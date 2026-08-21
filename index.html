@@ -2922,6 +2922,13 @@ async function apiRejectPlotRequest(id){
   const {error}=await sb.from('plot_requests').update({status:'Rejected',resolved_at:new Date().toISOString(),resolved_by:PROFILE.name}).eq('id',id);
   if(error) throw error;
 }
+async function apiUpdatePlotRequestFull(id,patch){
+  const row={client_name:patch.clientName,plot_type:patch.plotType,no_plots:num(patch.noPlots),payment_plan:patch.paymentPlan,notes:patch.notes};
+  const {error}=await sb.from('plot_requests').update(row).eq('id',id); if(error) throw error;
+}
+async function apiDeletePlotRequest(id){
+  const {error}=await sb.from('plot_requests').delete().eq('id',id); if(error) throw error;
+}
 /* Loads the site-visit authorization form for one specific day within a week,
    creating an Open one on demand -- this is what makes the form "reset per day"
    with zero manual setup: the moment anyone opens a day that doesn't have a row
@@ -3465,6 +3472,25 @@ async function apiDeleteComplaint(id){ if(DEMO_MODE){ const d=await demoLoad(); 
   const {error}=await sb.from('complaints').delete().eq('id',id); if(error) throw error; }
 async function apiDeleteVisit(id){ if(DEMO_MODE){ const d=await demoLoad(); d.sitevisits=d.sitevisits.filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('site_visits').delete().eq('id',id); if(error) throw error; }
+// Full-record edits (distinct from the existing status-only apiUpdateComplaintStatus/
+// apiUpdateVisitStatus) -- lets Management correct an entry's own fields, not just
+// its status. RLS already permits this (enquiries_upd/complaints_upd/site_visits_upd
+// are all manager-inclusive) -- these just expose it from the client.
+async function apiUpdateEnquiry(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.enquiries.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,location:patch.location,types:(patch.types||[]).join(','),plot:patch.plot,source:patch.source,details:patch.details,follow:patch.follow,follow_date:patch.followDate||null};
+  const {error}=await sb.from('enquiries').update(row).eq('id',id); if(error) throw error;
+}
+async function apiUpdateComplaintFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.complaints.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,category:patch.category,details:patch.details,resolution:patch.resolution,priority:patch.priority};
+  const {error}=await sb.from('complaints').update(row).eq('id',id); if(error) throw error;
+}
+async function apiUpdateVisitFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.sitevisits.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,visit_date:patch.date,visit_time:patch.time,people:patch.people,transport:patch.transport,pickup:patch.pickup,notes:patch.notes};
+  const {error}=await sb.from('site_visits').update(row).eq('id',id); if(error) throw error;
+}
 
 /* ---- plot inventory (manager manage; agents read-only via plots_availability) ---- */
 /* ---- announcements / flyers (manager posts, everyone reads) ---- */
@@ -5117,9 +5143,27 @@ function plotRequestsListHtml(list){
       <button class="btn primary" style="flex:1" data-approvepr="${esc(r.id)}">Approve</button>
       <button class="btn ghost" style="flex:1" data-rejectpr="${esc(r.id)}">Reject</button>
     </div>`:''}
+    <div class="foot" style="gap:8px;justify-content:flex-end">
+      <button class="trashbtn" data-editpr="${esc(r.id)}" title="Edit">${ic.edit}</button>
+      <button class="trashbtn" data-delpr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
   </div>`).join('')+`</div>`;
 }
 function bindPlotRequestCtrls(list){
+  document.querySelectorAll('[data-editpr]').forEach(b=>b.onclick=()=>{
+    const r=list.find(x=>x.id===b.dataset.editpr); if(!r) return;
+    openEditEntryModal({title:'Edit plot request',fields:[
+      {key:'clientName',label:'Client name',value:r.clientName},
+      {key:'plotType',label:'Plot type',type:'select',options:['Full Plot','Half Plot'],value:r.plotType},
+      {key:'noPlots',label:'Number of plots',type:'number',value:r.noPlots},
+      {key:'paymentPlan',label:'Payment plan',value:r.paymentPlan},
+      {key:'notes',label:'Notes',type:'textarea',value:r.notes},
+    ],onSave:async(v)=>{ await apiUpdatePlotRequestFull(r.id,v); Object.assign(r,v); toast('Plot request updated'); viewPlotRequests(); }});
+  });
+  document.querySelectorAll('[data-delpr]').forEach(b=>b.onclick=()=>{
+    const r=list.find(x=>x.id===b.dataset.delpr); if(!r) return;
+    confirmDeleteEntry('this plot request from '+r.clientName,apiDeletePlotRequest,r.id,()=>{ toast('Plot request deleted'); viewPlotRequests(); });
+  });
   document.querySelectorAll('[data-approvepr]').forEach(b=>b.onclick=async()=>{
     const req=list.find(x=>x.id===b.dataset.approvepr); if(!req) return;
     b.disabled=true; b.textContent='Approving…';
@@ -7964,6 +8008,55 @@ function bindCompanionWidget(){
   const toggle=document.getElementById('companionToggle');
   if(toggle) toggle.onclick=()=>w.classList.toggle('open');
   w.querySelectorAll('[data-comproute]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); const r=b.dataset.comproute; if(r) route(r,b.dataset.comparg||undefined); });
+}
+
+/* ================= EDIT-ENTRY MODAL (shared, reused across every "received" app —
+   Enquiries, Client Feedback, Site Visits, Plot Requests, Contract Requests, Fund
+   Requests — so Management can correct/edit an entry's own fields, not just its
+   status). One generic form-builder + one generic delete confirm, rather than a
+   bespoke modal per app. ================= */
+function openEditEntryModal(opts){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  const fieldHtml=f=>{
+    const id='editf_'+f.key;
+    if(f.type==='textarea') return fld(f.label,`<textarea id="${id}">${esc(f.value||'')}</textarea>`);
+    if(f.type==='select') return fld(f.label,sel(id,f.options,f.value));
+    if(f.type==='date') return fld(f.label,`<input id="${id}" type="date" value="${esc(f.value||'')}"/>`);
+    if(f.type==='number') return fld(f.label,`<input id="${id}" type="number" value="${esc(f.value!=null?f.value:'')}"/>`);
+    if(f.type==='chips') return fld(f.label,`<div class="chips" id="${id}">${(f.options||[]).map(o=>`<button type="button" class="chip2 ${((f.value||[]).includes(o))?'on':''}" data-t="${esc(o)}">${esc(o)}</button>`).join('')}</div>`);
+    return fld(f.label,`<input id="${id}" value="${esc(f.value||'')}"/>`);
+  };
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="editEntryTitle">${esc(opts.title||'Edit entry')}</div><button id="closeEditEntry" aria-label="Close" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="formwrap" style="padding:0">${opts.fields.map(fieldHtml).join('')}</div>
+    <div class="formactions" style="margin-top:14px"><button class="btn ghost" id="cancelEditEntry">Cancel</button><button class="btn primary" id="saveEditEntry">Save changes</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','editEntryTitle');
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeEditEntry').onclick=()=>ov.remove();
+  document.getElementById('cancelEditEntry').onclick=()=>ov.remove();
+  opts.fields.filter(f=>f.type==='chips').forEach(f=>{
+    document.querySelectorAll(`#editf_${f.key} .chip2`).forEach(c=>c.onclick=()=>c.classList.toggle('on'));
+  });
+  document.getElementById('saveEditEntry').onclick=async()=>{
+    const btn=document.getElementById('saveEditEntry'); btn.disabled=true; btn.textContent='Saving…';
+    const values={};
+    opts.fields.forEach(f=>{
+      const id='editf_'+f.key;
+      if(f.type==='chips') values[f.key]=[...document.querySelectorAll(`#${id} .chip2.on`)].map(c=>c.dataset.t);
+      else if(f.type==='number') values[f.key]=num(val(id));
+      else values[f.key]=val(id);
+    });
+    try{ await opts.onSave(values); ov.remove(); }
+    catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+  };
+}
+async function confirmDeleteEntry(label,apiFn,id,onDone){
+  if(!confirm('Delete '+label+'? This cannot be undone.')) return;
+  try{ await apiFn(id); onDone(); }catch(e){ toast('Could not delete: '+(e.message||e)); }
 }
 function homeHeroGreeting(){
   const h=new Date().getHours();
@@ -14071,6 +14164,14 @@ async function apiFulfillContractRequest(id){
   if(DEMO_MODE){ const d=await demoLoad(); const r=(d.contractRequests||[]).find(x=>x.id===id); if(r){ r.status='fulfilled'; r.fulfilledAt=new Date().toISOString(); } await demoSave(); return; }
   await sb.from('contract_requests').update({status:'fulfilled',fulfilled_at:new Date().toISOString()}).eq('id',id);
 }
+async function apiUpdateContractRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.contractRequests||[]).find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const {error}=await sb.from('contract_requests').update({client_name:patch.clientName,note:patch.note}).eq('id',id); if(error) throw error;
+}
+async function apiDeleteContractRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.contractRequests=(d.contractRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
+  const {error}=await sb.from('contract_requests').delete().eq('id',id); if(error) throw error;
+}
 async function apiMarkContractRequestsRead(ids){
   if(!ids||!ids.length) return;
   if(DEMO_MODE){ const d=await demoLoad(); (d.contractRequests||[]).forEach(r=>{ if(ids.includes(r.id)) r.read=true; }); await demoSave(); return; }
@@ -14190,12 +14291,25 @@ function contractRequestsHtml(){
   const pending=(DB.contractRequests||[]).filter(r=>r.status==='pending').sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   const fulfilled=(DB.contractRequests||[]).filter(r=>r.status==='fulfilled').sort((a,b)=>(b.fulfilledAt||'').localeCompare(a.fulfilledAt||'')).slice(0,15);
   return `<div class="sectitle" style="margin-top:0"><h3>Pending</h3><span class="cnt">${pending.length}</span></div>
-  <div class="list" style="margin-bottom:18px">${pending.length?pending.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}${r.source==='client'?' <span class="tag ok">Submitted by client</span>':''}</div><div class="meta">Requested by ${esc(r.requestedByName)} · ${esc((r.createdAt||'').slice(0,16).replace('T',' '))}${r.note?' · "'+esc(r.note)+'"':''}</div></div></div>
+  <div class="list" style="margin-bottom:18px">${pending.length?pending.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}${r.source==='client'?' <span class="tag ok">Submitted by client</span>':''}</div><div class="meta">Requested by ${esc(r.requestedByName)} · ${esc((r.createdAt||'').slice(0,16).replace('T',' '))}${r.note?' · "'+esc(r.note)+'"':''}</div></div>
+  <div style="display:flex;gap:6px"><button class="trashbtn" data-editcr="${esc(r.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delcr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
   <div class="foot" style="margin-top:10px"><button class="chip" data-cropen="${esc(r.id)}" data-croleadid="${esc(r.leadId)}">Open client &amp; generate →</button></div></div>`).join(''):emptyState(ic.doc,'Nothing pending','New contract requests will show up here.')}</div>
   <div class="sectitle"><h3>Recently fulfilled</h3><span class="cnt">${fulfilled.length}</span></div>
-  <div class="list">${fulfilled.length?fulfilled.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}</div><div class="meta">Requested by ${esc(r.requestedByName)} · fulfilled ${esc((r.fulfilledAt||'').slice(0,16).replace('T',' '))}</div></div></div></div>`).join(''):emptyState(ic.doc,'Nothing yet','')}</div>`;
+  <div class="list">${fulfilled.length?fulfilled.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}</div><div class="meta">Requested by ${esc(r.requestedByName)} · fulfilled ${esc((r.fulfilledAt||'').slice(0,16).replace('T',' '))}</div></div>
+  <div style="display:flex;gap:6px"><button class="trashbtn" data-editcr="${esc(r.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delcr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div></div>`).join(''):emptyState(ic.doc,'Nothing yet','')}</div>`;
 }
 function bindContractRequestsCtrls(){
+  document.querySelectorAll('[data-editcr]').forEach(b=>b.onclick=()=>{
+    const r=(DB.contractRequests||[]).find(x=>x.id===b.dataset.editcr); if(!r) return;
+    openEditEntryModal({title:'Edit contract request',fields:[
+      {key:'clientName',label:'Client name',value:r.clientName},
+      {key:'note',label:'Note',type:'textarea',value:r.note},
+    ],onSave:async(v)=>{ await apiUpdateContractRequestFull(r.id,v); Object.assign(r,v); toast('Contract request updated'); paintContractAppBody(); }});
+  });
+  document.querySelectorAll('[data-delcr]').forEach(b=>b.onclick=()=>{
+    const r=(DB.contractRequests||[]).find(x=>x.id===b.dataset.delcr); if(!r) return;
+    confirmDeleteEntry('this contract request from '+r.clientName,apiDeleteContractRequest,r.id,()=>{ DB.contractRequests=DB.contractRequests.filter(x=>x.id!==r.id); toast('Contract request deleted'); paintContractAppBody(); });
+  });
   document.querySelectorAll('[data-cropen]').forEach(b=>b.onclick=async()=>{
     const lead=findLeadById(b.dataset.croleadid);
     if(!lead){ toast('Could not find that client'); return; }
@@ -15058,13 +15172,27 @@ function mgrList(arr,kind){ if(!arr.length) return emptyState(ic.spark,'Nothing 
 }
 function mgrEnquiries(){ if(!DB.enquiries.length) return emptyState(ic.enquiry,'No enquiries logged','Submissions from agents will appear here live.');
   return `<div class="list">`+DB.enquiries.map(x=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(x.name)}" data-custcontact="${esc(x.contact||'')}">${esc(x.name)}</div><div class="meta">${esc(x.agentName)} · ${esc(x.createdAt)}</div></div>
-    <div style="display:flex;gap:6px"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
+    <div style="display:flex;gap:6px"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-editenq="${x.id}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="meta" style="margin-top:6px">${esc((x.types&&x.types.length?x.types.join(', '):'')+(x.location?(' · '+x.location):''))}</div>
     <div class="foot">${tg('ghost',x.source)}${x.follow==='Yes'?tg('warnt','Follow-up '+(x.followDate||'')):''}</div>
     ${x.details?`<div class="note">${esc(x.details)}</div>`:''}</div>`).join('')+`</div>`;
 }
+const ENQ_TYPE_OPTIONS=['Location','Price','Payment Plan','Documentation','Plot Availability','Title / Ownership','Site Visit','Other'];
 function bindEnquiryCtrls(){
   V.querySelectorAll('[data-pdfenq]').forEach(b=>b.onclick=()=>{ const e=DB.enquiries.find(x=>x.id===b.dataset.pdfenq); if(e) downloadRecordPDF('enquiry',e); });
+  V.querySelectorAll('[data-editenq]').forEach(b=>b.onclick=()=>{
+    const e=DB.enquiries.find(x=>x.id===b.dataset.editenq); if(!e) return;
+    openEditEntryModal({title:'Edit enquiry',fields:[
+      {key:'name',label:'Customer name',value:e.name},
+      {key:'contact',label:'Contact',value:e.contact},
+      {key:'location',label:'Location / area',value:e.location},
+      {key:'types',label:'Type of enquiry',type:'chips',options:ENQ_TYPE_OPTIONS,value:e.types||[]},
+      {key:'source',label:'Source',type:'select',options:['Walk-in','Phone Call','WhatsApp','Referral','Social Media','Advert','Other'],value:e.source},
+      {key:'details',label:'Enquiry details',type:'textarea',value:e.details},
+      {key:'follow',label:'Follow-up needed?',type:'select',options:['Yes','No'],value:e.follow},
+      {key:'followDate',label:'Follow-up date',type:'date',value:e.followDate},
+    ],onSave:async(v)=>{ await apiUpdateEnquiry(e.id,v); Object.assign(e,v); toast('Enquiry updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delenq]').forEach(b=>b.onclick=async()=>{
   const id=b.dataset.delenq; const e=DB.enquiries.find(x=>x.id===id); if(!confirm('Delete this enquiry from '+e.name+'?')) return;
   try{ await apiDeleteEnquiry(id); DB.enquiries=DB.enquiries.filter(x=>x.id!==id); toast('Enquiry deleted'); managerView(); }catch(err){ toast('Delete failed'); } }); }
@@ -15080,6 +15208,7 @@ function mgrComplaints(){
     return `<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(c.name)}" data-custcontact="${esc(c.contact||'')}">${esc(c.name)}</div><div class="meta">${esc(c.agentName)} · ${esc(c.createdAt)}${c.plot?(' · '+esc(c.plot)):''}</div></div>
     <div style="display:flex;gap:8px;align-items:center"><span class="tag pri-${esc(c.priority)}">${esc(c.priority)}</span>
     <button class="trashbtn" data-pdfcmp="${c.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="trashbtn" data-editcmp="${c.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delcmp="${c.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="foot"><span class="tag ghost">${esc(c.category)}</span><span class="tag ${statusTag}">${esc(c.status)}</span>${sentTag}${tg('portal',c.source==='Client portal'?'Client portal':'')}</div>
     <div class="note">${esc(c.details)}</div>${c.resolution?`<div class="note"><b>Wants:</b> ${esc(c.resolution)}</div>`:''}
@@ -15090,6 +15219,7 @@ function mgrVisits(){ if(!DB.sitevisits.length) return emptyState(ic.visit,'No s
   return `<div class="list">`+DB.sitevisits.map(v=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(v.name)}" data-custcontact="${esc(v.contact||'')}">${esc(v.name)}</div><div class="meta">${esc(v.agentName)} · ${esc(v.site)}</div></div>
     <div style="display:flex;gap:8px;align-items:center">${tg('gold',v.source==='Client portal'?'Client portal':'')}<span class="tag ${v.status==='Confirmed'?'ok':'warnt'}">${esc(v.status)}</span>
     <button class="trashbtn" data-pdfvisit="${v.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="trashbtn" data-editvisit="${v.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delvisit="${v.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="meta" style="margin-top:6px">${esc(v.date)} · ${esc(v.time)} · ${esc(v.people)} pax · ${esc(v.transport)}${v.pickup?(' · pickup: '+esc(v.pickup)):''}</div>${v.notes?`<div class="note">${esc(v.notes)}</div>`:''}
     <div class="foot" style="justify-content:space-between"><span class="mini">${esc(v.contact||'')}</span><select class="assign" data-vstatus="${v.id}">${['Pending','Confirmed'].map(s=>`<option ${s===v.status?'selected':''}>${s}</option>`).join('')}</select></div></div>`).join('')+`</div>`;
@@ -15099,6 +15229,17 @@ function bindComplaintCtrls(){
   V.querySelectorAll('select[data-status]').forEach(s=>s.onchange=async()=>{
     const c=DB.complaints.find(x=>x.id===s.dataset.status); try{ await apiUpdateComplaintStatus(c.id,s.value); c.status=s.value; toast('Complaint marked '+s.value); managerView(); }catch(e){ toast('Failed'); } });
   V.querySelectorAll('[data-pdfcmp]').forEach(b=>b.onclick=()=>{ const c=DB.complaints.find(x=>x.id===b.dataset.pdfcmp); if(c) downloadRecordPDF('complaint',c); });
+  V.querySelectorAll('[data-editcmp]').forEach(b=>b.onclick=()=>{
+    const c=DB.complaints.find(x=>x.id===b.dataset.editcmp); if(!c) return;
+    openEditEntryModal({title:'Edit client feedback',fields:[
+      {key:'name',label:'Client name',value:c.name},
+      {key:'contact',label:'Contact',value:c.contact},
+      {key:'category',label:'Category',type:'select',options:['Documentation','Payment / Refund','Land / Plot Issue','Service Quality','Communication','Delay','Other'],value:c.category},
+      {key:'priority',label:'Priority',type:'select',options:['High','Medium','Low'],value:c.priority},
+      {key:'details',label:'Feedback details',type:'textarea',value:c.details},
+      {key:'resolution',label:'Desired resolution',type:'textarea',value:c.resolution},
+    ],onSave:async(v)=>{ await apiUpdateComplaintFull(c.id,v); Object.assign(c,v); toast('Feedback updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delcmp]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.delcmp; const c=DB.complaints.find(x=>x.id===id); if(!confirm('Delete this complaint from '+c.name+'?')) return;
     try{ await apiDeleteComplaint(id); DB.complaints=DB.complaints.filter(x=>x.id!==id); toast('Complaint deleted'); managerView(); }catch(err){ toast('Delete failed'); } });
@@ -15107,6 +15248,19 @@ function bindVisitCtrls(){
   V.querySelectorAll('select[data-vstatus]').forEach(s=>s.onchange=async()=>{
     const v=DB.sitevisits.find(x=>x.id===s.dataset.vstatus); try{ await apiUpdateVisitStatus(v.id,s.value); v.status=s.value; toast('Visit marked '+s.value); }catch(e){ toast('Failed'); } });
   V.querySelectorAll('[data-pdfvisit]').forEach(b=>b.onclick=()=>{ const v=DB.sitevisits.find(x=>x.id===b.dataset.pdfvisit); if(v) downloadRecordPDF('sitevisit',v); });
+  V.querySelectorAll('[data-editvisit]').forEach(b=>b.onclick=()=>{
+    const v=DB.sitevisits.find(x=>x.id===b.dataset.editvisit); if(!v) return;
+    openEditEntryModal({title:'Edit site visit',fields:[
+      {key:'name',label:'Client name',value:v.name},
+      {key:'contact',label:'Contact',value:v.contact},
+      {key:'date',label:'Visit date',type:'date',value:v.date},
+      {key:'time',label:'Visit time',value:v.time},
+      {key:'people',label:'Number of accompaniment',type:'number',value:v.people},
+      {key:'transport',label:'Mode of transportation',type:'select',options:['Personal Vehicle','Company Vehicle'],value:v.transport},
+      {key:'pickup',label:'Pick-up location',value:v.pickup},
+      {key:'notes',label:'Notes',type:'textarea',value:v.notes},
+    ],onSave:async(vals)=>{ await apiUpdateVisitFull(v.id,vals); Object.assign(v,vals); toast('Site visit updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delvisit]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.delvisit; const v=DB.sitevisits.find(x=>x.id===id); if(!confirm('Delete this site visit request from '+v.name+'?')) return;
     try{ await apiDeleteVisit(id); DB.sitevisits=DB.sitevisits.filter(x=>x.id!==id); toast('Site visit deleted'); managerView(); }catch(err){ toast('Delete failed'); } });
@@ -17136,6 +17290,13 @@ function mapFundReq(r){ return {id:r.id,type:r.req_type,amount:num(r.amount),pur
   status:r.status,decidedBy:r.decided_by,decidedByName:r.decided_by_name,decidedAt:r.decided_at,decisionNote:r.decision_note,approvalSignature:r.approval_signature,
   receiptData:r.receipt_data,receiptName:r.receipt_name,createdAt:r.created_at}; }
 function mapDailyBalance(r){ return {id:r.id,date:r.balance_date,cash:num(r.cash),momo:num(r.momo),bank:num(r.bank),loggedByName:r.logged_by_name,updatedAt:r.updated_at}; }
+async function apiUpdateFundRequestFull(id,patch){
+  const row={req_type:patch.type==='General budget'?'budget':'specific',amount:num(patch.amount),purpose:patch.purpose};
+  const {error}=await sb.from('fund_requests').update(row).eq('id',id); if(error) throw error;
+}
+async function apiDeleteFundRequest(id){
+  const {error}=await sb.from('fund_requests').delete().eq('id',id); if(error) throw error;
+}
 async function apiLoadExpenseCategories(){ const {data,error}=await sb.from('expense_categories').select('*').eq('active',true).order('name'); if(error) throw error; return data||[]; }
 async function apiAddExpenseCategory(name,monthlyBudget){ const {data,error}=await sb.from('expense_categories').insert({name,monthly_budget:monthlyBudget||null}).select().single(); if(error) throw error; return data; }
 async function apiUpdateExpenseCategoryBudget(id,monthlyBudget){ const {data,error}=await sb.from('expense_categories').update({monthly_budget:monthlyBudget||null}).eq('id',id).select().single(); if(error) throw error; return data; }
@@ -17425,7 +17586,8 @@ function expFundsTabHtml(){
 }
 function fundReqRowHtml(f){
   const logged=fundReqHasLoggedSpend(f.id);
-  return `<div class="rowcard"><div class="top"><div><div class="nm">${f.type==='budget'?'General budget':'Specific spend'} · ${ghs(f.amount)}</div><div class="meta">${esc((f.createdAt||'').slice(0,10))}${f.requestedByName?' · by '+esc(f.requestedByName):''}</div></div>${expStatusTag(f.status)}</div>
+  const mgrCtrls=PROFILE.role==='manager'?`<button class="trashbtn" data-editfr="${esc(f.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delfr="${esc(f.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`:'';
+  return `<div class="rowcard"><div class="top"><div><div class="nm">${f.type==='budget'?'General budget':'Specific spend'} · ${ghs(f.amount)}</div><div class="meta">${esc((f.createdAt||'').slice(0,10))}${f.requestedByName?' · by '+esc(f.requestedByName):''}</div></div><div style="display:flex;gap:6px;align-items:center">${expStatusTag(f.status)}${mgrCtrls}</div></div>
   <div class="note">${esc(f.purpose)}</div>
   ${f.status==='approved'?`<div class="foot" style="gap:8px;flex-wrap:wrap">${logged?'<span class="tag ok">✓ Spend logged</span>':'<span class="tag warnt">Not yet logged</span>'}<button class="chip" data-frslip="${esc(f.id)}">Download approval slip</button>${f.receiptData?`<button class="chip" data-frreceipt="${esc(f.id)}">View document</button>`:''}</div>`:f.receiptData?`<div class="foot" style="gap:8px"><button class="chip" data-frreceipt="${esc(f.id)}">View document</button></div>`:''}</div>`;
 }
@@ -17576,6 +17738,18 @@ function bindExpensesCtrls(){
   });
   document.querySelectorAll('[data-logspend]').forEach(b=>b.onclick=()=>{
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.logspend); if(f) openLogSpendModal(f);
+  });
+  document.querySelectorAll('[data-editfr]').forEach(b=>b.onclick=()=>{
+    const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.editfr); if(!f) return;
+    openEditEntryModal({title:'Edit fund request',fields:[
+      {key:'type',label:'Type',type:'select',options:['General budget','Specific / untagged spending'],value:f.type==='budget'?'General budget':'Specific / untagged spending'},
+      {key:'amount',label:'Amount (GHS)',type:'number',value:f.amount},
+      {key:'purpose',label:'Purpose',type:'textarea',value:f.purpose},
+    ],onSave:async(v)=>{ await apiUpdateFundRequestFull(f.id,v); f.type=v.type==='General budget'?'budget':'specific'; f.amount=v.amount; f.purpose=v.purpose; toast('Fund request updated'); paintExpensesApp(); }});
+  });
+  document.querySelectorAll('[data-delfr]').forEach(b=>b.onclick=()=>{
+    const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.delfr); if(!f) return;
+    confirmDeleteEntry('this fund request',apiDeleteFundRequest,f.id,()=>{ FUND_REQUESTS_LIST=FUND_REQUESTS_LIST.filter(x=>x.id!==f.id); toast('Fund request deleted'); paintExpensesApp(); });
   });
   const ecAddBtn=document.getElementById('ecAddBtn');
   if(ecAddBtn) ecAddBtn.onclick=async()=>{
