@@ -13086,11 +13086,18 @@ function openClientPlotRequestModal(leads){
     }catch(e){ toast('Could not send request: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request'; }
   };
 }
+// Cumulative approved-payment total for one lead, as of (inclusive of) a given
+// date -- what buildReceiptPDF needs to show the correct "as of this payment"
+// balance for a historical receipt instead of the lead's live running total.
+function computePaidAsOfDate(allPayments,leadId,asOfDate){
+  return (allPayments||[]).filter(p=>p.leadId===leadId&&(p.date||'')<=(asOfDate||'')).reduce((s,p)=>s+num(p.amount),0);
+}
 /* One or more payments can land in the same calendar month -- merge whichever ones
    match into a single PDF rather than forcing a pick when there's more than one. */
 async function downloadReceiptForMonth(monthKey){
   if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return; }
-  const leads=(CLIENT_DB&&CLIENT_DB.leads)||[]; const payments=((CLIENT_DB&&CLIENT_DB.payments)||[]).filter(p=>(p.date||'').slice(0,7)===monthKey);
+  const allPayments=(CLIENT_DB&&CLIENT_DB.payments)||[];
+  const leads=(CLIENT_DB&&CLIENT_DB.leads)||[]; const payments=allPayments.filter(p=>(p.date||'').slice(0,7)===monthKey);
   if(!payments.length){ toast('No payments recorded for '+monthLabel(monthKey)); return; }
   const sorted=payments.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const portfolioTotal=computeClientPortfolioTotal(CLIENT_PROFILE.contact,leads,CLIENT_PROFILE.name);
@@ -13098,7 +13105,8 @@ async function downloadReceiptForMonth(monthKey){
   for(const p of sorted){
     const lead=leads.find(l=>l.id===p.leadId)||leads[0];
     let receiptNumber=null; try{ receiptNumber=await apiEnsureReceiptNumber(p.id,'client-portal'); }catch(e){}
-    doc=buildReceiptPDF(CLIENT_PROFILE.name,p,lead,doc,portfolioTotal,receiptNumber);
+    const paidAsOf=lead?computePaidAsOfDate(allPayments,lead.id,p.date):null;
+    doc=buildReceiptPDF(CLIENT_PROFILE.name,p,lead,doc,portfolioTotal,receiptNumber,paidAsOf);
   }
   if(!doc) return;
   const fname='Receipt_'+monthKey+'_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'.pdf';
@@ -13186,7 +13194,15 @@ async function apiEnsureReceiptNumber(paymentId,channel){
   const {data,error}=await sb.rpc('ensure_receipt_number',{p_payment_id:paymentId,p_channel:channel||'download'});
   if(error) throw error; return data;
 }
-function buildReceiptPDF(clientName,payment,lead,existingDoc,portfolioTotal,receiptNumber){
+// paidAsOf (optional): the client's cumulative approved-payment total as of THIS
+// payment's own date, for a receipt covering a historical payment -- without it,
+// every page of a merged multi-receipt PDF (downloadAllReceipts/
+// downloadReceiptForMonth) showed the lead's CURRENT running total instead of
+// what was actually true on the date being receipted, which is wrong for a
+// bookkeeping document. Falls back to the lead's live amtPaid when omitted
+// (the "just logged this payment" case, where today and as-of-this-payment are
+// the same moment anyway).
+function buildReceiptPDF(clientName,payment,lead,existingDoc,portfolioTotal,receiptNumber,paidAsOf){
   if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=existingDoc||new jsPDF({unit:'mm',format:'a4'});
   if(existingDoc) doc.addPage();
@@ -13239,7 +13255,7 @@ function buildReceiptPDF(clientName,payment,lead,existingDoc,portfolioTotal,rece
   y+=9.5+4;
 
   if(lead){
-    const paid=num(lead.amtPaid); const bal=Math.max(grand-paid,0);
+    const paid=paidAsOf!=null?num(paidAsOf):num(lead.amtPaid); const bal=Math.max(grand-paid,0);
     const boxX=tblX[2], boxW=(R-boxX);
     const totRows=[['Total contract price',ghs(grand),false],['Paid to date',ghs(paid),false],[bal<=0?'Status':'Balance remaining',bal<=0?'PAID IN FULL':ghs(bal),true]];
     totRows.forEach((row,i)=>{
@@ -13257,7 +13273,7 @@ function buildReceiptPDF(clientName,payment,lead,existingDoc,portfolioTotal,rece
   doc.text('PAYMENT INFORMATION',colLx,y); doc.text('NOTES',colRx,y);
   doc.setDrawColor(RECEIPT_GOLD[0],RECEIPT_GOLD[1],RECEIPT_GOLD[2]); doc.line(colLx,y+1.5,colLx+16,y+1.5); doc.line(colRx,y+1.5,colRx+16,y+1.5);
   y+=8;
-  const payRows=[['Payment Method',payment.method||'—'],['Reference No.',ref],['Payment Date',dateStr],['Status',lead?(Math.max(grand-num(lead.amtPaid),0)<=0?'PAID IN FULL':'PARTIAL PAYMENT'):'RECEIVED']];
+  const payRows=[['Payment Method',payment.method||'—'],['Reference No.',ref],['Payment Date',dateStr],['Status',lead?(Math.max(grand-(paidAsOf!=null?num(paidAsOf):num(lead.amtPaid)),0)<=0?'PAID IN FULL':'PARTIAL PAYMENT'):'RECEIVED']];
   payRows.forEach((row,i)=>pdfReceiptRow(doc,colLx,y+i*rowH,colW,row[0],row[1]));
 
   const notes=[CONFIG.receiptThanksText||'This receipt confirms the amount above was received by us and applied to your account.','Please keep this document for your records.'];
@@ -14050,7 +14066,10 @@ function openContractNewClientModal(){
 async function buildClientReceiptPDF(payment,lead){
   const portfolioTotal=computeClientPortfolioTotal(CLIENT_PROFILE.contact,(CLIENT_DB&&CLIENT_DB.leads)||[],CLIENT_PROFILE.name);
   let receiptNumber=null; try{ receiptNumber=await apiEnsureReceiptNumber(payment.id,'client-portal'); }catch(e){}
-  const doc=buildReceiptPDF(CLIENT_PROFILE.name,payment,lead,undefined,portfolioTotal,receiptNumber); if(!doc) return;
+  // This "Receipt" button sits on every historical payment row, not just the most
+  // recent one -- needs the as-of-that-date total, not the lead's live running one.
+  const paidAsOf=lead?computePaidAsOfDate((CLIENT_DB&&CLIENT_DB.payments)||[],lead.id,payment.date):null;
+  const doc=buildReceiptPDF(CLIENT_PROFILE.name,payment,lead,undefined,portfolioTotal,receiptNumber,paidAsOf); if(!doc) return;
   const fname='Receipt_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'_'+(payment.date||today())+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
 }
@@ -14067,7 +14086,8 @@ async function downloadAllReceipts(){
   for(const p of sorted){
     const lead=leads.find(l=>l.id===p.leadId)||leads[0];
     let receiptNumber=null; try{ receiptNumber=await apiEnsureReceiptNumber(p.id,'client-portal'); }catch(e){}
-    doc=buildReceiptPDF(CLIENT_PROFILE.name,p,lead,doc,portfolioTotal,receiptNumber);
+    const paidAsOf=lead?computePaidAsOfDate(payments,lead.id,p.date):null;
+    doc=buildReceiptPDF(CLIENT_PROFILE.name,p,lead,doc,portfolioTotal,receiptNumber,paidAsOf);
   }
   if(!doc) return;
   const fname='Receipts_All_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'_'+today()+'.pdf';
