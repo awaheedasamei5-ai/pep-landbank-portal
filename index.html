@@ -10115,20 +10115,37 @@ function bindAllocationAwaitingCtrls(a,wrap){
     }
     confirmBtn.disabled=true; confirmBtn.textContent='Confirming…';
     try{
-      await apiResolveAllocation(a.id,plot,'Approved via signed authorization form');
-      const nowStr=today()+' '+nowTime();
-      Object.assign(a,{status:'Allocated',plotNumber:plot,note:'Approved via signed authorization form',allocatedBy:PROFILE.name,resolvedAt:nowStr});
-      { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocated','Plot '+plot+' has been allocated to you. Log in to view the details and download your allocation confirmation.').catch(()=>{}); }
-      if(canManagePlots()){
-        if(existingPlot){
-          await apiUpdatePlot(existingPlot.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
-          Object.assign(existingPlot,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
-        }else{
-          const newPlot=await apiInsertPlot({site:PLOT_SITE,plotNumber:plot,plotType:'Full Plot',status:'Allocated',
-            price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Allocated via signed authorization'});
-          DB.plots.unshift(newPlot);
+      const noteTxt='Approved via signed authorization form';
+      if(DEMO_MODE){
+        await apiResolveAllocation(a.id,plot,noteTxt);
+        const nowStr=today()+' '+nowTime();
+        Object.assign(a,{status:'Allocated',plotNumber:plot,note:noteTxt,allocatedBy:PROFILE.name,resolvedAt:nowStr});
+        if(canManagePlots()){
+          if(existingPlot){
+            await apiUpdatePlot(existingPlot.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
+            Object.assign(existingPlot,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
+          }else{
+            const newPlot=await apiInsertPlot({site:PLOT_SITE,plotNumber:plot,plotType:'Full Plot',status:'Allocated',
+              price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Allocated via signed authorization'});
+            DB.plots.unshift(newPlot);
+          }
         }
+      }else{
+        // Atomic server-side RPC (confirm_allocation) -- replaces the old two-step
+        // sequence (allocation_requests, then a separately-gated plots-table sync)
+        // with one transaction that also re-verifies the plot isn't already taken
+        // server-side, closing a race a client-side-only check can't catch. It also
+        // always syncs the plots table now, not just for manager/elias/emmanuel --
+        // RLS already lets an allocation's own agent confirm it, so skipping the
+        // inventory sync for that case was a gap, not an intentional restriction.
+        const {data:r,error}=await sb.rpc('confirm_allocation',{p_allocation_id:a.id,p_plot_number:plot,p_note:noteTxt}); if(error) throw error;
+        Object.assign(a,{status:'Allocated',plotNumber:r.plot_number,note:r.note,allocatedBy:r.allocated_by,resolvedAt:(r.resolved_at||'').slice(0,16).replace('T',' ')});
+        const plotObj={id:r.plot.id,site:r.plot.site,plotNumber:r.plot.plotNumber,plotType:r.plot.plotType,status:r.plot.status,price:r.plot.price,
+          clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey,notes:r.plot.notes,updatedAt:r.plot.updatedAt};
+        const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
+        if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
       }
+      { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocated','Plot '+plot+' has been allocated to you. Log in to view the details and download your allocation confirmation.').catch(()=>{}); }
       toast('Allocation confirmed — '+a.agentName+' will see it on their dashboard');
       wrap.innerHTML=renderAllocationDone(a); bindAllocationDoneCtrls(a);
     }catch(e){ toast('Failed: '+(e.message||e)); confirmBtn.disabled=false; confirmBtn.textContent='Confirm approved plot'; }
