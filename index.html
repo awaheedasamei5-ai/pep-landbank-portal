@@ -140,8 +140,14 @@ a{color:var(--green2)}
 .dd-chev{flex:0 0 auto;transition:transform .2s;color:#9DB2CC}
 .dd-trigger.open .dd-chev{transform:rotate(180deg)}
 .dd-panel{position:absolute;left:0;right:0;top:calc(100% + 8px);background:#0F2749;border:1px solid rgba(255,255,255,.14);
-  border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.45);z-index:20;
-  transform-origin:top center;animation:pop .18s cubic-bezier(.2,.9,.3,1.2) both}
+  border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.45);z-index:20;
+  transform-origin:top center;animation:pop .18s cubic-bezier(.2,.9,.3,1.2) both;
+  max-height:min(340px,60vh);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
+.dd-search-wrap{position:sticky;top:0;background:#0F2749;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.14);z-index:1}
+.dd-search-wrap input{width:100%;box-sizing:border-box;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);
+  border-radius:9px;padding:8px 11px;color:#EAF0EB;font-size:13.5px;outline:none}
+.dd-search-wrap input:focus{border-color:var(--gold)}
+.dd-empty{padding:14px 13px;color:#9DB2CC;font-size:12.5px}
 .dd-item{display:flex;align-items:center;gap:11px;padding:11px 13px;transition:.12s;border-bottom:1px solid rgba(255,255,255,.06)}
 .dd-item:last-child{border-bottom:none}
 .dd-item:hover{background:rgba(255,255,255,.08)}
@@ -5013,15 +5019,37 @@ async function refreshStaffList(){
   STAFF_LIST=BASE_STAFF.slice();
   return STAFF_LIST;
 }
-function buildDropdown(){
-  const panel=document.getElementById('ddPanel'); panel.innerHTML='';
-  STAFF_LIST.forEach(s=>{
+function ddRenderResults(query){
+  const results=document.getElementById('ddResults'); if(!results) return;
+  const q=(query||'').trim().toLowerCase();
+  const matches=q?STAFF_LIST.filter(s=>(s.name||'').toLowerCase().includes(q)):STAFF_LIST;
+  results.innerHTML='';
+  if(!matches.length){
+    results.innerHTML=`<div class="dd-empty">No staff match "${esc(query)}"</div>`;
+    return;
+  }
+  matches.forEach(s=>{
     const it=document.createElement('div'); it.className='dd-item'; it.dataset.email=s.email;
     it.innerHTML=`<span class="dd-text"><span class="dd-name">${esc(s.name)}</span></span>
       <svg class="dd-check" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     it.onclick=()=>{ selectStaff(s); closeDD(); };
-    panel.appendChild(it);
+    results.appendChild(it);
   });
+}
+// A long roster used to be entirely unscrollable and unsearchable -- a manager
+// with more than a handful of staff had no way to reach names past the fold.
+// The search box lives outside #ddResults (sticky, stays put while the results
+// below it scroll) so re-filtering never has to rebuild it or lose focus.
+function buildDropdown(){
+  const panel=document.getElementById('ddPanel'); panel.innerHTML='';
+  const searchWrap=document.createElement('div'); searchWrap.className='dd-search-wrap';
+  searchWrap.innerHTML=`<input id="ddSearchInput" type="text" placeholder="Search staff…" autocomplete="off"/>`;
+  panel.appendChild(searchWrap);
+  const results=document.createElement('div'); results.id='ddResults';
+  panel.appendChild(results);
+  searchWrap.querySelector('#ddSearchInput').addEventListener('input',e=>ddRenderResults(e.target.value));
+  searchWrap.querySelector('#ddSearchInput').addEventListener('click',e=>e.stopPropagation());
+  ddRenderResults('');
   const joinItem=document.createElement('div'); joinItem.className='dd-item dd-join';
   joinItem.innerHTML=`<span class="dd-text"><span class="dd-name">+ New employee — join the portal</span></span>`;
   joinItem.onclick=()=>{ closeDD(); openJoinCard(); };
@@ -5045,7 +5073,10 @@ function selectStaff(s){ pickStaff=s;
   renderLoginMode(); syncSign();
   (LOGIN_MODE==='pin'?document.getElementById('pinInput'):document.getElementById('pw')).focus();
 }
-function openDD(){ document.getElementById('ddPanel').classList.remove('hidden'); document.getElementById('ddTrigger').classList.add('open'); ddOpen=true; }
+function openDD(){
+  document.getElementById('ddPanel').classList.remove('hidden'); document.getElementById('ddTrigger').classList.add('open'); ddOpen=true;
+  const si=document.getElementById('ddSearchInput'); if(si){ si.value=''; ddRenderResults(''); si.focus(); }
+}
 function closeDD(){ document.getElementById('ddPanel').classList.add('hidden'); document.getElementById('ddTrigger').classList.remove('open'); ddOpen=false; }
 document.getElementById('ddTrigger').addEventListener('click',e=>{ e.stopPropagation(); ddOpen?closeDD():openDD(); });
 document.addEventListener('click',e=>{ if(ddOpen && !document.getElementById('nameDD').contains(e.target)) closeDD(); });
