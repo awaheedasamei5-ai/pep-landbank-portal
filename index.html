@@ -3267,9 +3267,14 @@ async function checkPaymentDueReminders(){
 }
 
 /* ---- deletes ---- */
+// Soft-delete, not a hard DELETE -- a real DELETE cascades and destroys the
+// linked allocation_requests audit trail (ON DELETE CASCADE) and silently
+// orphans payment history (ON DELETE SET NULL). Setting deleted_at instead
+// keeps that history intact and RLS (leads_sel/leads_client_sel) already
+// hides deleted_at-set rows from every normal read.
 async function apiDeleteLead(id,agentKey){
   if(DEMO_MODE){ const d=await demoLoad(); d.leads[agentKey]=(d.leads[agentKey]||[]).filter(x=>x.id!==id); await demoSave(); return; }
-  const {error}=await sb.from('leads').delete().eq('id',id); if(error) throw error;
+  const {error}=await sb.from('leads').update({deleted_at:new Date().toISOString()}).eq('id',id); if(error) throw error;
 }
 async function apiDeleteEnquiry(id){ if(DEMO_MODE){ const d=await demoLoad(); d.enquiries=d.enquiries.filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('enquiries').delete().eq('id',id); if(error) throw error; }
