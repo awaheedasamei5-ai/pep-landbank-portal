@@ -5359,6 +5359,7 @@ async function enterApp(){
   ensureSiteVisitFeedbackLiveSubscribed();
   ensureMemosLiveSubscribed();
   ensureBannersLiveSubscribed();
+  ensureStaffRosterLiveSubscribed();
   ensurePresenceSubscribed();
   if(PROFILE.role!=='manager') evaluateMyAchievements();
   startInactivityTimer();
@@ -5628,6 +5629,35 @@ function ensureBannersLiveSubscribed(){
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'banners'},payload=>upsertBanner(payload.new))
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'banners'},payload=>upsertBanner(payload.new))
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'banners'},payload=>removeBanner(payload.old))
+      .subscribe();
+  }catch(e){}
+}
+let STAFF_ROSTER_LIVE_CHANNEL=null;
+function ensureStaffRosterLiveSubscribed(){
+  if(DEMO_MODE || !sb || STAFF_ROSTER_LIVE_CHANNEL || IS_CLIENT) return;
+  try{
+    const upsertStaff=row=>{
+      if(!row||!row.agent_key) return;
+      const i=STAFF_LIST.findIndex(s=>s.key===row.agent_key);
+      if(row.active===false){
+        if(i>=0) STAFF_LIST.splice(i,1);
+      } else {
+        const mapped={name:row.name,email:row.email,role:row.role,key:row.agent_key};
+        if(i>=0) STAFF_LIST[i]=mapped; else STAFF_LIST.push(mapped);
+      }
+      buildDropdown();
+      if(document.getElementById('mgrBody') && mgrTab==='Staff Settings') managerView();
+    };
+    const removeStaff=oldRow=>{
+      const key=oldRow&&oldRow.agent_key; if(!key) return;
+      STAFF_LIST=STAFF_LIST.filter(s=>s.key!==key);
+      buildDropdown();
+      if(document.getElementById('mgrBody') && mgrTab==='Staff Settings') managerView();
+    };
+    STAFF_ROSTER_LIVE_CHANNEL=sb.channel('staff-roster-live')
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'profiles'},payload=>upsertStaff(payload.new))
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},payload=>upsertStaff(payload.new))
+      .on('postgres_changes',{event:'DELETE',schema:'public',table:'profiles'},payload=>removeStaff(payload.old))
       .subscribe();
   }catch(e){}
 }
@@ -15417,7 +15447,11 @@ function mgrStaffSettingsHtml(){
     <button class="team-toggle" data-teamkey="${s.key}" data-active="${s.active}">…</button></div>`).join('');
   return `${settingsSectionHead('people','Team',activeCount+' active of '+roster.length)}
   <div class="formwrap" style="padding:6px 15px 15px">
-  <p class="mini" style="margin:0 0 12px">New staff join themselves — no invite needed. They tap "+ New employee — join the portal" on the sign-in screen, enter their name, email and a password, and they appear here right away. You can also create their account directly in Supabase Authentication and it will show up here automatically too.</p>
+  <p class="mini" style="margin:0 0 12px">Create a new staff account here — they appear below immediately, no separate confirmation step. Staff can also join themselves via "+ New employee — join the portal" on the sign-in screen, or you can create their account directly in Supabase Authentication.</p>
+  <div class="grid2">${fld('Full name','<input id="newemp_name" placeholder="e.g. Philip Mensah"/>')}${fld('Email','<input id="newemp_email" type="email" placeholder="name@example.com"/>')}</div>
+  ${fld('Password','<input id="newemp_pw" type="password" placeholder="Choose a password (min 6 characters)"/>','they can change it later from their own Settings')}
+  <div class="formactions"><button class="btn primary" id="createEmployeeBtn" style="flex:0 0 auto;padding-left:24px;padding-right:24px">Create account</button></div>
+  <div class="err" id="createEmployeeErr"></div>
   </div>
   <div class="formwrap" style="padding:6px 15px">${teamRows||'<div class="empty">No agents yet</div>'}
   <p class="mini" style="margin-top:12px">Deactivating someone here blocks their sign-in but keeps their historical leads and stats intact everywhere, including the Sales League.</p></div>
@@ -15433,6 +15467,24 @@ function mgrStaffSettingsHtml(){
   </div>`;
 }
 function bindStaffSettingsCtrls(){
+  document.getElementById('createEmployeeBtn').onclick=async()=>{
+    const name=val('newemp_name').trim(), email=val('newemp_email').trim(), pw=val('newemp_pw');
+    const err=document.getElementById('createEmployeeErr'); err.textContent='';
+    if(!name||!email){ err.textContent='Name and email are required.'; return; }
+    if(pw.length<6){ err.textContent='Password must be at least 6 characters.'; return; }
+    const btn=document.getElementById('createEmployeeBtn'); btn.disabled=true; btn.textContent='Creating…';
+    try{
+      const {data,error}=await sb.functions.invoke('create-employee',{body:{name,email,password:pw}});
+      if(error || !data || !data.ok){
+        err.textContent=(data&&data.reason)||(error&&error.message)||'Could not create account.';
+        btn.disabled=false; btn.textContent='Create account'; return;
+      }
+      document.getElementById('newemp_name').value=''; document.getElementById('newemp_email').value=''; document.getElementById('newemp_pw').value='';
+      toast('Account created — welcome, '+name.split(' ')[0]+'!');
+      await refreshStaffList(); buildDropdown(); managerView();
+    }catch(e){ err.textContent='Something went wrong. Please try again.'; }
+    btn.disabled=false; btn.textContent='Create account';
+  };
   V.querySelectorAll('[data-teamkey]').forEach(b=>{
     const key=b.dataset.teamkey; const isActive=b.dataset.active==='true';
     paintTeamToggle(b,isActive);

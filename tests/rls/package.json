@@ -1,0 +1,12 @@
+{
+  "name": "palmstead-rls-tests",
+  "private": true,
+  "type": "module",
+  "description": "RLS security test matrix (rebuild Sec 63/64/93) -- disposable-account integration tests run against a live Supabase project, not the app's own build tooling.",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
