@@ -2999,21 +2999,46 @@ const PAYMENT_METHODS=['Ecobank','Stanbic Bank','MTN MoMo','Vodafone Cash','Hubt
 // behavior); live payment-entry surfaces pass 'pending' for a non-manager logger
 // so the money can't reach the client until Management approves it -- see
 // logNewPayment() below, the single place that decides which status to use.
-async function apiInsertPayment(leadId,clientName,amount,paymentDate,paymentMethod,status){
+// Offline mutation queue (Sec 17) -- a payment insert attempted with no
+// connection would otherwise just be silently lost (this function already
+// swallowed any failure and returned null). Queues as 'pending' regardless of
+// the requested status -- applying an 'approved' payment's balance/allocation
+// side effects (applyApprovedPaymentToLead) needs a live connection itself, so
+// an offline-logged payment always waits for a real review-and-approve pass
+// (the existing approve_payment RPC) once back online, rather than trying to
+// fake those effects locally. The row's id is generated client-side so a retry
+// after a dropped response can never create a duplicate.
+async function queuePaymentInsert(leadId,clientName,amount,pdate,paymentMethod,leadAgentKeyHint){
+  const clientId=crypto.randomUUID();
+  const agentKey=leadAgentKeyHint||PROFILE.agent_key;
+  const payload={id:clientId,lead_id:leadId,agent_key:agentKey,client_name:clientName,amount,payment_date:pdate,payment_method:paymentMethod||null,status:'pending'};
+  await enqueueMutation('payments','insert',payload,{});
+  return {id:clientId,leadId,agentKey,clientName,amount,date:pdate,method:paymentMethod||'',status:'pending',createdAt:today()+' '+nowTime(),queued:true};
+}
+async function apiInsertPayment(leadId,clientName,amount,paymentDate,paymentMethod,status,leadAgentKeyHint){
   const pdate=paymentDate||today(); const st=status||'approved';
   if(DEMO_MODE){ const d=await demoLoad(); d.payments=d.payments||[];
     const rec={id:uid(),leadId,agentKey:PROFILE.key,clientName,amount,date:pdate,method:paymentMethod||'',status:st,createdAt:today()+' '+nowTime()};
     d.payments.unshift(rec); await demoSave(); return rec; }
+  if(navigator.onLine===false) return await queuePaymentInsert(leadId,clientName,amount,pdate,paymentMethod,leadAgentKeyHint);
   // Payments are always attributed to the lead's own assigned agent, never to whoever is
   // physically logging them (payment entry is Elias/Management-only, but visibility for the
   // client's own agent must be preserved) -- looked up fresh rather than trusted from a
   // possibly-stale in-memory lead, and enforced again at the database level either way.
-  let leadAgentKey=PROFILE.agent_key;
+  let leadAgentKey=leadAgentKeyHint||PROFILE.agent_key;
   try{ const {data:leadRow}=await sb.from('leads').select('agent_key').eq('id',leadId).maybeSingle(); if(leadRow) leadAgentKey=leadRow.agent_key; }catch(e){}
   const dbrow={lead_id:leadId,agent_key:leadAgentKey,client_name:clientName,amount,payment_date:pdate,payment_method:paymentMethod||null,status:st};
-  try{ const {data,error}=await sb.from('payments').insert(dbrow).select().single(); if(error) throw error;
+  try{
+    const {data,error}=await sb.from('payments').insert(dbrow).select().single();
+    if(error){
+      if(isNetworkShapedError(error)) return await queuePaymentInsert(leadId,clientName,amount,pdate,paymentMethod,leadAgentKey);
+      throw error;
+    }
     return {id:data.id,leadId:data.lead_id,agentKey:data.agent_key,clientName:data.client_name,amount:data.amount,date:data.payment_date,method:data.payment_method||'',status:data.status||'approved',createdAt:(data.created_at||'').slice(0,16).replace('T',' ')};
-  }catch(e){ return null; } // payments table not set up yet — pipeline still saves fine, just no ledger entry
+  }catch(e){
+    if(isNetworkShapedError(e)) return await queuePaymentInsert(leadId,clientName,amount,pdate,paymentMethod,leadAgentKey);
+    return null; // a real rejection (RLS/validation) -- pipeline still saves fine, just no ledger entry
+  }
 }
 async function apiDecidePayment(id,approve){
   const patch={status:approve?'approved':'declined',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString()};
@@ -3076,10 +3101,19 @@ async function applyApprovedPaymentToLead(lead,prec){
 // never reach the client before that approval. Management logging it themselves
 // auto-approves (no self-approval step needed).
 async function logNewPayment(lead,amount,date,method,activityDetail){
-  const status=PROFILE.role==='manager'?'approved':'pending';
-  const prec=await apiInsertPayment(lead.id,lead.name,amount,date,method,status);
-  if(!prec) return {payment:null,status,offerReceipt:false};
-  if(status==='approved'){
+  const requestedStatus=PROFILE.role==='manager'?'approved':'pending';
+  const prec=await apiInsertPayment(lead.id,lead.name,amount,date,method,requestedStatus,lead.agent);
+  if(!prec) return {payment:null,status:requestedStatus,offerReceipt:false};
+  if(prec.queued){
+    // Offline -- the row isn't in the database yet, so none of the approved-path
+    // side effects (balance sync, allocation check, thank-you SMS) can run. It
+    // shows up locally as pending and gets a real review-and-approve pass once
+    // the device is back online, same as any other agent's submission.
+    DB.pendingPayments=DB.pendingPayments||[]; DB.pendingPayments.unshift(prec);
+    toast("Offline — payment saved on this device and will sync automatically once you're back online.");
+    return {payment:prec,status:'pending',offerReceipt:false};
+  }
+  if(prec.status==='approved'){
     DB.payments.unshift(prec);
     await applyApprovedPaymentToLead(lead,prec);
     await addActivity(lead.name,'Payment logged',activityDetail,'','',null);
@@ -3089,7 +3123,7 @@ async function logNewPayment(lead,amount,date,method,activityDetail){
     try{ await apiSendMessage('manager','New payment pending approval: '+lead.name+' — '+ghs(amount)+' logged by '+PROFILE.name+'. Open Office › Log Payment › Pending Approvals to review.'); }catch(e){}
     toast('Payment submitted — awaiting Management approval before the receipt is sent to '+lead.name+'.');
   }
-  return {payment:prec,status,offerReceipt:status==='approved'};
+  return {payment:prec,status:prec.status,offerReceipt:prec.status==='approved'};
 }
 async function apiInsertQuotationRequest(row){
   if(DEMO_MODE){ const d=await demoLoad(); const rec={id:uid(),requestedBy:PROFILE.key,requestedByName:PROFILE.name,...row,createdAt:new Date().toISOString()};
@@ -4462,6 +4496,18 @@ async function drainOfflineQueue(){
           if(item.extra.expectedVersion!=null && (!data||data.length===0)){
             await offlineDbDelete(item.id);
             toast('A change queued offline for '+(item.extra.leadName||'a client')+' could not be auto-applied -- their record changed since. Please review and re-apply if still needed.');
+            continue;
+          }
+          await offlineDbDelete(item.id);
+          continue;
+        }
+        if(item.table==='payments' && item.op==='insert'){
+          const {error}=await sb.from('payments').insert(item.payload);
+          if(error){
+            if(isNetworkShapedError(error)) break;
+            if(error.code==='23505'){ await offlineDbDelete(item.id); continue; } // already landed from an earlier attempt whose response was lost
+            await offlineDbDelete(item.id);
+            toast('A queued offline payment for '+(item.payload.client_name||'a client')+' could not be saved: '+(error.message||error));
             continue;
           }
           await offlineDbDelete(item.id);
