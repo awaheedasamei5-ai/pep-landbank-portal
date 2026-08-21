@@ -1873,7 +1873,7 @@ const mapLead=r=>({id:r.id,agent:r.agent_key,name:r.name,contact:r.contact,date:
   plotType:r.plot_type,noPlots:r.no_plots,unitPrice:r.unit_price,discount:r.discount,netTotal:r.net_total,
   paymentPlan:r.payment_plan,grandTotal:r.grand_total,siteVisit:r.site_visit,priority:r.priority,
   amtPaid:r.amt_paid,balance:r.balance,nextAction:r.next_action,notes:r.notes,tags:r.tags,depositTarget:r.deposit_target,
-  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{}});
+  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at});
 const mapEnq=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,name:r.name,contact:r.contact,location:r.location,
   types:(r.types||'').split(',').filter(Boolean),plot:r.plot,source:r.source,details:r.details,follow:r.follow,
   followDate:r.follow_date,createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
@@ -4330,7 +4330,10 @@ function ensureClientDbSubscribed(){
     };
     CLIENTDB_CHANNEL=sb.channel('clientdb-live')
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'leads'},payload=>upsertLocal(mapLead(payload.new)))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},payload=>upsertLocal(mapLead(payload.new)))
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},payload=>{
+        const l=mapLead(payload.new);
+        if(l.deletedAt) removeLeadLocal({id:l.id}); else upsertLocal(l);
+      })
       .on('postgres_changes',{event:'DELETE',schema:'public',table:'leads'},payload=>removeLeadLocal(payload.old))
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'payments'},payload=>{
         const p={id:payload.new.id,leadId:payload.new.lead_id,agentKey:payload.new.agent_key,clientName:payload.new.client_name,amount:payload.new.amount,date:payload.new.payment_date};
@@ -5391,6 +5394,7 @@ function ensureClientLiveSubscribed(){
     CLIENT_LIVE_CHANNEL=sb.channel('client-live')
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},payload=>{
         const l=mapLead(payload.new); if(!CLIENT_DB||!CLIENT_DB.leads) return;
+        if(l.deletedAt){ CLIENT_DB.leads=CLIENT_DB.leads.filter(x=>x.id!==l.id); refreshHomeIfOpen(); return; }
         const i=CLIENT_DB.leads.findIndex(x=>x.id===l.id);
         if(i>=0) CLIENT_DB.leads[i]=l; else CLIENT_DB.leads.push(l);
         refreshHomeIfOpen();
