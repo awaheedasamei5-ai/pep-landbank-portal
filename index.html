@@ -1086,6 +1086,25 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
     <button class="linkbtn" id="joinBack">← Back to sign in</button>
   </div>
 
+  <div class="cfg hidden" id="resetCard">
+    <div class="lbl">Reset your password</div>
+    <div id="resetStep1">
+      <div class="note">Enter your email and we'll send a 6-digit code to confirm it's you.</div>
+      <input id="reset_email" placeholder="Email address" type="email"/>
+      <button class="signin" id="resetSendBtn">Send code</button>
+      <div class="err" id="resetErr1"></div>
+    </div>
+    <div id="resetStep2" class="hidden">
+      <div class="note">Enter the 6-digit code sent to your email, then choose a new password.</div>
+      <input id="reset_code" placeholder="6-digit code" inputmode="numeric" maxlength="6"/>
+      <input id="reset_pw" placeholder="New password (min 6 characters)" type="password"/>
+      <input id="reset_pw2" placeholder="Confirm new password" type="password"/>
+      <button class="signin" id="resetConfirmBtn">Set new password</button>
+      <div class="err" id="resetErr2"></div>
+    </div>
+    <button class="linkbtn" id="resetBack">← Back to sign in</button>
+  </div>
+
   <div class="cfg hidden" id="clientCard">
     <div id="clientCardInner"></div>
   </div>
@@ -5037,14 +5056,61 @@ document.getElementById('modeSwitchBtn').addEventListener('click',()=>{
   renderLoginMode(); syncSign();
   (LOGIN_MODE==='pin'?document.getElementById('pinInput'):document.getElementById('pw')).focus();
 });
-document.getElementById('forgotBtn').addEventListener('click',async()=>{
-  if(!pickStaff||DEMO_MODE) return;
-  const b=document.getElementById('forgotBtn'); b.disabled=true; b.textContent='Sending…';
-  try{ const {error}=await sb.auth.resetPasswordForEmail(pickStaff.email);
-    if(error){ toast('Could not send reset email: '+error.message); } else { toast('Reset link sent to '+pickStaff.email); }
-  }catch(e){ toast('Could not send reset email'); }
-  b.disabled=false; b.textContent='Forgot your password?';
+document.getElementById('forgotBtn').addEventListener('click',()=>{
+  if(DEMO_MODE) return;
+  openResetCard();
 });
+
+/* forgot password: email -> 6-digit code -> new password, all in-app (no redirect link) */
+let RESET_EMAIL='';
+function openResetCard(){
+  document.getElementById('authCard').classList.add('hidden');
+  document.getElementById('resetCard').classList.remove('hidden');
+  document.getElementById('resetStep1').classList.remove('hidden');
+  document.getElementById('resetStep2').classList.add('hidden');
+  document.getElementById('reset_email').value = pickStaff ? pickStaff.email : '';
+  document.getElementById('reset_code').value=''; document.getElementById('reset_pw').value=''; document.getElementById('reset_pw2').value='';
+  document.getElementById('resetErr1').textContent=''; document.getElementById('resetErr2').textContent='';
+  document.getElementById('resetSendBtn').disabled=false; document.getElementById('resetSendBtn').textContent='Send code';
+}
+document.getElementById('resetBack').onclick=()=>{
+  document.getElementById('resetCard').classList.add('hidden');
+  document.getElementById('authCard').classList.remove('hidden');
+};
+document.getElementById('resetSendBtn').onclick=async()=>{
+  const email=val('reset_email').trim();
+  const err=document.getElementById('resetErr1'); err.textContent='';
+  if(!email){ err.textContent='Enter your email.'; return; }
+  const btn=document.getElementById('resetSendBtn'); btn.disabled=true; btn.textContent='Sending…';
+  try{
+    const {error}=await sb.auth.resetPasswordForEmail(email);
+    if(error){ err.textContent=error.message||'Could not send code.'; btn.disabled=false; btn.textContent='Send code'; return; }
+    RESET_EMAIL=email;
+    document.getElementById('resetStep1').classList.add('hidden');
+    document.getElementById('resetStep2').classList.remove('hidden');
+    toast('Code sent to '+email);
+  }catch(e){ err.textContent='Could not send code.'; }
+  btn.disabled=false; btn.textContent='Send code';
+};
+document.getElementById('resetConfirmBtn').onclick=async()=>{
+  const code=val('reset_code').trim(), pw=val('reset_pw'), pw2=val('reset_pw2');
+  const err=document.getElementById('resetErr2'); err.textContent='';
+  if(!/^\d{6}$/.test(code)){ err.textContent='Enter the 6-digit code from your email.'; return; }
+  if(pw.length<6){ err.textContent='Password must be at least 6 characters.'; return; }
+  if(pw!==pw2){ err.textContent='Passwords do not match.'; return; }
+  const btn=document.getElementById('resetConfirmBtn'); btn.disabled=true; btn.textContent='Setting password…';
+  try{
+    const {error:verifyErr}=await sb.auth.verifyOtp({email:RESET_EMAIL, token:code, type:'recovery'});
+    if(verifyErr){ err.textContent=verifyErr.message||'That code is invalid or expired.'; btn.disabled=false; btn.textContent='Set new password'; return; }
+    const {error:updErr}=await sb.auth.updateUser({password:pw});
+    if(updErr){ err.textContent=updErr.message||'Could not set new password.'; btn.disabled=false; btn.textContent='Set new password'; return; }
+    await sb.auth.signOut();
+    document.getElementById('resetCard').classList.add('hidden');
+    document.getElementById('authCard').classList.remove('hidden');
+    toast('Password updated — sign in with your new password.');
+  }catch(e){ err.textContent='Something went wrong. Please try again.'; }
+  btn.disabled=false; btn.textContent='Set new password';
+};
 
 function syncSign(){
   const ok = pickStaff && (DEMO_MODE || (LOGIN_MODE==='password' ? document.getElementById('pw').value.length>0 : /^\d{4,6}$/.test(document.getElementById('pinInput').value)));
@@ -5791,8 +5857,6 @@ document.getElementById('joinSubmit').onclick=async()=>{
   try{
     if(DEMO_MODE){
       const d=await demoLoad();
-      const invited=(d.invites||[]).some(i=>i.email.toLowerCase()===email.toLowerCase());
-      if(!invited){ err.textContent='This email hasn\'t been invited yet. Ask management to add it under Settings → Invite employees (as Management, in demo mode too), then try again.'; btn.disabled=false; btn.textContent='Create my account'; return; }
       const existingKeys=new Set([...BASE_STAFF.map(s=>s.key),...(d.employees||[]).map(e=>e.key)]);
       let key=slugify(name); let n=1; while(existingKeys.has(key)){ key=slugify(name)+n; n++; }
       d.employees=d.employees||[]; d.employees.push({name,email,key,createdAt:today()});
@@ -5820,20 +5884,21 @@ document.getElementById('joinSubmit').onclick=async()=>{
     await enterApp();
   }catch(e){ err.textContent='Something went wrong. Please try again.'; btn.disabled=false; btn.textContent='Create my account'; }
 };
-/* Creates the profile row for a newly-confirmed auth user. Only succeeds if their
-   email is on management's invite list (enforced by the database, not just here). */
+/* A database trigger (on_auth_user_created) creates the profile row automatically
+   the instant the auth user is created -- in the same transaction, whether that
+   happened via this app's sign-up form or directly in the Supabase dashboard --
+   so by the time signUp() resolves here, the profile should already exist. This
+   just reads it back; the insert fallback only covers the unlikely case where the
+   trigger didn't fire for some reason. */
 async function provisionProfile(user,fallbackName){
+  const {data:existing}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  if(existing) return {ok:true, profile:existing};
   const name=fallbackName || (user.user_metadata&&user.user_metadata.name) || (user.email||'').split('@')[0];
   let key=slugify(name); let inserted=null; let lastErr=null;
   for(let attempt=0; attempt<6 && !inserted; attempt++){
     const tryKey = attempt===0 ? key : key+attempt;
     const {data:prof,error:insErr}=await sb.from('profiles').insert({id:user.id,email:user.email,name,role:'agent',agent_key:tryKey,active:true}).select().single();
-    if(!insErr){ inserted=prof; } else { lastErr=insErr;
-      if(insErr.code==='42501' || (insErr.message||'').toLowerCase().includes('row-level security')){
-        return {ok:false, message:'This email hasn\'t been approved by management yet. Ask them to add you under Settings → Invite employees, then try again.'};
-      }
-      if(insErr.code!=='23505') break;
-    }
+    if(!insErr){ inserted=prof; } else { lastErr=insErr; if(insErr.code!=='23505') break; }
   }
   if(!inserted) return {ok:false, message:'Could not finish setup: '+(lastErr?lastErr.message:'unknown error')};
   return {ok:true, profile:inserted};
@@ -15348,25 +15413,13 @@ function mgrStaffSettingsHtml(){
   const agentStaff=STAFF_LIST.filter(s=>s.role==='agent');
   const roster=TEAM_ROSTER.length?TEAM_ROSTER:agentStaff.map(s=>({...s,active:true}));
   const activeCount=roster.filter(r=>r.active).length;
-  const joinedEmails=new Set(roster.map(r=>r.email.toLowerCase()));
-  const inviteRows=INVITE_LIST.map(inv=>{
-    const joined=joinedEmails.has(inv.email.toLowerCase());
-    return `<div class="team-row"><div class="ti">
-      <div><div class="nm" style="font-weight:600;font-size:13.5px">${esc(inv.email)}</div><div class="mini">${inv.name?esc(inv.name)+' · ':''}${joined?'Joined':'Waiting to confirm & join'}</div></div></div>
-      <button class="trashbtn" data-uninvite="${esc(inv.email)}" title="Withdraw invite"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
-  }).join('');
   const teamRows=roster.map(s=>`<div class="team-row"><div class="ti" style="opacity:${s.active?1:.5}">
     <div><div class="nm" style="font-weight:600;font-size:13.5px">${esc(s.name)}${s.active?'':' <span class="mini">(deactivated)</span>'}</div><div class="mini">${esc(s.email)}</div></div></div>
     <button class="team-toggle" data-teamkey="${s.key}" data-active="${s.active}">…</button></div>`).join('');
-  return `${settingsSectionHead('mail','Invite employees',INVITE_LIST.length+' invited')}
-  <div class="formwrap">
-  <p class="mini" style="margin:-2px 0 14px">Add each new hire's email here first. They'll then see "+ New employee — join the portal" on the sign-in screen, enter their name and choose a password, confirm the link sent to their email, and they're in — with no dashboard work from you.</p>
-  <div class="grid2">${fld('Email *','<input id="inv_email" type="email" placeholder="name@example.com"/>')}${fld('Name (optional)','<input id="inv_name" placeholder="So you recognise them in this list"/>')}</div>
-  <div class="formactions"><button class="btn primary" id="addInvite" style="flex:0 0 auto;padding-left:24px;padding-right:24px">Add to invite list</button></div>
-  <div style="margin-top:14px">${inviteRows||'<p class="mini">No one invited yet.</p>'}</div>
+  return `${settingsSectionHead('people','Team',activeCount+' active of '+roster.length)}
+  <div class="formwrap" style="padding:6px 15px 15px">
+  <p class="mini" style="margin:0 0 12px">New staff join themselves — no invite needed. They tap "+ New employee — join the portal" on the sign-in screen, enter their name, email and a password, and they appear here right away. You can also create their account directly in Supabase Authentication and it will show up here automatically too.</p>
   </div>
-
-  ${settingsSectionHead('people','Team',activeCount+' active of '+roster.length)}
   <div class="formwrap" style="padding:6px 15px">${teamRows||'<div class="empty">No agents yet</div>'}
   <p class="mini" style="margin-top:12px">Deactivating someone here blocks their sign-in but keeps their historical leads and stats intact everywhere, including the Sales League.</p></div>
 
@@ -15381,19 +15434,6 @@ function mgrStaffSettingsHtml(){
   </div>`;
 }
 function bindStaffSettingsCtrls(){
-  document.getElementById('addInvite').onclick=async()=>{
-    const email=val('inv_email').trim(), name=val('inv_name').trim();
-    if(!email||!email.includes('@')){ toast('Enter a valid email'); return; }
-    const btn=document.getElementById('addInvite'); btn.disabled=true; btn.textContent='Adding…';
-    try{ await apiAddInvite(email,name); toast('Invited '+email); INVITE_LIST=await apiListInvites().catch(()=>INVITE_LIST); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Add to invite list'; }
-  };
-  V.querySelectorAll('[data-uninvite]').forEach(b=>b.onclick=async()=>{
-    const email=b.dataset.uninvite;
-    if(!confirm('Withdraw the invite for '+email+'? They will no longer be able to join unless re-invited.')) return;
-    try{ await apiRemoveInvite(email); toast('Invite withdrawn'); INVITE_LIST=await apiListInvites().catch(()=>INVITE_LIST); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
-  });
   V.querySelectorAll('[data-teamkey]').forEach(b=>{
     const key=b.dataset.teamkey; const isActive=b.dataset.active==='true';
     paintTeamToggle(b,isActive);
