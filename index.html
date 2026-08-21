@@ -1569,6 +1569,43 @@ function withLoadTimeout(promise,ms,label){
     new Promise((_,reject)=>setTimeout(()=>reject(new Error((label||'This')+' is taking too long — check your connection and try again')),ms))
   ]);
 }
+// Accessibility fix (Sec 48-55) -- every ad-hoc dialog in the app builds its own
+// #announceOverlay/#announceModal shell by hand, with zero ARIA semantics, no
+// focus management, and no Escape-to-close anywhere in the file. Call this once,
+// right after document.body.appendChild(ov), instead of duplicating that
+// boilerplate at every call site -- adds role="dialog"/aria-modal to the modal,
+// moves focus into it, restores focus to whatever triggered it once the overlay
+// is removed from the DOM (however that happens -- close button, click-outside,
+// Escape, or a save/submit handler calling ov.remove() itself), and a minimal
+// Tab focus-trap so keyboard focus can't wander into the page behind it. This is
+// the same "one shared fix closes the gap everywhere" approach already proven
+// for realtime channels (subscribeRealtimeTable()) in Phase 2.
+function makeModalAccessible(ov){
+  const modal=ov.firstElementChild; if(!modal) return;
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  if(!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex','-1');
+  const triggerEl=document.activeElement;
+  const focusable=()=>Array.from(modal.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')).filter(el=>!el.disabled && el.offsetParent!==null);
+  const first=focusable()[0]||modal; first.focus();
+  const onKeydown=e=>{
+    if(e.key==='Escape'){ ov.remove(); return; }
+    if(e.key==='Tab'){
+      const f=focusable(); if(!f.length) return;
+      const firstEl=f[0], lastEl=f[f.length-1];
+      if(e.shiftKey && document.activeElement===firstEl){ e.preventDefault(); lastEl.focus(); }
+      else if(!e.shiftKey && document.activeElement===lastEl){ e.preventDefault(); firstEl.focus(); }
+    }
+  };
+  document.addEventListener('keydown',onKeydown);
+  new MutationObserver((muts,obs)=>{
+    if(!document.body.contains(ov)){
+      document.removeEventListener('keydown',onKeydown);
+      if(triggerEl && document.body.contains(triggerEl)) triggerEl.focus();
+      obs.disconnect();
+    }
+  }).observe(document.body,{childList:true});
+}
 // A toast alone (2.6s, easy to miss on a real device) isn't enough signal when a
 // load genuinely fails -- this renders a persistent, un-missable banner with a
 // retry button instead, so a failed load never looks indistinguishable from "just
@@ -8584,11 +8621,13 @@ function openGlobalSearch(){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Search</div><button id="closeGlobalSearch" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-    <input id="globalSearchInput" placeholder="Search by client name or phone…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
-    <div id="globalSearchResults" class="list"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="globalSearchTitle">Search</div><button id="closeGlobalSearch" aria-label="Close search" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <input id="globalSearchInput" aria-label="Search by client name or phone" placeholder="Search by client name or phone…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
+    <div id="globalSearchResults" class="list" aria-live="polite"></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','globalSearchTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeGlobalSearch').onclick=()=>ov.remove();
   const input=document.getElementById('globalSearchInput'); input.focus();
@@ -10952,7 +10991,7 @@ function openDepositOverpayModal(myDep,payAmount,onDone){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:6px">Deposit overpaid</div>
+    <div style="font-weight:800;font-size:16px;margin-bottom:6px" id="depOptTitle">Deposit overpaid</div>
     <div class="mini" style="margin-bottom:16px">This payment brings the deposit to ${ghs(newTotal)}, which is ${ghs(overshoot)} more than the ${ghs(myDep.target)} target. How should the extra be handled?</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="delReasonBtn" data-depopt="absorb">
@@ -10967,6 +11006,8 @@ function openDepositOverpayModal(myDep,payAmount,onDone){
     <button class="btn ghost" id="cancelDepOpt" style="width:100%;margin-top:14px">Cancel</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','depOptTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('cancelDepOpt').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-depopt]').forEach(b=>b.onclick=()=>{
@@ -10980,7 +11021,7 @@ function deleteLeadConfirm(id,name){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:4px">Delete ${esc(name)}?</div>
+    <div style="font-weight:800;font-size:16px;margin-bottom:4px" id="delLeadTitle">Delete ${esc(name)}?</div>
     <div class="mini" style="margin-bottom:16px">This can't be undone. Tell us why — it decides what else needs to happen.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="delReasonBtn" data-reason="wrong">
@@ -10999,6 +11040,8 @@ function deleteLeadConfirm(id,name){
     <button class="btn ghost" id="cancelDel" style="width:100%;margin-top:14px">Cancel</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','delLeadTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('cancelDel').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-reason]').forEach(b=>b.onclick=async()=>{
