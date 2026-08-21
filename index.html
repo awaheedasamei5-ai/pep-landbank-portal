@@ -541,6 +541,45 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 .insightIcon{flex:0 0 auto;position:relative;z-index:1;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,currentColor 16%,transparent)}
 .insightIcon svg{width:19px;height:19px}
 .insightCard>div{position:relative;z-index:1;color:var(--text)}
+/* ---- Companion widget: proactive nudges + guided checklist ---- */
+@keyframes companionBorderSpin{to{--cangle:360deg}}
+@property --cangle{syntax:'<angle>';inherits:false;initial-value:0deg}
+.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#22D3EE,#67E8F9,#C9A227,#22D3EE);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(34,211,238,.45)}
+.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink,#0B1E3D) 0%,#0F2A52 60%,#0B1E3D 100%);overflow:hidden;padding:16px 16px 14px}
+body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F2A52 60%,#0B1E3D 100%)}
+.companionInner::before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(34,211,238,.22),transparent 55%),radial-gradient(circle at 85% 75%,rgba(201,162,39,.18),transparent 55%);animation:orbDrift 9s ease-in-out infinite alternate;pointer-events:none}
+.companionHead{position:relative;z-index:1;display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+.companionOrb{flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#67E8F9,#22D3EE 60%,#0C7A93);box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ringPulse 2.2s ease-out infinite;color:#04202b}
+.companionOrb svg{width:18px;height:18px}
+.companionTitle{flex:1;min-width:0}
+.companionTitle .t{font-weight:800;font-size:13.5px;color:#fff;display:flex;align-items:center;gap:6px}
+.companionTitle .s{font-size:11px;color:rgba(255,255,255,.62);margin-top:2px}
+.companionCaret{flex:0 0 auto;width:22px;height:22px;color:rgba(255,255,255,.75);transition:transform .25s ease}
+.companionWrap.open .companionCaret{transform:rotate(180deg)}
+.companionBody{position:relative;z-index:1;max-height:0;overflow:hidden;transition:max-height .35s ease}
+.companionWrap.open .companionBody{max-height:900px}
+.companionBodyIn{padding-top:14px}
+.companionNudges{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.companionNudge{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);cursor:pointer;text-align:left;width:100%;animation:fadeUp .4s ease both;transition:background .15s ease,transform .15s ease}
+.companionNudge:hover{background:rgba(255,255,255,.11);transform:translateX(2px)}
+.companionNudge .ic{flex:0 0 auto;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.1)}
+.companionNudge .ic svg{width:15px;height:15px}
+.companionNudge.dgr .ic{color:#F87171;background:rgba(248,113,113,.16)}
+.companionNudge.warnt .ic{color:#FBBF4E;background:rgba(251,191,78,.16)}
+.companionNudge.ok .ic{color:#67E8F9;background:rgba(103,232,249,.16)}
+.companionNudge .txt{flex:1;min-width:0;color:#fff;font-size:12px;font-weight:650;line-height:1.4}
+.companionNudge .det{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:1px;font-weight:500}
+.companionChecklist{display:flex;flex-direction:column;gap:6px}
+.companionCheckHead{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);font-weight:700;margin:2px 0 6px}
+.companionCheckItem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:background .15s ease}
+.companionCheckItem:hover{background:rgba(255,255,255,.09)}
+.companionCheckItem.done{opacity:.5}
+.companionCheckDot{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.6px solid rgba(255,255,255,.4);display:grid;place-items:center;color:#04202b;transition:background .18s ease,border-color .18s ease}
+.companionCheckItem.done .companionCheckDot{background:linear-gradient(135deg,#67E8F9,#22D3EE);border-color:transparent;animation:badgePop .3s ease}
+.companionCheckDot svg{width:11px;height:11px}
+.companionCheckItem .txt{flex:1;color:#fff;font-size:12px;font-weight:600}
+.companionCheckItem.done .txt{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.4)}
+.companionEmpty{color:rgba(255,255,255,.6);font-size:12px;padding:6px 2px 2px}
 .delReasonBtn{display:block;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.12s}
 .delReasonBtn:hover{border-color:var(--leaf);background:#F4F8FF}
 
@@ -7763,6 +7802,91 @@ function renderSmartInsights(leads,paymentsForScope){
   </button>`).join('')}</div>`;
 }
 function bindSmartInsights(){ document.querySelectorAll('[data-insightroute]').forEach(b=>b.onclick=()=>route(b.dataset.insightroute,b.dataset.insightarg||undefined)); }
+
+/* ================= COMPANION — proactive nudges + guided checklist =================
+   Staff nudges reuse computeSmartInsights()/getInsightLists() directly (same rule
+   engine, same data) rather than duplicating logic; the client side gets its own
+   rules since clients have no equivalent today. Rule-based throughout -- no AI/LLM
+   call involved. */
+function computeStaffCompanionNudges(leads,paymentsForScope){ return computeSmartInsights(leads,paymentsForScope).slice(0,4); }
+function computeStaffCompanionChecklist(leads){
+  const {cold,nearTrigger,readyForAllocation,stalledHigh,overdue}=getInsightLists(leads);
+  return [
+    {done:overdue.length===0,text:overdue.length?`Clear ${overdue.length} overdue follow-up${overdue.length===1?'':'s'}`:'No overdue follow-ups',route:overdue.length?'insightList':'',arg:'overdue'},
+    {done:stalledHigh.length===0,text:stalledHigh.length?`Plan a follow-up for ${stalledHigh.length} high-priority client${stalledHigh.length===1?'':'s'}`:'High-priority clients all have a plan',route:stalledHigh.length?'insightList':'',arg:'stalledHigh'},
+    {done:readyForAllocation.length===0,text:readyForAllocation.length?`Request allocation for ${readyForAllocation.length} eligible client${readyForAllocation.length===1?'':'s'}`:'No pending allocation requests',route:readyForAllocation.length?'insightList':'',arg:'readyForAllocation'},
+    {done:cold.length===0,text:cold.length?`Re-engage ${cold.length} cold lead${cold.length===1?'':'s'}`:'No leads going cold',route:cold.length?'insightList':'',arg:'cold'},
+    {done:nearTrigger.length===0,text:nearTrigger.length?`Nudge ${nearTrigger.length} client${nearTrigger.length===1?'':'s'} toward the 30% mark`:'No clients waiting on the 30% mark',route:nearTrigger.length?'insightList':'',arg:'nearTrigger'},
+    {done:false,text:'View full Smart Insights',route:'insights'},
+  ];
+}
+function computeClientCompanionNudges(leads,payments){
+  const nudges=[];
+  if(!leads.length){ nudges.push({cls:'ok',icon:ic.spark,text:'Welcome to Palmstead — your purchases will appear here once your agent records one.'}); return nudges; }
+  leads.forEach(l=>{
+    const c=computeLead(l); const grand=l.grandTotal!=null?num(l.grandTotal):c.grand; const paid=num(l.amtPaid); const bal=Math.max(grand-paid,0);
+    const pct=grand>0?Math.round(paid/grand*100):0; const label=l.plotType||'plot';
+    if(bal>0.01){
+      const paymentsForLead=payments.filter(p=>p.leadId===l.id);
+      const sched=computeMonthlySchedule(l,paymentsForLead);
+      if(sched){
+        if(sched.arrears>0) nudges.push({cls:'dgr',icon:ic.clock,text:`Overdue ${ghs(sched.arrears)} on your ${label}`,detail:'Settle this to stay current on your payment plan.'});
+        else{
+          const days=Math.round((new Date(sched.nextDueDate+'T00:00:00')-new Date(today()+'T00:00:00'))/86400000);
+          if(days>=0&&days<=7) nudges.push({cls:'warnt',icon:ic.calendar,text:`Next payment of ${ghs(sched.expectedThisMonth||sched.monthlyInstallment)} due in ${days===0?'today':days+' day'+(days===1?'':'s')}`,detail:new Date(sched.nextDueDate+'T00:00:00').toLocaleDateString('en-GB')});
+        }
+      }
+      if(pct>=20&&pct<30) nudges.push({cls:'ok',icon:ic.target,text:`${30-pct}% away from the 30% allocation mark on your ${label}`,detail:'One more payment could make you eligible for plot allocation.'});
+    } else {
+      nudges.push({cls:'ok',icon:ic.trophy,text:`Your ${label} is fully paid`,detail:'Ask your agent about your Contract of Sale if you have not already.'});
+    }
+  });
+  if(leads.some(l=>clientContractState(l)==='ready')) nudges.push({cls:'ok',icon:ic.doc,text:'Your Contract of Sale is ready to download',route:'clientcontractsale'});
+  if(!nudges.length) nudges.push({cls:'ok',icon:'✅',text:'Nothing urgent right now — your account looks healthy'});
+  return nudges.slice(0,4);
+}
+function computeClientCompanionChecklist(leads){
+  if(!leads.length) return [];
+  const totalGrand=leads.reduce((s,l)=>{ const c=computeLead(l); return s+(l.grandTotal!=null?num(l.grandTotal):c.grand); },0);
+  const totalPaid=leads.reduce((s,l)=>s+num(l.amtPaid),0);
+  const totalBal=Math.max(totalGrand-totalPaid,0);
+  const anyRequested=leads.some(l=>clientContractState(l)!=='needsInfo');
+  return [
+    {done:totalBal<=0.01,text:totalBal<=0.01?'Balance fully cleared':`Clear your balance of ${ghs(totalBal)}`},
+    {done:anyRequested,text:anyRequested?'Contract of Sale in progress':'Start your Contract of Sale',route:'clientcontractsale'},
+    {done:false,text:'Refer a friend & earn',route:'clientreferrals'},
+  ];
+}
+function renderCompanionWidget(nudges,checklist,opts){
+  opts=opts||{};
+  const nudgeHtml=(nudges||[]).map((n,i)=>`<button class="companionNudge ${n.cls||'ok'}" style="animation-delay:${(i*.05).toFixed(2)}s" ${n.route?`data-comproute="${esc(n.route)}" data-comparg="${esc(n.arg||'')}"`:''}>
+    <span class="ic">${n.icon||ic.spark}</span>
+    <div class="txt">${esc(n.text)}${n.detail?`<div class="det">${esc(n.detail)}</div>`:''}</div>
+  </button>`).join('');
+  const checkHtml=(checklist||[]).map(c=>`<div class="companionCheckItem ${c.done?'done':''}" ${c.route?`data-comproute="${esc(c.route)}" data-comparg="${esc(c.arg||'')}"`:''}>
+    <span class="companionCheckDot">${c.done?ic.check2:''}</span>
+    <div class="txt">${esc(c.text)}</div>
+  </div>`).join('');
+  return `<div class="companionWrap open" id="companionWidget">
+    <div class="companionInner">
+      <div class="companionHead" id="companionToggle">
+        <span class="companionOrb">${ic.spark}</span>
+        <div class="companionTitle"><div class="t">✨ Companion</div><div class="s">${esc(opts.subtitle||'Proactive nudges, tailored to you')}</div></div>
+        <span class="companionCaret"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="companionBody"><div class="companionBodyIn">
+        ${nudgeHtml?`<div class="companionNudges">${nudgeHtml}</div>`:`<div class="companionEmpty">Nothing to flag right now.</div>`}
+        ${checkHtml?`<div class="companionCheckHead">Suggested next steps</div><div class="companionChecklist">${checkHtml}</div>`:''}
+      </div></div>
+    </div>
+  </div>`;
+}
+function bindCompanionWidget(){
+  const w=document.getElementById('companionWidget'); if(!w) return;
+  const toggle=document.getElementById('companionToggle');
+  if(toggle) toggle.onclick=()=>w.classList.toggle('open');
+  w.querySelectorAll('[data-comproute]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); const r=b.dataset.comproute; if(r) route(r,b.dataset.comparg||undefined); });
+}
 function homeHeroGreeting(){
   const h=new Date().getHours();
   return h>=5&&h<12?'Good morning':h>=12&&h<17?'Good afternoon':h>=17&&h<21?'Good evening':'Working late';
@@ -7788,12 +7912,13 @@ function agentHome(){ const k=kpisOf(DB.leads);
   ${renderBannerSlideshow()}
   ${renderAllocationBanners()}
   ${renderComplaintAssignBanners()}
+  ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{subtitle:'Your next best actions, auto-generated'})}
   <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'gold','monthlyclosed')}</div>
   <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
   <div class="footer-note" style="padding-top:2px">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
-  bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
+  bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); bindCompanionWidget(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
   document.getElementById('heroCommissionChip').onclick=()=>route('myCommission');
   document.getElementById('heroQuoteChip').onclick=openQuotationRequest;
   document.getElementById('dashRefreshBtn').onclick=async(e)=>{
@@ -12826,12 +12951,6 @@ async function clientHome(){
   const totalDiscount=leads.reduce((s,l)=>s+(l.discount!=null?num(l.discount):0),0);
   const overallPct=totalGrand>0?Math.min(100,Math.round(totalPaid/totalGrand*100)):0;
   const furthestStageIdx=leads.length?Math.max(-1,...leads.map(l=>l.docStage?DOC_STAGES.findIndex(d=>d.key===l.docStage):-1)):-1;
-  let insightMsg='';
-  if(leads.length){
-    if(overallPct>=100) insightMsg="You're fully paid up"+(furthestStageIdx>=0?(' — currently at "'+DOC_STAGES[furthestStageIdx].label+'".'):'. Documentation will begin shortly.');
-    else if(overallPct>=30) insightMsg="You're "+overallPct+"% paid — you've passed the 30% mark, so allocation can proceed."+(furthestStageIdx>=0?(' Currently at "'+DOC_STAGES[furthestStageIdx].label+'".'):'');
-    else insightMsg="You're "+overallPct+"% paid so far. Reach 30% to become eligible for plot allocation.";
-  }
   V.innerHTML=`
     <div class="homeHero">
       <div class="heroTop">
@@ -12848,14 +12967,11 @@ async function clientHome(){
         <div style="font-size:12px;font-weight:700;color:#fff;margin-top:6px">${esc(DOC_STAGES[furthestStageIdx].label)}</div>
       </div>`:''}`:`<div class="heroStat"><div class="heroStatLabel">Your account</div><div class="heroStatValue" style="font-size:20px">No purchases yet</div></div>`}
     </div>
+    ${renderCompanionWidget(computeClientCompanionNudges(leads,payments),computeClientCompanionChecklist(leads),{subtitle:'Tailored to your account'})}
     ${leads.length?`<div class="kpis" style="grid-template-columns:repeat(2,1fr)">
       ${kpi('Total plots',totalPlots)}
       ${totalDiscount>0?kpi('Discount given',ghs(totalDiscount),'gold'):kpi('Fully paid',overallPct>=100?'Yes':'Not yet')}
-    </div>
-    ${insightMsg?`<div class="rowcard" style="margin:0 0 16px;padding:14px 16px;background:linear-gradient(135deg,#EEF4FF,#F4F6F5);border:1px solid var(--line);display:flex;gap:10px;align-items:flex-start">
-      <span style="width:18px;height:18px;flex:0 0 auto;color:var(--leaf)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M12 3l2.2 5.6L20 11l-5.8 2.4L12 19l-2.2-5.6L4 11l5.8-2.4L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>
-      <div class="mini" style="font-size:12.5px;line-height:1.5">${esc(insightMsg)}</div>
-    </div>`:''}`:''}
+    </div>`:''}
     ${(CLIENT_DB.announcements||[]).length?`<div class="sectitle" style="margin-top:0"><h3>News from Palmstead</h3></div>
     <div class="list" style="margin-bottom:16px">${CLIENT_DB.announcements.map(a=>`<div class="rowcard" style="padding:14px 16px">
       ${a.image?`<div style="margin:-14px -16px 10px;border-radius:14px 14px 0 0;overflow:hidden"><img src="${a.image}" style="width:100%;display:block"/></div>`:''}
@@ -12936,6 +13052,7 @@ async function clientHome(){
   const arBtn=document.getElementById('dlAllReceipts'); if(arBtn) arBtn.onclick=()=>downloadAllReceipts();
   const moBtn=document.getElementById('dlMonthReceipt'); if(moBtn) moBtn.onclick=()=>downloadReceiptForMonth(val('dlMonthSel'));
   const reqBtn=document.getElementById('reqPlotBtn'); if(reqBtn) reqBtn.onclick=()=>openClientPlotRequestModal(leads);
+  bindCompanionWidget();
 }
 function viewClientMore(){
   V.innerHTML=`<div class="pagehead"><div><h2>More</h2><p>Contact your agent or PEP Landbank</p></div></div>
@@ -14775,11 +14892,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     </div>
   </div>
   ${renderBannerSlideshow()}
-  <button class="rowcard" id="mgrInsightsTeaser" style="margin-bottom:18px;padding:16px;width:100%;text-align:left;display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid rgba(52,211,153,.25);background:linear-gradient(120deg,#F4FBEA,#F4F8FF)">
-    <span class="kpi-ic green" style="margin-bottom:0">${ic.spark}</span>
-    <div style="flex:1"><div style="font-weight:700;font-size:13.5px">Smart Insights</div><div class="mini">${mySmartInsightsMgr.length} auto-generated ${mySmartInsightsMgr.length===1?'insight':'insights'} from live company data</div></div>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="color:var(--muted)"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
+  ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
   <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
   <div class="kpis">${kpi('Total leads',tot.leads,'','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
 
@@ -14796,7 +14909,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
   V.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>route('stageList',b.dataset.stage));
-  const insightsTeaser=document.getElementById('mgrInsightsTeaser'); if(insightsTeaser) insightsTeaser.onclick=()=>route('insights');
+  bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
 }
