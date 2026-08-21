@@ -1,3 +1,184 @@
+-- Leaf-first order: SQL-language functions are validated at CREATE time,
+-- so any function they call must already exist. plpgsql function bodies
+-- aren't validated until first execution, so their relative order doesn't
+-- matter, but they're kept after the SQL functions here for clarity.
+
+CREATE OR REPLACE FUNCTION public.my_client_contact_digits()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select right(regexp_replace(client_contact,'[^0-9]','','g'),9) from public.client_portal_access where auth_uid = auth.uid()
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.my_client_name()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select lower(trim(client_name)) from public.client_portal_access where auth_uid = auth.uid()
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.my_key()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$ select agent_key from public.profiles where id = auth.uid() $function$
+;
+
+CREATE OR REPLACE FUNCTION public.my_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$ select role from public.profiles where id = auth.uid() $function$
+;
+
+CREATE OR REPLACE FUNCTION public.email_is_allowed(check_email text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$ select exists (select 1 from public.allowed_emails a where lower(a.email) = lower(check_email)) $function$
+;
+
+CREATE OR REPLACE FUNCTION public.task_event_participant(t_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.task_events e
+    where e.task_id = t_id
+      and (e.actor_key = my_key() or e.from_key = my_key() or e.to_key = my_key())
+  );
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_memo_cc_recipient(p_memo_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists(select 1 from public.memo_recipients where memo_id = p_memo_id and staff_key = public.my_key())
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_memo_sender(p_memo_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists(select 1 from public.memos where id = p_memo_id and from_key = public.my_key())
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.client_portal_search_names(p_query text)
+ RETURNS TABLE(name text, contact_masked text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select distinct l.name, 'xxx-xxx-'||right(regexp_replace(l.contact,'[^0-9]','','g'),2)
+  from public.leads l
+  where l.name ilike '%'||p_query||'%' and length(trim(p_query)) >= 2
+  limit 10
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.leaderboard_rows(p_from date, p_to date)
+ RETURNS TABLE(staff_key text, staff_name text, total_collected numeric, deals_closed_year integer, site_visits integer, tasks_completed integer, avg_task_days numeric, todos_completed integer, days_attended integer, on_time_days integer)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with agents as (
+    select agent_key as key, name from public.profiles where role = 'agent'
+  ),
+  collected as (
+    select agent_key as key, coalesce(sum(amt_paid),0) as total_collected
+    from public.leads group by agent_key
+  ),
+  deals_year as (
+    select agent_key as key, count(*) as deals_closed_year
+    from public.leads
+    where coalesce(grand_total,0) > 0 and amt_paid >= grand_total
+      and date_added between p_from and p_to
+    group by agent_key
+  ),
+  visits_table as (
+    select agent_key as key, count(*) as cnt from public.site_visits group by agent_key
+  ),
+  visits_fallback as (
+    select agent_key as key, count(*) as cnt from public.leads where site_visit = 'Yes' group by agent_key
+  ),
+  tasks90 as (
+    select assigned_to as key, count(*) as tasks_completed,
+      avg(extract(epoch from (completed_at - created_at))/86400.0) as avg_task_days
+    from public.schedule_items
+    where kind='task' and status='done' and completed_at >= (now() - interval '90 days')
+      and completed_at >= created_at
+    group by assigned_to
+  ),
+  todos90 as (
+    select owner_key as key, count(*) as todos_completed
+    from public.schedule_items
+    where kind='todo' and status='done' and item_date >= (current_date - interval '90 days')
+    group by owner_key
+  ),
+  att90 as (
+    select staff_key as key,
+      count(*) filter (where sign_in_at is not null) as days_attended,
+      count(*) filter (where sign_in_at is not null and to_char(sign_in_at,'HH24:MI') <= coalesce((select attendance_cutoff_time from public.app_config where id=1),'09:00')) as on_time_days
+    from public.attendance_log
+    where work_date >= (current_date - interval '90 days')
+    group by staff_key
+  )
+  select
+    a.key,
+    a.name,
+    coalesce(c.total_collected,0),
+    coalesce(d.deals_closed_year,0)::int,
+    (case when coalesce(vt.cnt,0) > 0 then vt.cnt else coalesce(vf.cnt,0) end)::int,
+    coalesce(t.tasks_completed,0)::int,
+    t.avg_task_days,
+    coalesce(td.todos_completed,0)::int,
+    coalesce(att.days_attended,0)::int,
+    coalesce(att.on_time_days,0)::int
+  from agents a
+  left join collected c on c.key = a.key
+  left join deals_year d on d.key = a.key
+  left join visits_table vt on vt.key = a.key
+  left join visits_fallback vf on vf.key = a.key
+  left join tasks90 t on t.key = a.key
+  left join todos90 td on td.key = a.key
+  left join att90 att on att.key = a.key;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.staff_referral_conversions(p_from date, p_to date)
+ RETURNS TABLE(staff_key text, referral_conversions integer)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select l.agent_key as staff_key, count(*)::int as referral_conversions
+  from public.referrals r
+  join public.leads l on l.id = r.referrer_lead_id
+  where r.status = 'Cleared'
+    and r.cleared_at::date between p_from and p_to
+  group by l.agent_key;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.can_see_task(t_id uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -28,6 +209,8 @@ AS $function$
     and p_start < si.end_time and si.start_time < p_end
 $function$
 ;
+
+-- ============ plpgsql functions (bodies validated on first execution, not CREATE) ============
 
 CREATE OR REPLACE FUNCTION public.clear_referral(p_referral_id uuid, p_points numeric)
  RETURNS referrals
@@ -155,19 +338,6 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.client_portal_search_names(p_query text)
- RETURNS TABLE(name text, contact_masked text)
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select distinct l.name, 'xxx-xxx-'||right(regexp_replace(l.contact,'[^0-9]','','g'),2)
-  from public.leads l
-  where l.name ilike '%'||p_query||'%' and length(trim(p_query)) >= 2
-  limit 10
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.client_portal_update_avatar(p_avatar text)
  RETURNS void
  LANGUAGE plpgsql
@@ -265,129 +435,6 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.create_backup(p_trigger text, p_by text DEFAULT NULL::text, p_by_name text DEFAULT NULL::text)
- RETURNS uuid
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'extensions'
-AS $function$
-declare
-  v_snapshot jsonb;
-  v_counts jsonb;
-  v_id uuid;
-  v_checksum text;
-begin
-  select jsonb_build_object(
-    'leads', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.leads t),
-    'plots', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.plots t),
-    'payments', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.payments t),
-    'enquiries', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.enquiries t),
-    'complaints', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.complaints t),
-    'site_visits', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.site_visits t),
-    'activity_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.activity_log t),
-    'allocation_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.allocation_requests t),
-    'target_selections', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.target_selections t),
-    'tasks', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.tasks t),
-    'task_events', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.task_events t),
-    'feedback', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.feedback t),
-    'feedback_comments', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.feedback_comments t),
-    'quotation_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.quotation_requests t),
-    'sms_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.sms_log t),
-    'client_portal_access', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.client_portal_access t),
-    'payment_reminders_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.payment_reminders_log t),
-    'client_notifications', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.client_notifications t),
-    'plot_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.plot_requests t),
-    'weekly_visit_forms', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.weekly_visit_forms t),
-    'leave_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.leave_requests t),
-    'memos', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.memos t),
-    'pricing_history', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.pricing_history t),
-    'contracts', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.contracts t),
-    'contract_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.contract_requests t),
-    'allowed_emails', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.allowed_emails t),
-    'app_config', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.app_config t),
-    'profiles', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.profiles t)
-  ) into v_snapshot;
-
-  select jsonb_object_agg(key, jsonb_array_length(value)) into v_counts from jsonb_each(v_snapshot);
-  v_checksum := encode(digest(v_snapshot::text, 'sha256'), 'hex');
-
-  insert into public.backups(trigger_type, triggered_by, triggered_by_name, snapshot, table_counts, size_bytes, checksum)
-  values (p_trigger, p_by, p_by_name, v_snapshot, v_counts, octet_length(v_snapshot::text), v_checksum)
-  returning id into v_id;
-
-  delete from public.backups where id in (
-    select id from public.backups order by created_at desc offset 30
-  );
-
-  return v_id;
-end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.email_is_allowed(check_email text)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$ select exists (select 1 from public.allowed_emails a where lower(a.email) = lower(check_email)) $function$
-;
-
-CREATE OR REPLACE FUNCTION public.ensure_receipt_number(p_payment_id uuid, p_channel text DEFAULT 'download'::text)
- RETURNS text
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-declare
-  v_number text;
-  v_seq bigint;
-  v_actor_kind text;
-  v_actor_key text;
-  v_actor_name text;
-  v_authorized boolean;
-begin
-  select
-    (p.agent_key = my_key() or my_role() = 'manager' or my_key() = any(array['elias','emmanuel','elizabeth']))
-    or (
-      p.status = 'approved'
-      and my_client_contact_digits() is not null
-      and exists (
-        select 1 from public.leads l
-        where l.id = p.lead_id
-          and right(regexp_replace(l.contact,'[^0-9]','','g'),9) = my_client_contact_digits()
-          and lower(trim(l.name)) = my_client_name()
-      )
-    )
-  into v_authorized
-  from public.payments p
-  where p.id = p_payment_id;
-
-  if v_authorized is not true then
-    raise exception 'Not authorized to generate a receipt for this payment';
-  end if;
-
-  select receipt_number into v_number from public.payments where id = p_payment_id;
-  if v_number is null then
-    v_seq := nextval('public.receipt_number_seq');
-    v_number := 'RCT-' || lpad(v_seq::text, 6, '0');
-    update public.payments set receipt_number = v_number where id = p_payment_id;
-  end if;
-
-  if my_key() is not null then
-    v_actor_kind := 'staff'; v_actor_key := my_key(); v_actor_name := (select name from public.profiles where agent_key = my_key());
-  else
-    v_actor_kind := 'client';
-    select id::text, client_name into v_actor_key, v_actor_name from public.client_portal_access where auth_uid = auth.uid();
-  end if;
-
-  insert into public.receipt_log(payment_id, receipt_number, actor_kind, actor_key, actor_name, channel)
-  values (p_payment_id, v_number, v_actor_kind, v_actor_key, v_actor_name, coalesce(p_channel,'download'));
-
-  return v_number;
-end;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.guard_leads_amt_paid()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -434,96 +481,6 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.is_memo_cc_recipient(p_memo_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select exists(select 1 from public.memo_recipients where memo_id = p_memo_id and staff_key = public.my_key())
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.is_memo_sender(p_memo_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select exists(select 1 from public.memos where id = p_memo_id and from_key = public.my_key())
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.leaderboard_rows(p_from date, p_to date)
- RETURNS TABLE(staff_key text, staff_name text, total_collected numeric, deals_closed_year integer, site_visits integer, tasks_completed integer, avg_task_days numeric, todos_completed integer, days_attended integer, on_time_days integer)
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  with agents as (
-    select agent_key as key, name from public.profiles where role = 'agent'
-  ),
-  collected as (
-    select agent_key as key, coalesce(sum(amt_paid),0) as total_collected
-    from public.leads group by agent_key
-  ),
-  deals_year as (
-    select agent_key as key, count(*) as deals_closed_year
-    from public.leads
-    where coalesce(grand_total,0) > 0 and amt_paid >= grand_total
-      and date_added between p_from and p_to
-    group by agent_key
-  ),
-  visits_table as (
-    select agent_key as key, count(*) as cnt from public.site_visits group by agent_key
-  ),
-  visits_fallback as (
-    select agent_key as key, count(*) as cnt from public.leads where site_visit = 'Yes' group by agent_key
-  ),
-  tasks90 as (
-    select assigned_to as key, count(*) as tasks_completed,
-      avg(extract(epoch from (completed_at - created_at))/86400.0) as avg_task_days
-    from public.schedule_items
-    where kind='task' and status='done' and completed_at >= (now() - interval '90 days')
-      and completed_at >= created_at
-    group by assigned_to
-  ),
-  todos90 as (
-    select owner_key as key, count(*) as todos_completed
-    from public.schedule_items
-    where kind='todo' and status='done' and item_date >= (current_date - interval '90 days')
-    group by owner_key
-  ),
-  att90 as (
-    select staff_key as key,
-      count(*) filter (where sign_in_at is not null) as days_attended,
-      count(*) filter (where sign_in_at is not null and to_char(sign_in_at,'HH24:MI') <= coalesce((select attendance_cutoff_time from public.app_config where id=1),'09:00')) as on_time_days
-    from public.attendance_log
-    where work_date >= (current_date - interval '90 days')
-    group by staff_key
-  )
-  select
-    a.key,
-    a.name,
-    coalesce(c.total_collected,0),
-    coalesce(d.deals_closed_year,0)::int,
-    (case when coalesce(vt.cnt,0) > 0 then vt.cnt else coalesce(vf.cnt,0) end)::int,
-    coalesce(t.tasks_completed,0)::int,
-    t.avg_task_days,
-    coalesce(td.todos_completed,0)::int,
-    coalesce(att.days_attended,0)::int,
-    coalesce(att.on_time_days,0)::int
-  from agents a
-  left join collected c on c.key = a.key
-  left join deals_year d on d.key = a.key
-  left join visits_table vt on vt.key = a.key
-  left join visits_fallback vf on vf.key = a.key
-  left join tasks90 t on t.key = a.key
-  left join todos90 td on td.key = a.key
-  left join att90 att on att.key = a.key;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.link_referral_to_lead(p_referral_id uuid, p_lead_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -543,42 +500,6 @@ begin
     );
 end;
 $function$
-;
-
-CREATE OR REPLACE FUNCTION public.my_client_contact_digits()
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select right(regexp_replace(client_contact,'[^0-9]','','g'),9) from public.client_portal_access where auth_uid = auth.uid()
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.my_client_name()
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select lower(trim(client_name)) from public.client_portal_access where auth_uid = auth.uid()
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.my_key()
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$ select agent_key from public.profiles where id = auth.uid() $function$
-;
-
-CREATE OR REPLACE FUNCTION public.my_role()
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$ select role from public.profiles where id = auth.uid() $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.notify_staff_on_client_submission()
@@ -682,6 +603,169 @@ begin
     raise exception 'Only Management can approve or decline a payment';
   end if;
   return NEW;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.update_lead_doc_stage(p_lead_id uuid, p_stage text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if not (my_key() in ('elias','emmanuel','elizabeth') or my_role() = 'manager') then
+    raise exception 'not_authorized';
+  end if;
+  if p_stage is not null and p_stage not in ('allocation','picking','site_plan','indentures','court_stamping','ready_pickup') then
+    raise exception 'invalid_stage';
+  end if;
+  update public.leads set doc_stage = p_stage, doc_stage_updated_at = now() where id = p_lead_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.staff_get_client_channels(p_contact text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_digits text;
+  v_row record;
+begin
+  if auth.uid() is null or exists (select 1 from public.client_portal_access where auth_uid = auth.uid()) then
+    return jsonb_build_object('ok', false, 'reason', 'staff_only');
+  end if;
+  v_digits := right(regexp_replace(coalesce(p_contact,''), '[^0-9]', '', 'g'), 9);
+  if v_digits is null or length(v_digits) < 9 then
+    return jsonb_build_object('ok', false, 'reason', 'invalid_contact');
+  end if;
+  select client_email, client_whatsapp into v_row
+    from public.client_portal_access
+    where right(regexp_replace(client_contact,'[^0-9]','','g'),9) = v_digits
+    limit 1;
+  return jsonb_build_object('ok', true, 'email', v_row.client_email, 'whatsapp', v_row.client_whatsapp);
+end;
+$function$
+;
+
+-- Note: create_backup/ensure_receipt_number/restore_backup reference
+-- public.receipt_number_seq, created in 06_sequences_and_triggers.sql --
+-- fine since plpgsql bodies aren't validated until first execution.
+
+CREATE OR REPLACE FUNCTION public.create_backup(p_trigger text, p_by text DEFAULT NULL::text, p_by_name text DEFAULT NULL::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare
+  v_snapshot jsonb;
+  v_counts jsonb;
+  v_id uuid;
+  v_checksum text;
+begin
+  select jsonb_build_object(
+    'leads', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.leads t),
+    'plots', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.plots t),
+    'payments', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.payments t),
+    'enquiries', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.enquiries t),
+    'complaints', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.complaints t),
+    'site_visits', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.site_visits t),
+    'activity_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.activity_log t),
+    'allocation_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.allocation_requests t),
+    'target_selections', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.target_selections t),
+    'tasks', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.tasks t),
+    'task_events', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.task_events t),
+    'feedback', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.feedback t),
+    'feedback_comments', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.feedback_comments t),
+    'quotation_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.quotation_requests t),
+    'sms_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.sms_log t),
+    'client_portal_access', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.client_portal_access t),
+    'payment_reminders_log', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.payment_reminders_log t),
+    'client_notifications', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.client_notifications t),
+    'plot_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.plot_requests t),
+    'weekly_visit_forms', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.weekly_visit_forms t),
+    'leave_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.leave_requests t),
+    'memos', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.memos t),
+    'pricing_history', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.pricing_history t),
+    'contracts', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.contracts t),
+    'contract_requests', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.contract_requests t),
+    'allowed_emails', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.allowed_emails t),
+    'app_config', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.app_config t),
+    'profiles', (select coalesce(jsonb_agg(t),'[]'::jsonb) from public.profiles t)
+  ) into v_snapshot;
+
+  select jsonb_object_agg(key, jsonb_array_length(value)) into v_counts from jsonb_each(v_snapshot);
+  v_checksum := encode(digest(v_snapshot::text, 'sha256'), 'hex');
+
+  insert into public.backups(trigger_type, triggered_by, triggered_by_name, snapshot, table_counts, size_bytes, checksum)
+  values (p_trigger, p_by, p_by_name, v_snapshot, v_counts, octet_length(v_snapshot::text), v_checksum)
+  returning id into v_id;
+
+  delete from public.backups where id in (
+    select id from public.backups order by created_at desc offset 30
+  );
+
+  return v_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.ensure_receipt_number(p_payment_id uuid, p_channel text DEFAULT 'download'::text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_number text;
+  v_seq bigint;
+  v_actor_kind text;
+  v_actor_key text;
+  v_actor_name text;
+  v_authorized boolean;
+begin
+  select
+    (p.agent_key = my_key() or my_role() = 'manager' or my_key() = any(array['elias','emmanuel','elizabeth']))
+    or (
+      p.status = 'approved'
+      and my_client_contact_digits() is not null
+      and exists (
+        select 1 from public.leads l
+        where l.id = p.lead_id
+          and right(regexp_replace(l.contact,'[^0-9]','','g'),9) = my_client_contact_digits()
+          and lower(trim(l.name)) = my_client_name()
+      )
+    )
+  into v_authorized
+  from public.payments p
+  where p.id = p_payment_id;
+
+  if v_authorized is not true then
+    raise exception 'Not authorized to generate a receipt for this payment';
+  end if;
+
+  select receipt_number into v_number from public.payments where id = p_payment_id;
+  if v_number is null then
+    v_seq := nextval('public.receipt_number_seq');
+    v_number := 'RCT-' || lpad(v_seq::text, 6, '0');
+    update public.payments set receipt_number = v_number where id = p_payment_id;
+  end if;
+
+  if my_key() is not null then
+    v_actor_kind := 'staff'; v_actor_key := my_key(); v_actor_name := (select name from public.profiles where agent_key = my_key());
+  else
+    v_actor_kind := 'client';
+    select id::text, client_name into v_actor_key, v_actor_name from public.client_portal_access where auth_uid = auth.uid();
+  end if;
+
+  insert into public.receipt_log(payment_id, receipt_number, actor_kind, actor_key, actor_name, channel)
+  values (p_payment_id, v_number, v_actor_kind, v_actor_key, v_actor_name, coalesce(p_channel,'download'));
+
+  return v_number;
 end;
 $function$
 ;
@@ -808,79 +892,6 @@ begin
   );
 
   update public.app_config set last_commission_month = report_month where id=1;
-end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.staff_get_client_channels(p_contact text)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-declare
-  v_digits text;
-  v_row record;
-begin
-  if auth.uid() is null or exists (select 1 from public.client_portal_access where auth_uid = auth.uid()) then
-    return jsonb_build_object('ok', false, 'reason', 'staff_only');
-  end if;
-  v_digits := right(regexp_replace(coalesce(p_contact,''), '[^0-9]', '', 'g'), 9);
-  if v_digits is null or length(v_digits) < 9 then
-    return jsonb_build_object('ok', false, 'reason', 'invalid_contact');
-  end if;
-  select client_email, client_whatsapp into v_row
-    from public.client_portal_access
-    where right(regexp_replace(client_contact,'[^0-9]','','g'),9) = v_digits
-    limit 1;
-  return jsonb_build_object('ok', true, 'email', v_row.client_email, 'whatsapp', v_row.client_whatsapp);
-end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.staff_referral_conversions(p_from date, p_to date)
- RETURNS TABLE(staff_key text, referral_conversions integer)
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select l.agent_key as staff_key, count(*)::int as referral_conversions
-  from public.referrals r
-  join public.leads l on l.id = r.referrer_lead_id
-  where r.status = 'Cleared'
-    and r.cleared_at::date between p_from and p_to
-  group by l.agent_key;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.task_event_participant(t_id uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select exists (
-    select 1 from public.task_events e
-    where e.task_id = t_id
-      and (e.actor_key = my_key() or e.from_key = my_key() or e.to_key = my_key())
-  );
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.update_lead_doc_stage(p_lead_id uuid, p_stage text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-begin
-  if not (my_key() in ('elias','emmanuel','elizabeth') or my_role() = 'manager') then
-    raise exception 'not_authorized';
-  end if;
-  if p_stage is not null and p_stage not in ('allocation','picking','site_plan','indentures','court_stamping','ready_pickup') then
-    raise exception 'invalid_stage';
-  end if;
-  update public.leads set doc_stage = p_stage, doc_stage_updated_at = now() where id = p_lead_id;
 end;
 $function$
 ;
