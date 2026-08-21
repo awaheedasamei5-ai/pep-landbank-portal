@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Palmstead"/>
-<meta name="theme-color" content="#0B1E3D"/>
+<meta name="theme-color" content="var(--ink)"/>
 <link rel="manifest" href="./manifest.webmanifest"/>
 <link rel="apple-touch-icon" href="./apple-touch-icon.png"/>
 <link rel="icon" href="./favicon-32.png"/>
@@ -182,7 +182,7 @@ a{color:var(--green2)}
 .sysBanner button{flex:0 0 auto;border:none;border-radius:100px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;background:rgba(255,255,255,.18);color:#fff}
 .sysBanner button:hover{background:rgba(255,255,255,.3)}
 .sysBanner.info{background:#173D7A;color:#fff}
-.sysBanner.danger{background:#B4472F;color:#fff}
+.sysBanner.danger{background:var(--danger);color:#fff}
 .cfg{max-width:404px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:22px;animation:fadeUp .3s ease both}
 .cfg input{width:100%;padding:12px;border-radius:11px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.95);color:#16211C;margin-bottom:11px;outline:none}
 .cfg .note{font-size:11.5px;color:#9DB2CC;line-height:1.6;margin:2px 2px 14px}
@@ -244,7 +244,7 @@ a{color:var(--green2)}
   background-size:220% 100%;animation:sheenSlide 7s ease-in-out infinite}
 @keyframes sheenSlide{0%{background-position:130% 0}100%{background-position:-30% 0}}
 .topbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;pointer-events:none;
-  background:linear-gradient(90deg,transparent,var(--green) 20%,var(--gold2,#C9A227) 50%,var(--green) 80%,transparent);opacity:.5}
+  background:linear-gradient(90deg,transparent,var(--green) 20%,var(--gold2,var(--premium)) 50%,var(--green) 80%,transparent);opacity:.5}
 .topbar .glyph{width:34px;height:34px;border-radius:10px;overflow:hidden;flex:0 0 auto;box-shadow:0 4px 12px rgba(0,0,0,.3),0 0 0 1px rgba(190,242,100,.25)}
 .topbar .glyph img{width:100%;height:100%;display:block}
 .topbar .tt{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.09em;line-height:1}
@@ -297,7 +297,7 @@ a{color:var(--green2)}
   .svaCostGrid{grid-template-columns:1fr!important}
 }
 .chatnavbtn .badge{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:100px;
-  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:#0B1E3D;font-size:9.5px;font-weight:800;
+  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:9.5px;font-weight:800;
   display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--ink);animation:badgePop .3s ease both}
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
 .main{flex:1;padding:20px 16px 100px;max-width:1080px;width:100%;margin:0 auto}
@@ -324,7 +324,7 @@ a{color:var(--green2)}
 .bottomnav button svg{width:19px;height:19px;display:block}
 .bottomnav button.on{color:var(--leaf);font-weight:700}
 .bottomnav .bnBadge{position:absolute;top:0;right:22%;min-width:15px;height:15px;padding:0 3px;border-radius:100px;
-  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:#0B1E3D;font-size:8.5px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card)}
+  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:8.5px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card)}
 @media (max-width:380px){
   .bottomnav{padding-left:2px;padding-right:2px}
   .bottomnav button{font-size:8.8px;padding-left:0;padding-right:0}
@@ -366,10 +366,10 @@ a{color:var(--green2)}
 .kpi-ic svg{width:16px;height:16px}
 .kpi-ic.blue{background:linear-gradient(150deg,var(--accent,#3B82F6),var(--accent-dark,#1D4ED8))}
 .kpi-ic.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
-.kpi-ic.green{background:linear-gradient(150deg,#34D399,#16A34A)}
-.kpi-ic.amber{background:linear-gradient(150deg,#F5B94F,#B8791E)}
+.kpi-ic.green{background:linear-gradient(150deg,#34D399,var(--ok))}
+.kpi-ic.amber{background:linear-gradient(150deg,#F5B94F,var(--warn))}
 .kpi-ic.teal{background:linear-gradient(150deg,#4FBFA6,#1E7A6E)}
-.kpi-ic.red{background:linear-gradient(150deg,#E0836A,#B4472F)}
+.kpi-ic.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .kpi-ic.grey{background:linear-gradient(150deg,#94A3B8,#64748B)}
 .plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px}
 /* Team chat */
@@ -378,7 +378,7 @@ a{color:var(--green2)}
 .convRow:hover{transform:translateX(2px);box-shadow:var(--shadow)}
 .convAvatar{width:42px;height:42px;border-radius:100px;background:linear-gradient(150deg,var(--leaf),var(--green));color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden}
 .convAvatar img{width:100%;height:100%;object-fit:cover}
-.convBadge{min-width:19px;height:19px;padding:0 5px;border-radius:100px;background:linear-gradient(150deg,#84CC16,#4D7C0F);color:#0B1E3D;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.convBadge{min-width:19px;height:19px;padding:0 5px;border-radius:100px;background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .chatwrap{display:flex;flex-direction:column;height:calc(100dvh - 240px);min-height:320px;background:#EAF2ED;border-radius:0 0 16px 16px;overflow:hidden;border:1px solid var(--line);border-top:none}
 .waHeader{display:flex;align-items:center;gap:10px;background:linear-gradient(120deg,#1E8E5A,#146C46);color:#fff;
   padding:12px 14px;border-radius:18px 18px 0 0;box-shadow:0 6px 18px -6px rgba(20,108,70,.4)}
@@ -407,7 +407,7 @@ a{color:var(--green2)}
 .msgActBtn{background:rgba(0,0,0,.08);border:none;border-radius:100px;width:18px;height:18px;font-size:9.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:inherit}
 .msgActBtn svg{width:10px;height:10px}
 .chatLink{color:#1D4ED8;text-decoration:underline;word-break:break-all}
-.bubblerow.me .chatLink{color:#0B1E3D}
+.bubblerow.me .chatLink{color:var(--ink)}
 .chatImg{max-width:220px;width:100%;border-radius:10px;display:block;margin-bottom:4px;cursor:zoom-in}
 .fileCard{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.05);border-radius:10px;padding:8px 10px;margin-bottom:4px;min-width:180px}
 .fileIcon{flex:0 0 auto;color:var(--text);width:26px;height:26px;display:flex;align-items:center;justify-content:center}
@@ -445,13 +445,13 @@ a{color:var(--green2)}
 
 /* Floating announcement bubble */
 #announceBubble{position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:200;width:58px;height:58px;border-radius:100px;touch-action:none;
-  background:linear-gradient(150deg,#0B1E3D,#1D4ED8);box-shadow:0 10px 30px rgba(11,30,61,.45);
+  background:linear-gradient(150deg,var(--ink),#1D4ED8);box-shadow:0 10px 30px rgba(11,30,61,.45);
   display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;
   animation:bubbleIn .5s cubic-bezier(.34,1.56,.64,1) both}
 #announceBubble::before{content:"";position:absolute;inset:-6px;border-radius:100px;border:2px solid rgba(132,204,22,.55);animation:pulseRing 2.2s ease-out infinite}
 #announceBubble svg{position:relative;z-index:1;color:#fff}
 #announceBubble .badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:100px;
-  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:#0B1E3D;font-size:11px;font-weight:800;
+  background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:11px;font-weight:800;
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);z-index:2}
 @keyframes pulseRing{0%{transform:scale(.9);opacity:.9}80%{transform:scale(1.35);opacity:0}100%{opacity:0}}
 @keyframes bubbleIn{0%{transform:scale(0) rotate(-30deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
@@ -535,8 +535,8 @@ body.dark .appGridIcon:hover{background:#182541}
 .insightCard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
 .insightCard:hover::after{right:13px;opacity:.85}
 .insightCard.ok{color:#4D7C0F}
-.insightCard.warnt{color:#B8791E}
-.insightCard.dgr{color:#B4472F}
+.insightCard.warnt{color:var(--warn)}
+.insightCard.dgr{color:var(--danger)}
 body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF4E}body.dark .insightCard.dgr{color:#F87171}
 .insightIcon{flex:0 0 auto;position:relative;z-index:1;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,currentColor 16%,transparent)}
 .insightIcon svg{width:19px;height:19px}
@@ -544,9 +544,9 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 /* ---- Companion widget: proactive nudges + guided checklist ---- */
 @keyframes companionBorderSpin{to{--cangle:360deg}}
 @property --cangle{syntax:'<angle>';inherits:false;initial-value:0deg}
-.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#22D3EE,#67E8F9,#C9A227,#22D3EE);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(34,211,238,.45)}
-.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink,#0B1E3D) 0%,#0F2A52 60%,#0B1E3D 100%);overflow:hidden;padding:16px 16px 14px}
-body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F2A52 60%,#0B1E3D 100%)}
+.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#22D3EE,#67E8F9,var(--premium),#22D3EE);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(34,211,238,.45)}
+.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink,var(--ink)) 0%,#0F2A52 60%,var(--ink) 100%);overflow:hidden;padding:16px 16px 14px}
+body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,#0F2A52 60%,var(--ink) 100%)}
 .companionInner::before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(34,211,238,.22),transparent 55%),radial-gradient(circle at 85% 75%,rgba(201,162,39,.18),transparent 55%);animation:orbDrift 9s ease-in-out infinite alternate;pointer-events:none}
 .companionHead{position:relative;z-index:1;display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
 .companionOrb{flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#67E8F9,#22D3EE 60%,#0C7A93);box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ringPulse 2.2s ease-out infinite;color:#04202b}
@@ -589,8 +589,8 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F
 .plottile:hover{transform:translateY(-2px)}
 .plottile.sel{outline:3px solid var(--ink);outline-offset:2px}
 .plottile.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
-.plottile.amber{background:linear-gradient(150deg,#F5B94F,#B8791E)}
-.plottile.red{background:linear-gradient(150deg,#E0836A,#B4472F)}
+.plottile.amber{background:linear-gradient(150deg,#F5B94F,var(--warn))}
+.plottile.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .kpi .k{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
 .kpi .v{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:22px;margin-top:8px;color:var(--ink)}
 .kpi.gold .v{color:#8A6E12}
@@ -613,7 +613,7 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F
 .task.c-lead .ic{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
 .task.c-update .ic{background:linear-gradient(150deg,#3B82F6,#1D4ED8)}
 .task.c-enq .ic{background:linear-gradient(150deg,#4C9FC7,#2E6E8E)}
-.task.c-cmp .ic{background:linear-gradient(150deg,#E0836A,#B4472F)}
+.task.c-cmp .ic{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .task.c-visit .ic{background:linear-gradient(150deg,#4FBFA6,#1E7A6E)}
 .task.c-grid .ic{background:linear-gradient(150deg,#8C7BC7,#5D4E9E)}
 .task .tn{font-weight:700;font-size:15px;color:var(--ink);font-family:Inter,sans-serif}
@@ -640,7 +640,7 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F
 .contactBadgeBtn:hover{transform:scale(1.14);box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .contactTileIcon{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.18);transition:transform .15s}
 a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
-.tag.tagchip{background:linear-gradient(150deg,#F5B94F22,#B8791E22);color:#8A5F17;border:1px solid #F5B94F44}
+.tag.tagchip{background:linear-gradient(150deg,#F5B94F22,var(--warn)22);color:#8A5F17;border:1px solid #F5B94F44}
 .rowcard .meta{font-size:12px;color:var(--muted);margin-top:2px}
 .rowcard .amt{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;white-space:nowrap}
 .rowcard .foot{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
@@ -652,8 +652,8 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .tag.stage-2B{background:#DCEAFB;color:#1D4ED8}
 .tag.stage-3{background:#F6EBD3;color:#8A6E12}
 .tag.stage-4{background:#DCEEE4;color:#1E7A56}
-.tag.stage-Lost{background:#F4E0DA;color:#B4472F}
-.tag.pri-High{background:#F4E0DA;color:#B4472F}
+.tag.stage-Lost{background:#F4E0DA;color:var(--danger)}
+.tag.pri-High{background:#F4E0DA;color:var(--danger)}
 .tag.pri-Medium{background:#F6EBD3;color:#8A6E12}
 .tag.pri-Low{background:#EDEFF1;color:#5b6470}
 /* Pipeline lead cards: a colored left rail lets you scan stage at a glance down a
@@ -665,9 +665,9 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .pipeCard.stage-1{--stagecolor:#9AA5B1}
 .pipeCard.stage-2A{--stagecolor:#2E6E8E}
 .pipeCard.stage-2B{--stagecolor:#1D4ED8}
-.pipeCard.stage-3{--stagecolor:#C9A227}
+.pipeCard.stage-3{--stagecolor:var(--premium)}
 .pipeCard.stage-4{--stagecolor:#1E7A56}
-.pipeCard.stage-Lost{--stagecolor:#B4472F}
+.pipeCard.stage-Lost{--stagecolor:var(--danger)}
 .pipeAvatar{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:0 0 auto;letter-spacing:-.02em}
 .pipeStatStrip{display:flex;gap:10px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px}
@@ -735,8 +735,8 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .attClockDate{font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;position:relative;z-index:1}
 .attClockBtn{width:132px;height:132px;border-radius:100%;margin:20px auto 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
   border:none;cursor:pointer;position:relative;z-index:1;transition:.15s;box-shadow:0 14px 30px -10px rgba(0,0,0,.4)}
-.attClockBtn.in{background:radial-gradient(circle at 35% 30%,#22D3EE,#0C7A93 65%,#0B1E3D)}
-.attClockBtn.out{background:radial-gradient(circle at 35% 30%,#F7A26E,#B4472F 65%,#5B1F14)}
+.attClockBtn.in{background:radial-gradient(circle at 35% 30%,#22D3EE,#0C7A93 65%,var(--ink))}
+.attClockBtn.out{background:radial-gradient(circle at 35% 30%,#F7A26E,var(--danger) 65%,#5B1F14)}
 .attClockBtn.done{background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25);cursor:default}
 .attClockBtn:not(:disabled):active{transform:scale(.96)}
 .attClockBtn .lbl{font-size:14px;font-weight:800;color:#fff}
@@ -759,12 +759,12 @@ body.dark .themeSwatch.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,25
 body.dark .themeSwatchAuto.on{border-color:#fff}
 .starRating{display:flex;gap:4px}
 .starBtn{background:none;border:none;cursor:pointer;padding:0;font-size:26px;line-height:1;color:#E1E4E8;transition:transform .1s}
-.starBtn.on{color:#C9A227}
+.starBtn.on{color:var(--premium)}
 .starBtn:hover{transform:scale(1.15)}
 body.dark .starBtn{color:#3A4048}
 .achGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
 .achTile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 10px;text-align:center}
-.achTile.won{border-color:#C9A227;background:linear-gradient(180deg,#FDF6E3,var(--card) 60%);box-shadow:0 6px 16px -8px rgba(201,162,39,.4)}
+.achTile.won{border-color:var(--premium);background:linear-gradient(180deg,#FDF6E3,var(--card) 60%);box-shadow:0 6px 16px -8px rgba(201,162,39,.4)}
 .achIcon{font-size:28px;line-height:1;margin-bottom:6px;transition:opacity 1s ease,filter 1s ease}
 .achLabel{font-size:11px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:6px}
 .achEarned{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:#8A6E12;font-weight:700;line-height:1.35;text-align:center;word-break:break-word}
@@ -788,7 +788,7 @@ body.dark .achEarned{color:#E8C158}
 .tag.ghost{background:#F1EFE7;color:#6C7269}
 .tag.ok{background:#DCEEE4;color:#1E7A56}
 .tag.warnt{background:#F6EBD3;color:#8A6E12}
-.tag.dgr{background:#F4E0DA;color:#B4472F}
+.tag.dgr{background:#F4E0DA;color:var(--danger)}
 .tag.portal{background:#EAF7D8;color:#4D7C0F}
 .chip{border:1px solid var(--line);background:var(--card);border-radius:100px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);transition:.15s}
 .chip:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -922,7 +922,7 @@ body.dark .empty .bigicon{background:linear-gradient(135deg,#182541,#132038)}
 @keyframes successPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
 @keyframes successDraw{to{stroke-dashoffset:0}}
 .achUnlockWrap{width:88px;height:88px}
-.achUnlockCircle{background:linear-gradient(135deg,#E8C766,#C9A227);box-shadow:0 10px 30px rgba(201,162,39,.4);font-size:42px}
+.achUnlockCircle{background:linear-gradient(135deg,#E8C766,var(--premium));box-shadow:0 10px 30px rgba(201,162,39,.4);font-size:42px}
 @keyframes achGlow{0%,100%{box-shadow:0 10px 30px rgba(201,162,39,.4)}50%{box-shadow:0 10px 40px rgba(201,162,39,.7)}}
 .achUnlockCircle{animation:successPop .45s cubic-bezier(.34,1.56,.64,1) both, achGlow 1.8s ease-in-out .5s 2}
 .successCard{text-align:center;padding:42px 22px;margin-top:10px}
@@ -960,7 +960,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .bannerDots{position:absolute;bottom:10px;right:16px;display:flex;gap:5px;z-index:2}
 .bannerDot{width:6px;height:6px;border-radius:100px;background:rgba(255,255,255,.4);cursor:pointer;transition:.2s}
 .bannerDot.on{background:#fff;width:16px}
-.leaderBanner{position:relative;overflow:hidden;background:linear-gradient(135deg,#0B1E3D,#173D7A 60%,#1D4ED8);border-radius:22px;padding:22px;color:#fff;box-shadow:0 14px 34px rgba(11,30,61,.35);animation:fadeUp .45s ease both}
+.leaderBanner{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--ink),#173D7A 60%,#1D4ED8);border-radius:22px;padding:22px;color:#fff;box-shadow:0 14px 34px rgba(11,30,61,.35);animation:fadeUp .45s ease both}
 .leaderGlow{position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(190,242,100,.35),transparent 55%),radial-gradient(circle at 85% 75%,rgba(59,130,246,.35),transparent 55%);animation:meshDrift 10s ease-in-out infinite alternate}
 .leaderAvatar{width:64px;height:64px;border-radius:100px;background:linear-gradient(150deg,#84CC16,#4D7C0F);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px;flex:0 0 auto;box-shadow:0 6px 18px rgba(0,0,0,.3);overflow:hidden;animation:floaty 4s ease-in-out infinite}
 .leaderAvatar img{width:100%;height:100%;object-fit:cover}
@@ -975,7 +975,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .team-row .ti{display:flex;align-items:center;gap:11px}
 .team-toggle{padding:8px 14px;border-radius:100px;font-size:12px;font-weight:700;border:1.5px solid var(--line);background:#fff;color:#3c433c}
 .team-toggle.active{background:#DCEEE4;color:#1E7A56;border-color:#DCEEE4}
-.team-toggle.inactive{background:#F4E0DA;color:#B4472F;border-color:#F4E0DA}
+.team-toggle.inactive{background:#F4E0DA;color:var(--danger);border-color:#F4E0DA}
 .demoflag{display:inline-flex;align-items:center;gap:6px;background:#F6EBD3;color:#8A6E12;font-weight:700;font-size:10.5px;
   padding:4px 10px;border-radius:100px;letter-spacing:.04em;text-transform:uppercase}
 .demoflag .d{width:6px;height:6px;border-radius:50%;background:#8A6E12;animation:ringPulse 1.6s infinite}
@@ -1002,9 +1002,9 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .bootscreen .boot-word span:nth-child(9){animation-delay:.9s}
 .bootscreen .boot-sub{font-size:12px;color:#9DB2CC;letter-spacing:.14em;text-transform:uppercase;opacity:0;animation:fadeIn .6s 1.3s ease forwards}
 .bootscreen .fleck{position:absolute;border-radius:50%;background:#67E8F9;opacity:0;animation:fleckIn 1.1s ease-out both}
-.bootscreen .fleck.f1{width:7px;height:7px;top:8%;left:12%;background:#C9A227;animation-delay:.55s}
+.bootscreen .fleck.f1{width:7px;height:7px;top:8%;left:12%;background:var(--premium);animation-delay:.55s}
 .bootscreen .fleck.f2{width:5px;height:5px;top:70%;left:88%;animation-delay:.65s}
-.bootscreen .fleck.f3{width:4px;height:4px;top:80%;left:8%;background:#C9A227;animation-delay:.75s}
+.bootscreen .fleck.f3{width:4px;height:4px;top:80%;left:8%;background:var(--premium);animation-delay:.75s}
 .bootscreen .fleck.f4{width:6px;height:6px;top:15%;left:85%;animation-delay:.85s}
 .bootscreen .fleck.f5{width:3px;height:3px;top:45%;left:5%;animation-delay:.6s}
 .bootscreen .bootTap{position:absolute;bottom:34px;font-size:10.5px;color:#5E7396;opacity:0;animation:fadeIn .6s 1.9s ease forwards;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
@@ -1163,11 +1163,11 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
     <div class="whoami"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span>
       <button class="iconbtn hidden" id="clientBellBtn" title="Notifications" style="position:relative">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <span id="clientBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:#B4472F;color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
+        <span id="clientBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
       </button>
       <button class="iconbtn hidden" id="staffBellBtn" title="Notifications" style="position:relative">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <span id="staffBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:#B4472F;color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
+        <span id="staffBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
       </button>
       <span class="tbDivider"></span>
       <button class="iconbtn" id="darkModeBtn" title="Toggle dark mode"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
@@ -1198,7 +1198,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 const WAVE_VARIANTS=[
   {name:'Classic Navy',bg:'linear-gradient(165deg,#050B14 0%,#0A2A3A 30%,#0C7A93 55%,#22D3EE 74%,#BAE6E8 90%,#F2F6F7 100%)',orb1:'rgba(14,165,183,.55)',orb2:'rgba(34,211,238,.5)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,var(--ink) 0%,#0F3A52 45%,var(--green) 100%)',accent:'#22D3EE',accentDark:'#0C7A93'},
   {name:'Emerald Forest',bg:'linear-gradient(165deg,#051710 0%,#0F3D2E 30%,#1B7A5B 55%,#3FA66B 74%,#C9E8D2 90%,#F2F7F4 100%)',orb1:'rgba(27,122,91,.55)',orb2:'rgba(63,166,107,.45)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,#051710 0%,#123D2C 45%,#1B7A5B 100%)',accent:'#3FA66B',accentDark:'#1B7A5B'},
-  {name:'Charcoal & Gold',bg:'linear-gradient(170deg,#0A0A0C 0%,#1C1C22 35%,#4A3B1E 65%,#C9A227 85%,#F2EBD8 100%)',orb1:'rgba(201,162,39,.5)',orb2:'rgba(232,199,102,.4)',orb3:'rgba(74,59,30,.35)',heroBg:'linear-gradient(135deg,#0A0A0C 0%,#2A2118 50%,#C9A227 100%)',accent:'#E8C766',accentDark:'#C9A227'},
+  {name:'Charcoal & Gold',bg:'linear-gradient(170deg,#0A0A0C 0%,#1C1C22 35%,#4A3B1E 65%,var(--premium) 85%,#F2EBD8 100%)',orb1:'rgba(201,162,39,.5)',orb2:'rgba(232,199,102,.4)',orb3:'rgba(74,59,30,.35)',heroBg:'linear-gradient(135deg,#0A0A0C 0%,#2A2118 50%,var(--premium) 100%)',accent:'#E8C766',accentDark:'var(--premium)'},
   {name:'Wine & Rose Gold',bg:'linear-gradient(160deg,#1A050C 0%,#3D0F22 32%,#7A2645 58%,#C97A8C 80%,#F4E3DE 100%)',orb1:'rgba(201,122,140,.5)',orb2:'rgba(122,38,69,.5)',orb3:'rgba(201,162,39,.25)',heroBg:'linear-gradient(135deg,#1A050C 0%,#3D0F22 50%,#7A2645 100%)',accent:'#C97A8C',accentDark:'#7A2645'},
   {name:'Indigo & Amethyst',bg:'linear-gradient(155deg,#0A0821 0%,#1E1650 32%,#4A2F8C 60%,#8F6FCC 82%,#EDE7F9 100%)',orb1:'rgba(143,111,204,.5)',orb2:'rgba(74,47,140,.5)',orb3:'rgba(201,162,39,.22)',heroBg:'linear-gradient(135deg,#0A0821 0%,#241B5E 50%,#4A2F8C 100%)',accent:'#8F6FCC',accentDark:'#4A2F8C'},
   {name:'Espresso & Copper',bg:'linear-gradient(160deg,#140B06 0%,#331D10 32%,#7A4620 58%,#C97D3E 80%,#F5E6D3 100%)',orb1:'rgba(201,125,62,.5)',orb2:'rgba(122,70,32,.45)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,#140B06 0%,#331D10 50%,#7A4620 100%)',accent:'#C97D3E',accentDark:'#7A4620'},
@@ -1410,7 +1410,7 @@ const CONTACT_BADGE={
   email:{bg:'linear-gradient(150deg,#3B82F6,#1D4ED8)',svg:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.5" stroke="#fff" stroke-width="1.8"/><path d="M4 6.5l8 6 8-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
   instagram:{bg:'linear-gradient(135deg,#F5A623,#E1306C 45%,#8134AF)',svg:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="4.2" stroke="#fff" stroke-width="1.8"/><circle cx="17.3" cy="6.7" r="1.15" fill="#fff"/></svg>'},
   facebook:{bg:'linear-gradient(150deg,#3B82F6,#1447B8)',svg:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14.5 21v-7.2h2.4l.4-2.8h-2.8v-1.8c0-.8.2-1.4 1.4-1.4h1.5V5.3c-.3 0-1.2-.1-2.2-.1-2.2 0-3.7 1.3-3.7 3.8v2.1H9v2.8h2.5V21h3z" fill="#fff"/></svg>'},
-  tiktok:{bg:'linear-gradient(150deg,#25F4EE,#0B1E3D 55%,#FE2C55)',svg:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15.5 3c.4 2.2 1.8 3.6 4 3.9v2.8c-1.5 0-2.9-.5-4-1.3v6.1a5.4 5.4 0 11-5.4-5.4c.3 0 .6 0 .9.1V12a2.6 2.6 0 102.2 2.6V3h2.3z" fill="#fff"/></svg>'}
+  tiktok:{bg:'linear-gradient(150deg,#25F4EE,var(--ink) 55%,#FE2C55)',svg:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15.5 3c.4 2.2 1.8 3.6 4 3.9v2.8c-1.5 0-2.9-.5-4-1.3v6.1a5.4 5.4 0 11-5.4-5.4c.3 0 .6 0 .9.1V12a2.6 2.6 0 102.2 2.6V3h2.3z" fill="#fff"/></svg>'}
 };
 function contactBadgeHtml(kind,href,title,external){
   const b=CONTACT_BADGE[kind]; if(!b) return '';
@@ -1652,8 +1652,8 @@ function makeModalAccessible(ov){
 // (e.g. "viewLeaveApp()"), used the same way the codebase already uses inline
 // onclick="" strings elsewhere.
 function loadFailBannerHtml(label,retryFnCall){
-  return `<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid #B4472F">
-    <div style="font-weight:700;font-size:13.5px;color:#B4472F">⚠ Couldn't load ${esc(label)}</div>
+  return `<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid var(--danger)">
+    <div style="font-weight:700;font-size:13.5px;color:var(--danger)">⚠ Couldn't load ${esc(label)}</div>
     <div class="mini" style="margin-top:2px">Check your connection, then try again.</div>
     <button class="chip" style="margin-top:10px" onclick="${retryFnCall}">Retry</button>
   </div>`;
@@ -2820,6 +2820,25 @@ async function apiUpdateVisitStatus(id,status){
 /* ================= CLIENT PORTAL: DATA ================= */
 const mapClientPay=r=>({id:r.id,leadId:r.lead_id,clientName:r.client_name,amount:r.amount,date:r.payment_date,method:r.payment_method||'',createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
 async function apiClientLoadAll(){
+  if(DEMO_MODE){
+    // No RLS offline, so unlike the real branch below (which relies on the client's
+    // own auth session already scoping every table to just their rows), this has to
+    // filter manually -- same custMatches() identity check Customer 360 uses, against
+    // every agent's demo leads (a client isn't scoped to one agent).
+    const d=await demoLoad();
+    const allLeads=Object.values(d.leads||{}).flat();
+    const mine=allLeads.filter(l=>custMatches(l.name,l.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    const mineIds=new Set(mine.map(l=>l.id));
+    const payments=(d.payments||[]).filter(p=>mineIds.has(p.leadId)&&(p.status||'approved')==='approved');
+    const sitevisits=(d.sitevisits||[]).filter(v=>mineIds.has(v.leadId));
+    const enquiries=(d.enquiries||[]).filter(e=>custMatches(e.name,e.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    const complaints=(d.complaints||[]).filter(c=>custMatches(c.name,c.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    let news=[]; try{ news=(await apiLoadAnnouncements()).filter(a=>a.active&&(a.audience==='clients'||a.audience==='both')); }catch(e){}
+    const contracts=(d.contractRequests||[]).filter(c=>mineIds.has(c.leadId));
+    CLIENT_DB={leads:mine,payments,sitevisits,enquiries,complaints,announcements:news,
+      contracts:contracts.map(c=>({id:c.id,leadId:c.leadId,clientName:c.clientName,createdAt:c.createdAt}))};
+    return CLIENT_DB;
+  }
   const [{data:leads,error:le},{data:payments,error:pe},{data:visits,error:ve},{data:enqs,error:ee},{data:cmps,error:ce}]=await Promise.all([
     sb.from('leads').select('*').order('date_added',{ascending:false}),
     sb.from('payments').select('*').order('payment_date',{ascending:false}),
@@ -3154,7 +3173,15 @@ async function apiDeletePayment(id){
 // Anything that resolves a lead by a bare id needs to check here, or a lead opened
 // from Client Database silently fails to load, save, or sync correctly.
 function findLeadById(id){
-  return DB.leads.find(x=>x.id===id) || CLIENTDB_LIST.find(x=>x.id===id) || COMPANY_LEADS_LIST.find(x=>x.id===id);
+  return DB.leads.find(x=>x.id===id) || CLIENTDB_LIST.find(x=>x.id===id) || COMPANY_LEADS_LIST.find(x=>x.id===id)
+    // Management has no personal leads of their own (DB.leads is scoped to the
+    // signed-in profile, empty for a manager), and CLIENTDB_LIST/COMPANY_LEADS_LIST
+    // are lazy caches only populated once Client Database/Company Leads has actually
+    // been opened this session. allAgentLists() is the one source that's always
+    // synchronously ready with every agent's leads the instant a manager signs in
+    // (mgrOverview already depends on this) -- so it's the correct last resort for
+    // a manager reaching a specific lead by id from anywhere else (e.g. global search).
+    || (typeof PROFILE!=='undefined' && PROFILE && PROFILE.role==='manager' ? allAgentLists().flatMap(a=>a.list).find(x=>x.id===id) : null);
 }
 async function syncLeadAfterPaymentDelta(leadId,delta){
   const lead=findLeadById(leadId); if(!lead) return;
@@ -3586,7 +3613,7 @@ function attComparisonHtml(){
       const pct=Math.round(r.daysAttended/maxDays*100);
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px"><span style="font-weight:${isMe?800:600}">${esc(r.staffName)}${isMe?' (you)':''}</span><span class="mini">${r.daysAttended} day(s) · ${r.onTimeDays} on time</span></div>
-        <div style="height:7px;border-radius:6px;background:#EEF1F6;overflow:hidden"><div style="height:100%;width:${pct}%;background:${isMe?'#C9A227':'var(--leaf)'}"></div></div>
+        <div style="height:7px;border-radius:6px;background:#EEF1F6;overflow:hidden"><div style="height:100%;width:${pct}%;background:${isMe?'var(--premium)':'var(--leaf)'}"></div></div>
       </div>`;
     }).join('')}
   </div>`;
@@ -3638,7 +3665,7 @@ function attMonthStatsHtml(staffKey){
 // say "location not checked", which isn't useful).
 function attLocationTagHtml(isOffSite,reason){
   if(CONFIG.officeLat==null||CONFIG.officeLng==null) return '';
-  return isOffSite?`<div class="mini" style="color:#B4472F">📍 Off-site${reason?': '+esc(reason):''}</div>`:'<div class="mini" style="color:var(--muted)">📍 At the office</div>';
+  return isOffSite?`<div class="mini" style="color:var(--danger)">📍 Off-site${reason?': '+esc(reason):''}</div>`:'<div class="mini" style="color:var(--muted)">📍 At the office</div>';
 }
 function attHoursWorkedStr(t){
   if(!t||!t.signInAt) return '--:--';
@@ -3729,7 +3756,7 @@ function attendanceHistoryRowHtml(a){
       ${a.signInPhoto?`<img src="${a.signInPhoto}" style="width:38px;height:38px;border-radius:100%;object-fit:cover;flex:0 0 auto"/>`:''}
       <div style="min-width:0"><div class="nm">${esc(fmtLongDate(a.workDate))}</div><div class="meta">${a.signInAt?('In '+esc(fmtTimeAmPm(a.signInAt))+(a.lateReason?' · '+esc(a.lateReason):'')):(onLeave?'On leave':'—')}${a.signOutAt?(' · Out '+esc(fmtTimeAmPm(a.signOutAt))):''}</div>
       ${a.signInAt?attLocationTagHtml(a.isOffSiteIn,a.signInReason):''}
-      ${a.signOutAt&&a.isOffSiteOut?`<div class="mini" style="color:#B4472F">📍 Signed out off-site${a.signOutReason?': '+esc(a.signOutReason):''}</div>`:''}
+      ${a.signOutAt&&a.isOffSiteOut?`<div class="mini" style="color:var(--danger)">📍 Signed out off-site${a.signOutReason?': '+esc(a.signOutReason):''}</div>`:''}
       </div>
     </div>
   </div></div>`;
@@ -3763,7 +3790,7 @@ function openAttendanceDetailModal(rec,staffName){
     return `<div class="rowcard" style="margin-bottom:12px;padding:14px">
       <div style="font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">${esc(label)} · ${esc(fmtTimeAmPm(at))}</div>
       ${photo?`<img src="${photo}" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin-bottom:10px"/>`:''}
-      ${hasOffice?`<div class="mini" style="margin-bottom:8px;font-weight:700;color:${isOffSite?'#B4472F':'#1E7A56'}">📍 ${isOffSite?'Off-site':'At the office'}${reason?' — '+esc(reason):''}</div>`:''}
+      ${hasOffice?`<div class="mini" style="margin-bottom:8px;font-weight:700;color:${isOffSite?'var(--danger)':'#1E7A56'}">📍 ${isOffSite?'Off-site':'At the office'}${reason?' — '+esc(reason):''}</div>`:''}
       ${lat!=null&&lng!=null?`<iframe src="${attMapEmbedUrl(lat,lng)}" style="width:100%;height:200px;border:0;border-radius:12px" loading="lazy"></iframe>`:`<div class="mini">No location captured for this entry.</div>`}
     </div>`;
   };
@@ -6361,7 +6388,6 @@ document.getElementById('staffBackBtn').onclick=()=>{
   document.getElementById('roleChoice').classList.remove('hidden');
 };
 document.getElementById('chooseClientBtn').onclick=()=>{
-  if(DEMO_MODE){ toast('Client portal needs a connected Supabase project — not available in demo mode.'); return; }
   document.getElementById('roleChoice').classList.add('hidden');
   clientStep='search'; clientMatch=null; clientPhone='';
   document.getElementById('clientCard').classList.remove('hidden');
@@ -6397,13 +6423,27 @@ function renderClientStep(){
       if(q.length<2){ results.innerHTML=''; return; }
       clientSearchTimer=setTimeout(async()=>{
         try{
-          const {data,error}=await sb.rpc('client_portal_search_names',{p_query:q});
-          if(error||!data||!data.length){ results.innerHTML=`<div class="mini" style="padding:8px 2px;color:#9DB2CC">No matches yet — keep typing, or check with your agent.</div>`; return; }
-          results.innerHTML=data.map((r,i)=>`<div class="dd-item" data-i="${i}" style="cursor:pointer;border-radius:10px;margin-bottom:4px">
+          let matches;
+          if(DEMO_MODE){
+            // No client_portal_search_names RPC available offline -- search across
+            // every agent's demo leads directly (a client isn't scoped to one agent),
+            // deduping by name since the same client can have more than one purchase.
+            const dd=await demoLoad(); const allLeads=Object.values(dd.leads||{}).flat();
+            const seen=new Set(); const ql=q.toLowerCase();
+            matches=allLeads.filter(l=>l.contact&&(l.name||'').toLowerCase().includes(ql))
+              .filter(l=>{ const k=(l.name||'').toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; })
+              .map(l=>({name:l.name,contact_masked:String(l.contact).slice(-4)})).slice(0,8);
+          } else {
+            const {data,error}=await sb.rpc('client_portal_search_names',{p_query:q});
+            if(error||!data){ results.innerHTML=''; return; }
+            matches=data;
+          }
+          if(!matches.length){ results.innerHTML=`<div class="mini" style="padding:8px 2px;color:#9DB2CC">No matches yet — keep typing, or check with your agent.</div>`; return; }
+          results.innerHTML=matches.map((r,i)=>`<div class="dd-item" data-i="${i}" style="cursor:pointer;border-radius:10px;margin-bottom:4px">
             <span class="dd-text"><span class="dd-name">${esc(r.name)}</span><span class="mini" style="display:block;color:#9DB2CC">Phone ending ${esc(r.contact_masked)}</span></span>
           </div>`).join('');
           results.querySelectorAll('[data-i]').forEach(row=>{
-            row.onclick=()=>{ clientMatch={name:data[+row.dataset.i].name}; clientStep='phone'; renderClientStep(); };
+            row.onclick=()=>{ clientMatch={name:matches[+row.dataset.i].name}; clientStep='phone'; renderClientStep(); };
           });
         }catch(e){ results.innerHTML=''; }
       },320);
@@ -6445,6 +6485,23 @@ async function doClientLogin(){
   const pin=val('cp_pin');
   if(!/^\d{4,6}$/.test(pin)){ err.textContent='Enter your 4–6 digit PIN.'; return; }
   const btn=document.getElementById('clientSignInBtn'); btn.disabled=true; btn.textContent='Signing in…';
+  if(DEMO_MODE){
+    // No real PIN/session/edge-function infrastructure offline -- same "the value
+    // typed isn't actually checked" precedent as the staff demo sign-in (doLogin()).
+    // Only the phone needs to plausibly belong to the matched name, using the same
+    // last-9-digit fuzzy convention as everywhere else in the app.
+    try{
+      const dd=await demoLoad(); const allLeads=Object.values(dd.leads||{}).flat();
+      const digits=normContact(clientPhone).slice(-9);
+      const match=allLeads.find(l=>(l.name||'')===clientMatch.name && normContact(l.contact).slice(-9)===digits);
+      if(!match){ err.textContent="We couldn't find a match — check your name and phone number, or contact your agent."; btn.disabled=false; btn.textContent='Sign in'; return; }
+      CLIENT_PROFILE={id:'demo-'+slugify(match.name),name:match.name,contact:match.contact,avatar:null,isDefaultPin:false};
+      IS_CLIENT=true;
+      document.getElementById('clientCard').classList.add('hidden');
+      await enterClientPortal();
+    }catch(e){ err.textContent='Something went wrong. Please try again.'; btn.disabled=false; btn.textContent='Sign in'; }
+    return;
+  }
   try{
     // Everything -- PIN check, session issuance -- happens server-side in one
     // call now. No more separate signInAnonymously() step: that depended on a
@@ -6633,7 +6690,7 @@ Object.assign(ic,{
 });
 /* ---- dimensional feature-chip icons (premium, gradient) ---- */
 const FIC_DEFS='<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>'
- +'<linearGradient id="fic-gNavy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e4278"/><stop offset="1" stop-color="#0B1E3D"/></linearGradient>'
+ +'<linearGradient id="fic-gNavy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e4278"/><stop offset="1" stop-color="var(--ink)"/></linearGradient>'
  +'<linearGradient id="fic-gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4DD8E8"/><stop offset="1" stop-color="#0C7A93"/></linearGradient>'
  +'<linearGradient id="fic-gLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#0F766E"/></linearGradient>'
  +'<linearGradient id="fic-gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0D998"/><stop offset="1" stop-color="#B8860B"/></linearGradient>'
@@ -6656,12 +6713,12 @@ const FIC_GLYPHS={
  datacheck:{g:'gNavy',p:'<path d="M28 15l11 4v8c0 7.2-4.8 11.4-11 13.4C21.8 38.4 17 34.2 17 27v-8z" fill="#fff"/><path d="M23 27.5l3.8 3.8L34 23.5" fill="none" stroke="var(--green2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'},
  access:{g:'gGold',p:'<circle cx="24" cy="24" r="6.4" fill="none" stroke="#fff" stroke-width="3.2"/><path d="M28.5 28.5L39 39" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><path d="M35 35l3-3M38.5 38.5l2.5-2.5" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>'},
  location:{g:'gBlue',p:'<path d="M28 16c-6 0-10 4.4-10 10 0 7 10 15 10 15s10-8 10-15c0-5.6-4-10-10-10z" fill="#fff"/><circle cx="28" cy="26" r="4.2" fill="var(--green2)"/>'},
- calendar:{g:'gNavy',p:'<rect x="16" y="19" width="24" height="21" rx="3.5" fill="#fff"/><rect x="16" y="19" width="24" height="7" rx="3.5" fill="var(--green2)"/><rect x="22" y="15" width="3" height="7" rx="1.5" fill="#fff"/><rect x="31" y="15" width="3" height="7" rx="1.5" fill="#fff"/><rect x="21" y="30" width="4" height="4" rx="1" fill="#0B1E3D"/><rect x="31" y="30" width="4" height="4" rx="1" fill="#0B1E3D"/>'},
- document:{g:'gNavy',p:'<path d="M21 16h9l7 7v17a1.5 1.5 0 01-1.5 1.5h-14A1.5 1.5 0 0120 40V17.5A1.5 1.5 0 0121.5 16z" fill="#fff"/><path d="M30 16v7h7" fill="none" stroke="#0B1E3D" stroke-width="2" stroke-linejoin="round"/><path d="M24 29h9M24 33h9M24 37h6" stroke="#0B1E3D" stroke-width="2" stroke-linecap="round"/>'},
+ calendar:{g:'gNavy',p:'<rect x="16" y="19" width="24" height="21" rx="3.5" fill="#fff"/><rect x="16" y="19" width="24" height="7" rx="3.5" fill="var(--green2)"/><rect x="22" y="15" width="3" height="7" rx="1.5" fill="#fff"/><rect x="31" y="15" width="3" height="7" rx="1.5" fill="#fff"/><rect x="21" y="30" width="4" height="4" rx="1" fill="var(--ink)"/><rect x="31" y="30" width="4" height="4" rx="1" fill="var(--ink)"/>'},
+ document:{g:'gNavy',p:'<path d="M21 16h9l7 7v17a1.5 1.5 0 01-1.5 1.5h-14A1.5 1.5 0 0120 40V17.5A1.5 1.5 0 0121.5 16z" fill="#fff"/><path d="M30 16v7h7" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/><path d="M24 29h9M24 33h9M24 37h6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>'},
  savings:{g:'gLime',p:'<path d="M18 24a10 8 0 0120 0v8a2 2 0 01-2 2h-2v3h-4v-3h-4v3h-4v-3a10 8 0 01-4-6z" fill="#fff"/><circle cx="24" cy="26" r="1.8" fill="var(--green)"/><rect x="30" y="20" width="7" height="3" rx="1.5" fill="#fff"/>'},
  map:{g:'gBlue',p:'<path d="M22 16l-6 3v21l6-3 12 3 6-3V16l-6 3-12-3z" fill="#fff"/><path d="M22 16v21M34 19v21" fill="none" stroke="var(--green2)" stroke-width="2"/>'},
- clipboard:{g:'gNavy',p:'<rect x="18" y="18" width="20" height="23" rx="3" fill="#fff"/><rect x="23" y="15" width="10" height="6" rx="2" fill="var(--green2)"/><path d="M23 28h10M23 33h10M23 38h6" stroke="#0B1E3D" stroke-width="2" stroke-linecap="round"/>'},
- briefcase:{g:'gNavy',p:'<rect x="15" y="23" width="26" height="17" rx="3" fill="#fff"/><path d="M23 23v-3a2 2 0 012-2h6a2 2 0 012 2v3" fill="none" stroke="#fff" stroke-width="2.4"/><path d="M15 30h26" stroke="#0B1E3D" stroke-width="2"/><rect x="25" y="29" width="6" height="3" rx="1" fill="var(--green2)"/>'},
+ clipboard:{g:'gNavy',p:'<rect x="18" y="18" width="20" height="23" rx="3" fill="#fff"/><rect x="23" y="15" width="10" height="6" rx="2" fill="var(--green2)"/><path d="M23 28h10M23 33h10M23 38h6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>'},
+ briefcase:{g:'gNavy',p:'<rect x="15" y="23" width="26" height="17" rx="3" fill="#fff"/><path d="M23 23v-3a2 2 0 012-2h6a2 2 0 012 2v3" fill="none" stroke="#fff" stroke-width="2.4"/><path d="M15 30h26" stroke="var(--ink)" stroke-width="2"/><rect x="25" y="29" width="6" height="3" rx="1" fill="var(--green2)"/>'},
  backup:{g:'gLime',p:'<ellipse cx="28" cy="20" rx="11" ry="4" fill="#fff"/><path d="M17 20v6c0 2.2 5 4 11 4s11-1.8 11-4v-6" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M17 26v6c0 2.2 5 4 11 4s11-1.8 11-4v-6" fill="none" stroke="#fff" stroke-width="2.6"/>'},
  alert:{g:'gGold',p:'<path d="M28 16l12 21a1.5 1.5 0 01-1.3 2.3H17.3A1.5 1.5 0 0116 37l12-21z" fill="#fff"/><path d="M28 25v6" stroke="#B45309" stroke-width="2.8" stroke-linecap="round"/><circle cx="28" cy="35" r="1.8" fill="#B45309"/>'},
  settings:{g:'gNavy',p:'<circle cx="28" cy="27" r="4" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M28 15v4M28 35v4M16 27h4M36 27h4M19.5 18.5l2.8 2.8M33.7 32.7l2.8 2.8M36.5 18.5l-2.8 2.8M22.3 32.7l-2.8 2.8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'},
@@ -6674,7 +6731,7 @@ const FIC_GLYPHS={
  plotrequest:{g:'gLime',p:'<rect x="16" y="18" width="17" height="17" rx="2" fill="none" stroke="#fff" stroke-width="2.4"/><path d="M16 24.5h17M22.5 18v17" stroke="#fff" stroke-width="1.6" stroke-opacity="0.7"/><circle cx="37" cy="20" r="6.5" fill="var(--green)" stroke="#fff" stroke-width="2"/><path d="M37 17v6M34 20h6" stroke="#fff" stroke-width="2" stroke-linecap="round"/>'},
  clientdb:{g:'gLime',p:'<rect x="15" y="17" width="20" height="14" rx="2.5" fill="#fff" fill-opacity=".55"/><rect x="19" y="21" width="20" height="14" rx="2.5" fill="#fff"/><circle cx="26" cy="26.5" r="2.6" fill="var(--green)"/><path d="M22 32.5c0-2.2 1.8-3.5 4-3.5s4 1.3 4 3.5" fill="none" stroke="var(--green)" stroke-width="1.8" stroke-linecap="round"/>'},
  feedback:{g:'gBlue',p:'<path d="M16 20h24a3 3 0 013 3v9a3 3 0 01-3 3H27l-7 5.5V35h-4a3 3 0 01-3-3v-9a3 3 0 013-3z" fill="#fff"/><path d="M28 30.5c-3.6-2.4-5.5-4.3-5.5-6.4a2.9 2.9 0 015.5-1.3 2.9 2.9 0 015.5 1.3c0 2.1-1.9 4-5.5 6.4z" fill="var(--green)"/>'},
- memo:{g:'gNavy',p:'<path d="M21 16h14l4 4v20a1.5 1.5 0 01-1.5 1.5h-16A1.5 1.5 0 0120 40V17.5A1.5 1.5 0 0121.5 16z" fill="#fff"/><path d="M21 16v4a1.5 1.5 0 001.5 1.5H27" fill="none" stroke="#0B1E3D" stroke-width="1.6"/><path d="M24 27h10M24 31h10M24 35h6" stroke="#0B1E3D" stroke-width="2" stroke-linecap="round"/>'},
+ memo:{g:'gNavy',p:'<path d="M21 16h14l4 4v20a1.5 1.5 0 01-1.5 1.5h-16A1.5 1.5 0 0120 40V17.5A1.5 1.5 0 0121.5 16z" fill="#fff"/><path d="M21 16v4a1.5 1.5 0 001.5 1.5H27" fill="none" stroke="var(--ink)" stroke-width="1.6"/><path d="M24 27h10M24 31h10M24 35h6" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>'},
  billboard:{g:'gBlue',p:'<g transform="translate(0,1.5)"><rect x="14" y="16" width="28" height="14" rx="2" fill="#fff"/><path d="M20 16v-3M36 16v-3" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M23 30v10M33 30v10" stroke="var(--green)" stroke-width="2.8" stroke-linecap="round"/><path d="M19 23h18" stroke="var(--green2)" stroke-width="2" stroke-opacity=".6"/></g>'},
  sitevisitauth:{g:'gNavy',p:'<rect x="16" y="19" width="24" height="21" rx="3.5" fill="#fff"/><rect x="16" y="19" width="24" height="7" rx="3.5" fill="var(--green2)"/><rect x="22" y="15" width="3" height="7" rx="1.5" fill="#fff"/><rect x="31" y="15" width="3" height="7" rx="1.5" fill="#fff"/><path d="M22.5 32.5l3 3 7-7" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'},
  contract:{g:'gGold',p:'<path d="M20 16h11l7 7v16a1.5 1.5 0 01-1.5 1.5h-16.5A1.5 1.5 0 0119 39V17.5A1.5 1.5 0 0120.5 16z" fill="#fff"/><path d="M31 16v6.5A1.5 1.5 0 0032.5 24H38" fill="none" stroke="#B8860B" stroke-width="1.6"/><path d="M23 29h11M23 33h7" stroke="#B8860B" stroke-width="1.8" stroke-linecap="round"/><path d="M23 37.5c3-2.5 5-2.5 8 0" fill="none" stroke="#B8860B" stroke-width="1.8" stroke-linecap="round"/>'},
@@ -6682,12 +6739,12 @@ const FIC_GLYPHS={
  expense:{g:'gGold',p:'<path d="M16 20a3 3 0 013-3h17a2 2 0 012 2v3H19a3 3 0 01-3-3z" fill="#fff" fill-opacity=".85"/><rect x="16" y="22" width="24" height="16" rx="3" fill="#fff"/><circle cx="34" cy="30" r="4" fill="#B8860B"/><path d="M32 30h4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>'},
  commission:{g:'gGold',p:'<circle cx="24" cy="24" r="7" fill="none" stroke="#fff" stroke-width="2.6"/><circle cx="34" cy="34" r="7" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M20 38L38 18" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'},
  downloads:{g:'gBlue',p:'<path d="M28 16v14" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M22 25l6 6 6-6" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="16" y="34" width="24" height="6" rx="2" fill="var(--green2)"/>'},
- notes:{g:'gNavy',p:'<rect x="17" y="18" width="22" height="22" rx="3" fill="#fff"/><circle cx="22" cy="18" r="1.6" fill="var(--paper)"/><circle cx="28" cy="18" r="1.6" fill="var(--paper)"/><circle cx="34" cy="18" r="1.6" fill="var(--paper)"/><path d="M21 25h14M21 29h14M21 33h9" stroke="#0B1E3D" stroke-width="1.8" stroke-linecap="round"/>'},
+ notes:{g:'gNavy',p:'<rect x="17" y="18" width="22" height="22" rx="3" fill="#fff"/><circle cx="22" cy="18" r="1.6" fill="var(--paper)"/><circle cx="28" cy="18" r="1.6" fill="var(--paper)"/><circle cx="34" cy="18" r="1.6" fill="var(--paper)"/><path d="M21 25h14M21 29h14M21 33h9" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round"/>'},
  sms:{g:'gLime',p:'<rect x="20" y="14" width="16" height="26" rx="3.5" fill="#fff"/><rect x="22.5" y="18" width="11" height="15" rx="1.5" fill="var(--green)"/><circle cx="28" cy="36" r="1.4" fill="var(--green)"/><path d="M25 22h6M25 25h4" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/>'},
  quote:{g:'gLime',p:'<g transform="translate(0,2)"><path d="M18 16h20v20l-3-2.3-3 2.3-3-2.3-3 2.3-3-2.3-3 2.3-2-1.5z" fill="#fff"/><path d="M28 22.5v7M25.3 24.2c0-1.3 1.2-2.2 2.7-2.2s2.7.9 2.7 2c0 2.6-5.4 1.8-5.4 4.4 0 1.1 1.2 2 2.7 2s2.7-.9 2.7-2.2" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round"/></g>'},
- staffteam:{g:'gNavy',p:'<circle cx="22" cy="21" r="4.5" fill="#fff"/><circle cx="33" cy="23" r="3.6" fill="#fff" fill-opacity=".75"/><path d="M14.5 37c0-4.7 3.4-7.5 7.5-7.5s7.5 2.8 7.5 7.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M31 30.5c3.3.4 5.5 2.7 5.5 6.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".8"/><circle cx="37" cy="36" r="4" fill="var(--green2)" stroke="#fff" stroke-width="1.6"/><path d="M35.6 36h2.8M37 34.6v2.8" stroke="#0B1E3D" stroke-width="1.3" stroke-linecap="round"/>'},
+ staffteam:{g:'gNavy',p:'<circle cx="22" cy="21" r="4.5" fill="#fff"/><circle cx="33" cy="23" r="3.6" fill="#fff" fill-opacity=".75"/><path d="M14.5 37c0-4.7 3.4-7.5 7.5-7.5s7.5 2.8 7.5 7.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M31 30.5c3.3.4 5.5 2.7 5.5 6.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".8"/><circle cx="37" cy="36" r="4" fill="var(--green2)" stroke="#fff" stroke-width="1.6"/><path d="M35.6 36h2.8M37 34.6v2.8" stroke="var(--ink)" stroke-width="1.3" stroke-linecap="round"/>'},
  building:{g:'gBlue',p:'<rect x="18" y="16" width="20" height="24" rx="1.5" fill="#fff"/><rect x="22" y="20" width="3.5" height="3.5" fill="var(--green)"/><rect x="29" y="20" width="3.5" height="3.5" fill="var(--green)"/><rect x="22" y="27" width="3.5" height="3.5" fill="var(--green)"/><rect x="29" y="27" width="3.5" height="3.5" fill="var(--green)"/><rect x="24.5" y="34" width="7" height="6" fill="var(--green)"/>'},
- serverconfig:{g:'gSlate',p:'<rect x="17" y="16" width="22" height="8" rx="2" fill="#fff"/><rect x="17" y="26" width="22" height="8" rx="2" fill="#fff" fill-opacity=".8"/><circle cx="22" cy="20" r="1.4" fill="var(--green2)"/><circle cx="22" cy="30" r="1.4" fill="var(--green2)"/><circle cx="34" cy="38" r="5" fill="var(--green2)" stroke="#fff" stroke-width="1.6"/><path d="M34 35.5v1.2M34 39.3v1.2M31.5 38h1.2M35.3 38h1.2" stroke="#0B1E3D" stroke-width="1.1" stroke-linecap="round"/>'},
+ serverconfig:{g:'gSlate',p:'<rect x="17" y="16" width="22" height="8" rx="2" fill="#fff"/><rect x="17" y="26" width="22" height="8" rx="2" fill="#fff" fill-opacity=".8"/><circle cx="22" cy="20" r="1.4" fill="var(--green2)"/><circle cx="22" cy="30" r="1.4" fill="var(--green2)"/><circle cx="34" cy="38" r="5" fill="var(--green2)" stroke="#fff" stroke-width="1.6"/><path d="M34 35.5v1.2M34 39.3v1.2M31.5 38h1.2M35.3 38h1.2" stroke="var(--ink)" stroke-width="1.1" stroke-linecap="round"/>'},
  pulse:{g:'gGold',p:'<circle cx="28" cy="27" r="12" fill="none" stroke="#fff" stroke-width="2.4"/><path d="M18 27h4l2.5-6 3.5 11 3-8 2 3h5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'},
  attendance:{g:'gGold',p:'<circle cx="28" cy="27" r="12" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M28 20v7l5 3" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'},
  companyleads:{g:'gSlate',p:'<rect x="19" y="20" width="18" height="20" rx="1.5" fill="#fff"/><rect x="24" y="30" width="8" height="10" fill="var(--ink)"/><rect x="23" y="24" width="3" height="3" fill="var(--green2)"/><rect x="30" y="24" width="3" height="3" fill="var(--green2)"/><path d="M15 22l6-6 6 6" fill="none" stroke="var(--green2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 16v7" stroke="var(--green2)" stroke-width="2.4" stroke-linecap="round"/>'},
@@ -7011,7 +7068,7 @@ function previewKindOf(d){
   if(d.kind==='backup'||/\.json$/i.test(f)) return 'json';
   return guessFileKind(f);
 }
-const DOC_TYPE_COLOR={pdf:'#B4472F',excel:'#1E7A56',image:'#1D4ED8',csv:'#0C7A93',json:'#8A6E12',other:'#5C7280'};
+const DOC_TYPE_COLOR={pdf:'var(--danger)',excel:'#1E7A56',image:'#1D4ED8',csv:'#0C7A93',json:'#8A6E12',other:'#5C7280'};
 function docTypeIconHtml(kind){
   const color=DOC_TYPE_COLOR[kind]||DOC_TYPE_COLOR.other;
   return `<div style="width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:${color}1a;color:${color}"><span style="width:19px;height:19px;display:inline-flex">${ic.doc}</span></div>`;
@@ -7104,7 +7161,7 @@ function renderTablePreview(rows){
   const head=capped[0], body=capped.slice(1);
   return `<div style="overflow:auto;height:100%;background:#fff">
     <table style="border-collapse:collapse;width:100%;font-size:12.5px">
-      <thead><tr>${head.map(h=>`<th style="position:sticky;top:0;background:#0B1E3D;color:#fff;padding:8px 10px;text-align:left;white-space:nowrap;border:1px solid rgba(255,255,255,.15)">${esc(h)}</th>`).join('')}</tr></thead>
+      <thead><tr>${head.map(h=>`<th style="position:sticky;top:0;background:var(--ink);color:#fff;padding:8px 10px;text-align:left;white-space:nowrap;border:1px solid rgba(255,255,255,.15)">${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${body.map(r=>`<tr>${r.map(c=>`<td style="padding:7px 10px;border:1px solid #E2E7ED;white-space:nowrap">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>
     ${rows.length>500?`<div class="mini" style="padding:10px;text-align:center">Showing first 500 of ${rows.length} rows — download for the full file.</div>`:''}
@@ -7326,9 +7383,9 @@ function renderComplaintAssignBanners(){
   const dismissed=dismissedAnnouncements();
   const mine=(DB.complaints||[]).filter(c=>c.owner===PROFILE.name && c.status!=='Resolved' && !dismissed.includes('cmp_'+c.id));
   if(!mine.length) return '';
-  return mine.map(c=>`<div class="rowcard" style="margin-bottom:14px;padding:16px;border-left:4px solid #B4472F;position:relative">
+  return mine.map(c=>`<div class="rowcard" style="margin-bottom:14px;padding:16px;border-left:4px solid var(--danger);position:relative">
     <button data-dismisscmp="${c.id}" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--muted);cursor:pointer;line-height:1;padding:0;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center">${ic.close}</button>
-    <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;padding-right:24px;display:flex;align-items:center;gap:7px"><span style="width:16px;height:16px;color:#B4472F">${ic.flag}</span>Feedback assigned to you</div>
+    <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;padding-right:24px;display:flex;align-items:center;gap:7px"><span style="width:16px;height:16px;color:var(--danger)">${ic.flag}</span>Feedback assigned to you</div>
     <div class="meta">${esc(c.name)} · ${esc(c.category||'')} · <span class="tag warnt" style="margin-left:2px">${esc(c.status)}</span></div>
   </div>`).join('');
 }
@@ -7338,9 +7395,9 @@ function bindComplaintAssignBanners(){
 function renderAllocationBanners(){
   const mine=(DB.allocations||[]).filter(a=>a.agentKey===PROFILE.key && a.status==='Allocated' && !a.agentSeen);
   if(!mine.length) return '';
-  return mine.map(a=>`<div class="rowcard" style="margin-bottom:14px;padding:16px;border-left:4px solid #16A34A;position:relative">
+  return mine.map(a=>`<div class="rowcard" style="margin-bottom:14px;padding:16px;border-left:4px solid var(--ok);position:relative">
     <button data-seenalloc="${a.id}" style="position:absolute;top:10px;right:10px;background:none;border:none;color:var(--muted);cursor:pointer;line-height:1;padding:0;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center">${ic.close}</button>
-    <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;padding-right:24px;display:flex;align-items:center;gap:7px"><span style="width:16px;height:16px;color:#16A34A">${ic.pin}</span>Plot allocated for ${esc(a.clientName)}</div>
+    <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;padding-right:24px;display:flex;align-items:center;gap:7px"><span style="width:16px;height:16px;color:var(--ok)">${ic.pin}</span>Plot allocated for ${esc(a.clientName)}</div>
     <div class="meta">Plot ${esc(a.plotNumber||'—')} · allocated by ${esc(a.allocatedBy||'')}${a.note?(' · '+esc(a.note)):''}</div>
   </div>`).join('');
 }
@@ -7401,7 +7458,7 @@ function buildBannerSlides(){
   // agent-private. This is what makes Agent of the Month genuinely correct from any
   // agent's own session, not just Management's.
   const aom=computeAgentOfMonth();
-  if(aom) slides.push({grad:'linear-gradient(120deg,#0B1E3D,#1D4ED8 65%,#3B82F6)',kind:'agentOfMonth',arg:aom.key,
+  if(aom) slides.push({grad:'linear-gradient(120deg,var(--ink),#1D4ED8 65%,#3B82F6)',kind:'agentOfMonth',arg:aom.key,
     html:`<div style="display:flex;align-items:center;gap:14px;position:relative;z-index:1">
       <div class="leaderAvatar" style="width:52px;height:52px;font-size:20px">${aom.avatar?`<img src="${aom.avatar}"/>`:esc(aom.name[0])}</div>
       <div><div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;display:inline-flex">${ic.star}</span>Agent of the Month · ${monthLabel(today().slice(0,7))}</div>
@@ -7567,7 +7624,7 @@ function renderExpectedRevenueCard(){
   const scope=allAgentLists().flatMap(a=>a.list.map(l=>({...l,agent:a.key})));
   const monthlyTotal=getMonthlyPlanClients(scope).reduce((s,l)=>s+l.__sched.expectedThisMonth,0);
   const grandTotal=newClientTotal+monthlyTotal;
-  return `<div class="rowcard" style="margin-bottom:18px;padding:18px;cursor:pointer;background:linear-gradient(120deg,#0B1E3D,#173D7A);color:#fff" data-goexpected="1">
+  return `<div class="rowcard" style="margin-bottom:18px;padding:18px;cursor:pointer;background:linear-gradient(120deg,var(--ink),#173D7A);color:#fff" data-goexpected="1">
     <div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;font-weight:700;margin-bottom:6px">Total expected · ${monthLabel(today().slice(0,7))}</div>
     <div style="font-size:26px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-bottom:10px">${ghs(grandTotal)}</div>
     <div style="display:flex;gap:16px;font-size:12.5px;opacity:.9"><div>New clients: <b>${ghs(newClientTotal)}</b></div><div>Monthly-plan: <b>${ghs(monthlyTotal)}</b></div></div>
@@ -7634,7 +7691,7 @@ function viewMonthlyPlanClients(){
   <div class="list">${rows||emptyState(ic.grid,'No installment-plan clients right now','')}</div>
   <div class="sectitle"><h3>Who owes us</h3><span class="cnt">${owing.length} outstanding${PROFILE.role==='manager'?', company-wide':''}</span></div>
   <div style="display:flex;gap:8px;margin-bottom:10px"><button class="chip" id="whoOwesCsv">⬇ CSV</button><button class="chip" id="whoOwesPdf">⬇ PDF</button></div>
-  <div class="formwrap" style="padding:6px 15px">${owing.length?owing.map(l=>`<div class="agentrow"><div class="ai"><div><div class="nm nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}" style="font-weight:700">${esc(l.name)}</div><div class="mini">${l.agentDisplay?esc(l.agentDisplay):''}${l.nextAction?(' · Next: '+esc(l.nextAction)):''}</div></div></div><div style="text-align:right"><div class="amt mono" style="font-weight:700;color:#B4472F">${ghs(l.__bal)}</div><div class="mini">owed</div></div></div>`).join(''):'<div class="empty">Nobody owes an outstanding balance right now.</div>'}</div>`;
+  <div class="formwrap" style="padding:6px 15px">${owing.length?owing.map(l=>`<div class="agentrow"><div class="ai"><div><div class="nm nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}" style="font-weight:700">${esc(l.name)}</div><div class="mini">${l.agentDisplay?esc(l.agentDisplay):''}${l.nextAction?(' · Next: '+esc(l.nextAction)):''}</div></div></div><div style="text-align:right"><div class="amt mono" style="font-weight:700;color:var(--danger)">${ghs(l.__bal)}</div><div class="mini">owed</div></div></div>`).join(''):'<div class="empty">Nobody owes an outstanding balance right now.</div>'}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
   document.getElementById('whoOwesCsv').onclick=()=>exportCSV(owing,[
     ['Client','name'],['Contact','contact'],['Agent','agentDisplay'],['Balance owed',l=>l.__bal],['Next action','nextAction']
@@ -7668,12 +7725,12 @@ function renderTargetCard(monthCollected,targetVal){
     </div>
     ${expectedTotal>0?`<div style="display:flex;gap:18px;margin-top:12px;font-size:12px">
       <div><div class="mini">Cleared</div><div style="font-weight:700;color:#1E7A56">${ghs(expectedCleared)}</div></div>
-      <div><div class="mini">Left</div><div style="font-weight:700;color:${expectedLeft>0?'#B4472F':'#1E7A56'}">${ghs(expectedLeft)}</div></div>
+      <div><div class="mini">Left</div><div style="font-weight:700;color:${expectedLeft>0?'var(--danger)':'#1E7A56'}">${ghs(expectedLeft)}</div></div>
       <div><div class="mini">Progress</div><div style="font-weight:700">${expectedPct}%</div></div>
     </div>`:''}
     ${mySelections.length?`<div style="margin-top:10px;display:flex;flex-direction:column;gap:2px">${mySelections.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 0;border-top:1px solid var(--line)">
       <span>${esc(t.clientName)} <span class="mini">(${esc(t.paymentType)} · ${ghs(t.expectedAmount)})</span></span>
-      <button class="chip" style="padding:3px 8px;font-size:10.5px;color:#B4472F" data-removetargetsel="${esc(t.id)}">Remove</button>
+      <button class="chip" style="padding:3px 8px;font-size:10.5px;color:var(--danger)" data-removetargetsel="${esc(t.id)}">Remove</button>
     </div>`).join('')}</div>`:''}
   </div>
   </div>`;
@@ -8141,7 +8198,7 @@ function agentDetailView(agentKey){
     .map(l=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return {...l,__bal:g-num(l.amtPaid)}; })
     .sort((a,b)=>b.__bal-a.__bal);
 
-  const STAGE_COLORS2={'1':'#94A3B8','2A':'#64748B','2B':'#3B82F6','3':'#F59E0B','4':'#16A34A',Lost:'#EF4444'};
+  const STAGE_COLORS2={'1':'#94A3B8','2A':'#64748B','2B':'#3B82F6','3':'#F59E0B','4':'var(--ok)',Lost:'#EF4444'};
   const stageSegs=STAGES.map(s=>({label:s,value:list.filter(l=>l.stage===s).length,color:STAGE_COLORS2[s]||'#94A3B8'}));
 
   const months=last6MonthKeys();
@@ -8164,7 +8221,7 @@ function agentDetailView(agentKey){
   <div class="sectitle"><h3>Clients who have paid</h3><span class="cnt">${paidClients.length}</span></div>
   <div class="formwrap" style="padding:6px 15px">${paidClients.length?paidClients.map(l=>rowOf(l,num(l.amtPaid),'paid','#1E7A56')).join(''):'<div class="empty">No payments recorded yet.</div>'}</div>
   <div class="sectitle"><h3>Clients who still owe</h3><span class="cnt">${owingClients.length}</span></div>
-  <div class="formwrap" style="padding:6px 15px">${owingClients.length?owingClients.map(l=>rowOf(l,l.__bal,'owed','#B4472F')).join(''):'<div class="empty">Nobody owes a balance right now.</div>'}</div>`;
+  <div class="formwrap" style="padding:6px 15px">${owingClients.length?owingClients.map(l=>rowOf(l,l.__bal,'owed','var(--danger)')).join(''):'<div class="empty">Nobody owes a balance right now.</div>'}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
 }
 
@@ -8342,8 +8399,8 @@ function renderPlotsGrid(){
           <span style="font-weight:800;font-size:15px;color:var(--text);width:26px">${bl}</span>
           <div style="flex:1;height:10px;border-radius:100px;overflow:hidden;display:flex;background:#EEF1F6">
             ${avail?`<span style="width:${avail/tot*100}%;background:linear-gradient(90deg,#A3E635,#4D7C0F)"></span>`:''}
-            ${rs?`<span style="width:${rs/tot*100}%;background:linear-gradient(90deg,#F5B94F,#B8791E)"></span>`:''}
-            ${al?`<span style="width:${al/tot*100}%;background:linear-gradient(90deg,#E0836A,#B4472F)"></span>`:''}
+            ${rs?`<span style="width:${rs/tot*100}%;background:linear-gradient(90deg,#F5B94F,var(--warn))"></span>`:''}
+            ${al?`<span style="width:${al/tot*100}%;background:linear-gradient(90deg,#E0836A,var(--danger))"></span>`:''}
           </div>
           <span class="mini" style="flex:0 0 auto;white-space:nowrap">${avail} open · ${tot} total</span>
           <span style="flex:0 0 auto;transform:${isOpen?'rotate(180deg)':'none'};transition:.15s">▾</span>
@@ -8504,15 +8561,15 @@ function checkPlotFieldLive(inputId,statusId){
     if(!pn){ status.textContent=''; return; }
     const p=DB.plots.find(x=>x.plotNumber.toLowerCase()===pn.toLowerCase());
     if(!p){ status.style.color='var(--muted)'; status.textContent='Not found in inventory — check the plot number'; }
-    else if(p.status==='Allocated'){ status.style.color='#B4472F'; status.textContent='✕ Already allocated'+(p.clientName?(' to '+p.clientName):''); }
-    else if(p.status==='Running Search'){ status.style.color='#B8791E'; status.textContent='⚠ Running search — confirm before offering this one'; }
-    else{ status.style.color='#16A34A'; status.textContent='✓ Available'; }
+    else if(p.status==='Allocated'){ status.style.color='var(--danger)'; status.textContent='✕ Already allocated'+(p.clientName?(' to '+p.clientName):''); }
+    else if(p.status==='Running Search'){ status.style.color='var(--warn)'; status.textContent='⚠ Running search — confirm before offering this one'; }
+    else{ status.style.color='var(--ok)'; status.textContent='✓ Available'; }
   };
   input.addEventListener('input',check); check();
 }
 function renderAllocationAwaiting(a){
   const plots=(a.suggestedPlots||'').split(',').map(s=>s.trim()).filter(Boolean);
-  return `<div class="formwrap" style="margin-top:6px;border-left:4px solid #B8791E">
+  return `<div class="formwrap" style="margin-top:6px;border-left:4px solid var(--warn)">
     <div class="sectitle" style="margin-top:0"><h3>Awaiting Management sign-off</h3><span class="cnt">${esc(a.clientName)}</span></div>
     <div class="mini" style="margin-bottom:12px">Once Management has physically signed the authorization form, pick the plot they approved and confirm.</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
@@ -8523,7 +8580,7 @@ function renderAllocationAwaiting(a){
   </div>`;
 }
 function renderAllocationDone(a){
-  return `<div class="rowcard" style="margin-top:6px;padding:16px;border-left:4px solid #16A34A">
+  return `<div class="rowcard" style="margin-top:6px;padding:16px;border-left:4px solid var(--ok)">
     <div style="font-weight:700;font-size:14px;margin-bottom:6px">✓ Plot ${esc(a.plotNumber)} allocated to ${esc(a.clientName)}</div>
     <div class="mini" style="margin-bottom:12px">Now showing as Allocated in Plot Inventory. Requested ${esc(a.createdAt||'')} · Allocated ${esc(a.resolvedAt||(today()+' '+nowTime()))}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -8810,7 +8867,7 @@ function openGlobalSearch(){
     if(leadHits.length) html+=`<div class="mini" style="margin:6px 0 4px;font-weight:700">PIPELINE</div>`+leadHits.map(l=>searchRow('linear-gradient(150deg,#3B82F6,#1D4ED8)',(l.name||'?')[0],l.name,(l.contact||'')+(l.agentDisplay?(' · '+l.agentDisplay):''),`data-searchgo="updateOne" data-searchid="${l.id}"`)).join('');
     if(payHitsReal.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PAYMENTS</div>`+payHitsReal.map(p=>{ const l=leadById[p.leadId]||{}; return searchRow('linear-gradient(150deg,#0EA5B7,#0C7A93)','₵',ghs(p.amount)+' · '+esc(l.name||'Unknown'),p.date||'',`data-searchgo="updateOne" data-searchid="${esc(p.leadId||'')}"`); }).join('');
     if(enqHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">ENQUIRIES</div>`+enqHits.map(e=>searchRow('linear-gradient(150deg,#4FBFA6,#1E7A6E)',(e.name||'?')[0],e.name,e.contact||'',`data-searchgo="customer" data-searchname="${esc(e.name)}" data-searchcontact="${esc(e.contact||'')}"`)).join('');
-    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>searchRow('linear-gradient(150deg,#E0836A,#B4472F)',(c.name||'?')[0],c.name,c.contact||'',`data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"`)).join('');
+    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>searchRow('linear-gradient(150deg,#E0836A,var(--danger))',(c.name||'?')[0],c.name,c.contact||'',`data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"`)).join('');
     if(contractHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">CONTRACTS</div>`+contractHits.map(c=>{ const l=leadById[c.leadId]; return searchRow('linear-gradient(150deg,#8B5CF6,#6D28D9)',(c.clientName||'?')[0],c.clientName,'Contract of Sale · '+(c.status||''),l?`data-searchgo="updateOne" data-searchid="${l.id}"`:`data-searchgo="customer" data-searchname="${esc(c.clientName)}" data-searchcontact=""`); }).join('');
     if(plotHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PLOTS</div>`+plotHits.map(p=>searchRow('linear-gradient(150deg,#D97706,#92400E)',(p.plotNumber||'?')[0],'Plot '+(p.plotNumber||''),(p.site?p.site+' · ':'')+(p.status||'')+(p.clientName?(' · '+p.clientName):''),`data-searchgo="plots" data-searchid="${esc(p.id)}"`)).join('');
     if(staffHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">STAFF</div>`+staffHits.map(s=>searchRow('linear-gradient(150deg,#64748B,#334155)',(s.name||'?')[0],s.name,s.role==='manager'?'Management':'Agent',`data-searchgo="chatThread" data-searchid="${esc(s.key)}"`)).join('');
@@ -9154,7 +9211,7 @@ function openAttachMenu(otherKey){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Attach</div><button id="closeAttachMenu" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
     <div class="attachMenuGrid">
       <button class="attachMenuBtn" id="attachPhotoBtn"><span class="attachMenuIcon" style="background:linear-gradient(150deg,#EC4899,#BE185D);color:#fff">${ic.image}</span>Photo / File</button>
-      <button class="attachMenuBtn" id="attachLocationBtn"><span class="attachMenuIcon" style="background:linear-gradient(150deg,#16A34A,#166534);color:#fff">${ic.pin}</span>Location</button>
+      <button class="attachMenuBtn" id="attachLocationBtn"><span class="attachMenuIcon" style="background:linear-gradient(150deg,var(--ok),#166534);color:#fff">${ic.pin}</span>Location</button>
       <button class="attachMenuBtn" id="attachEventBtn"><span class="attachMenuIcon" style="background:linear-gradient(150deg,#F59E0B,#B45309);color:#fff">${ic.calendar}</span>Event</button>
     </div>
   </div>`;
@@ -9745,7 +9802,7 @@ function todoFireAlarm(t){
    model; due-today tasks are listed separately underneath instead of forced
    onto an axis they were never given a position on. */
 const DAYGRID_START_HOUR=7, DAYGRID_END_HOUR=19, DAYGRID_ROW_PX=48;
-const DAYGRID_COLORS=['#0C7A93','#B8791E','#7C3AED','#16A34A','#B4472F','#0E7490'];
+const DAYGRID_COLORS=['#0C7A93','var(--warn)','#7C3AED','var(--ok)','var(--danger)','#0E7490'];
 function dayGridMinutes(hhmm){ const p=(hhmm||'0:0').split(':'); return (num(p[0])-DAYGRID_START_HOUR)*60+num(p[1]); }
 function dayGridTopPx(hhmm){ return Math.max(0,dayGridMinutes(hhmm))/60*DAYGRID_ROW_PX; }
 function dayGridHeightPx(start,end){ return Math.max(20,(dayGridMinutes(end)-dayGridMinutes(start))/60*DAYGRID_ROW_PX); }
@@ -10148,7 +10205,7 @@ function paintDuties(){
   if(q) list=list.filter(t=>(t.assignedToName||t.assignedTo||'').toLowerCase().includes(q)||(t.title||'').toLowerCase().includes(q));
   if(dutiesCatFilter) list=list.filter(t=>t.category===dutiesCatFilter);
   if(dutiesStatusFilter) list=list.filter(t=>t.status===dutiesStatusFilter);
-  const statusMeta={Open:{cls:'ghost',rail:'#6C7269'},'In Progress':{cls:'warnt',rail:'#8A6E12'},Done:{cls:'ok',rail:'#1E7A56'},Cancelled:{cls:'dgr',rail:'#B4472F'}};
+  const statusMeta={Open:{cls:'ghost',rail:'#6C7269'},'In Progress':{cls:'warnt',rail:'#8A6E12'},Done:{cls:'ok',rail:'#1E7A56'},Cancelled:{cls:'dgr',rail:'var(--danger)'}};
   const rowOf=t=>{
     const overdue=t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled';
     const daysOpen=taskDaysOpen(t);
@@ -10157,7 +10214,7 @@ function paintDuties(){
     <span class="tag ${statusMeta[t.status].cls}">${esc(t.status)}</span></div>
     ${t.description?`<div class="mini" style="margin-top:4px">${esc(t.description)}</div>`:''}
     <div class="foot"><span class="tag ${t.priority==='Critical'||t.priority==='High'?'warnt':'ghost'}">${esc(t.priority)} priority</span>${t.dueDate?`<span class="tag ${overdue?'dgr':'ghost'}">${overdue?'Overdue: ':'Due '}${esc(t.dueDate)}</span>`:''}<span class="tag ghost">Opened ${esc((t.createdAt||'').slice(0,10))}</span>${t.completedAt?`<span class="tag ok">Completed ${esc((t.completedAt||'').slice(0,10))}</span>`:`<span class="tag ghost">${daysOpen} day${daysOpen===1?'':'s'} open</span>`}</div>
-    ${t.escalatedTo?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:#B4472F;display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>Escalated to ${esc(t.escalatedToName||t.escalatedTo)} by ${esc(t.escalatedByName||t.escalatedBy)} · ${esc((t.escalatedAt||'').slice(0,10))}${t.escalationNote?(': '+esc(t.escalationNote)):''}</div>`:''}
+    ${t.escalatedTo?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:var(--danger);display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>Escalated to ${esc(t.escalatedToName||t.escalatedTo)} by ${esc(t.escalatedByName||t.escalatedBy)} · ${esc((t.escalatedAt||'').slice(0,10))}${t.escalationNote?(': '+esc(t.escalationNote)):''}</div>`:''}
     <div class="foot"><span class="chip" style="pointer-events:none">Open →</span></div>
   </div>`;};
   document.getElementById('dutiesList').innerHTML=list.length?list.map(rowOf).join(''):emptyState(ic.grid,'Nothing here','Try adjusting your filters, or assign a task to get started.');
@@ -10353,8 +10410,8 @@ function viewTaskDetail(id){
     <div class="mini">Assigned to <b>${esc(t.assignedToName||t.assignedTo)}</b> by <b>${esc(t.assignedByName||t.assignedBy)}</b> on ${esc((t.createdAt||'').slice(0,10))}</div>
     ${t.dueDate?`<div class="mini" style="margin-top:4px">${overdue?'⚠ Overdue — ':'Due '}${esc(t.dueDate)}</div>`:''}
   </div>
-  ${t.escalatedTo?`<div class="rowcard" style="border-left:4px solid #B4472F;margin-bottom:16px">
-    <div style="font-weight:700;font-size:13px;color:#B4472F;display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>Escalated</div>
+  ${t.escalatedTo?`<div class="rowcard" style="border-left:4px solid var(--danger);margin-bottom:16px">
+    <div style="font-weight:700;font-size:13px;color:var(--danger);display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>Escalated</div>
     <div class="mini" style="margin-top:4px">From ${esc(t.escalatedByName||t.escalatedBy)} to ${esc(t.escalatedToName||t.escalatedTo)} on ${esc((t.escalatedAt||'').slice(0,10))}${t.escalationNote?': '+esc(t.escalationNote):''}</div>
   </div>`:''}
   <div class="sectitle" style="margin-top:0"><h3>Content</h3>${canEdit?`<button class="chip" id="taskEditBtn">Edit</button>`:''}</div>
@@ -10539,7 +10596,7 @@ function viewAllocations(){
   const rowOf=a=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(a.clientName)}" data-custcontact="">${esc(a.clientName)}</div>
     <div class="meta">${esc(a.agentName)} · ${ghs(a.amtPaid)} of ${ghs(a.grandTotal)}</div></div>
     <div style="text-align:right"><span class="tag ${a.status==='Pending'?'warnt':a.status==='Awaiting Authorization'?'warnt':'ok'}">${a.percent}% paid</span></div></div>
-    ${a.flagReason?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:#B4472F;display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>${esc(a.flagReason)} — flagged by ${esc(a.flaggedBy||'')}</div>`:''}
+    ${a.flagReason?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:var(--danger);display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>${esc(a.flagReason)} — flagged by ${esc(a.flaggedBy||'')}</div>`:''}
     ${a.status==='Pending'?(a.flagReason
         ?(a.agentKey===PROFILE.key?`<div class="foot"><button class="chip" data-fixalloc="${a.id}" style="flex:1">I've fixed this — notify for re-review</button></div>`:`<div class="foot"><span class="tag ghost">Waiting on ${esc(a.agentName)} to fix and resubmit</span></div>`)
         :`<div class="foot"><button class="chip" data-selectalloc="${a.id}">Suggest plots →</button>${canManagePlots()?`<button class="chip" data-flagalloc="${a.id}">Flag an issue</button>`:''}</div>`)
@@ -11063,7 +11120,7 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
       <div style="text-align:right"><div class="mini">Month ${mySched.monthsElapsed} of ${mySched.planMonths} · ${ghs(mySched.monthlyInstallment)}/mo</div>
       <div class="mini" style="margin-top:2px">Due ${mySched.nextDueDate}</div></div>
     </div>
-    ${mySched.arrears>0?`<div class="mini" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);color:#B8791E;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;display:inline-flex">${ic.alert}</span>${ghs(mySched.arrears)} still overdue from earlier months</div>`:''}
+    ${mySched.arrears>0?`<div class="mini" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);color:var(--warn);font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;display:inline-flex">${ic.alert}</span>${ghs(mySched.arrears)} still overdue from earlier months</div>`:''}
     <button class="chip" id="viewSchedBtn" style="margin-top:10px;width:100%">View full month-by-month schedule →</button>
   </div>`:''}
   ${fld('Total paid to date (GHS)','<input id="u_paidtotal" type="number" value="'+num(l.amtPaid)+'"'+(canEnterPayments?'':' disabled')+'/>',canEnterPayments?'only for a lump sum not yet itemized below — to correct or remove a specific logged payment, use Payment schedule instead':'only Elias or Management can record payments — ask them to log it')}
@@ -11103,8 +11160,8 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
   ];
 
   V.innerHTML=`${back('update')}<div class="pagehead"><div style="display:flex;align-items:center;gap:12px"><div class="pipeAvatar" style="width:46px;height:46px;font-size:16px;border-radius:14px">${esc(updInitials)}</div><div><div class="eyebrow">Updating</div><h2>${esc(l.name)}</h2><p>${esc(l.contact||'')} · ${esc(l.plotType||'')}${l.noPlots?' ×'+esc(l.noPlots):''}</p></div></div></div>
-  ${priceMismatch?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid #B4472F"><div style="font-weight:700;font-size:13.5px;color:#B4472F">⚠ Price check</div><div class="mini" style="margin-top:2px">This lead's unit price (${ghs(num(l.unitPrice))}) doesn't match the current ${esc(l.plotType)} price (${ghs(expectedUnit)}). This can be legitimate (a past promo) — but worth confirming it's correct.</div></div>`:''}
-  ${overpaid?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid #B4472F"><div style="font-weight:700;font-size:13.5px;color:#B4472F">⚠ Amount paid exceeds grand total</div><div class="mini" style="margin-top:2px">Paid ${ghs(num(l.amtPaid))} against a grand total of ${ghs(g)}. Check the numbers below.</div></div>`:''}
+  ${priceMismatch?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid var(--danger)"><div style="font-weight:700;font-size:13.5px;color:var(--danger)">⚠ Price check</div><div class="mini" style="margin-top:2px">This lead's unit price (${ghs(num(l.unitPrice))}) doesn't match the current ${esc(l.plotType)} price (${ghs(expectedUnit)}). This can be legitimate (a past promo) — but worth confirming it's correct.</div></div>`:''}
+  ${overpaid?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid var(--danger)"><div style="font-weight:700;font-size:13.5px;color:var(--danger)">⚠ Amount paid exceeds grand total</div><div class="mini" style="margin-top:2px">Paid ${ghs(num(l.amtPaid))} against a grand total of ${ghs(g)}. Check the numbers below.</div></div>`:''}
   <div class="pipeStatStrip"><div class="pipeStat"><div class="v">${ghs(g)}</div><div class="l">Pipeline value</div></div><div class="pipeStat"><div class="v">${ghs(num(l.amtPaid))}</div><div class="l">Collected</div></div><div class="pipeStat"><div class="v">${ghs(bal)}</div><div class="l">Balance</div></div></div>
   <div class="formactions" style="margin-bottom:16px"><button class="btn ghost" onclick="route('update')">Back</button><button class="btn gold" id="saveUpd">Save update</button></div>
   ${vaultGridHtml(updGroups,{hubId:'pipelineUpdate',openFirst:true})}`;
@@ -11121,9 +11178,9 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
       if(paidNow<=0){ cmpEl.textContent=''; }
       else{
         const diff=paidNow-mySched.monthlyInstallment;
-        if(Math.abs(diff)<1){ cmpEl.style.color='#16A34A'; cmpEl.textContent='Matches the usual monthly amount'; }
-        else if(diff<0){ cmpEl.style.color='#B8791E'; cmpEl.textContent=ghs(Math.abs(diff))+' less than the usual monthly amount — behind schedule'; }
-        else{ cmpEl.style.color='#16A34A'; cmpEl.textContent=ghs(diff)+' more than the usual monthly amount — ahead of schedule'; }
+        if(Math.abs(diff)<1){ cmpEl.style.color='var(--ok)'; cmpEl.textContent='Matches the usual monthly amount'; }
+        else if(diff<0){ cmpEl.style.color='var(--warn)'; cmpEl.textContent=ghs(Math.abs(diff))+' less than the usual monthly amount — behind schedule'; }
+        else{ cmpEl.style.color='var(--ok)'; cmpEl.textContent=ghs(diff)+' more than the usual monthly amount — ahead of schedule'; }
       }
     }
   };
@@ -11322,7 +11379,7 @@ function entriesRowsHtml(entries){
       <div class="mini">${esc(p.date||'')} · ${ghs(num(p.amount))}</div>
       ${canEnterPayments?`<div style="display:flex;gap:6px;flex:0 0 auto">
         <button class="chip" style="padding:4px 9px;font-size:11px" data-editpayment="${esc(p.id)}">Edit</button>
-        <button class="chip" style="padding:4px 9px;font-size:11px;color:#B4472F" data-delpayment="${esc(p.id)}">Delete</button>
+        <button class="chip" style="padding:4px 9px;font-size:11px;color:var(--danger)" data-delpayment="${esc(p.id)}">Delete</button>
       </div>`:''}
     </div>`).join('')}
   </div>`;
@@ -11355,8 +11412,8 @@ function viewPaymentSchedule(id){
     }).join('');
     V.innerHTML=`${back('updateOne')}<div class="pagehead"><div><div class="eyebrow">Payment schedule</div><h2>${esc(l.name)}</h2><p>${l.paymentPlan} · anchored from ${sched.anchor} (their first payment)</p></div></div>
     ${!canEnterPayments?`<div class="rowcard" style="margin-bottom:16px;padding:12px 16px"><div class="mini">Read-only — only Elias or Management can log, edit, or delete payments.</div></div>`:''}
-    ${sched.unassigned>0?`<div class="rowcard" style="margin-bottom:16px;padding:14px 16px;border-left:4px solid #B8791E">
-      <div style="font-weight:700;font-size:13.5px;color:#B8791E;display:flex;align-items:center;gap:7px"><span style="width:15px;height:15px;display:inline-flex">${ic.alert}</span>${ghs(sched.unassigned)} paid but not assigned to a month</div>
+    ${sched.unassigned>0?`<div class="rowcard" style="margin-bottom:16px;padding:14px 16px;border-left:4px solid var(--warn)">
+      <div style="font-weight:700;font-size:13.5px;color:var(--warn);display:flex;align-items:center;gap:7px"><span style="width:15px;height:15px;display:inline-flex">${ic.alert}</span>${ghs(sched.unassigned)} paid but not assigned to a month</div>
       <div class="mini" style="margin-top:3px">This client's total-paid figure is higher than what's itemized by month below (common for older records entered as a lump sum). Log it against the month(s) it actually covers so the schedule below is accurate.</div>
     </div>`:''}
     <div id="schedRows">${rows}</div>`;
@@ -11645,7 +11702,7 @@ function logPayDetailHtml(lead){
   <div class="mini" style="margin-bottom:14px">${esc(lead.contact||'')} · ${esc(lead.plotType||'')}${lead.noPlots?' ×'+esc(lead.noPlots):''}</div>
   <div style="display:flex;gap:10px;margin-bottom:18px">
     <div style="flex:1;background:#F4F6F8;border-radius:12px;padding:10px 12px"><div class="mini" style="margin-bottom:2px">Total price (all plots)</div><div style="font-weight:800;font-size:15px">${ghs(grand)}</div></div>
-    <div style="flex:1;background:#F4F6F8;border-radius:12px;padding:10px 12px"><div class="mini" style="margin-bottom:2px">Balance remaining</div><div style="font-weight:800;font-size:15px;color:${bal>0?'#B4472F':'#16A34A'}">${bal>0?ghs(bal):'Paid in full'}</div></div>
+    <div style="flex:1;background:#F4F6F8;border-radius:12px;padding:10px 12px"><div class="mini" style="margin-bottom:2px">Balance remaining</div><div style="font-weight:800;font-size:15px;color:${bal>0?'var(--danger)':'var(--ok)'}">${bal>0?ghs(bal):'Paid in full'}</div></div>
   </div>
   <div class="sectitle" style="margin-top:0"><h3>Log a new payment</h3></div>
   <div class="formwrap">
@@ -11656,7 +11713,7 @@ function logPayDetailHtml(lead){
   </div>
   <div class="sectitle"><h3>Payment history</h3><span class="cnt">${entries.length}</span></div>
   <div class="list" id="lpHistoryList">${entries.length?entries.map(p=>`<div class="rowcard" style="padding:12px 14px"><div class="top"><div><div class="nm" style="font-size:13.5px">${ghs(num(p.amount))}${p.status==='pending'?' <span class="tag warnt">Pending approval</span>':p.status==='declined'?' <span class="tag dgr">Declined</span>':''}</div><div class="meta">${esc(p.date||'')}${p.method?(' · '+esc(p.method)):''}</div></div>
-    <div style="display:flex;gap:6px;flex:0 0 auto"><button class="chip" data-lpedit="${esc(p.id)}" style="padding:4px 9px;font-size:11px">Edit</button><button class="chip" data-lpdel="${esc(p.id)}" style="padding:4px 9px;font-size:11px;color:#B4472F">Delete</button></div>
+    <div style="display:flex;gap:6px;flex:0 0 auto"><button class="chip" data-lpedit="${esc(p.id)}" style="padding:4px 9px;font-size:11px">Edit</button><button class="chip" data-lpdel="${esc(p.id)}" style="padding:4px 9px;font-size:11px;color:var(--danger)">Delete</button></div>
     </div></div>`).join(''):emptyState(ic.update,'No payments logged yet','')}</div>`;
 }
 function bindLogPayDetailCtrls(lead){
@@ -11866,7 +11923,7 @@ function siteVisitAuthBodyHtml(form,visits){
 
   <div class="formactions" style="display:flex;flex-direction:column;gap:10px">
     ${costsEditable?`<button class="btn primary" id="svaSave" style="width:100%">Save cost estimate</button>`:''}
-    ${form.status==='Open'&&PROFILE.role==='manager'?`<button class="btn" id="svaFinalize" style="width:100%;background:#0B1E3D;color:#fff">Finalize &amp; approve</button>`:''}
+    ${form.status==='Open'&&PROFILE.role==='manager'?`<button class="btn" id="svaFinalize" style="width:100%;background:var(--ink);color:#fff">Finalize &amp; approve</button>`:''}
     <button class="btn ghost" id="svaDownload" style="width:100%">⬇ Download PDF</button>
   </div>`;
 }
@@ -12714,7 +12771,7 @@ async function paintPerformanceSection(){
       <div style="font-size:36px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--gold)">#${myIdx+1}</div>
       <div><div class="mini">of ${scored.length} on the team</div><div style="font-weight:700;font-size:17px">${me.points} points</div></div>
     </div>
-    ${above?`<div class="rowcard" style="margin-bottom:14px;padding:12px 14px"><div class="mini">Gap to #${myIdx} — ${esc(above.staffName)}</div><div style="font-weight:700;font-size:16px;color:#B4472F">${gap} point${gap===1?'':'s'}</div></div>`
+    ${above?`<div class="rowcard" style="margin-bottom:14px;padding:12px 14px"><div class="mini">Gap to #${myIdx} — ${esc(above.staffName)}</div><div style="font-weight:700;font-size:16px;color:var(--danger)">${gap} point${gap===1?'':'s'}</div></div>`
       :`<div class="tag ok" style="display:inline-flex;margin-bottom:4px">You're #1 — keep it up</div>`}
     ${suggestions.length?`<div class="mini" style="font-weight:700;margin:12px 0 6px">Ways to close the gap</div>
       <ul style="margin:0;padding-left:18px">${suggestions.map(s=>`<li class="mini" style="margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}`;
@@ -13053,7 +13110,7 @@ async function clientHome(){
             <div style="display:flex;gap:3px">${DOC_STAGES.map((d,i)=>`<div style="flex:1;height:5px;border-radius:4px;background:${i<=stageIdx?'var(--leaf)':'#EEF1F6'}" title="${esc(d.label)}"></div>`).join('')}</div>
             <div class="mini" style="margin-top:5px">${esc(DOC_STAGES[stageIdx].label)}</div>
           </div>`:''}
-          ${sched?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11.5px;font-weight:600;background:${sched.arrears>0?'#FDECEA':'#EAF6EC'};color:${sched.arrears>0?'#B4472F':'#1E7A56'}">
+          ${sched?`<div style="margin-top:8px;padding:8px 10px;border-radius:10px;font-size:11.5px;font-weight:600;background:${sched.arrears>0?'#FDECEA':'#EAF6EC'};color:${sched.arrears>0?'var(--danger)':'#1E7A56'}">
             ${sched.arrears>0?`⚠ Overdue ${ghs(sched.arrears)} — `:'📅 '}Next payment ${ghs(sched.expectedThisMonth||sched.monthlyInstallment)} due ${new Date(sched.nextDueDate+'T00:00:00').toLocaleDateString('en-GB')}
           </div>`:''}
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
@@ -14770,7 +14827,7 @@ async function managerView(){
     const res=(DB.allocations||[]).filter(a=>a.status==='Allocated').sort((x,y)=>(y.createdAt||'').localeCompare(x.createdAt||''));
     const rowOf=a=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(a.clientName)}" data-custcontact="">${esc(a.clientName)}</div>
       <div class="meta">${esc(a.agentName)} · ${ghs(a.amtPaid)} of ${ghs(a.grandTotal)}</div></div><span class="tag ${a.status==='Allocated'?'ok':'warnt'}">${a.percent}% paid</span></div>
-      ${a.flagReason?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:#B4472F;display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>${esc(a.flagReason)} — flagged by ${esc(a.flaggedBy||'')}</div>`:''}
+      ${a.flagReason?`<div class="mini" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--line);color:var(--danger);display:flex;align-items:center;gap:6px"><span style="width:14px;height:14px;display:inline-flex">${ic.alert}</span>${esc(a.flagReason)} — flagged by ${esc(a.flaggedBy||'')}</div>`:''}
       ${a.status==='Pending'?(a.flagReason
           ?(a.agentKey===PROFILE.key?`<div class="foot"><button class="chip" data-fixalloc="${a.id}" style="flex:1">I've fixed this — notify for re-review</button></div>`:`<div class="foot"><span class="tag ghost">Waiting on ${esc(a.agentName)} to fix and resubmit</span></div>`)
           :`<div class="foot"><button class="chip" data-selectalloc="${a.id}">Suggest plots →</button>${canManagePlots()?`<button class="chip" data-flagalloc="${a.id}">Flag an issue</button>`:''}</div>`)
@@ -14912,7 +14969,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     return `<button class="agentrow" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);cursor:pointer" data-agentkey="${esc(a.key)}"><div class="ai"><div><div class="nm" style="font-weight:700">${esc(a.name)}</div><div class="mini">${k.leads} leads · ${k.sv} visits · ${k.hi} high-priority</div></div></div><div style="text-align:right"><div class="amt mono" style="font-weight:700">${ghs(k.val)}</div><div class="mini">out ${ghs(k.out)}</div></div></button>`; }).join('');
   const escalated=DB.complaints.filter(c=>c.status==='Escalated').length;
 
-  const STAGE_COLORS={'1':'#94A3B8','2A':'#64748B','2B':'#3B82F6','3':'#F59E0B','4':'#16A34A','Lost':'#EF4444'};
+  const STAGE_COLORS={'1':'#94A3B8','2A':'#64748B','2B':'#3B82F6','3':'#F59E0B','4':'var(--ok)','Lost':'#EF4444'};
   const stages=STAGES;
   const allLeads=agents.flatMap(a=>a.list);
   const stageMax=Math.max(1,...stages.map(s=>allLeads.filter(l=>l.stage===s).length));
@@ -15413,7 +15470,7 @@ function mgrAnalytics(){
   }
 
   const methodSegments=Object.keys(monthData.byMethod).map((m,i)=>({label:m,value:monthData.byMethod[m].total,color:DAYGRID_COLORS[i%DAYGRID_COLORS.length]}));
-  const pipelineSegments=[{label:'Committed (paying)',value:comp.committedVal,color:'#16A34A'},{label:'Prospects (unpaid)',value:comp.prospectVal,color:'#94A3B8'}];
+  const pipelineSegments=[{label:'Committed (paying)',value:comp.committedVal,color:'var(--ok)'},{label:'Prospects (unpaid)',value:comp.prospectVal,color:'#94A3B8'}];
   const topAgents=monthData.perAgent.slice(0,5);
 
   return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Analytics</div><h2>Company performance at a glance</h2><p>Live figures for ${monthLabel(thisMonth)} — for period exports and PDFs, see Reports.</p></div></div>
@@ -16449,7 +16506,7 @@ function openReferralClearModal(r){
   ov.innerHTML=`<div id="announceModal" style="max-width:480px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Clear ${esc(r.referrerName)}'s referral</div><button id="closeRefClear" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
     <p class="mini" style="margin:-4px 0 12px">Confirms ${esc(r.referredName)} actually bought, and credits ${esc(r.referrerName)} with points. A confirmation SMS goes to them right after.</p>
-    <p class="mini" style="margin:-4px 0 12px;color:#B4472F">Can only be cleared once linked to the referred person's actual lead, and that lead has paid at least 30% of the plot price.</p>
+    <p class="mini" style="margin:-4px 0 12px;color:var(--danger)">Can only be cleared once linked to the referred person's actual lead, and that lead has paid at least 30% of the plot price.</p>
     ${fld("Link to the client's lead",'<input id="refc_search" placeholder="Search '+esc(r.referredName)+' in Client Database…" autocomplete="off"/>')}
     <div id="refc_results"></div>
     <div id="refc_picked" class="hidden rowcard" style="margin:8px 0;padding:10px 14px"></div>
@@ -16471,7 +16528,7 @@ function openReferralClearModal(r){
     const grand=lead.grandTotal!=null?num(lead.grandTotal):computeLead(lead).grand;
     const pct=grand>0?Math.round(num(lead.amtPaid)/grand*100):0;
     if(pct>=30){ eligEl.style.color='var(--leaf)'; eligEl.textContent='✓ '+pct+'% paid — eligible to clear.'; saveBtn.disabled=false; }
-    else{ eligEl.style.color='#B4472F'; eligEl.textContent='⚠ Only '+pct+'% paid — needs at least 30% before this can be cleared.'; saveBtn.disabled=true; }
+    else{ eligEl.style.color='var(--danger)'; eligEl.textContent='⚠ Only '+pct+'% paid — needs at least 30% before this can be cleared.'; saveBtn.disabled=true; }
   };
   const showPicked=name=>{ const p=document.getElementById('refc_picked'); p.classList.remove('hidden');
     p.innerHTML=`Linked to <b>${esc(name)}</b> <button type="button" class="chip" id="refc_clearpick" style="margin-left:8px">Change</button>`;
@@ -16825,7 +16882,7 @@ function notesBodyHtml(){
 }
 function noteRowHtml(n,i){
   const snippet=(n.body||'').replace(/\s+/g,' ').trim().slice(0,90);
-  return `<div class="rowcard" style="position:relative;overflow:hidden;padding-left:18px;animation-delay:${Math.min((i||0)*25,250)}ms"><div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--premium,#C9A227)"></div><div class="top"><div><div class="nm">${esc(n.title||'Untitled note')}</div><div class="meta">${fmtBackupWhen(n.updatedAt)}</div></div></div>
+  return `<div class="rowcard" style="position:relative;overflow:hidden;padding-left:18px;animation-delay:${Math.min((i||0)*25,250)}ms"><div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--premium,var(--premium))"></div><div class="top"><div><div class="nm">${esc(n.title||'Untitled note')}</div><div class="meta">${fmtBackupWhen(n.updatedAt)}</div></div></div>
   ${snippet?`<div class="note">${esc(snippet)}${(n.body||'').length>90?'…':''}</div>`:''}
   <div class="foot" style="gap:8px;flex-wrap:wrap"><button class="chip" data-noteedit="${esc(n.id)}">Open</button><button class="chip" data-notesend="${esc(n.id)}">Send</button><button class="chip" data-notedl="${esc(n.id)}">Download</button><button class="chip" data-notedel="${esc(n.id)}" style="color:#B91C1C">Delete</button></div></div>`;
 }
@@ -18909,7 +18966,7 @@ function memoRowHtml(m){
   const myCc=myMemoCcRow(m);
   const isUnreadToMe=(m.toKey===PROFILE.key&&!m.read)||(myCc&&!myCc.read);
   const ccNote=(m.cc&&m.cc.length)?' <span class="mini">+cc '+m.cc.map(c=>esc(c.staffName)).join(', ')+'</span>':'';
-  return `<button class="rowcard" style="text-align:left;width:100%" data-memoopen="${m.id}"><div class="top"><div class="pipeAvatar" style="background:linear-gradient(135deg,var(--premium,#C9A227),var(--premium2,#E8C766))">${ic.doc}</div><div style="flex:1;min-width:0"><div class="nm">${esc(m.subject)}${isUnreadToMe?' <span class="tag gold">New</span>':''}</div><div class="meta">${m.fromKey===PROFILE.key?'To '+esc(m.toName)+ccNote:(myCc?'Cc’d from '+esc(m.fromName):'From '+esc(m.fromName))} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></div>${kindTag}</div></button>`;
+  return `<button class="rowcard" style="text-align:left;width:100%" data-memoopen="${m.id}"><div class="top"><div class="pipeAvatar" style="background:linear-gradient(135deg,var(--premium,var(--premium)),var(--premium2,#E8C766))">${ic.doc}</div><div style="flex:1;min-width:0"><div class="nm">${esc(m.subject)}${isUnreadToMe?' <span class="tag gold">New</span>':''}</div><div class="meta">${m.fromKey===PROFILE.key?'To '+esc(m.toName)+ccNote:(myCc?'Cc’d from '+esc(m.fromName):'From '+esc(m.fromName))} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></div>${kindTag}</div></button>`;
 }
 function memoInboxHtml(){
   const inbox=DB.memos.filter(m=>m.toKey===PROFILE.key||myMemoCcRow(m)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
@@ -19010,7 +19067,7 @@ const BANNER_STATUS={
   placed:{label:'Perfect condition',color:'#1E7A56',bg:'#DCEEE4'},
   needs_maintenance:{label:'Needs maintenance',color:'#8A6E12',bg:'#F6EBD3'},
   location_only:{label:'Scouted location',color:'#2E6E8E',bg:'#DCEAF0'},
-  being_replaced:{label:'Being replaced',color:'#B4472F',bg:'#F5DCD5'}
+  being_replaced:{label:'Being replaced',color:'var(--danger)',bg:'#F5DCD5'}
 };
 function ensureLeafletLoaded(){
   if(window.L) return Promise.resolve();
