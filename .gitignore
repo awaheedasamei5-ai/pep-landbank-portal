@@ -26,3 +26,6 @@ android/app/src/main/res/xml/config.xml
 ios/App/App/public/
 ios/App/Pods/
 www/
+
+# web-next rebuild scaffold (React/TS/Vite) -- build output only, source is tracked
+web-next/dist/
