@@ -1873,7 +1873,7 @@ const mapLead=r=>({id:r.id,agent:r.agent_key,name:r.name,contact:r.contact,date:
   plotType:r.plot_type,noPlots:r.no_plots,unitPrice:r.unit_price,discount:r.discount,netTotal:r.net_total,
   paymentPlan:r.payment_plan,grandTotal:r.grand_total,siteVisit:r.site_visit,priority:r.priority,
   amtPaid:r.amt_paid,balance:r.balance,nextAction:r.next_action,notes:r.notes,tags:r.tags,depositTarget:r.deposit_target,
-  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at});
+  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at,version:r.version});
 const mapEnq=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,name:r.name,contact:r.contact,location:r.location,
   types:(r.types||'').split(',').filter(Boolean),plot:r.plot,source:r.source,details:r.details,follow:r.follow,
   followDate:r.follow_date,createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
@@ -2541,7 +2541,28 @@ async function apiUpdateLead(id,patch){
   if('leadSource' in patch) dbPatch.lead_source=patch.leadSource;
   if('bannerId' in patch) dbPatch.banner_id=patch.bannerId;
   if('kyc' in patch) dbPatch.kyc=patch.kyc;
-  const {error}=await sb.from('leads').update(dbPatch).eq('id',id); if(error) throw error;
+  // Offline mutation queue (Sec 17) -- a network-shaped failure here (including
+  // the fast-path when we already know we're offline) queues the edit instead
+  // of losing it; a real rejection (validation/RLS) still throws exactly as
+  // before. Every apiUpdateLead caller already treats a resolved promise as
+  // "saved", so queueing-then-resolving is safe for all of them -- the
+  // persistent sync-state badge is what tells the user it's pending, not this
+  // return value.
+  if(navigator.onLine===false){
+    const known=findKnownLeadVersion(id);
+    await enqueueMutation('leads','update',dbPatch,{id,expectedVersion:known.version,leadName:known.name});
+    return;
+  }
+  try{
+    const {error}=await sb.from('leads').update(dbPatch).eq('id',id); if(error) throw error;
+  }catch(e){
+    if(isNetworkShapedError(e)){
+      const known=findKnownLeadVersion(id);
+      await enqueueMutation('leads','update',dbPatch,{id,expectedVersion:known.version,leadName:known.name});
+      return;
+    }
+    throw e;
+  }
 }
 // Seeds a referral record the moment staff tag "this lead was referred by an existing
 // client" during normal lead intake. Starts Pending -- it only turns into earned points
@@ -4315,6 +4336,136 @@ function teardownAllRealtimeChannels(){
   REALTIME_CHANNELS.forEach(({chan,onReset})=>{ try{ sb.removeChannel(chan); }catch(e){} try{ onReset&&onReset(); }catch(e){} });
   REALTIME_CHANNELS.length=0;
 }
+
+// ---- offline mutation queue (Sec 17) ----
+// IndexedDB-backed queue for writes that fail because the network is down,
+// not because of a real validation/RLS rejection -- those still surface to
+// the caller exactly as they do today. Currently wired into apiUpdateLead
+// only (covers every lead-field edit -- stage, next action, notes, priority,
+// etc. -- the single most realistic "agent offline at a client site"
+// scenario), proven here before extending to payment/activity logging in a
+// later round. Fails safe: when online and reachable, nothing about this
+// changes today's behavior at all.
+const OFFLINE_DB_NAME='palmstead-offline', OFFLINE_STORE='pending_mutations';
+let OFFLINE_DRAIN_TIMER=null, OFFLINE_DRAINING=false;
+function offlineDbOpen(){
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB){ reject(new Error('no indexedDB')); return; }
+    const req=indexedDB.open(OFFLINE_DB_NAME,1);
+    req.onupgradeneeded=()=>{ req.result.createObjectStore(OFFLINE_STORE,{keyPath:'id'}); };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function offlineDbAll(){
+  try{
+    const db=await offlineDbOpen();
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction(OFFLINE_STORE,'readonly');
+      const req=tx.objectStore(OFFLINE_STORE).getAll();
+      req.onsuccess=()=>resolve(req.result||[]); req.onerror=()=>reject(req.error);
+    });
+  }catch(e){ return []; }
+}
+async function offlineDbPut(item){
+  try{
+    const db=await offlineDbOpen();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(OFFLINE_STORE,'readwrite'); tx.objectStore(OFFLINE_STORE).put(item);
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+    });
+  }catch(e){}
+}
+async function offlineDbDelete(id){
+  try{
+    const db=await offlineDbOpen();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction(OFFLINE_STORE,'readwrite'); tx.objectStore(OFFLINE_STORE).delete(id);
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+    });
+  }catch(e){}
+}
+// A network-shaped failure (the request never actually reached Supabase) is
+// queueable; anything else -- validation, RLS, a real conflict -- is a
+// genuine failure and must still surface to the caller exactly as it does
+// today, not get silently swallowed into the queue.
+function isNetworkShapedError(e){
+  if(!e) return false;
+  if(navigator.onLine===false) return true;
+  const msg=((e&&e.message)||String(e)||'').toLowerCase();
+  return /failed to fetch|networkerror|network request failed|load failed|internet connection appears to be offline/.test(msg);
+}
+async function enqueueMutation(table,op,payload,extra){
+  const item={id:'off-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),table,op,payload,extra:extra||{},createdAt:new Date().toISOString(),retryCount:0};
+  await offlineDbPut(item);
+  await refreshOfflineQueueUi();
+  return item;
+}
+async function refreshOfflineQueueUi(){
+  const items=await offlineDbAll();
+  const count=items.length;
+  let el=document.getElementById('offlineSyncBadge');
+  if(!count){ if(el) el.remove(); return; }
+  if(!el){
+    el=document.createElement('div'); el.id='offlineSyncBadge';
+    el.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;background:var(--card,#1b1f27);color:var(--text,#fff);border:1px solid var(--line,#333);border-radius:999px;padding:8px 16px;font-size:12.5px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.25);pointer-events:none';
+    document.body.appendChild(el);
+  }
+  el.textContent = navigator.onLine
+    ? `Syncing ${count} change${count===1?'':'s'}…`
+    : `${count} change${count===1?'':'s'} waiting to sync`;
+}
+async function drainOfflineQueue(){
+  if(OFFLINE_DRAINING || DEMO_MODE || !sb || navigator.onLine===false) return;
+  OFFLINE_DRAINING=true;
+  try{
+    const items=(await offlineDbAll()).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+    for(const item of items){
+      try{
+        if(item.table==='leads' && item.op==='update'){
+          let q=sb.from('leads').update(item.payload).eq('id',item.extra.id);
+          if(item.extra.expectedVersion!=null) q=q.eq('version',item.extra.expectedVersion);
+          const {data,error}=await q.select('id');
+          if(error){
+            if(isNetworkShapedError(error)) break;
+            await offlineDbDelete(item.id);
+            toast('A queued offline change to '+(item.extra.leadName||'a client record')+' could not be saved: '+(error.message||error));
+            continue;
+          }
+          if(item.extra.expectedVersion!=null && (!data||data.length===0)){
+            await offlineDbDelete(item.id);
+            toast('A change queued offline for '+(item.extra.leadName||'a client')+' could not be auto-applied -- their record changed since. Please review and re-apply if still needed.');
+            continue;
+          }
+          await offlineDbDelete(item.id);
+          continue;
+        }
+        await offlineDbDelete(item.id);
+      }catch(e){
+        if(isNetworkShapedError(e)) break;
+        item.retryCount=(item.retryCount||0)+1;
+        if(item.retryCount>5){ await offlineDbDelete(item.id); toast('A queued offline change failed repeatedly and was dropped.'); }
+        else await offlineDbPut(item);
+      }
+    }
+  } finally {
+    OFFLINE_DRAINING=false;
+    await refreshOfflineQueueUi();
+  }
+}
+function ensureOfflineQueueRunning(){
+  if(DEMO_MODE) return;
+  refreshOfflineQueueUi();
+  drainOfflineQueue();
+  window.addEventListener('online',drainOfflineQueue);
+  clearInterval(OFFLINE_DRAIN_TIMER);
+  OFFLINE_DRAIN_TIMER=setInterval(drainOfflineQueue,30000);
+}
+function findKnownLeadVersion(id){
+  const sources=[typeof DB!=='undefined'?DB.leads:null,typeof CLIENTDB_LIST!=='undefined'?CLIENTDB_LIST:null,typeof COMPANY_LEADS_LIST!=='undefined'?COMPANY_LEADS_LIST:null];
+  for(const src of sources){ if(!src) continue; const l=src.find(x=>x.id===id); if(l && l.version!=null) return {version:l.version,name:l.name}; }
+  return {version:null,name:null};
+}
 /* Live, not "reload to see it" -- when any agent adds or updates a lead
    anywhere in the company, Elias/Management see it here immediately without
    reopening the screen, and it's already in DB.leads for anything else that
@@ -5392,6 +5543,7 @@ async function enterApp(){
   ensureBannersLiveSubscribed();
   ensureStaffRosterLiveSubscribed();
   ensurePresenceSubscribed();
+  ensureOfflineQueueRunning();
   if(PROFILE.role!=='manager') evaluateMyAchievements();
   startInactivityTimer();
   startMonthRolloverWatchdog();
@@ -5834,6 +5986,8 @@ document.getElementById('logoutBtn').onclick=async()=>{
   // its own explicit teardown here.
   teardownAllRealtimeChannels();
   if(PRESENCE_LIVE_CHANNEL){ try{ await apiTouchLastSeen(); sb.removeChannel(PRESENCE_LIVE_CHANNEL); }catch(e){} PRESENCE_LIVE_CHANNEL=null; PRESENCE_ONLINE_KEYS=new Set(); clearInterval(PRESENCE_HEARTBEAT_TIMER); }
+  clearInterval(OFFLINE_DRAIN_TIMER);
+  const offlineBadge=document.getElementById('offlineSyncBadge'); if(offlineBadge) offlineBadge.remove();
   CLIENTDB_LOADED=false; CLIENTDB_LIST=[];
   CLIENT_NOTIFICATIONS=[];
   const bellBtn=document.getElementById('clientBellBtn'); if(bellBtn) bellBtn.classList.add('hidden');
