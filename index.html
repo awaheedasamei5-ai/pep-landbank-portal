@@ -2406,7 +2406,17 @@ async function apiLoadAll(){
     DB.badgeCounts=await apiLoadBadgeCounts();
     return;
   }
-  const q=async t=>{const {data,error}=await sb.from(t).select('*').order('created_at',{ascending:false});if(error)throw error;return data||[];};
+  // site_visits/activity_log get capped here -- both are effectively append-only
+  // logs that only ever grow, and no hot-path screen needs their complete
+  // history on every sign-in (Management Reports/Customer 360/backup/CSV export
+  // each fetch their own fresh, uncapped copy instead -- see apiLoadFullSiteVisits/
+  // apiLoadFullActivity). leads/enquiries/complaints stay uncapped deliberately:
+  // leads is the actual working set, and the manager home dashboard (mgrOverview,
+  // rendered on every sign-in) already needs a complete enquiries/complaints
+  // count and by-source breakdown, so capping those two would just force a
+  // second, duplicate fetch right after sign-in with no net benefit.
+  const BULK_LOAD_LIMIT=500;
+  const q=async(t,limit)=>{let qq=sb.from(t).select('*').order('created_at',{ascending:false}); if(limit) qq=qq.limit(limit); const {data,error}=await qq;if(error)throw error;return data||[];};
   // Loaded for every role, not just managers -- RLS already allows any signed-in user to
   // read this (staff directory info: name/avatar/role), and computeAgentOfMonth()/
   // allAgentLists() need it to work correctly from an agent's own dashboard too.
@@ -2439,7 +2449,7 @@ async function apiLoadAll(){
   // Every read below is independent of the others, so they run as one concurrent wave
   // instead of one-after-another — this is most of what makes sign-in-to-dashboard slow.
   const results=await Promise.all([
-    q('leads'),q('enquiries'),q('complaints'),q('site_visits'),q('activity_log'),
+    q('leads'),q('enquiries'),q('complaints'),q('site_visits',BULK_LOAD_LIMIT),q('activity_log',BULK_LOAD_LIMIT),
     loadProfiles(),loadPayments(),loadPlots(),loadContracts(),
     apiLoadAnnouncements(),apiLoadAllocations(),apiLoadMessages(),apiLoadTargetSelections(today().slice(0,7),PROFILE.role==='manager'),
     apiLoadAgentMonthStats(),apiLoadTasks(),apiLoadFeedback(),apiLoadDownloads(),apiLoadBadgeCounts()
@@ -3868,11 +3878,37 @@ const mapTask=r=>({id:r.id,title:r.title,description:r.description,category:r.ca
   escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note});
 const mapTaskEvent=r=>({id:r.id,taskId:r.task_id,type:r.type,actorKey:r.actor_key,actorName:r.actor_name,
   fromKey:r.from_key,fromName:r.from_name,toKey:r.to_key,toName:r.to_name,note:r.note,createdAt:r.created_at});
+// Sign-in load stays capped to the most recent TASK_LOAD_LIMIT tasks (Duties
+// Today/My Day/Team only ever need recent+open items) -- but the Ops Report
+// (computeOpsReportData) needs the COMPLETE history to report accurately on
+// older periods, so it calls apiLoadFullTasks() for its own fresh, uncapped
+// fetch instead of reading the capped DB.tasks.
+const TASK_LOAD_LIMIT=500;
 async function apiLoadTasks(){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.tasks||[]).slice(); }
-  try{ const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}); if(error) throw error;
+  try{ const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}).limit(TASK_LOAD_LIMIT); if(error) throw error;
     return (data||[]).map(mapTask); }
   catch(e){ return []; }
+}
+async function apiLoadFullTasks(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.tasks||[]).slice(); }
+  const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapTask);
+}
+// site_visits and activity_log are capped the same way in apiLoadAll() (below)
+// for the same reason -- Management Reports, Customer 360, the system backup,
+// and the Site Visits CSV export all need COMPLETE history though, so each of
+// those calls one of these two fresh, uncapped fetches instead of reading the
+// capped DB.sitevisits/DB.activity.
+async function apiLoadFullSiteVisits(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sitevisits||[]).slice(); }
+  const {data,error}=await sb.from('site_visits').select('*').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapSV);
+}
+async function apiLoadFullActivity(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.activity||[]).slice(); }
+  const {data,error}=await sb.from('activity_log').select('*').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapAct);
 }
 async function apiLoadTaskEvents(taskId){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.taskEvents||[]).filter(e=>e.taskId===taskId).slice(); }
@@ -9883,10 +9919,10 @@ async function paintOpsReportsTab(){
     const range=reportPeriodRange(OPSRPT_PERIOD,OPSRPT_FROM,OPSRPT_TO);
     const btn=document.getElementById('opsRptGoBtn'); btn.disabled=true; btn.textContent='Building…';
     try{
-      const todos=await apiLoadAllTodosForLeaderboard(range.from,range.to);
-      const data=computeOpsReportData(range.from,range.to,todos);
+      const [todos,tasksData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks()]);
+      const data=computeOpsReportData(range.from,range.to,todos,tasksData);
       let prior=null, priorData=null;
-      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos); }
+      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData); }
       buildOpsReportPDF(range,data,prior,priorData);
     }catch(e){ toast('Could not build report: '+(e.message||e)); }
     btn.disabled=false; btn.textContent='Generate PDF report';
@@ -10524,8 +10560,12 @@ async function formCustomer(arg){
   const mLeads=DB.leads.filter(l=>custMatches(l.name,l.contact,name,contact));
   const mEnq=DB.enquiries.filter(e=>custMatches(e.name,e.contact,name,contact));
   const mCmp=DB.complaints.filter(c=>custMatches(c.name,c.contact,name,contact));
-  const mVis=DB.sitevisits.filter(v=>custMatches(v.name,v.contact,name,contact));
-  const mAct=DB.activity.filter(a=>custMatches(a.client,'',name,contact));
+  // DB.sitevisits/DB.activity are capped for everyday screens (see apiLoadAll) --
+  // a customer's own full history shouldn't silently truncate on their 360 profile,
+  // so this fetches fresh, uncapped copies specifically for the two capped tables.
+  const [fullSiteVisitsForCust,fullActivityForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity()]);
+  const mVis=fullSiteVisitsForCust.filter(v=>custMatches(v.name,v.contact,name,contact));
+  const mAct=fullActivityForCust.filter(a=>custMatches(a.client,'',name,contact));
   const mPay=(DB.payments||[]).filter(p=>custMatches(p.clientName,'',name,contact)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
 
   const events=[];
@@ -14508,6 +14548,7 @@ async function managerView(){
     // changes -- everything else the RPC returns (site visits, tasks/to-dos, attendance)
     // is a fixed 90-day/all-time window independent of slYear.
     if(LEADERBOARD_ROWS_YEAR!==slYear) jobs.push(withLoadTimeout(apiLoadLeaderboardRows(slYear+'-01-01',slYear+'-12-31'),8000,'Leaderboard').then(rows=>{ LEADERBOARD_ROWS=rows; LEADERBOARD_ROWS_YEAR=slYear; }));
+    if(!LEADERBOARD_TASKS_LOADED) jobs.push(withLoadTimeout(apiLoadFullTasks(),8000,'Leaderboard').then(rows=>{ LEADERBOARD_TASKS_FULL=rows; LEADERBOARD_TASKS_LOADED=true; }));
     if(jobs.length){ try{ await Promise.all(jobs); }catch(e){ toast(e.message||'Could not load leaderboard'); } }
     body.innerHTML=mgrLeaderboard(); bindLeagueCtrls();
   }
@@ -14843,6 +14884,11 @@ function agentPoints(r){
 }
 let LEADERBOARD_TODOS_LOADED=false, LEADERBOARD_TODOS_LIST=[];
 let LEADERBOARD_ROWS_YEAR=null, LEADERBOARD_ROWS=[];
+// workloadVolume (mgrLeaderboard) feeds directly into agentPoints() -- DB.tasks
+// is capped for everyday screens, which would unfairly under-count total
+// workload for any agent with more historical tasks than the cap once company-
+// wide volume grows, so this loads its own complete copy once per session.
+let LEADERBOARD_TASKS_LOADED=false, LEADERBOARD_TASKS_FULL=[];
 async function apiLoadAllTodosForLeaderboard(fromDate,toDate){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.todos||[]).filter(t=>t.date>=fromDate&&t.date<=toDate); }
   const {data,error}=await sb.from('schedule_items').select('*').eq('kind','todo').gte('item_date',fromDate).lte('item_date',toDate);
@@ -15030,7 +15076,7 @@ function mgrLeaderboard(){
     const monthsActive=monthVals.filter(v=>v>0).length||1;
     const avgMonthly=Math.round(monthVals.reduce((s,v)=>s+v,0)/monthsActive);
     const profile=(DB.profiles||[]).find(p=>p.agent_key===a.key);
-    const workloadVolume=(DB.tasks||[]).filter(t=>t.assignedTo===a.key).length + (LEADERBOARD_TODOS_LIST||[]).filter(t=>t.ownerKey===a.key).length;
+    const workloadVolume=(LEADERBOARD_TASKS_FULL.length?LEADERBOARD_TASKS_FULL:DB.tasks||[]).filter(t=>t.assignedTo===a.key).length + (LEADERBOARD_TODOS_LIST||[]).filter(t=>t.ownerKey===a.key).length;
     const r={name:a.name,key:a.key,avatar:profile?profile.avatar:null,totalCollected:lb.totalCollected||0,dealsClosedYear:lb.dealsClosedYear||0,closedValueYear,
       totalPipeline:k.val,winRate,health,siteVisits:lb.siteVisits||0,avgMonthly,monthVals,tasksCompleted:lb.tasksCompleted||0,avgTaskDays:lb.avgTaskDays,
       todosCompleted:lb.todosCompleted||0,workloadVolume,daysAttended:lb.daysAttended||0,onTimeDays:lb.onTimeDays||0};
@@ -15221,8 +15267,12 @@ function bindReportCtrls(){
     ['Types',r=>(r.types||[]).join('; ')],['Plot','plot'],['Source','source'],['Details','details'],['Follow-up','follow'],['Follow-up Date','followDate'],['Logged','createdAt']],'PEP_Landbank_Enquiries.csv');
   document.getElementById('csvCmp').onclick=()=>exportCSV(DB.complaints,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],
     ['Sentiment','sentiment'],['Category','category'],['Details','details'],['Assigned','owner'],['Priority','priority'],['Status','status'],['Resolution','resolution'],['Logged','createdAt']],'PEP_Landbank_ClientFeedback.csv');
-  document.getElementById('csvVis').onclick=()=>exportCSV(DB.sitevisits,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],['Site','site'],
+  document.getElementById('csvVis').onclick=async()=>{
+    // DB.sitevisits is capped for everyday screens -- this export needs the complete history.
+    const fullSiteVisits=await apiLoadFullSiteVisits();
+    exportCSV(fullSiteVisits,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],['Site','site'],
     ['Date','date'],['Time','time'],['Guests','people'],['Transport','transport'],['Pickup','pickup'],['Status','status'],['Notes','notes'],['Logged','createdAt']],'PEP_Landbank_SiteVisits.csv');
+  };
 }
 function xlStyleHeader(ws){
   const row=ws.getRow(1);
@@ -15589,6 +15639,9 @@ async function downloadCompanyExcel(){
 
     const agents=allAgentLists();
     const allLeads=agents.flatMap(a=>a.list.map(l=>({...l,agentName:a.name})));
+    // DB.sitevisits is capped for everyday screens (see apiLoadAll) -- this export
+    // needs the complete history, so it fetches its own fresh copy.
+    const fullSiteVisits=await apiLoadFullSiteVisits();
     const thisMonth=today().slice(0,7);
     let tot={leads:0,val:0,coll:0,out:0,sv:0};
     agents.forEach(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv; });
@@ -15667,7 +15720,7 @@ async function downloadCompanyExcel(){
       {header:'Plot',key:'plot',width:12},{header:'Site',key:'site',width:12},{header:'Date',key:'date',width:12},{header:'Time',key:'time',width:9},
       {header:'Guests',key:'people',width:9},{header:'Transport',key:'transport',width:12},{header:'Pickup',key:'pickup',width:20},
       {header:'Status',key:'status',width:12},{header:'Notes',key:'notes',width:26},{header:'Logged',key:'createdAt',width:16}
-    ], DB.sitevisits);
+    ], fullSiteVisits);
 
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -15999,6 +16052,9 @@ function bindSystemCtrls(){
     sysBackupBtn.disabled=true; sysBackupBtn.textContent='Building backup…';
     try{
       const agents=allAgentLists();
+      // DB.sitevisits is capped for everyday screens -- a "full data backup" needs
+      // the complete history, so this fetches a fresh, uncapped copy specifically.
+      const fullSiteVisitsForBackup=await apiLoadFullSiteVisits();
       const backup={
         generatedAt:new Date().toISOString(),
         generatedBy:PROFILE.name,
@@ -16006,7 +16062,7 @@ function bindSystemCtrls(){
         payments:DB.payments,
         enquiries:DB.enquiries,
         complaints:DB.complaints,
-        siteVisits:DB.sitevisits,
+        siteVisits:fullSiteVisitsForBackup,
         plots:DB.plots,
         allocations:DB.allocations,
         announcements:DB.announcements,
@@ -17330,16 +17386,23 @@ function paintMgmtRptBody(){
   </div>`;
   body.querySelectorAll('[data-rptperiod]').forEach(b=>b.onclick=()=>{ MGMTRPT_PERIOD=b.dataset.rptperiod; paintMgmtRptBody(); });
   document.getElementById('rpt_compare').onchange=e=>{ MGMTRPT_COMPARE=e.target.checked; };
-  document.getElementById('rptGoBtn').onclick=()=>{
-    if(isCustom){ MGMTRPT_FROM=val('rpt_from')||today(); MGMTRPT_TO=val('rpt_to')||today(); }
-    const range=reportPeriodRange(MGMTRPT_PERIOD);
-    const data=computeManagementReportData(range.from,range.to);
-    let prior=null, priorData=null;
-    if(MGMTRPT_COMPARE){ prior=priorPeriodRange(range); priorData=computeManagementReportData(prior.from,prior.to); }
-    buildManagementReportPDF(range,data,prior,priorData);
+  document.getElementById('rptGoBtn').onclick=async()=>{
+    const btn=document.getElementById('rptGoBtn'); btn.disabled=true; btn.textContent='Building…';
+    try{
+      if(isCustom){ MGMTRPT_FROM=val('rpt_from')||today(); MGMTRPT_TO=val('rpt_to')||today(); }
+      const range=reportPeriodRange(MGMTRPT_PERIOD);
+      // DB.sitevisits is capped for everyday screens -- this report needs the
+      // complete history to be accurate on older periods.
+      const fullSiteVisits=await apiLoadFullSiteVisits();
+      const data=computeManagementReportData(range.from,range.to,fullSiteVisits);
+      let prior=null, priorData=null;
+      if(MGMTRPT_COMPARE){ prior=priorPeriodRange(range); priorData=computeManagementReportData(prior.from,prior.to,fullSiteVisits); }
+      buildManagementReportPDF(range,data,prior,priorData);
+    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='Generate PDF report';
   };
 }
-function computeManagementReportData(from,to){
+function computeManagementReportData(from,to,siteVisitsData){
   const inRange=d=>d && d>=from && d<=to;
   const agents=allAgentLists();
   const allLeads=agents.flatMap(a=>a.list.map(l=>({...l,agentName:a.name,agentKey:a.key})));
@@ -17350,7 +17413,7 @@ function computeManagementReportData(from,to){
   payments.forEach(p=>{ const m=p.method||'Unspecified'; byMethod[m]=byMethod[m]||{count:0,total:0}; byMethod[m].count++; byMethod[m].total+=num(p.amount); });
   const outstandingTotal=allLeads.reduce((s,l)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return s+Math.max(g-num(l.amtPaid),0); },0);
   const fullyPaidCount=allLeads.filter(l=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return Math.max(g-num(l.amtPaid),0)<0.5; }).length;
-  const visitsInRange=(DB.sitevisits||[]).filter(v=>inRange((v.date||v.visitDate||v.createdAt||'').slice(0,10))).length;
+  const visitsInRange=(siteVisitsData||DB.sitevisits||[]).filter(v=>inRange((v.date||v.visitDate||v.createdAt||'').slice(0,10))).length;
   const perAgent=agents.map(a=>{
     const leadsA=a.list.filter(l=>inRange((l.date||'').slice(0,10)));
     const paymentsA=payments.filter(p=>p.agentKey===a.key);
@@ -17453,9 +17516,12 @@ function buildManagementReportPDF(range,d,prior,priorData){
 // are full timestamps already, so hour-level precision falls out of the same
 // data daysBetween uses, just without rounding to a whole day first.
 function hoursBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,(d2-d1)/3600000); }
-function computeOpsReportData(from,to,todos){
+function computeOpsReportData(from,to,todos,tasksData){
   const inRange=d=>{ const s=(d||'').slice(0,10); return !!s && s>=from && s<=to; };
-  const all=DB.tasks||[];
+  // tasksData: a fresh, uncapped fetch (apiLoadFullTasks()) passed in by the
+  // caller -- DB.tasks itself is capped to the most recent tasks for everyday
+  // screens, which would silently under-report older periods here otherwise.
+  const all=tasksData||DB.tasks||[];
   const assignedInRange=all.filter(t=>inRange(t.createdAt));
   const completedInRange=all.filter(t=>t.status==='Done'&&inRange(t.completedAt));
   const escalatedInRange=all.filter(t=>t.escalatedTo&&inRange(t.escalatedAt));
