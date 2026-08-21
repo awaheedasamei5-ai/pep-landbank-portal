@@ -11099,11 +11099,23 @@ function openEditPaymentModal(p,lead){
     const btn=document.getElementById('saveEditPayment'); btn.disabled=true; btn.textContent='Saving…';
     try{
       const oldAmount=num(p.amount);
-      await apiUpdatePayment(p.id,newAmount,newDate,newMethod);
-      p.amount=newAmount; p.date=newDate; p.method=newMethod;
-      await syncLeadAfterPaymentDelta(lead.id,newAmount-oldAmount);
-      await checkAllocationTrigger(lead);
-      await addActivity(lead.name,'Payment corrected',ghs(oldAmount)+' → '+ghs(newAmount)+' ('+monthLabel(newDate.slice(0,7))+')','','',null);
+      if(DEMO_MODE){
+        await apiUpdatePayment(p.id,newAmount,newDate,newMethod);
+        p.amount=newAmount; p.date=newDate; p.method=newMethod;
+        await syncLeadAfterPaymentDelta(lead.id,newAmount-oldAmount);
+        await checkAllocationTrigger(lead);
+        await addActivity(lead.name,'Payment corrected',ghs(oldAmount)+' → '+ghs(newAmount)+' ('+monthLabel(newDate.slice(0,7))+')','','',null);
+      }else{
+        // Atomic server-side RPC (update_payment_entry) -- replaces the old
+        // separate update+syncLeadAfterPaymentDelta sequence, the same class of
+        // atomicity gap approve_payment/decline_payment closed for approvals: a
+        // dropped connection between the two steps used to be exactly what let a
+        // corrected/deleted payment drift out of sync with the lead's balance.
+        const {data:r,error}=await sb.rpc('update_payment_entry',{p_payment_id:p.id,p_amount:newAmount,p_date:newDate,p_method:newMethod}); if(error) throw error;
+        p.amount=newAmount; p.date=newDate; p.method=newMethod;
+        Object.assign(lead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+        const cdbLead=findLeadById(lead.id); if(cdbLead&&cdbLead!==lead) Object.assign(cdbLead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+      }
       toast('Payment corrected'); ov.remove();
       route('paymentSchedule',lead.id);
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save correction'; }
@@ -11112,10 +11124,17 @@ function openEditPaymentModal(p,lead){
 async function deletePaymentEntry(p,lead){
   if(!confirm('Delete this '+ghs(num(p.amount))+' payment dated '+(p.date||'')+'? This also removes it from payment history, Agent of the Month, and commission.')) return;
   try{
-    await apiDeletePayment(p.id);
-    DB.payments=DB.payments.filter(x=>x.id!==p.id);
-    await syncLeadAfterPaymentDelta(lead.id,-num(p.amount));
-    await addActivity(lead.name,'Payment deleted',ghs(num(p.amount))+' removed ('+monthLabel((p.date||'').slice(0,7))+')','','',null);
+    if(DEMO_MODE){
+      await apiDeletePayment(p.id);
+      DB.payments=DB.payments.filter(x=>x.id!==p.id);
+      await syncLeadAfterPaymentDelta(lead.id,-num(p.amount));
+      await addActivity(lead.name,'Payment deleted',ghs(num(p.amount))+' removed ('+monthLabel((p.date||'').slice(0,7))+')','','',null);
+    }else{
+      const {data:r,error}=await sb.rpc('delete_payment_entry',{p_payment_id:p.id}); if(error) throw error;
+      DB.payments=DB.payments.filter(x=>x.id!==p.id);
+      Object.assign(lead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+      const cdbLead=findLeadById(lead.id); if(cdbLead&&cdbLead!==lead) Object.assign(cdbLead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+    }
     toast('Payment deleted');
     route('paymentSchedule',lead.id);
   }catch(e){ toast('Failed: '+(e.message||e)); }
@@ -11361,15 +11380,25 @@ function bindLogPayDetailCtrls(lead){
     const isPending=p.status==='pending';
     if(!confirm('Delete this '+ghs(num(p.amount))+' payment dated '+(p.date||'')+'?'+(isPending?' It is still pending approval and was never applied to their balance.':' This also updates their balance, Agent of the Month, and commission.'))) return;
     try{
-      await apiDeletePayment(p.id);
-      if(isPending){
-        DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
-      } else {
-        DB.payments=(DB.payments||[]).filter(x=>x.id!==p.id);
-        await syncLeadAfterPaymentDelta(lead.id,-num(p.amount));
-        const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:lead.amtPaid,balance:lead.balance});
+      if(DEMO_MODE){
+        await apiDeletePayment(p.id);
+        if(isPending){
+          DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
+        } else {
+          DB.payments=(DB.payments||[]).filter(x=>x.id!==p.id);
+          await syncLeadAfterPaymentDelta(lead.id,-num(p.amount));
+          const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:lead.amtPaid,balance:lead.balance});
+        }
+        await addActivity(lead.name,'Payment deleted',ghs(num(p.amount))+' removed ('+monthLabel((p.date||'').slice(0,7))+')','','',null);
+      }else{
+        const {data:r,error}=await sb.rpc('delete_payment_entry',{p_payment_id:p.id}); if(error) throw error;
+        if(isPending){ DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id); }
+        else{
+          DB.payments=(DB.payments||[]).filter(x=>x.id!==p.id);
+          Object.assign(lead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+          const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+        }
       }
-      await addActivity(lead.name,'Payment deleted',ghs(num(p.amount))+' removed ('+monthLabel((p.date||'').slice(0,7))+')','','',null);
       toast('Payment deleted');
       paintLogPayBody();
     }catch(e){ toast('Failed: '+(e.message||e)); }
@@ -11396,14 +11425,23 @@ function openLogPayEditModal(p,lead){
     const btn=document.getElementById('saveLpEdit'); btn.disabled=true; btn.textContent='Saving…';
     try{
       const oldAmount=num(p.amount);
-      await apiUpdatePayment(p.id,newAmount,newDate,newMethod);
-      p.amount=newAmount; p.date=newDate; p.method=newMethod;
-      if(p.status!=='pending'){
-        await syncLeadAfterPaymentDelta(lead.id,newAmount-oldAmount);
-        const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:lead.amtPaid,balance:lead.balance});
-        await checkAllocationTrigger(lead);
+      if(DEMO_MODE){
+        await apiUpdatePayment(p.id,newAmount,newDate,newMethod);
+        p.amount=newAmount; p.date=newDate; p.method=newMethod;
+        if(p.status!=='pending'){
+          await syncLeadAfterPaymentDelta(lead.id,newAmount-oldAmount);
+          const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:lead.amtPaid,balance:lead.balance});
+          await checkAllocationTrigger(lead);
+        }
+        await addActivity(lead.name,'Payment corrected',ghs(oldAmount)+' → '+ghs(newAmount)+' ('+monthLabel(newDate.slice(0,7))+')','','',null);
+      }else{
+        const {data:r,error}=await sb.rpc('update_payment_entry',{p_payment_id:p.id,p_amount:newAmount,p_date:newDate,p_method:newMethod}); if(error) throw error;
+        p.amount=newAmount; p.date=newDate; p.method=newMethod;
+        if(r.was_approved){
+          Object.assign(lead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+          const cdbLead=CLIENTDB_LIST.find(x=>x.id===lead.id); if(cdbLead) Object.assign(cdbLead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+        }
       }
-      await addActivity(lead.name,'Payment corrected',ghs(oldAmount)+' → '+ghs(newAmount)+' ('+monthLabel(newDate.slice(0,7))+')','','',null);
       toast('Payment corrected'); ov.remove();
       paintLogPayBody();
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save correction'; }
