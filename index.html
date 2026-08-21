@@ -10942,13 +10942,30 @@ function bindPendingPaymentsCtrls(){
     if(!lead){ toast('Could not find the linked client record'); return; }
     b.disabled=true; b.textContent='Approving…';
     try{
-      const updated=await apiDecidePayment(p.id,true);
-      DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
-      const approvedRec={...p,status:'approved',decidedBy:updated.decidedBy,decidedByName:updated.decidedByName,decidedAt:updated.decidedAt};
-      DB.payments.unshift(approvedRec);
-      await applyApprovedPaymentToLead(lead,approvedRec);
-      await addActivity(lead.name,'Payment approved',ghs(num(p.amount))+' approved by '+PROFILE.name,'','',null);
-      try{ await apiSendMessage(p.agentKey,'Your payment of '+ghs(num(p.amount))+' for '+lead.name+' was approved and the receipt has been sent.'); }catch(e){}
+      let approvedRec;
+      if(DEMO_MODE){
+        const updated=await apiDecidePayment(p.id,true);
+        DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
+        approvedRec={...p,status:'approved',decidedBy:updated.decidedBy,decidedByName:updated.decidedByName,decidedAt:updated.decidedAt};
+        DB.payments.unshift(approvedRec);
+        await applyApprovedPaymentToLead(lead,approvedRec);
+        await addActivity(lead.name,'Payment approved',ghs(num(p.amount))+' approved by '+PROFILE.name,'','',null);
+        try{ await apiSendMessage(p.agentKey,'Your payment of '+ghs(num(p.amount))+' for '+lead.name+' was approved and the receipt has been sent.'); }catch(e){}
+      }else{
+        // Atomic server-side RPC (approve_payment) -- replaces the old 5-step
+        // client-side sequence (payment status, lead balance, activity_log,
+        // staff message, allocation-threshold check) with one transaction, so a
+        // dropped connection mid-flow can't leave the payment approved without
+        // the lead's balance/allocation state updating to match.
+        const {data:r,error}=await sb.rpc('approve_payment',{p_payment_id:p.id}); if(error) throw error;
+        DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
+        approvedRec={...p,status:'approved',decidedBy:r.decided_by,decidedByName:r.decided_by_name,decidedAt:new Date().toISOString()};
+        DB.payments.unshift(approvedRec);
+        Object.assign(lead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+        const cdbLead=findLeadById(lead.id); if(cdbLead&&cdbLead!==lead) Object.assign(cdbLead,{amtPaid:r.new_amt_paid,balance:r.new_balance});
+        if(r.allocation){ DB.allocations=DB.allocations||[]; DB.allocations.unshift(r.allocation); }
+        if(lead.contact) apiSendSms(lead.contact,`Hi ${lead.name}, thank you for your payment of ${ghs(p.amount)} towards your plot at Royal Palm Enclave. - PEP Landbank`,'payment_thanks').catch(()=>{});
+      }
       toast('Approved · receipt ready to send');
       paintLogPayBody();
       offerSendReceipt(lead,approvedRec);
@@ -10959,11 +10976,16 @@ function bindPendingPaymentsCtrls(){
     if(!confirm("Decline this "+ghs(num(p.amount))+" payment? It will NOT be applied to the client's balance.")) return;
     b.disabled=true;
     try{
-      await apiDecidePayment(p.id,false);
-      DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
-      const lead=findLeadById(p.leadId);
-      await addActivity((lead&&lead.name)||p.clientName,'Payment declined',ghs(num(p.amount))+' declined by '+PROFILE.name,'','',null);
-      try{ await apiSendMessage(p.agentKey,'Your payment of '+ghs(num(p.amount))+' for '+p.clientName+' was declined by Management. Please check the details and re-submit if needed.'); }catch(e){}
+      if(DEMO_MODE){
+        await apiDecidePayment(p.id,false);
+        DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
+        const lead=findLeadById(p.leadId);
+        await addActivity((lead&&lead.name)||p.clientName,'Payment declined',ghs(num(p.amount))+' declined by '+PROFILE.name,'','',null);
+        try{ await apiSendMessage(p.agentKey,'Your payment of '+ghs(num(p.amount))+' for '+p.clientName+' was declined by Management. Please check the details and re-submit if needed.'); }catch(e){}
+      }else{
+        const {error}=await sb.rpc('decline_payment',{p_payment_id:p.id}); if(error) throw error;
+        DB.pendingPayments=(DB.pendingPayments||[]).filter(x=>x.id!==p.id);
+      }
       toast('Declined');
       paintLogPayBody();
     }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
