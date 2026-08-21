@@ -151,12 +151,32 @@ async function main() {
   if (loginB.access_id) cleanup.clientAccessIds.push(loginB.access_id);
 
   if (loginA.ok && loginB.ok) {
+    // Matches the real client-login handshake in index.html exactly: setSession()
+    // alone does NOT bind client_portal_access.auth_uid -- a second RPC call,
+    // client_portal_link_auth, is required (it needs an authenticated session to
+    // run, so it can't happen inside the service-role edge function itself).
+    // Skipping this step was the actual bug in the previous run -- both queries
+    // silently returned zero rows because my_client_contact_digits() had nothing
+    // to look up, not because RLS was denying anything.
     const clientA = createClient(SUPABASE_URL, ANON_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
     await clientA.auth.setSession({ access_token: loginA.access_token, refresh_token: loginA.refresh_token });
-    const { data } = await clientA.from('leads').select('id').eq('id', leadB.id);
-    check('Client A reads Client B lead: denied', (data || []).length === 0);
-    const { data: ownData } = await clientA.from('leads').select('id').eq('id', leadA.id);
-    check('Client A reads own lead: allowed', (ownData || []).length === 1);
+    const { error: linkAErr } = await clientA.rpc('client_portal_link_auth', { p_access_id: loginA.access_id });
+    check('Client A session linked', !linkAErr, linkAErr && linkAErr.message);
+
+    const clientB = createClient(SUPABASE_URL, ANON_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+    await clientB.auth.setSession({ access_token: loginB.access_token, refresh_token: loginB.refresh_token });
+    const { error: linkBErr } = await clientB.rpc('client_portal_link_auth', { p_access_id: loginB.access_id });
+    check('Client B session linked', !linkBErr, linkBErr && linkBErr.message);
+
+    const { data: aOwn } = await clientA.from('leads').select('id').eq('id', leadA.id);
+    check('Client A reads own lead: allowed', (aOwn || []).length === 1);
+    const { data: aOther } = await clientA.from('leads').select('id').eq('id', leadB.id);
+    check('Client A reads Client B lead: denied', (aOther || []).length === 0);
+
+    const { data: bOwn } = await clientB.from('leads').select('id').eq('id', leadB.id);
+    check('Client B reads own lead: allowed', (bOwn || []).length === 1);
+    const { data: bOther } = await clientB.from('leads').select('id').eq('id', leadA.id);
+    check('Client B reads Client A lead: denied', (bOther || []).length === 0);
   } else {
     check('Client A/B login setup', false, 'client-login function did not return ok for both -- skipped client scenarios');
   }
