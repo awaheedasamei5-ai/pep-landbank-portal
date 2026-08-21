@@ -6221,22 +6221,43 @@ document.getElementById('logoutBtn').onclick=async()=>{
 };
 document.getElementById('globalSearchBtn').onclick=openGlobalSearch;
 document.getElementById('staffBellBtn').onclick=()=>route('notifications');
-function applyDarkModePref(){ try{ if(localStorage.getItem('pep_dark')==='1') document.body.classList.add('dark'); }catch(e){} }
-applyDarkModePref();
-document.getElementById('darkModeBtn').onclick=()=>{
-  document.body.classList.toggle('dark');
-  try{ localStorage.setItem('pep_dark', document.body.classList.contains('dark')?'1':'0'); }catch(e){}
-  // Most of the theme is CSS-variable-driven and updates live the instant the class
-  // toggles, everywhere in the DOM -- including open modals, which live outside #view
-  // and were never touched by the old route()-only repaint below. A few cards still
-  // bake literal colors into their template string at render time, though, so also
-  // re-run whatever's on screen. Prefer CURRENT_ROUTE_NAME (kept in sync on every
-  // route() call, even ones that skip history.pushState) over history.state, which
-  // can be empty right after sign-in or inside a modal-only flow.
+// Most of the theme is CSS-variable-driven and updates live the instant the class
+// toggles, everywhere in the DOM -- including open modals, which live outside #view.
+// A few cards still bake literal colors into their template string at render time,
+// though, so also re-run whatever's on screen. Prefer CURRENT_ROUTE_NAME (kept in
+// sync on every route() call, even ones that skip history.pushState) over
+// history.state, which can be empty right after sign-in or inside a modal-only flow.
+function repaintCurrentRouteForTheme(){
   if(typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
     const rn=(history.state&&history.state.routeName)||CURRENT_ROUTE_NAME;
     if(rn){ try{ route(rn,(history.state&&history.state.routeArg),true); }catch(e){} }
   }
+}
+// Dark mode: an explicit toggle always wins once set (localStorage 'pep_dark').
+// Before any explicit choice exists, follow the OS's prefers-color-scheme instead
+// of defaulting to light -- and keep following it live if the OS setting changes
+// mid-session, right up until the user actually taps the toggle themselves.
+const DARK_MEDIA=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+function applyDarkModePref(){
+  try{
+    const saved=localStorage.getItem('pep_dark');
+    const wantDark=saved!==null?saved==='1':!!(DARK_MEDIA&&DARK_MEDIA.matches);
+    document.body.classList.toggle('dark',wantDark);
+  }catch(e){}
+}
+applyDarkModePref();
+if(DARK_MEDIA){
+  DARK_MEDIA.addEventListener('change',e=>{
+    let saved=null; try{ saved=localStorage.getItem('pep_dark'); }catch(err){}
+    if(saved!==null) return; // user already made an explicit choice -- OS changes no longer apply
+    document.body.classList.toggle('dark',e.matches);
+    repaintCurrentRouteForTheme();
+  });
+}
+document.getElementById('darkModeBtn').onclick=()=>{
+  document.body.classList.toggle('dark');
+  try{ localStorage.setItem('pep_dark', document.body.classList.contains('dark')?'1':'0'); }catch(e){}
+  repaintCurrentRouteForTheme();
 };
 document.getElementById('accountBtn').onclick=()=>route(IS_CLIENT?'clientsettings':'account');
 
