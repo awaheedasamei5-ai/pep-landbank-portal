@@ -5004,7 +5004,7 @@ async function refreshStaffList(){
     return STAFF_LIST;
   }
   try{
-    const {data,error}=await sb.from('profiles').select('name,email,role,agent_key,active').eq('active',true);
+    const {data,error}=await sb.from('staff_directory').select('name,email,role,agent_key,active');
     if(!error && data && data.length){
       const mapped=data.map(p=>({name:p.name,email:p.email,role:p.role,key:p.agent_key}));
       mapped.sort((a,b)=> (a.role===b.role) ? a.name.localeCompare(b.name) : (a.role==='manager'?1:-1));
