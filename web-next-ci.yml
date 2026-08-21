@@ -1,0 +1,49 @@
+name: web-next CI
+
+on:
+  push:
+    branches: [rebuild]
+    paths:
+      - 'web-next/**'
+      - 'tests/rls/**'
+      - '.github/workflows/web-next-ci.yml'
+  pull_request:
+    paths:
+      - 'web-next/**'
+      - 'tests/rls/**'
+
+jobs:
+  build-web-next:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web-next/package-lock.json
+      - run: npm ci
+        working-directory: web-next
+      - run: npm run build
+        working-directory: web-next
+
+  rls-security-tests:
+    runs-on: ubuntu-latest
+    # Only runs once SUPABASE_SERVICE_ROLE_KEY is set as a repo secret --
+    # skipped (not failed) otherwise, so this workflow stays green until
+    # that's configured.
+    if: ${{ vars.RLS_TESTS_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tests/rls/package.json
+      - run: npm install
+        working-directory: tests/rls
+      - run: npm test
+        working-directory: tests/rls
+        env:
+          SUPABASE_URL: https://lrahgcnftetnyxunaljs.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
