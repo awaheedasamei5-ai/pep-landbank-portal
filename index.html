@@ -1089,14 +1089,14 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   <div class="cfg hidden" id="resetCard">
     <div class="lbl">Reset your password</div>
     <div id="resetStep1">
-      <div class="note">Enter your email and we'll send a 6-digit code to confirm it's you.</div>
+      <div class="note">Enter your email and we'll send a code to confirm it's you.</div>
       <input id="reset_email" placeholder="Email address" type="email"/>
       <button class="signin" id="resetSendBtn">Send code</button>
       <div class="err" id="resetErr1"></div>
     </div>
     <div id="resetStep2" class="hidden">
-      <div class="note">Enter the 6-digit code sent to your email, then choose a new password.</div>
-      <input id="reset_code" placeholder="6-digit code" inputmode="numeric" maxlength="6"/>
+      <div class="note">Enter the code sent to your email, then choose a new password.</div>
+      <input id="reset_code" placeholder="Code from email" inputmode="numeric" maxlength="10"/>
       <input id="reset_pw" placeholder="New password (min 6 characters)" type="password"/>
       <input id="reset_pw2" placeholder="Confirm new password" type="password"/>
       <button class="signin" id="resetConfirmBtn">Set new password</button>
@@ -5095,7 +5095,7 @@ document.getElementById('resetSendBtn').onclick=async()=>{
 document.getElementById('resetConfirmBtn').onclick=async()=>{
   const code=val('reset_code').trim(), pw=val('reset_pw'), pw2=val('reset_pw2');
   const err=document.getElementById('resetErr2'); err.textContent='';
-  if(!/^\d{6}$/.test(code)){ err.textContent='Enter the 6-digit code from your email.'; return; }
+  if(!/^\d{4,10}$/.test(code)){ err.textContent='Enter the code from your email.'; return; }
   if(pw.length<6){ err.textContent='Password must be at least 6 characters.'; return; }
   if(pw!==pw2){ err.textContent='Passwords do not match.'; return; }
   const btn=document.getElementById('resetConfirmBtn'); btn.disabled=true; btn.textContent='Setting password…';
