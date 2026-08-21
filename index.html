@@ -8742,12 +8742,25 @@ function bindNotificationCtrls(){
     refreshAllBadges(); viewNotifications();
   };
 }
+// Matches name against the raw query text, OR contact against a digits-only
+// normalized query -- so "0257 793 802", "+233257793802" and "257793802" all
+// find the same client regardless of how either side happens to be formatted.
+// This is the "fuzzy" part: no typo-tolerance/edit-distance, just formatting-
+// tolerant contact matching plus a plain substring match on names.
+function globalSearchRowMatches(name,contact,qText,qDigits){
+  if(qText && (name||'').toLowerCase().includes(qText)) return true;
+  // Compare last-9-digit (national, no country-code/leading-zero) forms -- same
+  // convention used elsewhere in the app (see custMatches/agentPoints) -- so
+  // "0277966499", "+233277966499" and "277966499" all resolve to one number.
+  if(qDigits.length>=3){ const c=normContact(contact).slice(-9); if(c && c.includes(qDigits.slice(-9))) return true; }
+  return false;
+}
 function openGlobalSearch(){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="globalSearchTitle">Search</div><button id="closeGlobalSearch" aria-label="Close search" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-    <input id="globalSearchInput" aria-label="Search by client name or phone" placeholder="Search by client name or phone…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
+    <input id="globalSearchInput" aria-label="Search clients, staff, plots, contracts, or payments" placeholder="Search clients, staff, plots, contracts…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
     <div id="globalSearchResults" class="list" aria-live="polite"></div>
   </div>`;
   document.body.appendChild(ov);
@@ -8756,23 +8769,37 @@ function openGlobalSearch(){
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeGlobalSearch').onclick=()=>ov.remove();
   const input=document.getElementById('globalSearchInput'); input.focus();
+  const searchRow=(grad,initial,title,sub,dataAttrs)=>`<button class="convRow" ${dataAttrs}><div class="convAvatar" style="background:${grad}">${esc(initial)}</div><div style="text-align:left"><div style="font-weight:700">${esc(title)}</div><div class="mini">${esc(sub)}</div></div></button>`;
   const runSearch=()=>{
-    const q=input.value.trim().toLowerCase();
+    const qText=input.value.trim().toLowerCase();
+    const qDigits=normContact(input.value);
     const results=document.getElementById('globalSearchResults');
-    if(q.length<2){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">Type at least 2 characters…</div>'; return; }
-    const leadHits=(PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list.map(l=>({...l,agentDisplay:a.name}))):DB.leads)
-      .filter(l=>(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q)).slice(0,8);
-    const enqHits=DB.enquiries.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.contact||'').includes(q)).slice(0,4);
-    const cmpHits=DB.complaints.filter(c=>(c.name||'').toLowerCase().includes(q)||String(c.contact||'').includes(q)).slice(0,4);
-    if(!leadHits.length&&!enqHits.length&&!cmpHits.length){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">No matches</div>'; return; }
+    if(qText.length<2 && qDigits.length<3){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">Type at least 2 characters…</div>'; return; }
+    const allLeadsScope=(PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list.map(l=>({...l,agentDisplay:a.name}))):DB.leads);
+    const leadHits=allLeadsScope.filter(l=>globalSearchRowMatches(l.name,l.contact,qText,qDigits)).slice(0,8);
+    const enqHits=DB.enquiries.filter(e=>globalSearchRowMatches(e.name,e.contact,qText,qDigits)).slice(0,4);
+    const cmpHits=DB.complaints.filter(c=>globalSearchRowMatches(c.name,c.contact,qText,qDigits)).slice(0,4);
+    const leadById={}; allLeadsScope.forEach(l=>{ leadById[l.id]=l; });
+    const payHitsReal=(DB.payments||[]).filter(p=>{ const l=leadById[p.leadId]; return l&&globalSearchRowMatches(l.name,l.contact,qText,qDigits); }).slice(0,4);
+    const contractHits=(DB.contractRequests||[]).filter(c=>globalSearchRowMatches(c.clientName,(leadById[c.leadId]||{}).contact,qText,qDigits)).slice(0,4);
+    const plotHits=canManagePlots()?(DB.plots||[]).filter(p=>(p.plotNumber||'').toLowerCase().includes(qText)||globalSearchRowMatches(p.clientName,p.clientContact,qText,qDigits)).slice(0,4):[];
+    const staffHits=(STAFF_LIST||[]).filter(s=>s.key!==PROFILE.key&&(s.name||'').toLowerCase().includes(qText)).slice(0,4);
+    if(![leadHits,enqHits,cmpHits,payHitsReal,contractHits,plotHits,staffHits].some(a=>a.length)){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">No matches</div>'; return; }
     let html='';
-    if(leadHits.length) html+=`<div class="mini" style="margin:6px 0 4px;font-weight:700">PIPELINE</div>`+leadHits.map(l=>`<button class="convRow" data-searchgo="updateOne" data-searchid="${l.id}"><div class="convAvatar" style="background:linear-gradient(150deg,#3B82F6,#1D4ED8)">${esc((l.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(l.name)}</div><div class="mini">${esc(l.contact||'')}${l.agentDisplay?(' · '+esc(l.agentDisplay)):''}</div></div></button>`).join('');
-    if(enqHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">ENQUIRIES</div>`+enqHits.map(e=>`<button class="convRow" data-searchgo="customer" data-searchname="${esc(e.name)}" data-searchcontact="${esc(e.contact||'')}"><div class="convAvatar" style="background:linear-gradient(150deg,#4FBFA6,#1E7A6E)">${esc((e.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(e.name)}</div><div class="mini">${esc(e.contact||'')}</div></div></button>`).join('');
-    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>`<button class="convRow" data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"><div class="convAvatar" style="background:linear-gradient(150deg,#E0836A,#B4472F)">${esc((c.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(c.name)}</div><div class="mini">${esc(c.contact||'')}</div></div></button>`).join('');
+    if(leadHits.length) html+=`<div class="mini" style="margin:6px 0 4px;font-weight:700">PIPELINE</div>`+leadHits.map(l=>searchRow('linear-gradient(150deg,#3B82F6,#1D4ED8)',(l.name||'?')[0],l.name,(l.contact||'')+(l.agentDisplay?(' · '+l.agentDisplay):''),`data-searchgo="updateOne" data-searchid="${l.id}"`)).join('');
+    if(payHitsReal.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PAYMENTS</div>`+payHitsReal.map(p=>{ const l=leadById[p.leadId]||{}; return searchRow('linear-gradient(150deg,#0EA5B7,#0C7A93)','₵',ghs(p.amount)+' · '+esc(l.name||'Unknown'),p.date||'',`data-searchgo="updateOne" data-searchid="${esc(p.leadId||'')}"`); }).join('');
+    if(enqHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">ENQUIRIES</div>`+enqHits.map(e=>searchRow('linear-gradient(150deg,#4FBFA6,#1E7A6E)',(e.name||'?')[0],e.name,e.contact||'',`data-searchgo="customer" data-searchname="${esc(e.name)}" data-searchcontact="${esc(e.contact||'')}"`)).join('');
+    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>searchRow('linear-gradient(150deg,#E0836A,#B4472F)',(c.name||'?')[0],c.name,c.contact||'',`data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"`)).join('');
+    if(contractHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">CONTRACTS</div>`+contractHits.map(c=>{ const l=leadById[c.leadId]; return searchRow('linear-gradient(150deg,#8B5CF6,#6D28D9)',(c.clientName||'?')[0],c.clientName,'Contract of Sale · '+(c.status||''),l?`data-searchgo="updateOne" data-searchid="${l.id}"`:`data-searchgo="customer" data-searchname="${esc(c.clientName)}" data-searchcontact=""`); }).join('');
+    if(plotHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PLOTS</div>`+plotHits.map(p=>searchRow('linear-gradient(150deg,#D97706,#92400E)',(p.plotNumber||'?')[0],'Plot '+(p.plotNumber||''),(p.site?p.site+' · ':'')+(p.status||'')+(p.clientName?(' · '+p.clientName):''),`data-searchgo="plots" data-searchid="${esc(p.id)}"`)).join('');
+    if(staffHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">STAFF</div>`+staffHits.map(s=>searchRow('linear-gradient(150deg,#64748B,#334155)',(s.name||'?')[0],s.name,s.role==='manager'?'Management':'Agent',`data-searchgo="chatThread" data-searchid="${esc(s.key)}"`)).join('');
     results.innerHTML=html;
     results.querySelectorAll('[data-searchgo]').forEach(b=>b.onclick=()=>{
       ov.remove();
-      if(b.dataset.searchgo==='updateOne') route('updateOne',b.dataset.searchid);
+      const kind=b.dataset.searchgo;
+      if(kind==='updateOne') route('updateOne',b.dataset.searchid);
+      else if(kind==='chatThread') route('chatThread',b.dataset.searchid);
+      else if(kind==='plots'){ selectedPlotId=b.dataset.searchid; route('mgrTabView','Plots'); }
       else route('customer',{name:b.dataset.searchname,contact:b.dataset.searchcontact});
     });
   };
