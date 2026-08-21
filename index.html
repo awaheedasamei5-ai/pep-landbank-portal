@@ -541,6 +541,45 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 .insightIcon{flex:0 0 auto;position:relative;z-index:1;width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,currentColor 16%,transparent)}
 .insightIcon svg{width:19px;height:19px}
 .insightCard>div{position:relative;z-index:1;color:var(--text)}
+/* ---- Companion widget: proactive nudges + guided checklist ---- */
+@keyframes companionBorderSpin{to{--cangle:360deg}}
+@property --cangle{syntax:'<angle>';inherits:false;initial-value:0deg}
+.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#22D3EE,#67E8F9,#C9A227,#22D3EE);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(34,211,238,.45)}
+.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink,#0B1E3D) 0%,#0F2A52 60%,#0B1E3D 100%);overflow:hidden;padding:16px 16px 14px}
+body:not(.dark) .companionInner{background:linear-gradient(160deg,#0B1E3D 0%,#0F2A52 60%,#0B1E3D 100%)}
+.companionInner::before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(34,211,238,.22),transparent 55%),radial-gradient(circle at 85% 75%,rgba(201,162,39,.18),transparent 55%);animation:orbDrift 9s ease-in-out infinite alternate;pointer-events:none}
+.companionHead{position:relative;z-index:1;display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+.companionOrb{flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#67E8F9,#22D3EE 60%,#0C7A93);box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ringPulse 2.2s ease-out infinite;color:#04202b}
+.companionOrb svg{width:18px;height:18px}
+.companionTitle{flex:1;min-width:0}
+.companionTitle .t{font-weight:800;font-size:13.5px;color:#fff;display:flex;align-items:center;gap:6px}
+.companionTitle .s{font-size:11px;color:rgba(255,255,255,.62);margin-top:2px}
+.companionCaret{flex:0 0 auto;width:22px;height:22px;color:rgba(255,255,255,.75);transition:transform .25s ease}
+.companionWrap.open .companionCaret{transform:rotate(180deg)}
+.companionBody{position:relative;z-index:1;max-height:0;overflow:hidden;transition:max-height .35s ease}
+.companionWrap.open .companionBody{max-height:900px}
+.companionBodyIn{padding-top:14px}
+.companionNudges{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.companionNudge{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);cursor:pointer;text-align:left;width:100%;animation:fadeUp .4s ease both;transition:background .15s ease,transform .15s ease}
+.companionNudge:hover{background:rgba(255,255,255,.11);transform:translateX(2px)}
+.companionNudge .ic{flex:0 0 auto;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.1)}
+.companionNudge .ic svg{width:15px;height:15px}
+.companionNudge.dgr .ic{color:#F87171;background:rgba(248,113,113,.16)}
+.companionNudge.warnt .ic{color:#FBBF4E;background:rgba(251,191,78,.16)}
+.companionNudge.ok .ic{color:#67E8F9;background:rgba(103,232,249,.16)}
+.companionNudge .txt{flex:1;min-width:0;color:#fff;font-size:12px;font-weight:650;line-height:1.4}
+.companionNudge .det{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:1px;font-weight:500}
+.companionChecklist{display:flex;flex-direction:column;gap:6px}
+.companionCheckHead{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);font-weight:700;margin:2px 0 6px}
+.companionCheckItem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:background .15s ease}
+.companionCheckItem:hover{background:rgba(255,255,255,.09)}
+.companionCheckItem.done{opacity:.5}
+.companionCheckDot{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.6px solid rgba(255,255,255,.4);display:grid;place-items:center;color:#04202b;transition:background .18s ease,border-color .18s ease}
+.companionCheckItem.done .companionCheckDot{background:linear-gradient(135deg,#67E8F9,#22D3EE);border-color:transparent;animation:badgePop .3s ease}
+.companionCheckDot svg{width:11px;height:11px}
+.companionCheckItem .txt{flex:1;color:#fff;font-size:12px;font-weight:600}
+.companionCheckItem.done .txt{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.4)}
+.companionEmpty{color:rgba(255,255,255,.6);font-size:12px;padding:6px 2px 2px}
 .delReasonBtn{display:block;width:100%;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.12s}
 .delReasonBtn:hover{border-color:var(--leaf);background:#F4F8FF}
 
@@ -1569,6 +1608,43 @@ function withLoadTimeout(promise,ms,label){
     new Promise((_,reject)=>setTimeout(()=>reject(new Error((label||'This')+' is taking too long — check your connection and try again')),ms))
   ]);
 }
+// Accessibility fix (Sec 48-55) -- every ad-hoc dialog in the app builds its own
+// #announceOverlay/#announceModal shell by hand, with zero ARIA semantics, no
+// focus management, and no Escape-to-close anywhere in the file. Call this once,
+// right after document.body.appendChild(ov), instead of duplicating that
+// boilerplate at every call site -- adds role="dialog"/aria-modal to the modal,
+// moves focus into it, restores focus to whatever triggered it once the overlay
+// is removed from the DOM (however that happens -- close button, click-outside,
+// Escape, or a save/submit handler calling ov.remove() itself), and a minimal
+// Tab focus-trap so keyboard focus can't wander into the page behind it. This is
+// the same "one shared fix closes the gap everywhere" approach already proven
+// for realtime channels (subscribeRealtimeTable()) in Phase 2.
+function makeModalAccessible(ov){
+  const modal=ov.firstElementChild; if(!modal) return;
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  if(!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex','-1');
+  const triggerEl=document.activeElement;
+  const focusable=()=>Array.from(modal.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')).filter(el=>!el.disabled && el.offsetParent!==null);
+  const first=focusable()[0]||modal; first.focus();
+  const onKeydown=e=>{
+    if(e.key==='Escape'){ ov.remove(); return; }
+    if(e.key==='Tab'){
+      const f=focusable(); if(!f.length) return;
+      const firstEl=f[0], lastEl=f[f.length-1];
+      if(e.shiftKey && document.activeElement===firstEl){ e.preventDefault(); lastEl.focus(); }
+      else if(!e.shiftKey && document.activeElement===lastEl){ e.preventDefault(); firstEl.focus(); }
+    }
+  };
+  document.addEventListener('keydown',onKeydown);
+  new MutationObserver((muts,obs)=>{
+    if(!document.body.contains(ov)){
+      document.removeEventListener('keydown',onKeydown);
+      if(triggerEl && document.body.contains(triggerEl)) triggerEl.focus();
+      obs.disconnect();
+    }
+  }).observe(document.body,{childList:true});
+}
 // A toast alone (2.6s, easy to miss on a real device) isn't enough signal when a
 // load genuinely fails -- this renders a persistent, un-missable banner with a
 // retry button instead, so a failed load never looks indistinguishable from "just
@@ -2406,7 +2482,17 @@ async function apiLoadAll(){
     DB.badgeCounts=await apiLoadBadgeCounts();
     return;
   }
-  const q=async t=>{const {data,error}=await sb.from(t).select('*').order('created_at',{ascending:false});if(error)throw error;return data||[];};
+  // site_visits/activity_log get capped here -- both are effectively append-only
+  // logs that only ever grow, and no hot-path screen needs their complete
+  // history on every sign-in (Management Reports/Customer 360/backup/CSV export
+  // each fetch their own fresh, uncapped copy instead -- see apiLoadFullSiteVisits/
+  // apiLoadFullActivity). leads/enquiries/complaints stay uncapped deliberately:
+  // leads is the actual working set, and the manager home dashboard (mgrOverview,
+  // rendered on every sign-in) already needs a complete enquiries/complaints
+  // count and by-source breakdown, so capping those two would just force a
+  // second, duplicate fetch right after sign-in with no net benefit.
+  const BULK_LOAD_LIMIT=500;
+  const q=async(t,limit)=>{let qq=sb.from(t).select('*').order('created_at',{ascending:false}); if(limit) qq=qq.limit(limit); const {data,error}=await qq;if(error)throw error;return data||[];};
   // Loaded for every role, not just managers -- RLS already allows any signed-in user to
   // read this (staff directory info: name/avatar/role), and computeAgentOfMonth()/
   // allAgentLists() need it to work correctly from an agent's own dashboard too.
@@ -2439,7 +2525,7 @@ async function apiLoadAll(){
   // Every read below is independent of the others, so they run as one concurrent wave
   // instead of one-after-another — this is most of what makes sign-in-to-dashboard slow.
   const results=await Promise.all([
-    q('leads'),q('enquiries'),q('complaints'),q('site_visits'),q('activity_log'),
+    q('leads'),q('enquiries'),q('complaints'),q('site_visits',BULK_LOAD_LIMIT),q('activity_log',BULK_LOAD_LIMIT),
     loadProfiles(),loadPayments(),loadPlots(),loadContracts(),
     apiLoadAnnouncements(),apiLoadAllocations(),apiLoadMessages(),apiLoadTargetSelections(today().slice(0,7),PROFILE.role==='manager'),
     apiLoadAgentMonthStats(),apiLoadTasks(),apiLoadFeedback(),apiLoadDownloads(),apiLoadBadgeCounts()
@@ -3868,11 +3954,37 @@ const mapTask=r=>({id:r.id,title:r.title,description:r.description,category:r.ca
   escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note});
 const mapTaskEvent=r=>({id:r.id,taskId:r.task_id,type:r.type,actorKey:r.actor_key,actorName:r.actor_name,
   fromKey:r.from_key,fromName:r.from_name,toKey:r.to_key,toName:r.to_name,note:r.note,createdAt:r.created_at});
+// Sign-in load stays capped to the most recent TASK_LOAD_LIMIT tasks (Duties
+// Today/My Day/Team only ever need recent+open items) -- but the Ops Report
+// (computeOpsReportData) needs the COMPLETE history to report accurately on
+// older periods, so it calls apiLoadFullTasks() for its own fresh, uncapped
+// fetch instead of reading the capped DB.tasks.
+const TASK_LOAD_LIMIT=500;
 async function apiLoadTasks(){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.tasks||[]).slice(); }
-  try{ const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}); if(error) throw error;
+  try{ const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}).limit(TASK_LOAD_LIMIT); if(error) throw error;
     return (data||[]).map(mapTask); }
   catch(e){ return []; }
+}
+async function apiLoadFullTasks(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.tasks||[]).slice(); }
+  const {data,error}=await sb.from('schedule_items').select('*').eq('kind','task').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapTask);
+}
+// site_visits and activity_log are capped the same way in apiLoadAll() (below)
+// for the same reason -- Management Reports, Customer 360, the system backup,
+// and the Site Visits CSV export all need COMPLETE history though, so each of
+// those calls one of these two fresh, uncapped fetches instead of reading the
+// capped DB.sitevisits/DB.activity.
+async function apiLoadFullSiteVisits(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sitevisits||[]).slice(); }
+  const {data,error}=await sb.from('site_visits').select('*').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapSV);
+}
+async function apiLoadFullActivity(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.activity||[]).slice(); }
+  const {data,error}=await sb.from('activity_log').select('*').order('created_at',{ascending:false}); if(error) throw error;
+  return (data||[]).map(mapAct);
 }
 async function apiLoadTaskEvents(taskId){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.taskEvents||[]).filter(e=>e.taskId===taskId).slice(); }
@@ -6109,22 +6221,43 @@ document.getElementById('logoutBtn').onclick=async()=>{
 };
 document.getElementById('globalSearchBtn').onclick=openGlobalSearch;
 document.getElementById('staffBellBtn').onclick=()=>route('notifications');
-function applyDarkModePref(){ try{ if(localStorage.getItem('pep_dark')==='1') document.body.classList.add('dark'); }catch(e){} }
-applyDarkModePref();
-document.getElementById('darkModeBtn').onclick=()=>{
-  document.body.classList.toggle('dark');
-  try{ localStorage.setItem('pep_dark', document.body.classList.contains('dark')?'1':'0'); }catch(e){}
-  // Most of the theme is CSS-variable-driven and updates live the instant the class
-  // toggles, everywhere in the DOM -- including open modals, which live outside #view
-  // and were never touched by the old route()-only repaint below. A few cards still
-  // bake literal colors into their template string at render time, though, so also
-  // re-run whatever's on screen. Prefer CURRENT_ROUTE_NAME (kept in sync on every
-  // route() call, even ones that skip history.pushState) over history.state, which
-  // can be empty right after sign-in or inside a modal-only flow.
+// Most of the theme is CSS-variable-driven and updates live the instant the class
+// toggles, everywhere in the DOM -- including open modals, which live outside #view.
+// A few cards still bake literal colors into their template string at render time,
+// though, so also re-run whatever's on screen. Prefer CURRENT_ROUTE_NAME (kept in
+// sync on every route() call, even ones that skip history.pushState) over
+// history.state, which can be empty right after sign-in or inside a modal-only flow.
+function repaintCurrentRouteForTheme(){
   if(typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
     const rn=(history.state&&history.state.routeName)||CURRENT_ROUTE_NAME;
     if(rn){ try{ route(rn,(history.state&&history.state.routeArg),true); }catch(e){} }
   }
+}
+// Dark mode: an explicit toggle always wins once set (localStorage 'pep_dark').
+// Before any explicit choice exists, follow the OS's prefers-color-scheme instead
+// of defaulting to light -- and keep following it live if the OS setting changes
+// mid-session, right up until the user actually taps the toggle themselves.
+const DARK_MEDIA=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+function applyDarkModePref(){
+  try{
+    const saved=localStorage.getItem('pep_dark');
+    const wantDark=saved!==null?saved==='1':!!(DARK_MEDIA&&DARK_MEDIA.matches);
+    document.body.classList.toggle('dark',wantDark);
+  }catch(e){}
+}
+applyDarkModePref();
+if(DARK_MEDIA){
+  DARK_MEDIA.addEventListener('change',e=>{
+    let saved=null; try{ saved=localStorage.getItem('pep_dark'); }catch(err){}
+    if(saved!==null) return; // user already made an explicit choice -- OS changes no longer apply
+    document.body.classList.toggle('dark',e.matches);
+    repaintCurrentRouteForTheme();
+  });
+}
+document.getElementById('darkModeBtn').onclick=()=>{
+  document.body.classList.toggle('dark');
+  try{ localStorage.setItem('pep_dark', document.body.classList.contains('dark')?'1':'0'); }catch(e){}
+  repaintCurrentRouteForTheme();
 };
 document.getElementById('accountBtn').onclick=()=>route(IS_CLIENT?'clientsettings':'account');
 
@@ -6834,7 +6967,7 @@ function viewMore(){
     const all=MGR_APPS.filter(a=>!a.section);
     const byKey=k=>all.find(a=>a.key===k);
     const groups=[
-      {title:'Insights & data',items:['Data Check','Reports','News','Insights'].map(byKey).filter(Boolean)},
+      {title:'Insights & data',items:['Data Check','Analytics','Reports','News','Insights'].map(byKey).filter(Boolean)},
       {title:'Tools',items:['Settings','Downloads'].map(byKey).filter(Boolean)}
     ];
     const items=groups.flatMap(g=>g.items);
@@ -7690,6 +7823,91 @@ function renderSmartInsights(leads,paymentsForScope){
   </button>`).join('')}</div>`;
 }
 function bindSmartInsights(){ document.querySelectorAll('[data-insightroute]').forEach(b=>b.onclick=()=>route(b.dataset.insightroute,b.dataset.insightarg||undefined)); }
+
+/* ================= COMPANION — proactive nudges + guided checklist =================
+   Staff nudges reuse computeSmartInsights()/getInsightLists() directly (same rule
+   engine, same data) rather than duplicating logic; the client side gets its own
+   rules since clients have no equivalent today. Rule-based throughout -- no AI/LLM
+   call involved. */
+function computeStaffCompanionNudges(leads,paymentsForScope){ return computeSmartInsights(leads,paymentsForScope).slice(0,4); }
+function computeStaffCompanionChecklist(leads){
+  const {cold,nearTrigger,readyForAllocation,stalledHigh,overdue}=getInsightLists(leads);
+  return [
+    {done:overdue.length===0,text:overdue.length?`Clear ${overdue.length} overdue follow-up${overdue.length===1?'':'s'}`:'No overdue follow-ups',route:overdue.length?'insightList':'',arg:'overdue'},
+    {done:stalledHigh.length===0,text:stalledHigh.length?`Plan a follow-up for ${stalledHigh.length} high-priority client${stalledHigh.length===1?'':'s'}`:'High-priority clients all have a plan',route:stalledHigh.length?'insightList':'',arg:'stalledHigh'},
+    {done:readyForAllocation.length===0,text:readyForAllocation.length?`Request allocation for ${readyForAllocation.length} eligible client${readyForAllocation.length===1?'':'s'}`:'No pending allocation requests',route:readyForAllocation.length?'insightList':'',arg:'readyForAllocation'},
+    {done:cold.length===0,text:cold.length?`Re-engage ${cold.length} cold lead${cold.length===1?'':'s'}`:'No leads going cold',route:cold.length?'insightList':'',arg:'cold'},
+    {done:nearTrigger.length===0,text:nearTrigger.length?`Nudge ${nearTrigger.length} client${nearTrigger.length===1?'':'s'} toward the 30% mark`:'No clients waiting on the 30% mark',route:nearTrigger.length?'insightList':'',arg:'nearTrigger'},
+    {done:false,text:'View full Smart Insights',route:'insights'},
+  ];
+}
+function computeClientCompanionNudges(leads,payments){
+  const nudges=[];
+  if(!leads.length){ nudges.push({cls:'ok',icon:ic.spark,text:'Welcome to Palmstead — your purchases will appear here once your agent records one.'}); return nudges; }
+  leads.forEach(l=>{
+    const c=computeLead(l); const grand=l.grandTotal!=null?num(l.grandTotal):c.grand; const paid=num(l.amtPaid); const bal=Math.max(grand-paid,0);
+    const pct=grand>0?Math.round(paid/grand*100):0; const label=l.plotType||'plot';
+    if(bal>0.01){
+      const paymentsForLead=payments.filter(p=>p.leadId===l.id);
+      const sched=computeMonthlySchedule(l,paymentsForLead);
+      if(sched){
+        if(sched.arrears>0) nudges.push({cls:'dgr',icon:ic.clock,text:`Overdue ${ghs(sched.arrears)} on your ${label}`,detail:'Settle this to stay current on your payment plan.'});
+        else{
+          const days=Math.round((new Date(sched.nextDueDate+'T00:00:00')-new Date(today()+'T00:00:00'))/86400000);
+          if(days>=0&&days<=7) nudges.push({cls:'warnt',icon:ic.calendar,text:`Next payment of ${ghs(sched.expectedThisMonth||sched.monthlyInstallment)} due in ${days===0?'today':days+' day'+(days===1?'':'s')}`,detail:new Date(sched.nextDueDate+'T00:00:00').toLocaleDateString('en-GB')});
+        }
+      }
+      if(pct>=20&&pct<30) nudges.push({cls:'ok',icon:ic.target,text:`${30-pct}% away from the 30% allocation mark on your ${label}`,detail:'One more payment could make you eligible for plot allocation.'});
+    } else {
+      nudges.push({cls:'ok',icon:ic.trophy,text:`Your ${label} is fully paid`,detail:'Ask your agent about your Contract of Sale if you have not already.'});
+    }
+  });
+  if(leads.some(l=>clientContractState(l)==='ready')) nudges.push({cls:'ok',icon:ic.doc,text:'Your Contract of Sale is ready to download',route:'clientcontractsale'});
+  if(!nudges.length) nudges.push({cls:'ok',icon:'✅',text:'Nothing urgent right now — your account looks healthy'});
+  return nudges.slice(0,4);
+}
+function computeClientCompanionChecklist(leads){
+  if(!leads.length) return [];
+  const totalGrand=leads.reduce((s,l)=>{ const c=computeLead(l); return s+(l.grandTotal!=null?num(l.grandTotal):c.grand); },0);
+  const totalPaid=leads.reduce((s,l)=>s+num(l.amtPaid),0);
+  const totalBal=Math.max(totalGrand-totalPaid,0);
+  const anyRequested=leads.some(l=>clientContractState(l)!=='needsInfo');
+  return [
+    {done:totalBal<=0.01,text:totalBal<=0.01?'Balance fully cleared':`Clear your balance of ${ghs(totalBal)}`},
+    {done:anyRequested,text:anyRequested?'Contract of Sale in progress':'Start your Contract of Sale',route:'clientcontractsale'},
+    {done:false,text:'Refer a friend & earn',route:'clientreferrals'},
+  ];
+}
+function renderCompanionWidget(nudges,checklist,opts){
+  opts=opts||{};
+  const nudgeHtml=(nudges||[]).map((n,i)=>`<button class="companionNudge ${n.cls||'ok'}" style="animation-delay:${(i*.05).toFixed(2)}s" ${n.route?`data-comproute="${esc(n.route)}" data-comparg="${esc(n.arg||'')}"`:''}>
+    <span class="ic">${n.icon||ic.spark}</span>
+    <div class="txt">${esc(n.text)}${n.detail?`<div class="det">${esc(n.detail)}</div>`:''}</div>
+  </button>`).join('');
+  const checkHtml=(checklist||[]).map(c=>`<div class="companionCheckItem ${c.done?'done':''}" ${c.route?`data-comproute="${esc(c.route)}" data-comparg="${esc(c.arg||'')}"`:''}>
+    <span class="companionCheckDot">${c.done?ic.check2:''}</span>
+    <div class="txt">${esc(c.text)}</div>
+  </div>`).join('');
+  return `<div class="companionWrap open" id="companionWidget">
+    <div class="companionInner">
+      <div class="companionHead" id="companionToggle">
+        <span class="companionOrb">${ic.spark}</span>
+        <div class="companionTitle"><div class="t">✨ Companion</div><div class="s">${esc(opts.subtitle||'Proactive nudges, tailored to you')}</div></div>
+        <span class="companionCaret"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </div>
+      <div class="companionBody"><div class="companionBodyIn">
+        ${nudgeHtml?`<div class="companionNudges">${nudgeHtml}</div>`:`<div class="companionEmpty">Nothing to flag right now.</div>`}
+        ${checkHtml?`<div class="companionCheckHead">Suggested next steps</div><div class="companionChecklist">${checkHtml}</div>`:''}
+      </div></div>
+    </div>
+  </div>`;
+}
+function bindCompanionWidget(){
+  const w=document.getElementById('companionWidget'); if(!w) return;
+  const toggle=document.getElementById('companionToggle');
+  if(toggle) toggle.onclick=()=>w.classList.toggle('open');
+  w.querySelectorAll('[data-comproute]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); const r=b.dataset.comproute; if(r) route(r,b.dataset.comparg||undefined); });
+}
 function homeHeroGreeting(){
   const h=new Date().getHours();
   return h>=5&&h<12?'Good morning':h>=12&&h<17?'Good afternoon':h>=17&&h<21?'Good evening':'Working late';
@@ -7715,12 +7933,13 @@ function agentHome(){ const k=kpisOf(DB.leads);
   ${renderBannerSlideshow()}
   ${renderAllocationBanners()}
   ${renderComplaintAssignBanners()}
+  ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{subtitle:'Your next best actions, auto-generated'})}
   <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'gold','monthlyclosed')}</div>
   <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
   <div class="footer-note" style="padding-top:2px">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
-  bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
+  bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); bindCompanionWidget(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
   document.getElementById('heroCommissionChip').onclick=()=>route('myCommission');
   document.getElementById('heroQuoteChip').onclick=openQuotationRequest;
   document.getElementById('dashRefreshBtn').onclick=async(e)=>{
@@ -8544,35 +8763,64 @@ function bindNotificationCtrls(){
     refreshAllBadges(); viewNotifications();
   };
 }
+// Matches name against the raw query text, OR contact against a digits-only
+// normalized query -- so "0257 793 802", "+233257793802" and "257793802" all
+// find the same client regardless of how either side happens to be formatted.
+// This is the "fuzzy" part: no typo-tolerance/edit-distance, just formatting-
+// tolerant contact matching plus a plain substring match on names.
+function globalSearchRowMatches(name,contact,qText,qDigits){
+  if(qText && (name||'').toLowerCase().includes(qText)) return true;
+  // Compare last-9-digit (national, no country-code/leading-zero) forms -- same
+  // convention used elsewhere in the app (see custMatches/agentPoints) -- so
+  // "0277966499", "+233277966499" and "277966499" all resolve to one number.
+  if(qDigits.length>=3){ const c=normContact(contact).slice(-9); if(c && c.includes(qDigits.slice(-9))) return true; }
+  return false;
+}
 function openGlobalSearch(){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Search</div><button id="closeGlobalSearch" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-    <input id="globalSearchInput" placeholder="Search by client name or phone…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
-    <div id="globalSearchResults" class="list"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="globalSearchTitle">Search</div><button id="closeGlobalSearch" aria-label="Close search" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <input id="globalSearchInput" aria-label="Search clients, staff, plots, contracts, or payments" placeholder="Search clients, staff, plots, contracts…" style="width:100%;padding:13px 16px;border:1.5px solid var(--line);border-radius:100px;font-size:15px;margin-bottom:14px"/>
+    <div id="globalSearchResults" class="list" aria-live="polite"></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','globalSearchTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeGlobalSearch').onclick=()=>ov.remove();
   const input=document.getElementById('globalSearchInput'); input.focus();
+  const searchRow=(grad,initial,title,sub,dataAttrs)=>`<button class="convRow" ${dataAttrs}><div class="convAvatar" style="background:${grad}">${esc(initial)}</div><div style="text-align:left"><div style="font-weight:700">${esc(title)}</div><div class="mini">${esc(sub)}</div></div></button>`;
   const runSearch=()=>{
-    const q=input.value.trim().toLowerCase();
+    const qText=input.value.trim().toLowerCase();
+    const qDigits=normContact(input.value);
     const results=document.getElementById('globalSearchResults');
-    if(q.length<2){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">Type at least 2 characters…</div>'; return; }
-    const leadHits=(PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list.map(l=>({...l,agentDisplay:a.name}))):DB.leads)
-      .filter(l=>(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q)).slice(0,8);
-    const enqHits=DB.enquiries.filter(e=>(e.name||'').toLowerCase().includes(q)||String(e.contact||'').includes(q)).slice(0,4);
-    const cmpHits=DB.complaints.filter(c=>(c.name||'').toLowerCase().includes(q)||String(c.contact||'').includes(q)).slice(0,4);
-    if(!leadHits.length&&!enqHits.length&&!cmpHits.length){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">No matches</div>'; return; }
+    if(qText.length<2 && qDigits.length<3){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">Type at least 2 characters…</div>'; return; }
+    const allLeadsScope=(PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list.map(l=>({...l,agentDisplay:a.name}))):DB.leads);
+    const leadHits=allLeadsScope.filter(l=>globalSearchRowMatches(l.name,l.contact,qText,qDigits)).slice(0,8);
+    const enqHits=DB.enquiries.filter(e=>globalSearchRowMatches(e.name,e.contact,qText,qDigits)).slice(0,4);
+    const cmpHits=DB.complaints.filter(c=>globalSearchRowMatches(c.name,c.contact,qText,qDigits)).slice(0,4);
+    const leadById={}; allLeadsScope.forEach(l=>{ leadById[l.id]=l; });
+    const payHitsReal=(DB.payments||[]).filter(p=>{ const l=leadById[p.leadId]; return l&&globalSearchRowMatches(l.name,l.contact,qText,qDigits); }).slice(0,4);
+    const contractHits=(DB.contractRequests||[]).filter(c=>globalSearchRowMatches(c.clientName,(leadById[c.leadId]||{}).contact,qText,qDigits)).slice(0,4);
+    const plotHits=canManagePlots()?(DB.plots||[]).filter(p=>(p.plotNumber||'').toLowerCase().includes(qText)||globalSearchRowMatches(p.clientName,p.clientContact,qText,qDigits)).slice(0,4):[];
+    const staffHits=(STAFF_LIST||[]).filter(s=>s.key!==PROFILE.key&&(s.name||'').toLowerCase().includes(qText)).slice(0,4);
+    if(![leadHits,enqHits,cmpHits,payHitsReal,contractHits,plotHits,staffHits].some(a=>a.length)){ results.innerHTML='<div class="mini" style="text-align:center;padding:20px">No matches</div>'; return; }
     let html='';
-    if(leadHits.length) html+=`<div class="mini" style="margin:6px 0 4px;font-weight:700">PIPELINE</div>`+leadHits.map(l=>`<button class="convRow" data-searchgo="updateOne" data-searchid="${l.id}"><div class="convAvatar" style="background:linear-gradient(150deg,#3B82F6,#1D4ED8)">${esc((l.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(l.name)}</div><div class="mini">${esc(l.contact||'')}${l.agentDisplay?(' · '+esc(l.agentDisplay)):''}</div></div></button>`).join('');
-    if(enqHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">ENQUIRIES</div>`+enqHits.map(e=>`<button class="convRow" data-searchgo="customer" data-searchname="${esc(e.name)}" data-searchcontact="${esc(e.contact||'')}"><div class="convAvatar" style="background:linear-gradient(150deg,#4FBFA6,#1E7A6E)">${esc((e.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(e.name)}</div><div class="mini">${esc(e.contact||'')}</div></div></button>`).join('');
-    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>`<button class="convRow" data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"><div class="convAvatar" style="background:linear-gradient(150deg,#E0836A,#B4472F)">${esc((c.name||'?')[0])}</div><div style="text-align:left"><div style="font-weight:700">${esc(c.name)}</div><div class="mini">${esc(c.contact||'')}</div></div></button>`).join('');
+    if(leadHits.length) html+=`<div class="mini" style="margin:6px 0 4px;font-weight:700">PIPELINE</div>`+leadHits.map(l=>searchRow('linear-gradient(150deg,#3B82F6,#1D4ED8)',(l.name||'?')[0],l.name,(l.contact||'')+(l.agentDisplay?(' · '+l.agentDisplay):''),`data-searchgo="updateOne" data-searchid="${l.id}"`)).join('');
+    if(payHitsReal.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PAYMENTS</div>`+payHitsReal.map(p=>{ const l=leadById[p.leadId]||{}; return searchRow('linear-gradient(150deg,#0EA5B7,#0C7A93)','₵',ghs(p.amount)+' · '+esc(l.name||'Unknown'),p.date||'',`data-searchgo="updateOne" data-searchid="${esc(p.leadId||'')}"`); }).join('');
+    if(enqHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">ENQUIRIES</div>`+enqHits.map(e=>searchRow('linear-gradient(150deg,#4FBFA6,#1E7A6E)',(e.name||'?')[0],e.name,e.contact||'',`data-searchgo="customer" data-searchname="${esc(e.name)}" data-searchcontact="${esc(e.contact||'')}"`)).join('');
+    if(cmpHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">COMPLAINTS</div>`+cmpHits.map(c=>searchRow('linear-gradient(150deg,#E0836A,#B4472F)',(c.name||'?')[0],c.name,c.contact||'',`data-searchgo="customer" data-searchname="${esc(c.name)}" data-searchcontact="${esc(c.contact||'')}"`)).join('');
+    if(contractHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">CONTRACTS</div>`+contractHits.map(c=>{ const l=leadById[c.leadId]; return searchRow('linear-gradient(150deg,#8B5CF6,#6D28D9)',(c.clientName||'?')[0],c.clientName,'Contract of Sale · '+(c.status||''),l?`data-searchgo="updateOne" data-searchid="${l.id}"`:`data-searchgo="customer" data-searchname="${esc(c.clientName)}" data-searchcontact=""`); }).join('');
+    if(plotHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">PLOTS</div>`+plotHits.map(p=>searchRow('linear-gradient(150deg,#D97706,#92400E)',(p.plotNumber||'?')[0],'Plot '+(p.plotNumber||''),(p.site?p.site+' · ':'')+(p.status||'')+(p.clientName?(' · '+p.clientName):''),`data-searchgo="plots" data-searchid="${esc(p.id)}"`)).join('');
+    if(staffHits.length) html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700">STAFF</div>`+staffHits.map(s=>searchRow('linear-gradient(150deg,#64748B,#334155)',(s.name||'?')[0],s.name,s.role==='manager'?'Management':'Agent',`data-searchgo="chatThread" data-searchid="${esc(s.key)}"`)).join('');
     results.innerHTML=html;
     results.querySelectorAll('[data-searchgo]').forEach(b=>b.onclick=()=>{
       ov.remove();
-      if(b.dataset.searchgo==='updateOne') route('updateOne',b.dataset.searchid);
+      const kind=b.dataset.searchgo;
+      if(kind==='updateOne') route('updateOne',b.dataset.searchid);
+      else if(kind==='chatThread') route('chatThread',b.dataset.searchid);
+      else if(kind==='plots'){ selectedPlotId=b.dataset.searchid; route('mgrTabView','Plots'); }
       else route('customer',{name:b.dataset.searchname,contact:b.dataset.searchcontact});
     });
   };
@@ -9883,10 +10131,10 @@ async function paintOpsReportsTab(){
     const range=reportPeriodRange(OPSRPT_PERIOD,OPSRPT_FROM,OPSRPT_TO);
     const btn=document.getElementById('opsRptGoBtn'); btn.disabled=true; btn.textContent='Building…';
     try{
-      const todos=await apiLoadAllTodosForLeaderboard(range.from,range.to);
-      const data=computeOpsReportData(range.from,range.to,todos);
+      const [todos,tasksData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks()]);
+      const data=computeOpsReportData(range.from,range.to,todos,tasksData);
       let prior=null, priorData=null;
-      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos); }
+      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData); }
       buildOpsReportPDF(range,data,prior,priorData);
     }catch(e){ toast('Could not build report: '+(e.message||e)); }
     btn.disabled=false; btn.textContent='Generate PDF report';
@@ -10524,8 +10772,12 @@ async function formCustomer(arg){
   const mLeads=DB.leads.filter(l=>custMatches(l.name,l.contact,name,contact));
   const mEnq=DB.enquiries.filter(e=>custMatches(e.name,e.contact,name,contact));
   const mCmp=DB.complaints.filter(c=>custMatches(c.name,c.contact,name,contact));
-  const mVis=DB.sitevisits.filter(v=>custMatches(v.name,v.contact,name,contact));
-  const mAct=DB.activity.filter(a=>custMatches(a.client,'',name,contact));
+  // DB.sitevisits/DB.activity are capped for everyday screens (see apiLoadAll) --
+  // a customer's own full history shouldn't silently truncate on their 360 profile,
+  // so this fetches fresh, uncapped copies specifically for the two capped tables.
+  const [fullSiteVisitsForCust,fullActivityForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity()]);
+  const mVis=fullSiteVisitsForCust.filter(v=>custMatches(v.name,v.contact,name,contact));
+  const mAct=fullActivityForCust.filter(a=>custMatches(a.client,'',name,contact));
   const mPay=(DB.payments||[]).filter(p=>custMatches(p.clientName,'',name,contact)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
 
   const events=[];
@@ -10912,7 +11164,7 @@ function openDepositOverpayModal(myDep,payAmount,onDone){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:6px">Deposit overpaid</div>
+    <div style="font-weight:800;font-size:16px;margin-bottom:6px" id="depOptTitle">Deposit overpaid</div>
     <div class="mini" style="margin-bottom:16px">This payment brings the deposit to ${ghs(newTotal)}, which is ${ghs(overshoot)} more than the ${ghs(myDep.target)} target. How should the extra be handled?</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="delReasonBtn" data-depopt="absorb">
@@ -10927,6 +11179,8 @@ function openDepositOverpayModal(myDep,payAmount,onDone){
     <button class="btn ghost" id="cancelDepOpt" style="width:100%;margin-top:14px">Cancel</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','depOptTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('cancelDepOpt').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-depopt]').forEach(b=>b.onclick=()=>{
@@ -10940,7 +11194,7 @@ function deleteLeadConfirm(id,name){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:4px">Delete ${esc(name)}?</div>
+    <div style="font-weight:800;font-size:16px;margin-bottom:4px" id="delLeadTitle">Delete ${esc(name)}?</div>
     <div class="mini" style="margin-bottom:16px">This can't be undone. Tell us why — it decides what else needs to happen.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="delReasonBtn" data-reason="wrong">
@@ -10959,6 +11213,8 @@ function deleteLeadConfirm(id,name){
     <button class="btn ghost" id="cancelDel" style="width:100%;margin-top:14px">Cancel</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','delLeadTitle');
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('cancelDel').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-reason]').forEach(b=>b.onclick=async()=>{
@@ -12743,12 +12999,6 @@ async function clientHome(){
   const totalDiscount=leads.reduce((s,l)=>s+(l.discount!=null?num(l.discount):0),0);
   const overallPct=totalGrand>0?Math.min(100,Math.round(totalPaid/totalGrand*100)):0;
   const furthestStageIdx=leads.length?Math.max(-1,...leads.map(l=>l.docStage?DOC_STAGES.findIndex(d=>d.key===l.docStage):-1)):-1;
-  let insightMsg='';
-  if(leads.length){
-    if(overallPct>=100) insightMsg="You're fully paid up"+(furthestStageIdx>=0?(' — currently at "'+DOC_STAGES[furthestStageIdx].label+'".'):'. Documentation will begin shortly.');
-    else if(overallPct>=30) insightMsg="You're "+overallPct+"% paid — you've passed the 30% mark, so allocation can proceed."+(furthestStageIdx>=0?(' Currently at "'+DOC_STAGES[furthestStageIdx].label+'".'):'');
-    else insightMsg="You're "+overallPct+"% paid so far. Reach 30% to become eligible for plot allocation.";
-  }
   V.innerHTML=`
     <div class="homeHero">
       <div class="heroTop">
@@ -12765,14 +13015,11 @@ async function clientHome(){
         <div style="font-size:12px;font-weight:700;color:#fff;margin-top:6px">${esc(DOC_STAGES[furthestStageIdx].label)}</div>
       </div>`:''}`:`<div class="heroStat"><div class="heroStatLabel">Your account</div><div class="heroStatValue" style="font-size:20px">No purchases yet</div></div>`}
     </div>
+    ${renderCompanionWidget(computeClientCompanionNudges(leads,payments),computeClientCompanionChecklist(leads),{subtitle:'Tailored to your account'})}
     ${leads.length?`<div class="kpis" style="grid-template-columns:repeat(2,1fr)">
       ${kpi('Total plots',totalPlots)}
       ${totalDiscount>0?kpi('Discount given',ghs(totalDiscount),'gold'):kpi('Fully paid',overallPct>=100?'Yes':'Not yet')}
-    </div>
-    ${insightMsg?`<div class="rowcard" style="margin:0 0 16px;padding:14px 16px;background:linear-gradient(135deg,#EEF4FF,#F4F6F5);border:1px solid var(--line);display:flex;gap:10px;align-items:flex-start">
-      <span style="width:18px;height:18px;flex:0 0 auto;color:var(--leaf)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M12 3l2.2 5.6L20 11l-5.8 2.4L12 19l-2.2-5.6L4 11l5.8-2.4L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span>
-      <div class="mini" style="font-size:12.5px;line-height:1.5">${esc(insightMsg)}</div>
-    </div>`:''}`:''}
+    </div>`:''}
     ${(CLIENT_DB.announcements||[]).length?`<div class="sectitle" style="margin-top:0"><h3>News from Palmstead</h3></div>
     <div class="list" style="margin-bottom:16px">${CLIENT_DB.announcements.map(a=>`<div class="rowcard" style="padding:14px 16px">
       ${a.image?`<div style="margin:-14px -16px 10px;border-radius:14px 14px 0 0;overflow:hidden"><img src="${a.image}" style="width:100%;display:block"/></div>`:''}
@@ -12853,6 +13100,7 @@ async function clientHome(){
   const arBtn=document.getElementById('dlAllReceipts'); if(arBtn) arBtn.onclick=()=>downloadAllReceipts();
   const moBtn=document.getElementById('dlMonthReceipt'); if(moBtn) moBtn.onclick=()=>downloadReceiptForMonth(val('dlMonthSel'));
   const reqBtn=document.getElementById('reqPlotBtn'); if(reqBtn) reqBtn.onclick=()=>openClientPlotRequestModal(leads);
+  bindCompanionWidget();
 }
 function viewClientMore(){
   V.innerHTML=`<div class="pagehead"><div><h2>More</h2><p>Contact your agent or PEP Landbank</p></div></div>
@@ -14451,6 +14699,7 @@ const MGR_APPS=[
   {key:'Data Check',fic:'datacheck',label:'Data Check'},
   {key:'Leaderboard',fic:'leaderboard',label:'Leaderboard',section:'officedesk'},
   {key:'Reports',fic:'analytics',label:'Reports'},
+  {key:'Analytics',fic:'analytics',label:'Analytics'},
   {key:'Plots',fic:'map',label:'Plot Inventory',section:'salesdesk'},
   {key:'Allocations',fic:'allocation',label:'Allocations',section:'salesdesk'},
   {key:'Client Database',fic:'clientdb',label:'Client Database',section:'salesdesk'},
@@ -14508,10 +14757,12 @@ async function managerView(){
     // changes -- everything else the RPC returns (site visits, tasks/to-dos, attendance)
     // is a fixed 90-day/all-time window independent of slYear.
     if(LEADERBOARD_ROWS_YEAR!==slYear) jobs.push(withLoadTimeout(apiLoadLeaderboardRows(slYear+'-01-01',slYear+'-12-31'),8000,'Leaderboard').then(rows=>{ LEADERBOARD_ROWS=rows; LEADERBOARD_ROWS_YEAR=slYear; }));
+    if(!LEADERBOARD_TASKS_LOADED) jobs.push(withLoadTimeout(apiLoadFullTasks(),8000,'Leaderboard').then(rows=>{ LEADERBOARD_TASKS_FULL=rows; LEADERBOARD_TASKS_LOADED=true; }));
     if(jobs.length){ try{ await Promise.all(jobs); }catch(e){ toast(e.message||'Could not load leaderboard'); } }
     body.innerHTML=mgrLeaderboard(); bindLeagueCtrls();
   }
   else if(mgrTab==='Reports'){ body.innerHTML=mgrReports(); bindReportCtrls(); }
+  else if(mgrTab==='Analytics'){ body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls(); }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
     const pend=(DB.allocations||[]).filter(a=>a.status==='Pending').sort((x,y)=>y.percent-x.percent);
@@ -14691,11 +14942,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     </div>
   </div>
   ${renderBannerSlideshow()}
-  <button class="rowcard" id="mgrInsightsTeaser" style="margin-bottom:18px;padding:16px;width:100%;text-align:left;display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid rgba(52,211,153,.25);background:linear-gradient(120deg,#F4FBEA,#F4F8FF)">
-    <span class="kpi-ic green" style="margin-bottom:0">${ic.spark}</span>
-    <div style="flex:1"><div style="font-weight:700;font-size:13.5px">Smart Insights</div><div class="mini">${mySmartInsightsMgr.length} auto-generated ${mySmartInsightsMgr.length===1?'insight':'insights'} from live company data</div></div>
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="color:var(--muted)"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
+  ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
   <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
   <div class="kpis">${kpi('Total leads',tot.leads,'','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
 
@@ -14712,7 +14959,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
   V.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>route('stageList',b.dataset.stage));
-  const insightsTeaser=document.getElementById('mgrInsightsTeaser'); if(insightsTeaser) insightsTeaser.onclick=()=>route('insights');
+  bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
 }
@@ -14843,6 +15090,11 @@ function agentPoints(r){
 }
 let LEADERBOARD_TODOS_LOADED=false, LEADERBOARD_TODOS_LIST=[];
 let LEADERBOARD_ROWS_YEAR=null, LEADERBOARD_ROWS=[];
+// workloadVolume (mgrLeaderboard) feeds directly into agentPoints() -- DB.tasks
+// is capped for everyday screens, which would unfairly under-count total
+// workload for any agent with more historical tasks than the cap once company-
+// wide volume grows, so this loads its own complete copy once per session.
+let LEADERBOARD_TASKS_LOADED=false, LEADERBOARD_TASKS_FULL=[];
 async function apiLoadAllTodosForLeaderboard(fromDate,toDate){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.todos||[]).filter(t=>t.date>=fromDate&&t.date<=toDate); }
   const {data,error}=await sb.from('schedule_items').select('*').eq('kind','todo').gte('item_date',fromDate).lte('item_date',toDate);
@@ -15030,7 +15282,7 @@ function mgrLeaderboard(){
     const monthsActive=monthVals.filter(v=>v>0).length||1;
     const avgMonthly=Math.round(monthVals.reduce((s,v)=>s+v,0)/monthsActive);
     const profile=(DB.profiles||[]).find(p=>p.agent_key===a.key);
-    const workloadVolume=(DB.tasks||[]).filter(t=>t.assignedTo===a.key).length + (LEADERBOARD_TODOS_LIST||[]).filter(t=>t.ownerKey===a.key).length;
+    const workloadVolume=(LEADERBOARD_TASKS_FULL.length?LEADERBOARD_TASKS_FULL:DB.tasks||[]).filter(t=>t.assignedTo===a.key).length + (LEADERBOARD_TODOS_LIST||[]).filter(t=>t.ownerKey===a.key).length;
     const r={name:a.name,key:a.key,avatar:profile?profile.avatar:null,totalCollected:lb.totalCollected||0,dealsClosedYear:lb.dealsClosedYear||0,closedValueYear,
       totalPipeline:k.val,winRate,health,siteVisits:lb.siteVisits||0,avgMonthly,monthVals,tasksCompleted:lb.tasksCompleted||0,avgTaskDays:lb.avgTaskDays,
       todosCompleted:lb.todosCompleted||0,workloadVolume,daysAttended:lb.daysAttended||0,onTimeDays:lb.onTimeDays||0};
@@ -15139,6 +15391,65 @@ function bindReportsSearchResultRows(){
     ],'Client_'+l.name.replace(/\s+/g,'_')+'_'+today()+'.csv');
   });
 }
+/* Unified Analytics — a single live dashboard pulling together numbers that
+   previously only existed spread across Overview, Expenses, Pipeline Health and
+   the PDF-only Management Report. Purely additive: reuses computeManagementReportData/
+   computeCashBasisNetPosition/computePipelineComposition/svgLineChart/svgDonut exactly
+   as they already exist elsewhere, so this adds a view, not new computation logic. */
+function mgrAnalytics(){
+  const agents=allAgentLists();
+  const allLeads=agents.flatMap(a=>a.list);
+  const thisMonth=today().slice(0,7);
+  const monthFrom=thisMonth+'-01', monthTo=today();
+  const monthData=computeManagementReportData(monthFrom,monthTo,DB.sitevisits||[]);
+  const net=computeCashBasisNetPosition(monthFrom,monthTo);
+  const comp=computePipelineComposition(allLeads);
+
+  const now=new Date(today()+'T00:00:00'); const trend=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1); const key=d.toISOString().slice(0,7);
+    trend.push({label:d.toLocaleDateString('en-GB',{month:'short'}),
+      total:(DB.payments||[]).filter(p=>(p.date||'').slice(0,7)===key).reduce((s,p)=>s+num(p.amount),0)});
+  }
+
+  const methodSegments=Object.keys(monthData.byMethod).map((m,i)=>({label:m,value:monthData.byMethod[m].total,color:DAYGRID_COLORS[i%DAYGRID_COLORS.length]}));
+  const pipelineSegments=[{label:'Committed (paying)',value:comp.committedVal,color:'#16A34A'},{label:'Prospects (unpaid)',value:comp.prospectVal,color:'#94A3B8'}];
+  const topAgents=monthData.perAgent.slice(0,5);
+
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Analytics</div><h2>Company performance at a glance</h2><p>Live figures for ${monthLabel(thisMonth)} — for period exports and PDFs, see Reports.</p></div></div>
+  <div class="kpis">${kpi('Revenue this month',ghs(monthData.revenue))}${kpi('Outstanding',ghs(monthData.outstandingTotal),'gold')}${kpi('Fully paid',monthData.fullyPaidCount)}${kpi('Net position',ghs(net.net),net.net>=0?'':'gold')}</div>
+
+  <div class="sectitle" style="margin-top:0"><h3>Revenue trend</h3><span class="cnt">last 6 months, all agents</span></div>
+  <div class="rowcard" style="margin-bottom:18px">${svgLineChart(trend.map(t=>t.total),trend.map(t=>t.label))}</div>
+
+  <div class="sectitle"><h3>Pipeline composition</h3><span class="cnt">${comp.active.length} active leads · ${ghs(comp.totalVal)}</span></div>
+  <div class="rowcard" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    ${comp.totalVal?svgDonut(pipelineSegments,{size:110}):`<div style="width:100%">${emptyState(ic.spark,'No active pipeline yet','')}</div>`}
+    ${comp.totalVal?`<div style="flex:1;min-width:160px">${chartLegend(pipelineSegments)}<div class="mini" style="margin-top:8px">${esc(comp.healthLabel)}</div></div>`:''}
+  </div>
+
+  <div class="sectitle"><h3>Payments by method</h3><span class="cnt">${monthLabel(thisMonth)}</span></div>
+  <div class="rowcard" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    ${methodSegments.length?svgDonut(methodSegments,{size:110}):`<div style="width:100%">${emptyState(ic.spark,'No payments recorded yet this month','')}</div>`}
+    ${methodSegments.length?`<div style="flex:1;min-width:160px">${chartLegend(methodSegments)}</div>`:''}
+  </div>
+
+  <div class="sectitle"><h3>Top agents</h3><span class="cnt">by revenue collected, ${monthLabel(thisMonth)}</span></div>
+  <div class="formwrap" style="margin-bottom:18px">${topAgents.length?topAgents.map((a,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;${i<topAgents.length-1?'border-bottom:1px solid var(--line);':''}">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;height:26px;border-radius:8px;background:var(--paper);display:grid;place-items:center;font-weight:800;font-size:12px">${i+1}</span><div><div style="font-weight:700;font-size:13px">${esc(a.name)}</div><div class="mini">${a.newLeads} new lead${a.newLeads===1?'':'s'}</div></div></div>
+    <div style="font-weight:800;font-family:'IBM Plex Mono',monospace">${ghs(a.revenue)}</div>
+  </div>`).join(''):emptyState(ic.grid,'No agent activity this month','')}</div>
+
+  <div class="rowcard" style="margin-bottom:8px">
+    <div class="sectitle" style="margin-top:0"><h3>Net position</h3></div>
+    <div style="font-size:26px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:${net.net>=0?'var(--green)':'var(--danger)'}">${ghs(net.net)}</div>
+    <div class="mini" style="margin-top:6px">Cash-basis this month: ${ghs(net.revenue)} in payments minus ${ghs(net.expensesOut)} in approved expenses. Does not include commission payouts, which aren't logged as a cash outflow yet.</div>
+  </div>
+  <p class="mini" style="margin-top:14px">Need a downloadable PDF or Excel export instead? <button id="analyticsReportsGo" style="background:none;border:none;padding:0;color:var(--leaf);cursor:pointer;font:inherit;text-decoration:underline">Go to Reports →</button></p>`;
+}
+function bindAnalyticsCtrls(){
+  const b=document.getElementById('analyticsReportsGo'); if(b) b.onclick=()=>{ mgrTab='Reports'; managerView(); };
+}
 function mgrReports(){
   return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Reports</div><h2>Download company data</h2><p>Live figures, exported on demand — nothing pre-generated or stale.</p></div></div>
   <div class="searchbar" style="margin-bottom:10px"><input id="reportsSearchInput" placeholder="Search a client by name or contact…" value="${esc(REPORTS_SEARCH)}"/></div>
@@ -15221,8 +15532,12 @@ function bindReportCtrls(){
     ['Types',r=>(r.types||[]).join('; ')],['Plot','plot'],['Source','source'],['Details','details'],['Follow-up','follow'],['Follow-up Date','followDate'],['Logged','createdAt']],'PEP_Landbank_Enquiries.csv');
   document.getElementById('csvCmp').onclick=()=>exportCSV(DB.complaints,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],
     ['Sentiment','sentiment'],['Category','category'],['Details','details'],['Assigned','owner'],['Priority','priority'],['Status','status'],['Resolution','resolution'],['Logged','createdAt']],'PEP_Landbank_ClientFeedback.csv');
-  document.getElementById('csvVis').onclick=()=>exportCSV(DB.sitevisits,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],['Site','site'],
+  document.getElementById('csvVis').onclick=async()=>{
+    // DB.sitevisits is capped for everyday screens -- this export needs the complete history.
+    const fullSiteVisits=await apiLoadFullSiteVisits();
+    exportCSV(fullSiteVisits,[['Agent','agentName'],['Client','name'],['Contact','contact'],['Plot','plot'],['Site','site'],
     ['Date','date'],['Time','time'],['Guests','people'],['Transport','transport'],['Pickup','pickup'],['Status','status'],['Notes','notes'],['Logged','createdAt']],'PEP_Landbank_SiteVisits.csv');
+  };
 }
 function xlStyleHeader(ws){
   const row=ws.getRow(1);
@@ -15589,6 +15904,9 @@ async function downloadCompanyExcel(){
 
     const agents=allAgentLists();
     const allLeads=agents.flatMap(a=>a.list.map(l=>({...l,agentName:a.name})));
+    // DB.sitevisits is capped for everyday screens (see apiLoadAll) -- this export
+    // needs the complete history, so it fetches its own fresh copy.
+    const fullSiteVisits=await apiLoadFullSiteVisits();
     const thisMonth=today().slice(0,7);
     let tot={leads:0,val:0,coll:0,out:0,sv:0};
     agents.forEach(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv; });
@@ -15667,7 +15985,7 @@ async function downloadCompanyExcel(){
       {header:'Plot',key:'plot',width:12},{header:'Site',key:'site',width:12},{header:'Date',key:'date',width:12},{header:'Time',key:'time',width:9},
       {header:'Guests',key:'people',width:9},{header:'Transport',key:'transport',width:12},{header:'Pickup',key:'pickup',width:20},
       {header:'Status',key:'status',width:12},{header:'Notes',key:'notes',width:26},{header:'Logged',key:'createdAt',width:16}
-    ], DB.sitevisits);
+    ], fullSiteVisits);
 
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -15999,6 +16317,9 @@ function bindSystemCtrls(){
     sysBackupBtn.disabled=true; sysBackupBtn.textContent='Building backup…';
     try{
       const agents=allAgentLists();
+      // DB.sitevisits is capped for everyday screens -- a "full data backup" needs
+      // the complete history, so this fetches a fresh, uncapped copy specifically.
+      const fullSiteVisitsForBackup=await apiLoadFullSiteVisits();
       const backup={
         generatedAt:new Date().toISOString(),
         generatedBy:PROFILE.name,
@@ -16006,7 +16327,7 @@ function bindSystemCtrls(){
         payments:DB.payments,
         enquiries:DB.enquiries,
         complaints:DB.complaints,
-        siteVisits:DB.sitevisits,
+        siteVisits:fullSiteVisitsForBackup,
         plots:DB.plots,
         allocations:DB.allocations,
         announcements:DB.announcements,
@@ -17330,16 +17651,23 @@ function paintMgmtRptBody(){
   </div>`;
   body.querySelectorAll('[data-rptperiod]').forEach(b=>b.onclick=()=>{ MGMTRPT_PERIOD=b.dataset.rptperiod; paintMgmtRptBody(); });
   document.getElementById('rpt_compare').onchange=e=>{ MGMTRPT_COMPARE=e.target.checked; };
-  document.getElementById('rptGoBtn').onclick=()=>{
-    if(isCustom){ MGMTRPT_FROM=val('rpt_from')||today(); MGMTRPT_TO=val('rpt_to')||today(); }
-    const range=reportPeriodRange(MGMTRPT_PERIOD);
-    const data=computeManagementReportData(range.from,range.to);
-    let prior=null, priorData=null;
-    if(MGMTRPT_COMPARE){ prior=priorPeriodRange(range); priorData=computeManagementReportData(prior.from,prior.to); }
-    buildManagementReportPDF(range,data,prior,priorData);
+  document.getElementById('rptGoBtn').onclick=async()=>{
+    const btn=document.getElementById('rptGoBtn'); btn.disabled=true; btn.textContent='Building…';
+    try{
+      if(isCustom){ MGMTRPT_FROM=val('rpt_from')||today(); MGMTRPT_TO=val('rpt_to')||today(); }
+      const range=reportPeriodRange(MGMTRPT_PERIOD);
+      // DB.sitevisits is capped for everyday screens -- this report needs the
+      // complete history to be accurate on older periods.
+      const fullSiteVisits=await apiLoadFullSiteVisits();
+      const data=computeManagementReportData(range.from,range.to,fullSiteVisits);
+      let prior=null, priorData=null;
+      if(MGMTRPT_COMPARE){ prior=priorPeriodRange(range); priorData=computeManagementReportData(prior.from,prior.to,fullSiteVisits); }
+      buildManagementReportPDF(range,data,prior,priorData);
+    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='Generate PDF report';
   };
 }
-function computeManagementReportData(from,to){
+function computeManagementReportData(from,to,siteVisitsData){
   const inRange=d=>d && d>=from && d<=to;
   const agents=allAgentLists();
   const allLeads=agents.flatMap(a=>a.list.map(l=>({...l,agentName:a.name,agentKey:a.key})));
@@ -17350,7 +17678,7 @@ function computeManagementReportData(from,to){
   payments.forEach(p=>{ const m=p.method||'Unspecified'; byMethod[m]=byMethod[m]||{count:0,total:0}; byMethod[m].count++; byMethod[m].total+=num(p.amount); });
   const outstandingTotal=allLeads.reduce((s,l)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return s+Math.max(g-num(l.amtPaid),0); },0);
   const fullyPaidCount=allLeads.filter(l=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return Math.max(g-num(l.amtPaid),0)<0.5; }).length;
-  const visitsInRange=(DB.sitevisits||[]).filter(v=>inRange((v.date||v.visitDate||v.createdAt||'').slice(0,10))).length;
+  const visitsInRange=(siteVisitsData||DB.sitevisits||[]).filter(v=>inRange((v.date||v.visitDate||v.createdAt||'').slice(0,10))).length;
   const perAgent=agents.map(a=>{
     const leadsA=a.list.filter(l=>inRange((l.date||'').slice(0,10)));
     const paymentsA=payments.filter(p=>p.agentKey===a.key);
@@ -17453,9 +17781,12 @@ function buildManagementReportPDF(range,d,prior,priorData){
 // are full timestamps already, so hour-level precision falls out of the same
 // data daysBetween uses, just without rounding to a whole day first.
 function hoursBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,(d2-d1)/3600000); }
-function computeOpsReportData(from,to,todos){
+function computeOpsReportData(from,to,todos,tasksData){
   const inRange=d=>{ const s=(d||'').slice(0,10); return !!s && s>=from && s<=to; };
-  const all=DB.tasks||[];
+  // tasksData: a fresh, uncapped fetch (apiLoadFullTasks()) passed in by the
+  // caller -- DB.tasks itself is capped to the most recent tasks for everyday
+  // screens, which would silently under-report older periods here otherwise.
+  const all=tasksData||DB.tasks||[];
   const assignedInRange=all.filter(t=>inRange(t.createdAt));
   const completedInRange=all.filter(t=>t.status==='Done'&&inRange(t.completedAt));
   const escalatedInRange=all.filter(t=>t.escalatedTo&&inRange(t.escalatedAt));
