@@ -2820,6 +2820,25 @@ async function apiUpdateVisitStatus(id,status){
 /* ================= CLIENT PORTAL: DATA ================= */
 const mapClientPay=r=>({id:r.id,leadId:r.lead_id,clientName:r.client_name,amount:r.amount,date:r.payment_date,method:r.payment_method||'',createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
 async function apiClientLoadAll(){
+  if(DEMO_MODE){
+    // No RLS offline, so unlike the real branch below (which relies on the client's
+    // own auth session already scoping every table to just their rows), this has to
+    // filter manually -- same custMatches() identity check Customer 360 uses, against
+    // every agent's demo leads (a client isn't scoped to one agent).
+    const d=await demoLoad();
+    const allLeads=Object.values(d.leads||{}).flat();
+    const mine=allLeads.filter(l=>custMatches(l.name,l.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    const mineIds=new Set(mine.map(l=>l.id));
+    const payments=(d.payments||[]).filter(p=>mineIds.has(p.leadId)&&(p.status||'approved')==='approved');
+    const sitevisits=(d.sitevisits||[]).filter(v=>mineIds.has(v.leadId));
+    const enquiries=(d.enquiries||[]).filter(e=>custMatches(e.name,e.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    const complaints=(d.complaints||[]).filter(c=>custMatches(c.name,c.contact,CLIENT_PROFILE.name,CLIENT_PROFILE.contact));
+    let news=[]; try{ news=(await apiLoadAnnouncements()).filter(a=>a.active&&(a.audience==='clients'||a.audience==='both')); }catch(e){}
+    const contracts=(d.contractRequests||[]).filter(c=>mineIds.has(c.leadId));
+    CLIENT_DB={leads:mine,payments,sitevisits,enquiries,complaints,announcements:news,
+      contracts:contracts.map(c=>({id:c.id,leadId:c.leadId,clientName:c.clientName,createdAt:c.createdAt}))};
+    return CLIENT_DB;
+  }
   const [{data:leads,error:le},{data:payments,error:pe},{data:visits,error:ve},{data:enqs,error:ee},{data:cmps,error:ce}]=await Promise.all([
     sb.from('leads').select('*').order('date_added',{ascending:false}),
     sb.from('payments').select('*').order('payment_date',{ascending:false}),
@@ -6369,7 +6388,6 @@ document.getElementById('staffBackBtn').onclick=()=>{
   document.getElementById('roleChoice').classList.remove('hidden');
 };
 document.getElementById('chooseClientBtn').onclick=()=>{
-  if(DEMO_MODE){ toast('Client portal needs a connected Supabase project — not available in demo mode.'); return; }
   document.getElementById('roleChoice').classList.add('hidden');
   clientStep='search'; clientMatch=null; clientPhone='';
   document.getElementById('clientCard').classList.remove('hidden');
@@ -6405,13 +6423,27 @@ function renderClientStep(){
       if(q.length<2){ results.innerHTML=''; return; }
       clientSearchTimer=setTimeout(async()=>{
         try{
-          const {data,error}=await sb.rpc('client_portal_search_names',{p_query:q});
-          if(error||!data||!data.length){ results.innerHTML=`<div class="mini" style="padding:8px 2px;color:#9DB2CC">No matches yet — keep typing, or check with your agent.</div>`; return; }
-          results.innerHTML=data.map((r,i)=>`<div class="dd-item" data-i="${i}" style="cursor:pointer;border-radius:10px;margin-bottom:4px">
+          let matches;
+          if(DEMO_MODE){
+            // No client_portal_search_names RPC available offline -- search across
+            // every agent's demo leads directly (a client isn't scoped to one agent),
+            // deduping by name since the same client can have more than one purchase.
+            const dd=await demoLoad(); const allLeads=Object.values(dd.leads||{}).flat();
+            const seen=new Set(); const ql=q.toLowerCase();
+            matches=allLeads.filter(l=>l.contact&&(l.name||'').toLowerCase().includes(ql))
+              .filter(l=>{ const k=(l.name||'').toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; })
+              .map(l=>({name:l.name,contact_masked:String(l.contact).slice(-4)})).slice(0,8);
+          } else {
+            const {data,error}=await sb.rpc('client_portal_search_names',{p_query:q});
+            if(error||!data){ results.innerHTML=''; return; }
+            matches=data;
+          }
+          if(!matches.length){ results.innerHTML=`<div class="mini" style="padding:8px 2px;color:#9DB2CC">No matches yet — keep typing, or check with your agent.</div>`; return; }
+          results.innerHTML=matches.map((r,i)=>`<div class="dd-item" data-i="${i}" style="cursor:pointer;border-radius:10px;margin-bottom:4px">
             <span class="dd-text"><span class="dd-name">${esc(r.name)}</span><span class="mini" style="display:block;color:#9DB2CC">Phone ending ${esc(r.contact_masked)}</span></span>
           </div>`).join('');
           results.querySelectorAll('[data-i]').forEach(row=>{
-            row.onclick=()=>{ clientMatch={name:data[+row.dataset.i].name}; clientStep='phone'; renderClientStep(); };
+            row.onclick=()=>{ clientMatch={name:matches[+row.dataset.i].name}; clientStep='phone'; renderClientStep(); };
           });
         }catch(e){ results.innerHTML=''; }
       },320);
@@ -6453,6 +6485,23 @@ async function doClientLogin(){
   const pin=val('cp_pin');
   if(!/^\d{4,6}$/.test(pin)){ err.textContent='Enter your 4–6 digit PIN.'; return; }
   const btn=document.getElementById('clientSignInBtn'); btn.disabled=true; btn.textContent='Signing in…';
+  if(DEMO_MODE){
+    // No real PIN/session/edge-function infrastructure offline -- same "the value
+    // typed isn't actually checked" precedent as the staff demo sign-in (doLogin()).
+    // Only the phone needs to plausibly belong to the matched name, using the same
+    // last-9-digit fuzzy convention as everywhere else in the app.
+    try{
+      const dd=await demoLoad(); const allLeads=Object.values(dd.leads||{}).flat();
+      const digits=normContact(clientPhone).slice(-9);
+      const match=allLeads.find(l=>(l.name||'')===clientMatch.name && normContact(l.contact).slice(-9)===digits);
+      if(!match){ err.textContent="We couldn't find a match — check your name and phone number, or contact your agent."; btn.disabled=false; btn.textContent='Sign in'; return; }
+      CLIENT_PROFILE={id:'demo-'+slugify(match.name),name:match.name,contact:match.contact,avatar:null,isDefaultPin:false};
+      IS_CLIENT=true;
+      document.getElementById('clientCard').classList.add('hidden');
+      await enterClientPortal();
+    }catch(e){ err.textContent='Something went wrong. Please try again.'; btn.disabled=false; btn.textContent='Sign in'; }
+    return;
+  }
   try{
     // Everything -- PIN check, session issuance -- happens server-side in one
     // call now. No more separate signInAnonymously() step: that depended on a
