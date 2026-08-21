@@ -6946,7 +6946,7 @@ function viewMore(){
     const all=MGR_APPS.filter(a=>!a.section);
     const byKey=k=>all.find(a=>a.key===k);
     const groups=[
-      {title:'Insights & data',items:['Data Check','Reports','News','Insights'].map(byKey).filter(Boolean)},
+      {title:'Insights & data',items:['Data Check','Analytics','Reports','News','Insights'].map(byKey).filter(Boolean)},
       {title:'Tools',items:['Settings','Downloads'].map(byKey).filter(Boolean)}
     ];
     const items=groups.flatMap(g=>g.items);
@@ -14651,6 +14651,7 @@ const MGR_APPS=[
   {key:'Data Check',fic:'datacheck',label:'Data Check'},
   {key:'Leaderboard',fic:'leaderboard',label:'Leaderboard',section:'officedesk'},
   {key:'Reports',fic:'analytics',label:'Reports'},
+  {key:'Analytics',fic:'analytics',label:'Analytics'},
   {key:'Plots',fic:'map',label:'Plot Inventory',section:'salesdesk'},
   {key:'Allocations',fic:'allocation',label:'Allocations',section:'salesdesk'},
   {key:'Client Database',fic:'clientdb',label:'Client Database',section:'salesdesk'},
@@ -14713,6 +14714,7 @@ async function managerView(){
     body.innerHTML=mgrLeaderboard(); bindLeagueCtrls();
   }
   else if(mgrTab==='Reports'){ body.innerHTML=mgrReports(); bindReportCtrls(); }
+  else if(mgrTab==='Analytics'){ body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls(); }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
     const pend=(DB.allocations||[]).filter(a=>a.status==='Pending').sort((x,y)=>y.percent-x.percent);
@@ -15340,6 +15342,65 @@ function bindReportsSearchResultRows(){
       ['Balance','bal'],['Priority','priority'],['Next Action','nextAction']
     ],'Client_'+l.name.replace(/\s+/g,'_')+'_'+today()+'.csv');
   });
+}
+/* Unified Analytics — a single live dashboard pulling together numbers that
+   previously only existed spread across Overview, Expenses, Pipeline Health and
+   the PDF-only Management Report. Purely additive: reuses computeManagementReportData/
+   computeCashBasisNetPosition/computePipelineComposition/svgLineChart/svgDonut exactly
+   as they already exist elsewhere, so this adds a view, not new computation logic. */
+function mgrAnalytics(){
+  const agents=allAgentLists();
+  const allLeads=agents.flatMap(a=>a.list);
+  const thisMonth=today().slice(0,7);
+  const monthFrom=thisMonth+'-01', monthTo=today();
+  const monthData=computeManagementReportData(monthFrom,monthTo,DB.sitevisits||[]);
+  const net=computeCashBasisNetPosition(monthFrom,monthTo);
+  const comp=computePipelineComposition(allLeads);
+
+  const now=new Date(today()+'T00:00:00'); const trend=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1); const key=d.toISOString().slice(0,7);
+    trend.push({label:d.toLocaleDateString('en-GB',{month:'short'}),
+      total:(DB.payments||[]).filter(p=>(p.date||'').slice(0,7)===key).reduce((s,p)=>s+num(p.amount),0)});
+  }
+
+  const methodSegments=Object.keys(monthData.byMethod).map((m,i)=>({label:m,value:monthData.byMethod[m].total,color:DAYGRID_COLORS[i%DAYGRID_COLORS.length]}));
+  const pipelineSegments=[{label:'Committed (paying)',value:comp.committedVal,color:'#16A34A'},{label:'Prospects (unpaid)',value:comp.prospectVal,color:'#94A3B8'}];
+  const topAgents=monthData.perAgent.slice(0,5);
+
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Analytics</div><h2>Company performance at a glance</h2><p>Live figures for ${monthLabel(thisMonth)} — for period exports and PDFs, see Reports.</p></div></div>
+  <div class="kpis">${kpi('Revenue this month',ghs(monthData.revenue))}${kpi('Outstanding',ghs(monthData.outstandingTotal),'gold')}${kpi('Fully paid',monthData.fullyPaidCount)}${kpi('Net position',ghs(net.net),net.net>=0?'':'gold')}</div>
+
+  <div class="sectitle" style="margin-top:0"><h3>Revenue trend</h3><span class="cnt">last 6 months, all agents</span></div>
+  <div class="rowcard" style="margin-bottom:18px">${svgLineChart(trend.map(t=>t.total),trend.map(t=>t.label))}</div>
+
+  <div class="sectitle"><h3>Pipeline composition</h3><span class="cnt">${comp.active.length} active leads · ${ghs(comp.totalVal)}</span></div>
+  <div class="rowcard" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    ${comp.totalVal?svgDonut(pipelineSegments,{size:110}):`<div style="width:100%">${emptyState(ic.spark,'No active pipeline yet','')}</div>`}
+    ${comp.totalVal?`<div style="flex:1;min-width:160px">${chartLegend(pipelineSegments)}<div class="mini" style="margin-top:8px">${esc(comp.healthLabel)}</div></div>`:''}
+  </div>
+
+  <div class="sectitle"><h3>Payments by method</h3><span class="cnt">${monthLabel(thisMonth)}</span></div>
+  <div class="rowcard" style="margin-bottom:18px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    ${methodSegments.length?svgDonut(methodSegments,{size:110}):`<div style="width:100%">${emptyState(ic.spark,'No payments recorded yet this month','')}</div>`}
+    ${methodSegments.length?`<div style="flex:1;min-width:160px">${chartLegend(methodSegments)}</div>`:''}
+  </div>
+
+  <div class="sectitle"><h3>Top agents</h3><span class="cnt">by revenue collected, ${monthLabel(thisMonth)}</span></div>
+  <div class="formwrap" style="margin-bottom:18px">${topAgents.length?topAgents.map((a,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;${i<topAgents.length-1?'border-bottom:1px solid var(--line);':''}">
+    <div style="display:flex;align-items:center;gap:10px"><span style="width:26px;height:26px;border-radius:8px;background:var(--paper);display:grid;place-items:center;font-weight:800;font-size:12px">${i+1}</span><div><div style="font-weight:700;font-size:13px">${esc(a.name)}</div><div class="mini">${a.newLeads} new lead${a.newLeads===1?'':'s'}</div></div></div>
+    <div style="font-weight:800;font-family:'IBM Plex Mono',monospace">${ghs(a.revenue)}</div>
+  </div>`).join(''):emptyState(ic.grid,'No agent activity this month','')}</div>
+
+  <div class="rowcard" style="margin-bottom:8px">
+    <div class="sectitle" style="margin-top:0"><h3>Net position</h3></div>
+    <div style="font-size:26px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:${net.net>=0?'var(--green)':'var(--danger)'}">${ghs(net.net)}</div>
+    <div class="mini" style="margin-top:6px">Cash-basis this month: ${ghs(net.revenue)} in payments minus ${ghs(net.expensesOut)} in approved expenses. Does not include commission payouts, which aren't logged as a cash outflow yet.</div>
+  </div>
+  <p class="mini" style="margin-top:14px">Need a downloadable PDF or Excel export instead? <button id="analyticsReportsGo" style="background:none;border:none;padding:0;color:var(--leaf);cursor:pointer;font:inherit;text-decoration:underline">Go to Reports →</button></p>`;
+}
+function bindAnalyticsCtrls(){
+  const b=document.getElementById('analyticsReportsGo'); if(b) b.onclick=()=>{ mgrTab='Reports'; managerView(); };
 }
 function mgrReports(){
   return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Reports</div><h2>Download company data</h2><p>Live figures, exported on demand — nothing pre-generated or stale.</p></div></div>
