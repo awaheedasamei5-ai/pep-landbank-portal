@@ -4292,6 +4292,29 @@ async function apiLoadCompanyLeads(){
   COMPANY_LEADS_LIST=(data||[]).map(mapLead); COMPANY_LEADS_LOADED=true;
   return COMPANY_LEADS_LIST;
 }
+// ---- unified realtime subscription contract (Sec 15/16) ----
+// Every ensure*LiveSubscribed function below funnels its .channel()/.on()/
+// .subscribe() boilerplate through subscribeRealtimeTable() instead of
+// hand-rolling it 12 times over, and registers here for teardown -- so
+// logout can never again silently miss one, which is exactly how
+// STAFF_ROSTER_LIVE_CHANNEL ended up never being torn down before this
+// (a hand-maintained list of teardown lines had drifted out of sync with
+// the channels actually being created). presence-live is the one
+// exception: it uses the presence/broadcast API, not postgres_changes, and
+// is referenced directly elsewhere (typing broadcast, presence state), so
+// it keeps its own bespoke setup/teardown rather than being forced into
+// this shape.
+const REALTIME_CHANNELS=[];
+function subscribeRealtimeTable(channelName,subscriptions,onReset){
+  const chan=subscriptions.reduce((c,{event,table,handler})=>c.on('postgres_changes',{event,schema:'public',table},handler),sb.channel(channelName));
+  chan.subscribe();
+  REALTIME_CHANNELS.push({chan,onReset});
+  return chan;
+}
+function teardownAllRealtimeChannels(){
+  REALTIME_CHANNELS.forEach(({chan,onReset})=>{ try{ sb.removeChannel(chan); }catch(e){} try{ onReset&&onReset(); }catch(e){} });
+  REALTIME_CHANNELS.length=0;
+}
 /* Live, not "reload to see it" -- when any agent adds or updates a lead
    anywhere in the company, Elias/Management see it here immediately without
    reopening the screen, and it's already in DB.leads for anything else that
@@ -4328,21 +4351,21 @@ function ensureClientDbSubscribed(){
       const clList=document.getElementById('companyLeadsList');
       if(clList){ clList.innerHTML=companyLeadsListHtml(); bindCompanyLeadsRows(document.getElementById('companyLeadsBody')||document); }
     };
-    CLIENTDB_CHANNEL=sb.channel('clientdb-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'leads'},payload=>upsertLocal(mapLead(payload.new)))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},payload=>{
+    CLIENTDB_CHANNEL=subscribeRealtimeTable('clientdb-live',[
+      {event:'INSERT',table:'leads',handler:payload=>upsertLocal(mapLead(payload.new))},
+      {event:'UPDATE',table:'leads',handler:payload=>{
         const l=mapLead(payload.new);
         if(l.deletedAt) removeLeadLocal({id:l.id}); else upsertLocal(l);
-      })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'leads'},payload=>removeLeadLocal(payload.old))
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'payments'},payload=>{
+      }},
+      {event:'DELETE',table:'leads',handler:payload=>removeLeadLocal(payload.old)},
+      {event:'INSERT',table:'payments',handler:payload=>{
         const p={id:payload.new.id,leadId:payload.new.lead_id,agentKey:payload.new.agent_key,clientName:payload.new.client_name,amount:payload.new.amount,date:payload.new.payment_date};
         if(!DB.payments.some(x=>x.id===p.id)) DB.payments.push(p);
-      })
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'payments'},payload=>{
+      }},
+      {event:'DELETE',table:'payments',handler:payload=>{
         const id=payload.old&&payload.old.id; if(id) DB.payments=DB.payments.filter(x=>x.id!==id);
-      })
-      .subscribe();
+      }},
+    ],()=>{ CLIENTDB_CHANNEL=null; });
   }catch(e){}
 }
 function clientDatabaseListHtml(){
@@ -4887,20 +4910,20 @@ function unreadByKind(kind){ return DB.messages.filter(m=>m.recipientKey===PROFI
 function subscribeToChat(onMessage,onMessageUpdate){
   if(DEMO_MODE || !sb || CHAT_CHANNEL) return;
   try{
-    CHAT_CHANNEL=sb.channel('messages-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},payload=>{
+    CHAT_CHANNEL=subscribeRealtimeTable('messages-live',[
+      {event:'INSERT',table:'messages',handler:payload=>{
         const m=mapMsg(payload.new);
         if(m.senderKey===PROFILE.key || m.recipientKey===PROFILE.key) onMessage(m);
-      })
+      }},
       // UPDATE is specifically for the read-receipt flag flipping (marking a
       // thread read writes `read:true` on the recipient's side) -- this is what
       // lets the sender's checkmark go from single to double live, instead of
       // only updating next time they reopen the thread.
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'},payload=>{
+      {event:'UPDATE',table:'messages',handler:payload=>{
         const m=mapMsg(payload.new);
         if((m.senderKey===PROFILE.key || m.recipientKey===PROFILE.key) && onMessageUpdate) onMessageUpdate(m);
-      })
-      .subscribe();
+      }},
+    ],()=>{ CHAT_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- monthly target selections (expected revenue tracking) ---- */
@@ -5391,23 +5414,23 @@ function ensureClientLiveSubscribed(){
   if(DEMO_MODE || !sb || CLIENT_LIVE_CHANNEL || !IS_CLIENT) return;
   try{
     const refreshHomeIfOpen=()=>{ if(CURRENT_ROUTE_NAME==='clienthome') clientHome(); };
-    CLIENT_LIVE_CHANNEL=sb.channel('client-live')
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leads'},payload=>{
+    CLIENT_LIVE_CHANNEL=subscribeRealtimeTable('client-live',[
+      {event:'UPDATE',table:'leads',handler:payload=>{
         const l=mapLead(payload.new); if(!CLIENT_DB||!CLIENT_DB.leads) return;
         if(l.deletedAt){ CLIENT_DB.leads=CLIENT_DB.leads.filter(x=>x.id!==l.id); refreshHomeIfOpen(); return; }
         const i=CLIENT_DB.leads.findIndex(x=>x.id===l.id);
         if(i>=0) CLIENT_DB.leads[i]=l; else CLIENT_DB.leads.push(l);
         refreshHomeIfOpen();
-      })
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'payments'},payload=>{
+      }},
+      {event:'INSERT',table:'payments',handler:payload=>{
         const p=mapClientPay(payload.new); if(!CLIENT_DB||!CLIENT_DB.payments) return;
         if(!CLIENT_DB.payments.some(x=>x.id===p.id)) CLIENT_DB.payments.unshift(p);
         refreshHomeIfOpen();
-      })
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'client_notifications'},()=>{
+      }},
+      {event:'INSERT',table:'client_notifications',handler:()=>{
         apiClientLoadNotifications().then(refreshClientBellBadge).catch(()=>{});
-      })
-      .subscribe();
+      }},
+    ],()=>{ CLIENT_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- cross-app realtime: Operations Tracker + Leave + Attendance -- same shape
@@ -5429,10 +5452,10 @@ function ensureScheduleLiveSubscribed(){
       else if(DUTIES_TAB==='team') paintTeamTab();
       else if(DUTIES_TAB==='todo') todoEnsureRangeLoaded().then(paintTodoTab);
     };
-    SCHEDULE_LIVE_CHANNEL=sb.channel('schedule-live')
-      .on('postgres_changes',{event:'*',schema:'public',table:'schedule_items'},repaintDuties)
-      .on('postgres_changes',{event:'*',schema:'public',table:'schedule_item_invitees'},repaintDuties)
-      .subscribe();
+    SCHEDULE_LIVE_CHANNEL=subscribeRealtimeTable('schedule-live',[
+      {event:'*',table:'schedule_items',handler:repaintDuties},
+      {event:'*',table:'schedule_item_invitees',handler:repaintDuties},
+    ],()=>{ SCHEDULE_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 let LEAVE_LIVE_CHANNEL=null;
@@ -5453,11 +5476,11 @@ function ensureLeaveLiveSubscribed(){
       if(document.getElementById('leaveBody')) paintLeaveApp();
       if(document.getElementById('attBody')) paintAttendanceBody();
     };
-    LEAVE_LIVE_CHANNEL=sb.channel('leave-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'leave_requests'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'leave_requests'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'leave_requests'},payload=>removeLocal(payload.old))
-      .subscribe();
+    LEAVE_LIVE_CHANNEL=subscribeRealtimeTable('leave-live',[
+      {event:'INSERT',table:'leave_requests',handler:payload=>upsertLocal(payload.new)},
+      {event:'UPDATE',table:'leave_requests',handler:payload=>upsertLocal(payload.new)},
+      {event:'DELETE',table:'leave_requests',handler:payload=>removeLocal(payload.old)},
+    ],()=>{ LEAVE_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 let ATTENDANCE_LIVE_CHANNEL=null;
@@ -5485,11 +5508,11 @@ function ensureAttendanceLiveSubscribed(){
       if(ATTENDANCE_TODAY&&ATTENDANCE_TODAY.id===id) ATTENDANCE_TODAY=null;
       if(document.getElementById('attBody')) paintAttendanceBody();
     };
-    ATTENDANCE_LIVE_CHANNEL=sb.channel('attendance-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'attendance_log'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'attendance_log'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'attendance_log'},payload=>removeLocal(payload.old))
-      .subscribe();
+    ATTENDANCE_LIVE_CHANNEL=subscribeRealtimeTable('attendance-live',[
+      {event:'INSERT',table:'attendance_log',handler:payload=>upsertLocal(payload.new)},
+      {event:'UPDATE',table:'attendance_log',handler:payload=>upsertLocal(payload.new)},
+      {event:'DELETE',table:'attendance_log',handler:payload=>removeLocal(payload.old)},
+    ],()=>{ ATTENDANCE_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- cross-app realtime, round 2: referrals + contract_requests + site_visit_feedback --
@@ -5526,11 +5549,11 @@ function ensureReferralsLiveSubscribed(){
         if(CURRENT_ROUTE_NAME==='clientreferrals') viewClientReferrals();
       }
     };
-    REFERRALS_LIVE_CHANNEL=sb.channel('referrals-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'referrals'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'referrals'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'referrals'},payload=>removeLocal(payload.old))
-      .subscribe();
+    REFERRALS_LIVE_CHANNEL=subscribeRealtimeTable('referrals-live',[
+      {event:'INSERT',table:'referrals',handler:payload=>upsertLocal(payload.new)},
+      {event:'UPDATE',table:'referrals',handler:payload=>upsertLocal(payload.new)},
+      {event:'DELETE',table:'referrals',handler:payload=>removeLocal(payload.old)},
+    ],()=>{ REFERRALS_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 let CONTRACT_REQUESTS_LIVE_CHANNEL=null;
@@ -5559,11 +5582,11 @@ function ensureContractRequestsLiveSubscribed(){
         else if(CURRENT_ROUTE_NAME==='clienthome') clientHome();
       }
     };
-    CONTRACT_REQUESTS_LIVE_CHANNEL=sb.channel('contract-requests-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'contract_requests'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'contract_requests'},payload=>upsertLocal(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'contract_requests'},payload=>removeLocal(payload.old))
-      .subscribe();
+    CONTRACT_REQUESTS_LIVE_CHANNEL=subscribeRealtimeTable('contract-requests-live',[
+      {event:'INSERT',table:'contract_requests',handler:payload=>upsertLocal(payload.new)},
+      {event:'UPDATE',table:'contract_requests',handler:payload=>upsertLocal(payload.new)},
+      {event:'DELETE',table:'contract_requests',handler:payload=>removeLocal(payload.old)},
+    ],()=>{ CONTRACT_REQUESTS_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 // No staff-facing screen reads site_visit_feedback yet (only the client's own
@@ -5573,11 +5596,11 @@ let SITE_VISIT_FEEDBACK_LIVE_CHANNEL=null;
 function ensureSiteVisitFeedbackLiveSubscribed(){
   if(DEMO_MODE || !sb || SITE_VISIT_FEEDBACK_LIVE_CHANNEL) return;
   try{
-    SITE_VISIT_FEEDBACK_LIVE_CHANNEL=sb.channel('site-visit-feedback-live')
-      .on('postgres_changes',{event:'*',schema:'public',table:'site_visit_feedback'},()=>{
+    SITE_VISIT_FEEDBACK_LIVE_CHANNEL=subscribeRealtimeTable('site-visit-feedback-live',[
+      {event:'*',table:'site_visit_feedback',handler:()=>{
         if(IS_CLIENT&&CURRENT_ROUTE_NAME==='clientvisitexperience') viewClientSiteVisitExperience();
-      })
-      .subscribe();
+      }},
+    ],()=>{ SITE_VISIT_FEEDBACK_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- cross-app realtime, round 3: memos + banners -- staff-only (no client leg
@@ -5609,13 +5632,13 @@ function ensureMemosLiveSubscribed(){
       if(i>=0) m.cc[i]=r; else m.cc.push(r);
       repaintMemos();
     };
-    MEMOS_LIVE_CHANNEL=sb.channel('memos-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'memos'},payload=>upsertMemo(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'memos'},payload=>upsertMemo(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'memos'},payload=>removeMemo(payload.old))
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'memo_recipients'},payload=>upsertRecipient(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'memo_recipients'},payload=>upsertRecipient(payload.new))
-      .subscribe();
+    MEMOS_LIVE_CHANNEL=subscribeRealtimeTable('memos-live',[
+      {event:'INSERT',table:'memos',handler:payload=>upsertMemo(payload.new)},
+      {event:'UPDATE',table:'memos',handler:payload=>upsertMemo(payload.new)},
+      {event:'DELETE',table:'memos',handler:payload=>removeMemo(payload.old)},
+      {event:'INSERT',table:'memo_recipients',handler:payload=>upsertRecipient(payload.new)},
+      {event:'UPDATE',table:'memo_recipients',handler:payload=>upsertRecipient(payload.new)},
+    ],()=>{ MEMOS_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 let BANNERS_LIVE_CHANNEL=null;
@@ -5634,11 +5657,11 @@ function ensureBannersLiveSubscribed(){
       DB.banners=(DB.banners||[]).filter(x=>x.id!==id);
       repaintBanners();
     };
-    BANNERS_LIVE_CHANNEL=sb.channel('banners-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'banners'},payload=>upsertBanner(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'banners'},payload=>upsertBanner(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'banners'},payload=>removeBanner(payload.old))
-      .subscribe();
+    BANNERS_LIVE_CHANNEL=subscribeRealtimeTable('banners-live',[
+      {event:'INSERT',table:'banners',handler:payload=>upsertBanner(payload.new)},
+      {event:'UPDATE',table:'banners',handler:payload=>upsertBanner(payload.new)},
+      {event:'DELETE',table:'banners',handler:payload=>removeBanner(payload.old)},
+    ],()=>{ BANNERS_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 let STAFF_ROSTER_LIVE_CHANNEL=null;
@@ -5663,11 +5686,11 @@ function ensureStaffRosterLiveSubscribed(){
       buildDropdown();
       if(document.getElementById('mgrBody') && mgrTab==='Staff Settings') managerView();
     };
-    STAFF_ROSTER_LIVE_CHANNEL=sb.channel('staff-roster-live')
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'profiles'},payload=>upsertStaff(payload.new))
-      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},payload=>upsertStaff(payload.new))
-      .on('postgres_changes',{event:'DELETE',schema:'public',table:'profiles'},payload=>removeStaff(payload.old))
-      .subscribe();
+    STAFF_ROSTER_LIVE_CHANNEL=subscribeRealtimeTable('staff-roster-live',[
+      {event:'INSERT',table:'profiles',handler:payload=>upsertStaff(payload.new)},
+      {event:'UPDATE',table:'profiles',handler:payload=>upsertStaff(payload.new)},
+      {event:'DELETE',table:'profiles',handler:payload=>removeStaff(payload.old)},
+    ],()=>{ STAFF_ROSTER_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- chat presence: who's actually online right now, not the old hardcoded
@@ -5800,17 +5823,16 @@ function paintTopbarAvatar(){
 }
 document.getElementById('logoutBtn').onclick=async()=>{
   if(!DEMO_MODE){ try{await sb.auth.signOut();}catch(e){} }
-  if(CHAT_CHANNEL){ try{ sb.removeChannel(CHAT_CHANNEL); }catch(e){} CHAT_CHANNEL=null; }
-  if(CLIENTDB_CHANNEL){ try{ sb.removeChannel(CLIENTDB_CHANNEL); }catch(e){} CLIENTDB_CHANNEL=null; }
-  if(CLIENT_LIVE_CHANNEL){ try{ sb.removeChannel(CLIENT_LIVE_CHANNEL); }catch(e){} CLIENT_LIVE_CHANNEL=null; }
-  if(SCHEDULE_LIVE_CHANNEL){ try{ sb.removeChannel(SCHEDULE_LIVE_CHANNEL); }catch(e){} SCHEDULE_LIVE_CHANNEL=null; }
-  if(LEAVE_LIVE_CHANNEL){ try{ sb.removeChannel(LEAVE_LIVE_CHANNEL); }catch(e){} LEAVE_LIVE_CHANNEL=null; }
-  if(ATTENDANCE_LIVE_CHANNEL){ try{ sb.removeChannel(ATTENDANCE_LIVE_CHANNEL); }catch(e){} ATTENDANCE_LIVE_CHANNEL=null; }
-  if(REFERRALS_LIVE_CHANNEL){ try{ sb.removeChannel(REFERRALS_LIVE_CHANNEL); }catch(e){} REFERRALS_LIVE_CHANNEL=null; }
-  if(CONTRACT_REQUESTS_LIVE_CHANNEL){ try{ sb.removeChannel(CONTRACT_REQUESTS_LIVE_CHANNEL); }catch(e){} CONTRACT_REQUESTS_LIVE_CHANNEL=null; }
-  if(SITE_VISIT_FEEDBACK_LIVE_CHANNEL){ try{ sb.removeChannel(SITE_VISIT_FEEDBACK_LIVE_CHANNEL); }catch(e){} SITE_VISIT_FEEDBACK_LIVE_CHANNEL=null; }
-  if(MEMOS_LIVE_CHANNEL){ try{ sb.removeChannel(MEMOS_LIVE_CHANNEL); }catch(e){} MEMOS_LIVE_CHANNEL=null; }
-  if(BANNERS_LIVE_CHANNEL){ try{ sb.removeChannel(BANNERS_LIVE_CHANNEL); }catch(e){} BANNERS_LIVE_CHANNEL=null; }
+  // Every ensure*LiveSubscribed channel above (chat, clientdb, client-live,
+  // schedule, leave, attendance, referrals, contract-requests,
+  // site-visit-feedback, memos, banners, staff-roster) registered itself with
+  // subscribeRealtimeTable(), so one call here tears all of them down and
+  // resets their guard variables -- this is what closes the staff-roster gap
+  // (its teardown line had been missing from this hand-maintained list since
+  // Phase 1; that class of bug is now structurally impossible). presence-live
+  // isn't part of that registry (bespoke presence/broadcast API), so it keeps
+  // its own explicit teardown here.
+  teardownAllRealtimeChannels();
   if(PRESENCE_LIVE_CHANNEL){ try{ await apiTouchLastSeen(); sb.removeChannel(PRESENCE_LIVE_CHANNEL); }catch(e){} PRESENCE_LIVE_CHANNEL=null; PRESENCE_ONLINE_KEYS=new Set(); clearInterval(PRESENCE_HEARTBEAT_TIMER); }
   CLIENTDB_LOADED=false; CLIENTDB_LIST=[];
   CLIENT_NOTIFICATIONS=[];
