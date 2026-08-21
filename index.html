@@ -3154,7 +3154,15 @@ async function apiDeletePayment(id){
 // Anything that resolves a lead by a bare id needs to check here, or a lead opened
 // from Client Database silently fails to load, save, or sync correctly.
 function findLeadById(id){
-  return DB.leads.find(x=>x.id===id) || CLIENTDB_LIST.find(x=>x.id===id) || COMPANY_LEADS_LIST.find(x=>x.id===id);
+  return DB.leads.find(x=>x.id===id) || CLIENTDB_LIST.find(x=>x.id===id) || COMPANY_LEADS_LIST.find(x=>x.id===id)
+    // Management has no personal leads of their own (DB.leads is scoped to the
+    // signed-in profile, empty for a manager), and CLIENTDB_LIST/COMPANY_LEADS_LIST
+    // are lazy caches only populated once Client Database/Company Leads has actually
+    // been opened this session. allAgentLists() is the one source that's always
+    // synchronously ready with every agent's leads the instant a manager signs in
+    // (mgrOverview already depends on this) -- so it's the correct last resort for
+    // a manager reaching a specific lead by id from anywhere else (e.g. global search).
+    || (typeof PROFILE!=='undefined' && PROFILE && PROFILE.role==='manager' ? allAgentLists().flatMap(a=>a.list).find(x=>x.id===id) : null);
 }
 async function syncLeadAfterPaymentDelta(leadId,delta){
   const lead=findLeadById(leadId); if(!lead) return;
