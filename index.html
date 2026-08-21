@@ -8582,15 +8582,23 @@ async function submitBulkPlots(){
 async function savePlotDetail(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   const btn=document.getElementById('savePlot'); btn.disabled=true; btn.textContent='Saving…';
+  const before={status:p.status,price:p.price};
   const patch={status:val('pd_status'),plotType:val('pd_type'),price:val('pd_price')?num(val('pd_price')):null,
     clientName:val('pd_cname').trim(),clientContact:val('pd_ccontact').trim(),agentKey:val('pd_agent'),notes:val('pd_notes').trim()};
-  try{ await apiUpdatePlot(p.id,patch); Object.assign(p,patch); toast('Plot '+p.plotNumber+' updated'); selectedPlotId=null; refreshPlotsView(); }
+  try{
+    await apiUpdatePlot(p.id,patch); Object.assign(p,patch); toast('Plot '+p.plotNumber+' updated'); selectedPlotId=null; refreshPlotsView();
+    const changes=[]; if(patch.status!==before.status) changes.push('status: '+before.status+' → '+patch.status);
+    if(num(patch.price)!==num(before.price)) changes.push('price: '+ghs(num(before.price))+' → '+ghs(num(patch.price)));
+    addActivity('Plot '+p.plotNumber,'Plot edited',changes.length?changes.join(' · '):'Details updated','by '+PROFILE.name,'',null);
+  }
   catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
 }
 async function deleteSelectedPlot(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   if(!confirm('Remove plot '+p.plotNumber+' from inventory?')) return;
-  try{ await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView(); }
+  try{ await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView();
+    addActivity('Plot '+p.plotNumber,'Plot deleted','Removed from inventory by '+PROFILE.name,'','',null);
+  }
   catch(e){ toast('Delete failed'); }
 }
 function bindPlotsGrid(){
@@ -11397,6 +11405,8 @@ function deleteLeadConfirm(id,name){
       }
       await apiDeleteLead(id,PROFILE.key);
       DB.leads=DB.leads.filter(x=>x.id!==id); CLIENTDB_LIST=CLIENTDB_LIST.filter(x=>x.id!==id); COMPANY_LEADS_LIST=COMPANY_LEADS_LIST.filter(x=>x.id!==id);
+      const reasonLabel=reason==='wrong'?'data entered wrong':reason==='refund'?'client refund/opt-out':'other reason';
+      addActivity(name,'Lead deleted','Reason: '+reasonLabel+' — deleted by '+PROFILE.name,'','',null);
       ov.remove(); toast(name+' deleted'); route('pipeline');
     }catch(e){ toast('Delete failed: '+(e.message||e)); b.disabled=false; b.textContent='Retry'; }
   });
@@ -11434,6 +11444,7 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
   const depositTarget=resolvedDepositTarget!=null?resolvedDepositTarget:(deptargetEl?num(deptargetEl.value):undefined);
   const btn=document.getElementById('saveUpd'); btn.disabled=true; btn.textContent='Saving…';
   const oldName=l.name, oldContact=l.contact;
+  const oldPlotType=l.plotType, oldUnitPrice=num(l.unitPrice), oldNoPlots=num(l.noPlots);
   try{
     const patch={name,contact,plotType,noPlots,unitPrice,amtPaid:paidTotalInput,stage,nextAction:next,notes,tags,siteVisit:sv,balance:bal,discount,paymentPlan:plan,netTotal:cc.net,grandTotal:cc.grand};
     if(depositTarget!=null) patch.depositTarget=depositTarget;
@@ -11447,6 +11458,9 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
     let paymentResult=null;
     if(pay>0){ const methodEl=document.getElementById('u_paymethod'); paymentResult=await logNewPayment(l,pay,undefined,methodEl?methodEl.value:undefined,'Pipeline update · '+ghs(pay)); }
     const parts=[]; if(pay>0)parts.push(paymentResult&&paymentResult.status==='pending'?('Payment '+ghs(pay)+' (pending approval)'):('Payment '+ghs(pay))); parts.push('Stage: '+stage); if(discount!==oldDiscount)parts.push('Discount now '+ghs(discount));
+    if(plotType!==oldPlotType)parts.push('Plot type: '+oldPlotType+' → '+plotType);
+    if(unitPrice!==oldUnitPrice)parts.push('Unit price: '+ghs(oldUnitPrice)+' → '+ghs(unitPrice));
+    if(noPlots!==oldNoPlots)parts.push('No. plots: '+oldNoPlots+' → '+noPlots);
     await addActivity(name,'Pipeline update',parts.join(' · '),val('u_disc').trim(),val('u_method'),val('u_follow'));
     toast(pay>0?(paymentResult&&paymentResult.status==='pending'?'Pipeline updated · payment awaiting approval':('Payment recorded · '+ghs(pay))):'Pipeline updated'); route('updateOne',id,true);
     if(paymentResult&&paymentResult.offerReceipt){
@@ -19822,19 +19836,27 @@ function buildCommissionReportPDF(data){
 // CURRENT month arrives (that's when it's actually payable), and posts a personalized
 // announcement so it isn't just a silent download. Tracked in app_config so it only
 // fires once regardless of how many times or which device Management logs in from.
+// Posting the "Commission ready" announcement and owning CONFIG.lastCommissionMonth
+// used to be a race: run_monthly_commission_check() (pg_cron, daily 6am) and this
+// client-side check both gated on the exact same flag and both posted a near-
+// identical announcement -- whichever fired first silently won, sometimes
+// producing two announcements in the same month. The server cron is now the SOLE
+// writer of the announcement/flag; this is purely a client-local "grab this
+// month's PDF once" convenience (the Commission screen's own Download PDF button
+// always works on demand regardless), gated on its own localStorage flag and on
+// having actually observed the server's confirmation (CONFIG.lastCommissionMonth,
+// refreshed by apiLoadConfig() at sign-in) rather than racing to set it.
 async function checkMonthlyCommissionReport(){
   if(PROFILE.role!=='manager') return;
   try{
     if(+today().slice(8,10)<15) return;
     const reportMonth=shiftMonth(today().slice(0,7),-1);
-    if(CONFIG.lastCommissionMonth===reportMonth) return;
+    let already=null; try{ already=localStorage.getItem('pep_commission_pdf_month'); }catch(e){}
+    if(already===reportMonth) return;
+    if(CONFIG.lastCommissionMonth!==reportMonth) return;
     const data=computeCommissionForMonth(reportMonth);
     buildCommissionReportPDF(data);
-    const grandTotal=data.rows.reduce((s,r)=>s+r.total,0);
-    const body=`${monthLabel(reportMonth)} commission is ready to pay today — ${ghs(grandTotal)} total across ${data.rows.length} agents (${data.eligibleCount} sharing a ${ghs(data.poolTotal)} pool). Full breakdown downloaded as a PDF.`;
-    const rec=await apiInsertAnnouncement('Commission ready: '+monthLabel(reportMonth),body,null);
-    if(rec){ DB.announcements.unshift(rec); refreshAnnounceBubble(); }
-    await apiSaveConfig({lastCommissionMonth:reportMonth});
+    try{ localStorage.setItem('pep_commission_pdf_month',reportMonth); }catch(e){}
   }catch(e){}
 }
 
