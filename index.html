@@ -30,6 +30,13 @@
   --glass:rgba(255,255,255,.68);
   --wave:linear-gradient(180deg,#050B14 0%,#0A2A3A 32%,#0C7A93 58%,#67E8F9 78%,#F2F6F7 100%);
   --r:20px;
+  /* Premium UI rebuild, Phase 1 -- spacing/radius/type scale, additive only.
+     Nothing above this line is renamed or re-valued; every existing inline
+     style referencing --ink/--r/etc keeps working untouched. */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px;
+  --r-sm:12px; --r-md:20px; --r-lg:28px; --r-pill:100px;
+  --fs-xs:12px; --fs-sm:13.5px; --fs-md:15px; --fs-lg:18px; --fs-xl:22px; --fs-2xl:28px;
+  --fw-reg:500; --fw-semi:700; --fw-bold:800;
 }
 body.dark{
   --paper:#0B1424; --card:#121E33; --line:#233150; --text:#E7ECF5; --muted:#8FA0BC;
@@ -237,6 +244,30 @@ a{color:var(--green2)}
 
 /* ---------- APP SHELL ---------- */
 #app{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+/* Premium UI rebuild, Phase 1 -- persistent desktop sidebar shell. Below
+   1024px this is a no-op (.appContent is a plain flex column identical to the
+   old #app, .sidebar stays display:none): existing mobile layout is pixel-
+   identical. At/above 1024px, #app becomes a row of [sidebar][.appContent],
+   and the existing .bottomnav is hidden since the sidebar replaces it. */
+.appContent{display:flex;flex-direction:column;flex:1;min-width:0}
+.sidebar{display:none;flex-direction:column;flex:0 0 240px;background:var(--ink);color:#fff;
+  padding:20px 14px;gap:4px;overflow-y:auto}
+@media(min-width:1024px){
+  #app{flex-direction:row}
+  .sidebar{display:flex}
+  #app:not(.chat-fullscreen) .bottomnav{display:none}
+  #app.chat-fullscreen .sidebar{display:none}
+}
+.sidebar .sbSection{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);
+  font-weight:700;margin:14px 8px 6px}
+.sidebar .sbSection:first-child{margin-top:0}
+.sidebar .sbItem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;color:rgba(255,255,255,.78);
+  font-size:13.5px;font-weight:600;transition:background .15s,color .15s;text-align:left;border:none;background:none;cursor:pointer;width:100%}
+.sidebar .sbItem:hover{background:rgba(255,255,255,.08);color:#fff}
+.sidebar .sbItem.on{background:rgba(103,232,249,.16);color:#fff}
+.sidebar .sbItem svg{width:17px;height:17px;flex:0 0 auto}
+.sidebar .bnBadge{position:static;min-width:18px;height:18px;padding:0 5px;border-radius:100px;background:var(--danger);
+  color:#fff;font-size:10.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .topbar{position:sticky;top:0;z-index:40;background:var(--hero-bg,linear-gradient(115deg,var(--ink) 0%,#123262 45%,#0F2A52 100%));color:#fff;
   padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 24px rgba(0,0,0,.28);
   overflow:hidden}
@@ -456,9 +487,9 @@ a{color:var(--green2)}
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);z-index:2}
 @keyframes pulseRing{0%{transform:scale(.9);opacity:.9}80%{transform:scale(1.35);opacity:0}100%{opacity:0}}
 @keyframes bubbleIn{0%{transform:scale(0) rotate(-30deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
-#announceOverlay{position:fixed;inset:0;background:rgba(5,14,31,.55);backdrop-filter:blur(3px);z-index:300;
+#announceOverlay,.overlay{position:fixed;inset:0;background:rgba(5,14,31,.55);backdrop-filter:blur(3px);z-index:300;
   display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease both}
-@media(min-width:640px){#announceOverlay{align-items:center}}
+@media(min-width:640px){#announceOverlay,.overlay{align-items:center}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 #announceModal{background:var(--card);width:100%;max-width:460px;max-height:88vh;overflow-y:auto;border-radius:22px 22px 0 0;
   padding:24px 20px 26px;animation:modalUp .32s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 -10px 40px rgba(0,0,0,.3);
@@ -467,6 +498,17 @@ a{color:var(--green2)}
   background-origin:border-box;background-clip:padding-box,border-box}
 @media(min-width:640px){#announceModal{border-radius:22px;margin-bottom:0;border-top-width:3px}}
 @keyframes modalUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+/* Premium UI rebuild, Phase 1 -- Drawer/Sheet as modifiers on the SAME
+   #announceOverlay/#announceModal shell (still goes through makeModalAccessible)
+   rather than a second overlay/focus-trap implementation.
+   .sheet-full: a true full-screen sheet for complex editors (mobile-first; also
+   used as the desktop centered-modal-but-tall case).
+   .drawer: anchors right on desktop, still a bottom sheet on mobile (edge-anchor
+   only matters once there's a wide viewport to anchor within). */
+#announceModal.sheet-full{max-width:none;width:100%;max-height:100vh;height:100vh;border-radius:0}
+@media(min-width:640px){#announceModal.drawer{margin-left:auto;height:100%;max-height:100vh;border-radius:0;animation:drawerIn .28s cubic-bezier(.22,1,.36,1) both}}
+#announceOverlay:has(#announceModal.drawer),.overlay:has(.drawer){justify-content:flex-end}
+@keyframes drawerIn{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
 .announceCard{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
 .announceCard img{width:100%;border-radius:12px;margin-top:10px}
 .commentRow{display:flex;gap:8px;margin-top:10px}
@@ -631,6 +673,12 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,
 .rowcard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 15px;box-shadow:var(--shadow);
   transition:transform .18s cubic-bezier(.22,1,.36,1),box-shadow .18s;animation:fadeUp .35s ease both}
 .rowcard:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+/* Premium UI rebuild, Phase 1 -- a generic boxed-surface primitive for content
+   that isn't a list row (.rowcard already covers that role well, reused as-is
+   rather than forking a parallel .list-row). */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md)}
+.card.elevated{box-shadow:var(--shadow-lg);border-color:transparent}
+.card.flat{box-shadow:none}
 .rowcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .rowcard .nm{font-weight:700;font-size:14.5px}
 .nm-link{cursor:pointer;transition:.15s}
@@ -808,6 +856,11 @@ body.dark .achEarned{color:#E8C158}
 .field textarea{min-height:84px;resize:vertical;line-height:1.5}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--leaf);box-shadow:var(--glow-blue);transform:translateY(-1px)}
 .field input:hover:not(:focus),.field select:hover:not(:focus){border-color:#C7D0DC}
+/* Premium UI rebuild, Phase 1 -- invalid-field state, additive only. Existing
+   .field/.field label/.field input rules above are untouched. */
+.field.invalid input,.field.invalid select,.field.invalid textarea{border-color:var(--danger)}
+.field .errmsg{display:flex;align-items:center;gap:5px;color:var(--danger);font-size:11.5px;font-weight:600;margin-top:6px}
+.field .errmsg svg{width:13px;height:13px;flex:0 0 auto}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:430px){.grid2{grid-template-columns:1fr}}
 .acctMediaRow{display:flex;align-items:center;gap:16px}
@@ -892,6 +945,15 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .btn:active:not(:disabled){transform:translateY(0) scale(.98)}
 .btn:disabled{opacity:.55}
 .btn.danger{background:linear-gradient(180deg,#D8654C,var(--danger));color:#fff;box-shadow:0 10px 24px -8px rgba(180,71,47,.45);flex:0 0 auto}
+/* Premium UI rebuild, Phase 1 -- new button states/sizes, additive modifiers only.
+   None of .btn/.primary/.gold/.ghost/.danger above are touched. */
+.btn.sm{padding:9px 16px;font-size:var(--fs-sm);flex:0 0 auto}
+.btn.lg{padding:18px;font-size:var(--fs-lg)}
+.btn.icon-only{flex:0 0 auto;width:44px;height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+.btn.loading{pointer-events:none;opacity:.75;color:transparent!important}
+.btn.loading::after{content:"";position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;
+  border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:btnSpin .7s linear infinite}
+@keyframes btnSpin{to{transform:rotate(360deg)}}
 .dangerzone{margin-top:16px;border:1.5px dashed #E7C3B7;background:#FDF4F1;border-radius:16px;padding:15px 16px;
   display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .dz-text{font-size:12.5px;color:#8a4331;line-height:1.5;flex:1;min-width:180px}
@@ -1178,6 +1240,15 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 
 <!-- APP -->
 <section id="app" class="hidden">
+  <!-- Premium UI rebuild, Phase 1 -- persistent desktop sidebar, presentation-only.
+       Wraps the existing header/main/bottomnav in one new .appContent div (no
+       existing element renamed/removed; #app.chat-fullscreen's descendant
+       selectors for .topbar/.main/.bottomnav still match through the wrapper).
+       Populated by renderSidebarNow(), mirroring renderBottomNavNow() -- both
+       driven by the same CURRENT_ROUTE_NAME/tabForRoute(), route() itself is
+       untouched. Hidden below 1024px, where today's bottom-nav is unchanged. -->
+  <nav id="sidebar" class="sidebar"></nav>
+  <div class="appContent">
   <header class="topbar">
     <span class="glyph"><img alt="" id="topbarLogo"/></span>
     <div><div class="tt">PALMSTEAD</div><div class="ts" id="topbarSub">by PEP Landbank</div></div>
@@ -1200,6 +1271,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   </header>
   <main class="main" id="view"></main>
   <nav class="bottomnav" id="bottomnav"></nav>
+  </div>
 </section>
 
 <div id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
@@ -1729,7 +1801,7 @@ function loadFailBannerHtml(label,retryFnCall){
     <button class="chip" style="margin-top:10px" onclick="${retryFnCall}">Retry</button>
   </div>`;
 }
-function fld(l,inner,hint){return `<div class="field"><label>${l}${hint?` <span class="hint">— ${hint}</span>`:''}</label>${inner}</div>`;}
+function fld(l,inner,hint,errMsg){return `<div class="field${errMsg?' invalid':''}"><label>${l}${hint?` <span class="hint">— ${hint}</span>`:''}</label>${inner}${errMsg?`<div class="errmsg"><svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 3.5h.01M10.3 3.9L2.7 17.3a1.7 1.7 0 001.5 2.5h15.6a1.7 1.7 0 001.5-2.5L13.7 3.9a1.7 1.7 0 00-3.4 0z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>${esc(errMsg)}</div>`:''}</div>`;}
 function sel(id,opts,cur){return `<select id="${id}">`+opts.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('')+`</select>`;}
 // The refresh icon next to Back exists for the "a screen got stuck loading and
 // never recovers" case (seen live -- a stale DB reset made a couple of new
@@ -6988,21 +7060,19 @@ function tabForRoute(name){
   if(name==='home'||name==='mgr') return 'home';
   return 'more';
 }
-function updateBottomNav(routeName){ CURRENT_ROUTE_NAME=routeName; renderBottomNavNow(); }
-function renderBottomNavNow(){
-  const nav=document.getElementById('bottomnav'); if(!nav||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
+// Single source of truth for both the mobile bottom-nav and the desktop
+// sidebar (Premium UI rebuild, Phase 1) -- badge counts and route targets are
+// computed exactly once here so the two surfaces can never drift apart.
+function computeNavTabDefs(){
   const activeTab=tabForRoute(CURRENT_ROUTE_NAME);
   if(IS_CLIENT){
-    const tabDefs=[
+    return {activeTab,tabDefs:[
       {key:'clienthome',label:'Home',icon:ic.home,r:'clienthome'},
       {key:'clientvisit',label:'Book Visit',icon:ic.visit,r:'clientvisit'},
       {key:'clientfeedback',label:'Feedback',icon:ic.enquiry,r:'clientfeedback'},
       {key:'clientmore',label:'More',icon:ic.more,r:'clientmore'},
       {key:'clientsettings',label:'Settings',icon:ic.gear,r:'clientsettings'}
-    ];
-    nav.innerHTML=tabDefs.map(t=>`<button class="${t.key===activeTab?'on':''}" data-navtab="${t.r}">${t.icon}<span>${esc(t.label)}</span></button>`).join('');
-    nav.querySelectorAll('[data-navtab]').forEach(b=>b.onclick=()=>route(b.dataset.navtab));
-    return;
+    ]};
   }
   const isMgr=PROFILE.role==='manager';
   const openTasks=computeDutiesSummary((DB.tasks||[]).filter(t=>isMgr||t.assignedTo===PROFILE.key)).openCount;
@@ -7011,19 +7081,43 @@ function renderBottomNavNow(){
   // Five tabs for both roles -- Sales Desk now folds in everything client/lead/plot-related
   // (site visits, enquiries, feedback, plot requests, and for managers the old separate
   // CRM Tools + Plot Inventory tabs) so the nav shape matches across roles.
-  const tabDefs=[
+  return {activeTab,tabDefs:[
     {key:'home',label:'Home',icon:ic.home,r:isMgr?'mgr':'home'},
     {key:'salesdesk',label:'Sales',icon:ic.briefcase2,r:isMgr?'mgrSalesDesk':'salesdesk',badge:salesDeskBadge},
     {key:'officedesk',label:'Office',icon:ic.desk,r:'officedesk',badge:openTasks},
     {key:'chat',label:'Chat',icon:ic.chat,r:'chat',badge:unread,badgeId:'bnChatBadge'},
     {key:'more',label:'More',icon:ic.more,r:'more'}
-  ];
+  ]};
+}
+function updateBottomNav(routeName){ CURRENT_ROUTE_NAME=routeName; renderBottomNavNow(); renderSidebarNow(); }
+function renderBottomNavNow(){
+  const nav=document.getElementById('bottomnav'); if(!nav||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
+  const {activeTab,tabDefs}=computeNavTabDefs();
   nav.innerHTML=tabDefs.map(t=>{
     const show=t.badge>0;
     const needsBadge=t.badgeId||show;
     return `<button class="${t.key===activeTab?'on':''}" data-navtab="${t.r}">${t.icon}${needsBadge?`<span class="bnBadge${show?'':' hidden'}"${t.badgeId?` id="${t.badgeId}"`:''}>${show?(t.badge>9?'9+':t.badge):''}</span>`:''}<span>${esc(t.label)}</span></button>`;
   }).join('');
   nav.querySelectorAll('[data-navtab]').forEach(b=>b.onclick=()=>route(b.dataset.navtab));
+}
+// Premium UI rebuild, Phase 1 -- persistent desktop sidebar. Mirrors the exact
+// same tabDefs/activeTab as the bottom-nav (computeNavTabDefs() above); route()
+// is called identically either way. This is intentionally a plain mirror of
+// today's 5 nav destinations, not the richer multi-section IA the full rebuild
+// spec describes -- that reorganization is Phase 2 (per-screen migration),
+// once real screens are being migrated to consume this shell.
+function renderSidebarNow(){
+  const sb=document.getElementById('sidebar'); if(!sb||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
+  const {activeTab,tabDefs}=computeNavTabDefs();
+  sb.innerHTML=`<div style="display:flex;align-items:center;gap:9px;padding:0 8px 18px;color:#fff">
+      <span style="width:30px;height:30px;border-radius:9px;overflow:hidden;flex:0 0 auto"><img alt="" src="./logo.png" style="width:100%;height:100%;display:block"/></span>
+      <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em">PALMSTEAD</span>
+    </div>`+
+    tabDefs.map(t=>{
+      const show=t.badge>0;
+      return `<button class="sbItem${t.key===activeTab?' on':''}" data-sbnav="${t.r}">${t.icon}<span style="flex:1;text-align:left">${esc(t.label)}</span>${show?`<span class="bnBadge">${t.badge>9?'9+':t.badge}</span>`:''}</button>`;
+    }).join('');
+  sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
 }
 window.addEventListener('popstate',e=>{
   if(!PROFILE && !IS_CLIENT) return; // still on login screen — nothing app-side to navigate
@@ -7171,6 +7265,16 @@ const FIC_GLYPHS={
  pricetag:{g:'gGold',p:'<path d="M18 18h10l12 12-10 10-12-12V18z" fill="#fff"/><circle cx="23" cy="23" r="2.2" fill="#B8860B"/><path d="M25 30.5l6-6" stroke="#B8860B" stroke-width="1.6" stroke-linecap="round"/>'}
 };
 function fic(name,size){size=size||44;var G=FIC_GLYPHS[name];if(!G)return '';return '<svg class="fic" width="'+size+'" height="'+size+'" viewBox="0 0 56 56" style="vertical-align:middle;flex:0 0 auto">'+ficChip(G.g)+G.p+'</svg>';}
+// Premium UI rebuild, Phase 1 -- one call surface over the two existing icon
+// registries (`ic` = small inline-SVG glyphs, `fic()`/FIC_GLYPHS = larger
+// chip-wrapped app-grid glyphs). Purely additive: every existing ic.xxx/fic()
+// call site is untouched. New code should prefer icon(name) going forward;
+// consolidating the two registries' visual styles is a later phase, not this one.
+function icon(name,opts){
+  opts=opts||{};
+  if(opts.chip||(!ic[name]&&FIC_GLYPHS[name])) return fic(name,opts.size);
+  return ic[name]||'';
+}
 const KPI_STYLE={
  'Active leads':{icon:'grid',color:'blue'}, 'Total leads':{icon:'grid',color:'blue'},
  'Pipeline value':{icon:'coins',color:'lime'},
@@ -9372,9 +9476,9 @@ function openGlobalSearch(){
   input.addEventListener('input',runSearch);
 }
 function refreshChatNavBadge(){
-  const badge=document.getElementById('bnChatBadge'); if(!badge) return;
-  const n=totalUnread();
-  if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.remove('hidden'); } else badge.classList.add('hidden');
+  const badge=document.getElementById('bnChatBadge');
+  if(badge){ const n=totalUnread(); if(n>0){ badge.textContent=n>9?'9+':n; badge.classList.remove('hidden'); } else badge.classList.add('hidden'); }
+  renderSidebarNow(); // desktop sidebar has no live-patched badge id of its own -- just recompute it fully, it's cheap
 }
 // Refreshes every live notification badge on screen -- the bottom nav's CRM/More
 // counts plus any appGrid tile currently showing a data-badgekind span -- without
@@ -20274,17 +20378,76 @@ function paintLeaveApp(){
   const tabs=`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${leaveAppTab==='mine'?'on':''}" data-leavetab="mine">My Leave</button>
     ${isMgr?`<button class="chip ${leaveAppTab==='requests'?'on':''}" data-leavetab="requests">Leave Requests${pendingCount?' ('+pendingCount+')':''}</button>`:''}
+    ${isMgr?`<button class="chip ${leaveAppTab==='plans'?'on':''}" data-leavetab="plans">Leave Plans</button>`:''}
     ${isMgr?`<button class="chip ${leaveAppTab==='settings'?'on':''}" data-leavetab="settings">Leave Settings</button>`:''}
   </div>`;
   let content;
   if(leaveAppTab==='requests'&&isMgr) content=leaveRequestsHtml();
+  else if(leaveAppTab==='plans'&&isMgr) content=leavePlansHtml();
   else if(leaveAppTab==='settings'&&isMgr) content=leaveSettingsHtml();
   else content=leaveMineHtml();
   body.innerHTML=(LEAVE_REQUESTS_LOAD_FAILED?loadFailBannerHtml('leave data','viewLeaveApp()'):'')+tabs+content;
   body.querySelectorAll('[data-leavetab]').forEach(b=>b.onclick=()=>{ leaveAppTab=b.dataset.leavetab; paintLeaveApp(); });
   if(leaveAppTab==='requests'&&isMgr) bindLeaveRequestsCtrls();
+  else if(leaveAppTab==='plans'&&isMgr) bindLeavePlansCtrls();
   else if(leaveAppTab==='settings'&&isMgr) bindLeaveSettingsCtrls();
   else bindLeaveMineCtrls();
+}
+// Management browse-by-staff view: unlike "Leave Requests" (which only ever
+// shows requests once a staff member has actually sent them), this surfaces a
+// staff member's WHOLE yearly plan -- including 'planned' entries they've
+// saved privately but not sent yet -- since RLS already lets Management read
+// every leave_requests row (needed for the calendar's own conflict checking),
+// this is a read/decide surface over the same data, not a new table.
+let leavePlansStaffKey=null, leavePlansYear=new Date().getFullYear();
+function leavePlansHtml(){
+  const agentStaff=STAFF_LIST.filter(s=>s.role==='agent').slice().sort((a,b)=>a.name.localeCompare(b.name));
+  if(!agentStaff.length) return emptyState(ic.people||ic.calendar,'No staff yet','');
+  if(!leavePlansStaffKey||!agentStaff.some(s=>s.key===leavePlansStaffKey)) leavePlansStaffKey=agentStaff[0].key;
+  const staff=agentStaff.find(s=>s.key===leavePlansStaffKey);
+  const picker=`<div class="formwrap" style="margin-bottom:16px">
+    <div class="field"><label>Staff member</label>
+      <select id="lvPlansStaffSel">${agentStaff.map(s=>`<option value="${esc(s.key)}" ${s.key===leavePlansStaffKey?' selected':''}>${esc(s.name)}</option>`).join('')}</select>
+    </div>
+  </div>`;
+  const year=leavePlansYear;
+  const used=leaveDaysUsed(staff.key,year);
+  const total=num(CONFIG.leaveTotalDays)||20;
+  const remaining=Math.max(0,total-used);
+  const rows=DB.leaveRequests.filter(r=>r.agentKey===staff.key&&r.year===year)
+    .sort((a,b)=>((a.dates&&a.dates[0])||'').localeCompare((b.dates&&b.dates[0])||''));
+  return picker+`
+  <div class="lvCalNav">
+    <button class="lvCalNavBtn" id="lvPlansPrevYear" aria-label="Previous year">‹</button>
+    <div class="lvCalNavLabel">${year}</div>
+    <button class="lvCalNavBtn" id="lvPlansNextYear" aria-label="Next year">›</button>
+  </div>
+  <div class="kpis" style="margin-top:10px">${kpi('Total days/yr',total)}${kpi('Used in '+year,used)}${kpi('Remaining',remaining)}</div>
+  <div class="sectitle"><h3>${esc(staff.name)}'s leave plan</h3><span class="cnt">${rows.length}</span></div>
+  <div class="list">${rows.length?rows.map(leavePlansRowHtml).join(''):emptyState(ic.calendar,'Nothing planned yet','Nothing on file for '+year+'.')}</div>`;
+}
+function leavePlansRowHtml(r){
+  const badge=r.status==='approved'?'<span class="tag ok">Approved</span>'
+    :r.status==='declined'?'<span class="tag dgr">Declined</span>'
+    :r.status==='rescheduled'?'<span class="tag dgr">Asked to reschedule</span>'
+    :r.status==='planned'?'<span class="tag ghost">Planned — not sent yet</span>'
+    :'<span class="tag warnt">Pending approval</span>';
+  const emTag=r.isEmergency?`<span class="tag warnt" style="margin-left:6px">🚨 Emergency${r.deductQuota===false?' · not deducted':''}</span>`:'';
+  return `<div class="rowcard"><div class="top"><div><div class="nm">${r.daysCount} day${r.daysCount===1?'':'s'}${emTag}</div><div class="meta">${(r.dates||[]).slice().sort().map(fmtLongDate).join(', ')}</div></div>${badge}</div>
+  ${(r.status==='rescheduled'||r.status==='declined')&&r.rescheduleNote?`<div class="note"><b>${r.status==='declined'?'Reason':"Management's note"}:</b> ${esc(r.rescheduleNote)}</div>`:''}
+  <div class="foot" style="display:flex;gap:7px;flex-wrap:wrap">
+    ${r.status==='pending'?`<button class="chip" data-leavereview="${r.id}">Preview &amp; decide</button>`:r.letterText?`<button class="chip" data-leavepreview="${r.id}">Preview letter</button>`:''}
+    ${r.status==='approved'?`<button class="chip" data-leavedownload="${r.id}">⬇ Download</button>`:''}
+  </div></div>`;
+}
+function bindLeavePlansCtrls(){
+  const sel=document.getElementById('lvPlansStaffSel');
+  if(sel) sel.onchange=()=>{ leavePlansStaffKey=sel.value; paintLeaveApp(); };
+  const prevBtn=document.getElementById('lvPlansPrevYear'); if(prevBtn) prevBtn.onclick=()=>{ leavePlansYear--; paintLeaveApp(); };
+  const nextBtn=document.getElementById('lvPlansNextYear'); if(nextBtn) nextBtn.onclick=()=>{ leavePlansYear++; paintLeaveApp(); };
+  document.querySelectorAll('[data-leavereview]').forEach(b=>b.onclick=()=>openLeaveReviewModal(b.dataset.leavereview));
+  document.querySelectorAll('[data-leavepreview]').forEach(b=>b.onclick=()=>previewLeaveLetter(b.dataset.leavepreview));
+  document.querySelectorAll('[data-leavedownload]').forEach(b=>b.onclick=()=>downloadLeaveLetter(b.dataset.leavedownload));
 }
 function leaveMineHtml(){
   const year=leaveCalYear;
@@ -21892,7 +22055,69 @@ playChime('reveal');
   await minSplash(); hideBoot();
   document.getElementById('login').classList.remove('hidden');
   if(joinNotice) document.getElementById('loginErr').textContent=joinNotice;
+  if(new URLSearchParams(location.search).get('preview')==='1') window.__previewComponents();
 })();
+// Premium UI rebuild, Phase 1 -- component preview harness. Deliberately NOT
+// wired into route()/the dispatch table/any nav: reachable only by calling
+// window.__previewComponents() from the console, or loading the app with
+// ?preview=1, so it can never be reached by a real user. Exercises every new
+// Phase 1 primitive side-by-side so they can be screenshotted/inspected
+// before any real screen starts consuming them.
+window.__previewComponents=function(){
+  const boot=document.getElementById('boot'); if(boot) boot.classList.add('hidden');
+  const login=document.getElementById('login'); if(login) login.classList.add('hidden');
+  document.body.insertAdjacentHTML('beforeend',`<div id="__preview" style="position:fixed;inset:0;z-index:250;background:var(--paper);color:var(--text);overflow:auto;padding:var(--sp-5)">
+    <h2 style="font-size:var(--fs-2xl);font-weight:var(--fw-bold);margin-bottom:var(--sp-4)">Phase 1 component preview</h2>
+    <div style="display:flex;flex-direction:column;gap:var(--sp-5);max-width:640px">
+      <div><div class="mini" style="margin-bottom:var(--sp-2)">Buttons</div>
+        <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center">
+          <button class="btn primary sm">Primary sm</button>
+          <button class="btn ghost">Ghost</button>
+          <button class="btn gold lg">Gold lg</button>
+          <button class="btn danger icon-only">${ic.trash||'X'}</button>
+          <button class="btn primary loading">Loading</button>
+        </div>
+      </div>
+      <div><div class="mini" style="margin-bottom:var(--sp-2)">Invalid field</div>
+        <div class="formwrap">${fld('Email','<input value="not-an-email"/>','',"That doesn't look like a valid email")}</div>
+      </div>
+      <div><div class="mini" style="margin-bottom:var(--sp-2)">Cards</div>
+        <div style="display:flex;gap:var(--sp-3)">
+          <div class="card elevated" style="padding:var(--sp-4);flex:1">card.elevated</div>
+          <div class="card flat" style="padding:var(--sp-4);flex:1">card.flat</div>
+          <div class="rowcard" style="flex:1">existing .rowcard (unchanged)</div>
+        </div>
+      </div>
+      <div><div class="mini" style="margin-bottom:var(--sp-2)">icon() wrapper vs originals</div>
+        <div style="display:flex;gap:var(--sp-4);align-items:center">
+          <span title="ic.home direct">${ic.home||''}</span>
+          <span title="icon('home') via wrapper">${icon('home')}</span>
+          <span title="fic('gift') direct">${fic('gift')}</span>
+          <span title="icon('gift',{chip:true}) via wrapper">${icon('gift',{chip:true})}</span>
+        </div>
+      </div>
+      <div><button class="btn primary" id="__previewDrawerBtn" style="width:auto">Open drawer</button>
+        <button class="btn ghost" id="__previewSheetBtn" style="width:auto">Open full sheet</button>
+        <button class="btn ghost" id="__previewCloseBtn" style="width:auto">Close preview</button>
+      </div>
+    </div>
+  </div>`);
+  document.getElementById('__previewDrawerBtn').onclick=()=>{
+    let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+    ov=document.createElement('div'); ov.id='announceOverlay';
+    ov.innerHTML='<div id="announceModal" class="drawer"><div style="font-weight:800;margin-bottom:10px">Drawer (desktop: right-anchored)</div><p class="mini">Same #announceOverlay/#announceModal shell, .drawer modifier, still goes through makeModalAccessible.</p></div>';
+    document.body.appendChild(ov); makeModalAccessible(ov);
+    ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  };
+  document.getElementById('__previewSheetBtn').onclick=()=>{
+    let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+    ov=document.createElement('div'); ov.id='announceOverlay';
+    ov.innerHTML='<div id="announceModal" class="sheet-full"><div style="font-weight:800;margin-bottom:10px">Full sheet</div><p class="mini">.sheet-full modifier on the same shell.</p></div>';
+    document.body.appendChild(ov); makeModalAccessible(ov);
+    ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  };
+  document.getElementById('__previewCloseBtn').onclick=()=>{ document.getElementById('__preview').remove(); if(boot) boot.classList.add('hidden'); if(login) login.classList.remove('hidden'); };
+};
 </script>
 </body>
 </html>
