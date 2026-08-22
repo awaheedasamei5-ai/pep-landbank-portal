@@ -420,18 +420,20 @@ a{color:var(--green2)}
 /* KPI cards */
 .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:20px}
 @media(min-width:640px){.kpis{grid-template-columns:repeat(3,1fr)}}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px 15px 16px;position:relative;
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;position:relative;
   overflow:hidden;box-shadow:var(--shadow);transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s;animation:fadeUp .4s ease both}
 .kpis>*:nth-child(1){animation-delay:.02s}.kpis>*:nth-child(2){animation-delay:.06s}.kpis>*:nth-child(3){animation-delay:.1s}
 .kpis>*:nth-child(4){animation-delay:.14s}.kpis>*:nth-child(5){animation-delay:.18s}.kpis>*:nth-child(6){animation-delay:.22s}.kpis>*:nth-child(7){animation-delay:.26s}
-.kpi::before{content:"";position:absolute;top:0;left:12px;right:12px;height:2px;border-radius:100px;
-  background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:0;transition:opacity .25s}
-.kpi:hover{transform:translateY(-4px);box-shadow:var(--glow-lime),var(--shadow-lg)}
-.kpi:hover::before{opacity:1}
-.kpi::after{content:"";position:absolute;right:-16px;bottom:-16px;width:60px;height:60px;border-radius:14px;
-  border:1.5px solid var(--line);transform:rotate(18deg);opacity:.35}
-.kpi-ic{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:#fff;margin-bottom:10px;box-shadow:0 6px 14px -6px rgba(11,30,61,.4);position:relative;z-index:1}
-.kpi-ic svg{width:16px;height:16px}
+.kpi:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+/* Redesign correction: a small icon prefix on the label line, not a large
+   standalone badge -- matches the reference's plain-label-plus-expand-arrow
+   card header instead of the earlier icon-badge-first layout. */
+.kpi-ic{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;color:#fff;flex:0 0 auto}
+.kpi-ic svg{width:10px;height:10px}
+/* Timeline/history rows reuse .kpi-ic as a generic colored icon badge at the
+   original larger size -- keep that usage visually unchanged. */
+.kpi-ic.lg{width:32px;height:32px;border-radius:10px}
+.kpi-ic.lg svg{width:16px;height:16px}
 .kpi-ic.blue{background:linear-gradient(150deg,var(--accent,#3B82F6),var(--accent-dark,#1D4ED8))}
 .kpi-ic.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
 .kpi-ic.green{background:linear-gradient(150deg,#34D399,var(--ok))}
@@ -439,23 +441,20 @@ a{color:var(--green2)}
 .kpi-ic.teal{background:linear-gradient(150deg,#4FBFA6,#1E7A6E)}
 .kpi-ic.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .kpi-ic.grey{background:linear-gradient(150deg,#94A3B8,#64748B)}
-/* Premium UI rebuild -- one "hero" KPI card per dashboard (Ref 2's solid-fill
-   Total revenue card standing out among plain white ones). Just a `cls`
-   value kpi() already accepts -- no signature change. The icon badge drops
-   its own gradient chip since the whole card is already colored. */
-.kpi.hero{background:linear-gradient(150deg,var(--green2),var(--green));border-color:transparent;color:#fff}
-.kpi.hero .k{color:rgba(255,255,255,.75)}
+/* One "hero" KPI card per dashboard (reference's solid-fill Total revenue
+   card standing out among plain white ones) -- indigo/purple, matching the
+   reference exactly. Just a `cls` value kpi() already accepts. */
+.kpi.hero{background:linear-gradient(150deg,#818CF8,#4F46E5);border-color:transparent;color:#fff}
+.kpi.hero .kpi-label{color:rgba(255,255,255,.75)}
 .kpi.hero .v{color:#fff}
-.kpi.hero .kpi-ic{background:rgba(255,255,255,.2);box-shadow:none}
-.kpi.hero::after{border-color:rgba(255,255,255,.25)}
-.kpi.hero .kpi-delta.up{background:rgba(255,255,255,.22);color:#fff}
-.kpi.hero .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
-/* Premium UI rebuild, Phase 2 (Home dashboards) -- compact period-over-period
-   trend badge, additive/optional (kpi()'s existing 4-arg call sites are
-   unaffected; only sites that explicitly pass a 5th `delta` argument show
-   this). Direction communicated by icon+color together, never color alone. */
-.kpi-delta{position:absolute;top:14px;right:14px;display:flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;
-  padding:2px 6px 2px 5px;border-radius:100px;z-index:1}
+.kpi.hero .kpi-caption{color:rgba(255,255,255,.65)}
+.kpi.hero .kpi-ic{background:rgba(255,255,255,.25)}
+.kpi.hero .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
+.kpi.hero .kpi-delta.up,.kpi.hero .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
+/* Compact period-over-period trend pill, inline next to the number now
+   (reference shows it right beside the figure, not floating in a corner). */
+.kpi-delta{display:inline-flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;
+  padding:2px 6px 2px 5px;border-radius:100px}
 .kpi-delta.up{background:rgba(22,163,74,.12);color:var(--ok)}
 .kpi-delta.down{background:rgba(180,71,47,.12);color:var(--danger)}
 /* Dashboard-first two-column shell: DOM order is unchanged from before this
@@ -722,11 +721,18 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,
 .plottile.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
 .plottile.amber{background:linear-gradient(150deg,#F5B94F,var(--warn))}
 .plottile.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
-.kpi .k{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
-.kpi .v{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:22px;margin-top:8px;color:var(--ink)}
+/* Redesign correction: matches the reference KPI card's row structure --
+   label+expand-arrow on top, number+delta together, caption below. */
+.kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.kpi-label{font-size:11px;letter-spacing:.03em;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
+.kpi-expand{width:24px;height:24px;border-radius:100px;background:var(--paper);color:var(--muted);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;transition:.15s}
+.kpi-click:hover .kpi-expand{background:var(--ink);color:#fff;transform:translate(1px,-1px)}
+.kpi-mainrow{display:flex;align-items:baseline;gap:8px;margin-top:9px;flex-wrap:wrap}
+.kpi .v{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:22px;color:var(--ink)}
 .kpi.gold .v{color:#8A6E12}
+.kpi-caption{font-size:11px;color:var(--muted);margin-top:8px}
 .kpi-click{cursor:pointer}
-.kpi-click:hover .kpi-ic{transform:scale(1.08)}
 
 /* task grid — icon tiles with gradient chips */
 .tasks{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -7486,9 +7492,21 @@ const KPI_STYLE={
  'Available':{icon:'check',color:'green'}, 'Reserved':{icon:'clock',color:'amber'}, 'Sold':{icon:'coins',color:'lime'},
  'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'}
 };
-function kpi(k,v,cls='',routeTo='',delta){ const st=KPI_STYLE[k]||{icon:'grid',color:'blue'};
+// Redesign correction: matches the reference KPI card's exact anatomy --
+// label (+small icon) and a plain expand-arrow affordance share the top row;
+// the number and its delta pill sit together on one line; an optional
+// caption ("vs last period") sits at the bottom. Two new optional trailing
+// params (delta, caption) -- every existing 4-arg call site is unaffected.
+function kpi(k,v,cls='',routeTo='',delta,caption){ const st=KPI_STYLE[k]||{icon:'grid',color:'blue'};
   const deltaHtml=delta==null?'':`<div class="kpi-delta ${delta>=0?'up':'down'}" title="vs last month"><svg viewBox="0 0 24 24" width="10" height="10" fill="none"><path d="M12 ${delta>=0?'19V5M5 12l7-7 7 7':'5v14M5 12l7 7 7-7'}" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>${Math.abs(Math.round(delta))}%</div>`;
-  return `<div class="kpi ${cls}${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}><span class="kpi-ic ${st.color}">${kpiIc[st.icon]}</span><div class="k">${k}</div><div class="v">${v}</div>${deltaHtml}</div>`;}
+  return `<div class="kpi ${cls}${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}>
+    <div class="kpi-top">
+      <span class="kpi-label"><span class="kpi-ic ${st.color}">${kpiIc[st.icon]}</span>${k}</span>
+      <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+    <div class="kpi-mainrow"><div class="v">${v}</div>${deltaHtml}</div>
+    ${caption?`<div class="kpi-caption">${esc(caption)}</div>`:''}
+  </div>`;}
 
 // The exact same "current month back 5" window was duplicated in agentDetailView
 // and mgrLeaderboard -- one shared helper so every "last 6 months" chart in the
@@ -11272,7 +11290,7 @@ async function loadTaskTimeline(t){
     else if(ev.type==='escalated') detail='From '+esc(ev.fromName||ev.fromKey||'')+' to '+esc(ev.toName||ev.toKey||'')+(ev.note?': '+esc(ev.note):'');
     else if(ev.note) detail=esc(ev.note);
     return `<div class="rowcard" style="display:flex;gap:12px;align-items:flex-start">
-      <span class="kpi-ic ${meta.cls}" style="margin-bottom:0;flex:0 0 auto">${meta.icon}</span>
+      <span class="kpi-ic lg ${meta.cls}">${meta.icon}</span>
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="nm">${esc(meta.label)}${ev.actorName?' · '+esc(ev.actorName):''}</div><div class="meta" style="white-space:nowrap">${esc((ev.createdAt||'').slice(0,16).replace('T',' '))}</div></div>
         ${detail?`<div class="meta" style="margin-top:3px">${detail}</div>`:''}
@@ -11836,7 +11854,7 @@ async function formCustomer(arg){
 
   const timeline=events.length ? events.map(ev=>`
     <div class="rowcard" style="display:flex;gap:12px;align-items:flex-start">
-      <span class="kpi-ic ${ev.cls}" style="margin-bottom:0;flex:0 0 auto">${ev.icon}</span>
+      <span class="kpi-ic lg ${ev.cls}">${ev.icon}</span>
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="nm">${esc(ev.type)} · ${esc(ev.label)}</div><div class="meta" style="white-space:nowrap">${esc(ev.date||'—')}</div></div>
         ${ev.detail?`<div class="meta" style="margin-top:3px">${esc(ev.detail)}</div>`:''}
