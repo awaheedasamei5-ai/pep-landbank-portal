@@ -2556,6 +2556,8 @@ async function apiLoadBadgeCounts(){
       try{ const d=await demoLoad();
         counts.sitevisit=(d.sitevisits||[]).filter(v=>v.status==='Pending').length;
         counts.complaint=(d.complaints||[]).filter(c=>c.status!=='Resolved').length;
+        counts.plotrequest=(d.plotRequests||[]).filter(r=>r.status==='Pending').length;
+        counts.approvals=(d.fundRequests||[]).filter(f=>f.status==='pending').length;
       }catch(e){}
     }
     try{ const d=await demoLoad();
@@ -2877,6 +2879,14 @@ const mapPlotRequest=r=>({id:r.id,clientName:r.client_name,clientContact:r.clien
   notes:r.notes,status:r.status,resultingLeadId:r.resulting_lead_id,resolvedBy:r.resolved_by,
   createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
 async function apiClientInsertPlotRequest(row){
+  if(DEMO_MODE){
+    const {key:agentKey}=await apiClientAgentKeyName();
+    const d=await demoLoad(); d.plotRequests=d.plotRequests||[];
+    const rec={id:uid(),clientName:CLIENT_PROFILE.name,clientContact:CLIENT_PROFILE.contact,agentKey,
+      plotType:row.plotType,noPlots:num(row.noPlots),paymentPlan:row.paymentPlan,combineWithLeadId:row.combineWithLeadId||null,
+      notes:row.notes||null,status:'Pending',resultingLeadId:null,resolvedBy:null,createdAt:today()+' '+nowTime()};
+    d.plotRequests.unshift(rec); await demoSave(); return rec;
+  }
   const {key:agentKey}=await apiClientAgentKeyName();
   const dbrow={client_name:CLIENT_PROFILE.name,client_contact:CLIENT_PROFILE.contact,agent_key:agentKey,
     plot_type:row.plotType,no_plots:num(row.noPlots),payment_plan:row.paymentPlan,
@@ -2887,6 +2897,7 @@ async function apiClientInsertPlotRequest(row){
 // RLS scopes this automatically -- a client sees only their own requests, staff see
 // whatever their role/agent_key allows -- so one loader works for both contexts.
 async function apiLoadPlotRequests(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.plotRequests||[]).slice(); }
   const {data,error}=await sb.from('plot_requests').select('*').order('created_at',{ascending:false}); if(error) throw error;
   return (data||[]).map(mapPlotRequest);
 }
@@ -2896,6 +2907,31 @@ async function apiLoadPlotRequests(){
    Database, Master Pipeline and the client's own dashboard all pick it up with no
    separate sync step. */
 async function apiApprovePlotRequest(req){
+  if(DEMO_MODE){
+    const d=await demoLoad(); let resultingId;
+    if(req.combineWithLeadId){
+      let existing=null;
+      for(const k of Object.keys(d.leads)){ existing=(d.leads[k]||[]).find(x=>x.id===req.combineWithLeadId); if(existing) break; }
+      if(!existing) throw new Error('Lead not found');
+      const newNoPlots=num(existing.noPlots)+num(req.noPlots);
+      const cc=computeLead({...existing,noPlots:newNoPlots});
+      const patch={noPlots:newNoPlots,netTotal:cc.net,grandTotal:cc.grand,balance:cc.bal};
+      await apiUpdateLead(req.combineWithLeadId,patch);
+      const local=DB.leads.find(x=>x.id===req.combineWithLeadId); if(local) Object.assign(local,patch);
+      resultingId=req.combineWithLeadId;
+    } else {
+      const l={name:req.clientName,contact:req.clientContact,date:today(),stage:'1',priority:'Low',
+        plotType:req.plotType,noPlots:req.noPlots,paymentPlan:req.paymentPlan,siteVisit:'No',nextAction:'',notes:req.notes||''};
+      const cc=computeLead(l);
+      const rec=await apiInsertLead(l,cc,req.agentKey||undefined,{sendWelcome:true});
+      DB.leads.unshift(rec);
+      resultingId=rec.id;
+    }
+    const pr=(d.plotRequests||[]).find(x=>x.id===req.id);
+    if(pr){ pr.status='Approved'; pr.resolvedBy=PROFILE.name; pr.resultingLeadId=resultingId; }
+    await demoSave();
+    return resultingId;
+  }
   let resultingId;
   if(req.combineWithLeadId){
     const {data:leadRow,error:le}=await sb.from('leads').select('*').eq('id',req.combineWithLeadId).single(); if(le) throw le;
@@ -2919,8 +2955,21 @@ async function apiApprovePlotRequest(req){
   return resultingId;
 }
 async function apiRejectPlotRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); const pr=(d.plotRequests||[]).find(x=>x.id===id);
+    if(pr){ pr.status='Rejected'; pr.resolvedBy=PROFILE.name; } await demoSave(); return; }
   const {error}=await sb.from('plot_requests').update({status:'Rejected',resolved_at:new Date().toISOString(),resolved_by:PROFILE.name}).eq('id',id);
   if(error) throw error;
+}
+async function apiUpdatePlotRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const pr=(d.plotRequests||[]).find(x=>x.id===id);
+    if(pr) Object.assign(pr,{clientName:patch.clientName,plotType:patch.plotType,noPlots:num(patch.noPlots),paymentPlan:patch.paymentPlan,notes:patch.notes});
+    await demoSave(); return; }
+  const row={client_name:patch.clientName,plot_type:patch.plotType,no_plots:num(patch.noPlots),payment_plan:patch.paymentPlan,notes:patch.notes};
+  const {error}=await sb.from('plot_requests').update(row).eq('id',id); if(error) throw error;
+}
+async function apiDeletePlotRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.plotRequests=(d.plotRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
+  const {error}=await sb.from('plot_requests').delete().eq('id',id); if(error) throw error;
 }
 /* Loads the site-visit authorization form for one specific day within a week,
    creating an Open one on demand -- this is what makes the form "reset per day"
@@ -3269,6 +3318,20 @@ async function apiSendSms(to,message,trigger){
   }catch(e){}
   return ok;
 }
+/* ---- Email (Supabase Edge Function proxy over Resend -- same "key never touches
+   this file" shape as apiSendSms). attachments: [{filename, content}] where
+   content is base64 (no data: prefix) -- e.g. jsPDF's doc.output('datauristring')
+   with the "data:application/pdf;filename=generated.pdf;base64," prefix stripped. */
+async function apiSendEmail(to,subject,html,attachments){
+  if(!to) return {ok:false,error:'No recipient email'};
+  if(DEMO_MODE) return {ok:true};
+  try{
+    const {data,error}=await sb.functions.invoke('send-email',{body:{to,subject,html,attachments:attachments||[]}});
+    if(error) throw error;
+    if(!data||!data.ok) return {ok:false,error:(data&&data.error)||(data&&data.data&&data.data.message)||'Email provider rejected the request'};
+    return {ok:true};
+  }catch(e){ return {ok:false,error:e.message||String(e)}; }
+}
 
 /* ---- config (pricing + targets) ---- */
 async function apiLoadConfig(){
@@ -3398,13 +3461,30 @@ async function checkBirthdaysToday(){
   }catch(e){}
 }
 /* Runs from a Management session only, same reasoning as checkBirthdaysToday --
-   avoids two different sessions both texting the same client the same day.
-   payment_reminders_log dedupes per lead per month so this is safe to run on
-   every sign-in rather than needing a real cron job. */
-/* Three stages of the same nudge, each deduped independently per (lead, month, kind)
-   so a client due on the 5th gets: a heads-up on the 2nd, the day-of reminder on the
-   5th, and — if still unpaid — one overdue nudge once they're 3+ days late, never a
-   repeat of the same kind within the same month. */
+   avoids two different sessions both texting the same client the same day. The
+   real 7am pg_cron job (daily-reminders Edge Function) is the reliable path now;
+   this stays as an additional same-day convenience, sharing the exact same
+   payment_reminders_log dedup key so whichever fires first wins, zero double-send
+   risk either way. */
+/* Rebuilt: each reminder is anchored to the client's own deposit-clearing DAY OF
+   THE MONTH (deposit cleared the 15th -> payment due the 15th every month ->
+   reminder starts the 10th), using real Date arithmetic instead of the old
+   nextDueDate/monthsElapsed-derived timing, which turned out to be structurally
+   unreachable for the "due"/"overdue" cases (confirmed by hand against real
+   production data). anchorDay is read off computeMonthlySchedule's own
+   nextDueDate day-of-month component (always correct even though that date's
+   MONTH is a cycle ahead, per how monthsElapsed is derived) rather than changing
+   computeMonthlySchedule itself, which several other screens (Expected Revenue,
+   Monthly Plan Clients, buildInstallmentSchedule) still depend on unchanged.
+   Three stages, each deduped independently per (lead, month, kind): "upcoming"
+   (REMINDER_LEAD_DAYS before the due day), "due" (on the day), "defaulted"
+   (DEFAULT_GRACE_DAYS after, still unpaid -- asks them to reach out with a
+   reason, notes a possible penalty). Since every lead's own deposit date
+   differs, this naturally spreads messages across the month instead of
+   contacting everyone at once. */
+const REMINDER_LEAD_DAYS=5, DEFAULT_GRACE_DAYS=5;
+function ordinalLabel(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; switch(n%10){ case 1:return n+'st'; case 2:return n+'nd'; case 3:return n+'rd'; default:return n+'th'; } }
+function sameCalendarDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
 async function checkPaymentDueReminders(){
   if(PROFILE.role!=='manager' || DEMO_MODE) return;
   try{
@@ -3414,24 +3494,31 @@ async function checkPaymentDueReminders(){
     const sentSet=new Set((already||[]).map(r=>r.lead_id+'|'+r.kind));
     const nudges=[];
     const todayDate=new Date(today()+'T00:00:00');
+    const monthName=todayDate.toLocaleDateString('en-GB',{month:'long'});
     for(const l of (DB.leads||[])){
       if(!PLAN_MONTHS[l.paymentPlan] || isFullyPaid(l)) continue;
       const myPayments=(DB.payments||[]).filter(p=>p.leadId===l.id);
       const sched=computeMonthlySchedule(l,myPayments);
       if(!sched) continue;
-      const dueDate=new Date(sched.nextDueDate+'T00:00:00');
-      const daysDiff=Math.round((todayDate-dueDate)/86400000);
+      const anchorDay=new Date(sched.nextDueDate+'T00:00:00').getDate();
+      const y=todayDate.getFullYear(), m=todayDate.getMonth();
+      const daysInThisMonth=new Date(y,m+1,0).getDate();
+      const thisMonthDueDay=Math.min(anchorDay,daysInThisMonth);
+      const dueDateThisCycle=new Date(y,m,thisMonthDueDay);
+      const reminderDate=new Date(dueDateThisCycle); reminderDate.setDate(dueDateThisCycle.getDate()-REMINDER_LEAD_DAYS);
+      const defaultDate=new Date(dueDateThisCycle); defaultDate.setDate(dueDateThisCycle.getDate()+DEFAULT_GRACE_DAYS);
+      const dueLabel=ordinalLabel(thisMonthDueDay)+' of '+monthName;
       let kind=null,msg=null;
-      if(daysDiff===-3 && sched.expectedThisMonth>0){
+      if(sameCalendarDay(todayDate,reminderDate) && sched.expectedThisMonth>0){
         kind='upcoming';
-        msg=`Hi ${l.name}, a friendly reminder — your monthly payment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due in 3 days (${sched.nextDueDate}). - PEP Landbank`;
-      } else if(daysDiff===0){
+        msg=`Dear ${l.name}, this is a friendly reminder that your monthly installment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due on the ${dueLabel}. Kindly ensure payment is made by then to keep your account in good standing. Thank you for choosing PEP Landbank.`;
+      } else if(sameCalendarDay(todayDate,dueDateThisCycle) && sched.expectedThisMonth>0){
         kind='due';
-        msg=`Hi ${l.name}, a friendly reminder that your monthly payment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due today. - PEP Landbank`;
-      } else if(daysDiff>=3 && (sched.expectedThisMonth>0.5 || sched.arrears>0.5)){
-        kind='overdue';
+        msg=`Dear ${l.name}, your monthly installment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due today. Please make your payment at your earliest convenience. We appreciate your continued commitment. - PEP Landbank`;
+      } else if(sameCalendarDay(todayDate,defaultDate) && (sched.expectedThisMonth>0.5 || sched.arrears>0.5)){
+        kind='defaulted';
         const owed=Math.round((sched.expectedThisMonth||0)+(sched.arrears||0));
-        msg=`Hi ${l.name}, your payment of ${ghs(owed)} for your plot at Royal Palm Enclave is now overdue. Please make payment as soon as possible or contact us. - PEP Landbank`;
+        msg=`Dear ${l.name}, we note that your monthly installment of ${ghs(owed)} for your plot at Royal Palm Enclave, due on the ${dueLabel}, has not yet been received. Kindly reach out to us as soon as possible with the reason for the delay so we can assist you appropriately. Please note that continued default on payments may attract additional penalty charges. We value your commitment and look forward to resolving this together. - PEP Landbank`;
       }
       if(!kind || sentSet.has(l.id+'|'+kind)) continue;
       if(l.contact){
@@ -3465,6 +3552,25 @@ async function apiDeleteComplaint(id){ if(DEMO_MODE){ const d=await demoLoad(); 
   const {error}=await sb.from('complaints').delete().eq('id',id); if(error) throw error; }
 async function apiDeleteVisit(id){ if(DEMO_MODE){ const d=await demoLoad(); d.sitevisits=d.sitevisits.filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('site_visits').delete().eq('id',id); if(error) throw error; }
+// Full-record edits (distinct from the existing status-only apiUpdateComplaintStatus/
+// apiUpdateVisitStatus) -- lets Management correct an entry's own fields, not just
+// its status. RLS already permits this (enquiries_upd/complaints_upd/site_visits_upd
+// are all manager-inclusive) -- these just expose it from the client.
+async function apiUpdateEnquiry(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.enquiries.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,location:patch.location,types:(patch.types||[]).join(','),plot:patch.plot,source:patch.source,details:patch.details,follow:patch.follow,follow_date:patch.followDate||null};
+  const {error}=await sb.from('enquiries').update(row).eq('id',id); if(error) throw error;
+}
+async function apiUpdateComplaintFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.complaints.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,category:patch.category,details:patch.details,resolution:patch.resolution,priority:patch.priority};
+  const {error}=await sb.from('complaints').update(row).eq('id',id); if(error) throw error;
+}
+async function apiUpdateVisitFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=d.sitevisits.find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const row={name:patch.name,contact:patch.contact,visit_date:patch.date,visit_time:patch.time,people:patch.people,transport:patch.transport,pickup:patch.pickup,notes:patch.notes};
+  const {error}=await sb.from('site_visits').update(row).eq('id',id); if(error) throw error;
+}
 
 /* ---- plot inventory (manager manage; agents read-only via plots_availability) ---- */
 /* ---- announcements / flyers (manager posts, everyone reads) ---- */
@@ -5117,9 +5223,27 @@ function plotRequestsListHtml(list){
       <button class="btn primary" style="flex:1" data-approvepr="${esc(r.id)}">Approve</button>
       <button class="btn ghost" style="flex:1" data-rejectpr="${esc(r.id)}">Reject</button>
     </div>`:''}
+    <div class="foot" style="gap:8px;justify-content:flex-end">
+      <button class="trashbtn" data-editpr="${esc(r.id)}" title="Edit">${ic.edit}</button>
+      <button class="trashbtn" data-delpr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
   </div>`).join('')+`</div>`;
 }
 function bindPlotRequestCtrls(list){
+  document.querySelectorAll('[data-editpr]').forEach(b=>b.onclick=()=>{
+    const r=list.find(x=>x.id===b.dataset.editpr); if(!r) return;
+    openEditEntryModal({title:'Edit plot request',fields:[
+      {key:'clientName',label:'Client name',value:r.clientName},
+      {key:'plotType',label:'Plot type',type:'select',options:['Full Plot','Half Plot'],value:r.plotType},
+      {key:'noPlots',label:'Number of plots',type:'number',value:r.noPlots},
+      {key:'paymentPlan',label:'Payment plan',value:r.paymentPlan},
+      {key:'notes',label:'Notes',type:'textarea',value:r.notes},
+    ],onSave:async(v)=>{ await apiUpdatePlotRequestFull(r.id,v); Object.assign(r,v); toast('Plot request updated'); viewPlotRequests(); }});
+  });
+  document.querySelectorAll('[data-delpr]').forEach(b=>b.onclick=()=>{
+    const r=list.find(x=>x.id===b.dataset.delpr); if(!r) return;
+    confirmDeleteEntry('this plot request from '+r.clientName,apiDeletePlotRequest,r.id,()=>{ toast('Plot request deleted'); viewPlotRequests(); });
+  });
   document.querySelectorAll('[data-approvepr]').forEach(b=>b.onclick=async()=>{
     const req=list.find(x=>x.id===b.dataset.approvepr); if(!req) return;
     b.disabled=true; b.textContent='Approving…';
@@ -7965,6 +8089,55 @@ function bindCompanionWidget(){
   if(toggle) toggle.onclick=()=>w.classList.toggle('open');
   w.querySelectorAll('[data-comproute]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); const r=b.dataset.comproute; if(r) route(r,b.dataset.comparg||undefined); });
 }
+
+/* ================= EDIT-ENTRY MODAL (shared, reused across every "received" app —
+   Enquiries, Client Feedback, Site Visits, Plot Requests, Contract Requests, Fund
+   Requests — so Management can correct/edit an entry's own fields, not just its
+   status). One generic form-builder + one generic delete confirm, rather than a
+   bespoke modal per app. ================= */
+function openEditEntryModal(opts){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  const fieldHtml=f=>{
+    const id='editf_'+f.key;
+    if(f.type==='textarea') return fld(f.label,`<textarea id="${id}">${esc(f.value||'')}</textarea>`);
+    if(f.type==='select') return fld(f.label,sel(id,f.options,f.value));
+    if(f.type==='date') return fld(f.label,`<input id="${id}" type="date" value="${esc(f.value||'')}"/>`);
+    if(f.type==='number') return fld(f.label,`<input id="${id}" type="number" value="${esc(f.value!=null?f.value:'')}"/>`);
+    if(f.type==='chips') return fld(f.label,`<div class="chips" id="${id}">${(f.options||[]).map(o=>`<button type="button" class="chip2 ${((f.value||[]).includes(o))?'on':''}" data-t="${esc(o)}">${esc(o)}</button>`).join('')}</div>`);
+    return fld(f.label,`<input id="${id}" value="${esc(f.value||'')}"/>`);
+  };
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="editEntryTitle">${esc(opts.title||'Edit entry')}</div><button id="closeEditEntry" aria-label="Close" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="formwrap" style="padding:0">${opts.fields.map(fieldHtml).join('')}</div>
+    <div class="formactions" style="margin-top:14px"><button class="btn ghost" id="cancelEditEntry">Cancel</button><button class="btn primary" id="saveEditEntry">Save changes</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','editEntryTitle');
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeEditEntry').onclick=()=>ov.remove();
+  document.getElementById('cancelEditEntry').onclick=()=>ov.remove();
+  opts.fields.filter(f=>f.type==='chips').forEach(f=>{
+    document.querySelectorAll(`#editf_${f.key} .chip2`).forEach(c=>c.onclick=()=>c.classList.toggle('on'));
+  });
+  document.getElementById('saveEditEntry').onclick=async()=>{
+    const btn=document.getElementById('saveEditEntry'); btn.disabled=true; btn.textContent='Saving…';
+    const values={};
+    opts.fields.forEach(f=>{
+      const id='editf_'+f.key;
+      if(f.type==='chips') values[f.key]=[...document.querySelectorAll(`#${id} .chip2.on`)].map(c=>c.dataset.t);
+      else if(f.type==='number') values[f.key]=num(val(id));
+      else values[f.key]=val(id);
+    });
+    try{ await opts.onSave(values); ov.remove(); }
+    catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+  };
+}
+async function confirmDeleteEntry(label,apiFn,id,onDone){
+  if(!confirm('Delete '+label+'? This cannot be undone.')) return;
+  try{ await apiFn(id); onDone(); }catch(e){ toast('Could not delete: '+(e.message||e)); }
+}
 function homeHeroGreeting(){
   const h=new Date().getHours();
   return h>=5&&h<12?'Good morning':h>=12&&h<17?'Good afternoon':h>=17&&h<21?'Good evening':'Working late';
@@ -8489,15 +8662,23 @@ async function submitBulkPlots(){
 async function savePlotDetail(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   const btn=document.getElementById('savePlot'); btn.disabled=true; btn.textContent='Saving…';
+  const before={status:p.status,price:p.price};
   const patch={status:val('pd_status'),plotType:val('pd_type'),price:val('pd_price')?num(val('pd_price')):null,
     clientName:val('pd_cname').trim(),clientContact:val('pd_ccontact').trim(),agentKey:val('pd_agent'),notes:val('pd_notes').trim()};
-  try{ await apiUpdatePlot(p.id,patch); Object.assign(p,patch); toast('Plot '+p.plotNumber+' updated'); selectedPlotId=null; refreshPlotsView(); }
+  try{
+    await apiUpdatePlot(p.id,patch); Object.assign(p,patch); toast('Plot '+p.plotNumber+' updated'); selectedPlotId=null; refreshPlotsView();
+    const changes=[]; if(patch.status!==before.status) changes.push('status: '+before.status+' → '+patch.status);
+    if(num(patch.price)!==num(before.price)) changes.push('price: '+ghs(num(before.price))+' → '+ghs(num(patch.price)));
+    addActivity('Plot '+p.plotNumber,'Plot edited',changes.length?changes.join(' · '):'Details updated','by '+PROFILE.name,'',null);
+  }
   catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
 }
 async function deleteSelectedPlot(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   if(!confirm('Remove plot '+p.plotNumber+' from inventory?')) return;
-  try{ await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView(); }
+  try{ await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView();
+    addActivity('Plot '+p.plotNumber,'Plot deleted','Removed from inventory by '+PROFILE.name,'','',null);
+  }
   catch(e){ toast('Delete failed'); }
 }
 function bindPlotsGrid(){
@@ -11304,6 +11485,8 @@ function deleteLeadConfirm(id,name){
       }
       await apiDeleteLead(id,PROFILE.key);
       DB.leads=DB.leads.filter(x=>x.id!==id); CLIENTDB_LIST=CLIENTDB_LIST.filter(x=>x.id!==id); COMPANY_LEADS_LIST=COMPANY_LEADS_LIST.filter(x=>x.id!==id);
+      const reasonLabel=reason==='wrong'?'data entered wrong':reason==='refund'?'client refund/opt-out':'other reason';
+      addActivity(name,'Lead deleted','Reason: '+reasonLabel+' — deleted by '+PROFILE.name,'','',null);
       ov.remove(); toast(name+' deleted'); route('pipeline');
     }catch(e){ toast('Delete failed: '+(e.message||e)); b.disabled=false; b.textContent='Retry'; }
   });
@@ -11341,6 +11524,7 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
   const depositTarget=resolvedDepositTarget!=null?resolvedDepositTarget:(deptargetEl?num(deptargetEl.value):undefined);
   const btn=document.getElementById('saveUpd'); btn.disabled=true; btn.textContent='Saving…';
   const oldName=l.name, oldContact=l.contact;
+  const oldPlotType=l.plotType, oldUnitPrice=num(l.unitPrice), oldNoPlots=num(l.noPlots);
   try{
     const patch={name,contact,plotType,noPlots,unitPrice,amtPaid:paidTotalInput,stage,nextAction:next,notes,tags,siteVisit:sv,balance:bal,discount,paymentPlan:plan,netTotal:cc.net,grandTotal:cc.grand};
     if(depositTarget!=null) patch.depositTarget=depositTarget;
@@ -11354,6 +11538,9 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
     let paymentResult=null;
     if(pay>0){ const methodEl=document.getElementById('u_paymethod'); paymentResult=await logNewPayment(l,pay,undefined,methodEl?methodEl.value:undefined,'Pipeline update · '+ghs(pay)); }
     const parts=[]; if(pay>0)parts.push(paymentResult&&paymentResult.status==='pending'?('Payment '+ghs(pay)+' (pending approval)'):('Payment '+ghs(pay))); parts.push('Stage: '+stage); if(discount!==oldDiscount)parts.push('Discount now '+ghs(discount));
+    if(plotType!==oldPlotType)parts.push('Plot type: '+oldPlotType+' → '+plotType);
+    if(unitPrice!==oldUnitPrice)parts.push('Unit price: '+ghs(oldUnitPrice)+' → '+ghs(unitPrice));
+    if(noPlots!==oldNoPlots)parts.push('No. plots: '+oldNoPlots+' → '+noPlots);
     await addActivity(name,'Pipeline update',parts.join(' · '),val('u_disc').trim(),val('u_method'),val('u_follow'));
     toast(pay>0?(paymentResult&&paymentResult.status==='pending'?'Pipeline updated · payment awaiting approval':('Payment recorded · '+ghs(pay))):'Pipeline updated'); route('updateOne',id,true);
     if(paymentResult&&paymentResult.offerReceipt){
@@ -14071,6 +14258,14 @@ async function apiFulfillContractRequest(id){
   if(DEMO_MODE){ const d=await demoLoad(); const r=(d.contractRequests||[]).find(x=>x.id===id); if(r){ r.status='fulfilled'; r.fulfilledAt=new Date().toISOString(); } await demoSave(); return; }
   await sb.from('contract_requests').update({status:'fulfilled',fulfilled_at:new Date().toISOString()}).eq('id',id);
 }
+async function apiUpdateContractRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.contractRequests||[]).find(x=>x.id===id); if(r) Object.assign(r,patch); await demoSave(); return; }
+  const {error}=await sb.from('contract_requests').update({client_name:patch.clientName,note:patch.note}).eq('id',id); if(error) throw error;
+}
+async function apiDeleteContractRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.contractRequests=(d.contractRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
+  const {error}=await sb.from('contract_requests').delete().eq('id',id); if(error) throw error;
+}
 async function apiMarkContractRequestsRead(ids){
   if(!ids||!ids.length) return;
   if(DEMO_MODE){ const d=await demoLoad(); (d.contractRequests||[]).forEach(r=>{ if(ids.includes(r.id)) r.read=true; }); await demoSave(); return; }
@@ -14190,12 +14385,25 @@ function contractRequestsHtml(){
   const pending=(DB.contractRequests||[]).filter(r=>r.status==='pending').sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   const fulfilled=(DB.contractRequests||[]).filter(r=>r.status==='fulfilled').sort((a,b)=>(b.fulfilledAt||'').localeCompare(a.fulfilledAt||'')).slice(0,15);
   return `<div class="sectitle" style="margin-top:0"><h3>Pending</h3><span class="cnt">${pending.length}</span></div>
-  <div class="list" style="margin-bottom:18px">${pending.length?pending.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}${r.source==='client'?' <span class="tag ok">Submitted by client</span>':''}</div><div class="meta">Requested by ${esc(r.requestedByName)} · ${esc((r.createdAt||'').slice(0,16).replace('T',' '))}${r.note?' · "'+esc(r.note)+'"':''}</div></div></div>
+  <div class="list" style="margin-bottom:18px">${pending.length?pending.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}${r.source==='client'?' <span class="tag ok">Submitted by client</span>':''}</div><div class="meta">Requested by ${esc(r.requestedByName)} · ${esc((r.createdAt||'').slice(0,16).replace('T',' '))}${r.note?' · "'+esc(r.note)+'"':''}</div></div>
+  <div style="display:flex;gap:6px"><button class="trashbtn" data-editcr="${esc(r.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delcr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
   <div class="foot" style="margin-top:10px"><button class="chip" data-cropen="${esc(r.id)}" data-croleadid="${esc(r.leadId)}">Open client &amp; generate →</button></div></div>`).join(''):emptyState(ic.doc,'Nothing pending','New contract requests will show up here.')}</div>
   <div class="sectitle"><h3>Recently fulfilled</h3><span class="cnt">${fulfilled.length}</span></div>
-  <div class="list">${fulfilled.length?fulfilled.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}</div><div class="meta">Requested by ${esc(r.requestedByName)} · fulfilled ${esc((r.fulfilledAt||'').slice(0,16).replace('T',' '))}</div></div></div></div>`).join(''):emptyState(ic.doc,'Nothing yet','')}</div>`;
+  <div class="list">${fulfilled.length?fulfilled.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.clientName)}</div><div class="meta">Requested by ${esc(r.requestedByName)} · fulfilled ${esc((r.fulfilledAt||'').slice(0,16).replace('T',' '))}</div></div>
+  <div style="display:flex;gap:6px"><button class="trashbtn" data-editcr="${esc(r.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delcr="${esc(r.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div></div>`).join(''):emptyState(ic.doc,'Nothing yet','')}</div>`;
 }
 function bindContractRequestsCtrls(){
+  document.querySelectorAll('[data-editcr]').forEach(b=>b.onclick=()=>{
+    const r=(DB.contractRequests||[]).find(x=>x.id===b.dataset.editcr); if(!r) return;
+    openEditEntryModal({title:'Edit contract request',fields:[
+      {key:'clientName',label:'Client name',value:r.clientName},
+      {key:'note',label:'Note',type:'textarea',value:r.note},
+    ],onSave:async(v)=>{ await apiUpdateContractRequestFull(r.id,v); Object.assign(r,v); toast('Contract request updated'); paintContractAppBody(); }});
+  });
+  document.querySelectorAll('[data-delcr]').forEach(b=>b.onclick=()=>{
+    const r=(DB.contractRequests||[]).find(x=>x.id===b.dataset.delcr); if(!r) return;
+    confirmDeleteEntry('this contract request from '+r.clientName,apiDeleteContractRequest,r.id,()=>{ DB.contractRequests=DB.contractRequests.filter(x=>x.id!==r.id); toast('Contract request deleted'); paintContractAppBody(); });
+  });
   document.querySelectorAll('[data-cropen]').forEach(b=>b.onclick=async()=>{
     const lead=findLeadById(b.dataset.croleadid);
     if(!lead){ toast('Could not find that client'); return; }
@@ -14516,6 +14724,81 @@ function buildClientStatementPDF(){
 
   const fname='Statement_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
+}
+// Personal, point-in-time statement built from a specific backup snapshot's own
+// leads/payments arrays (already filtered down to one person before this is called --
+// see openBackupSendModal) rather than the live CLIENT_DB/CLIENT_PROFILE globals
+// buildClientStatementPDF reads. Returns the PDF as base64 (no data: prefix) for
+// emailing, instead of triggering a browser download.
+function buildPersonBackupStatementPDF(personName,leads,payments,asOfLabel){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pageW=doc.internal.pageSize.getWidth();
+  const siteName=CONFIG.quoteSiteName||'Royal Palm Enclave, Tsopoli';
+  let y=pdfBrandedHeader(doc,'ACCOUNT STATEMENT',siteName,['Client: '+personName,'As of: '+asOfLabel]);
+  y+=8;
+  doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(100,112,133);
+  doc.text('This reflects records as they stood at the selected backup date, not live current data.',12,y); y+=8;
+  doc.setTextColor(20,20,20);
+
+  let grandAll=0,paidAll=0;
+  leads.forEach(l=>{
+    const c=computeLead(l); const grand=l.grandTotal!=null?num(l.grandTotal):c.grand;
+    const paid=num(l.amtPaid); const bal=Math.max(grand-paid,0);
+    grandAll+=grand; paidAll+=paid;
+    if(y>245){ doc.addPage(); y=16; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+    doc.text((l.plotType||'Plot')+' × '+(l.noPlots||1),12,y); y+=5;
+    const gap=4, cardW=(pageW-24-gap*2)/3;
+    pdfStatCard(doc,12,y,cardW,'Total price',ghs(grand));
+    pdfStatCard(doc,12+cardW+gap,y,cardW,'Paid as of date',ghs(paid));
+    pdfStatCard(doc,12+(cardW+gap)*2,y,cardW,'Balance',ghs(bal));
+    y+=17+8;
+  });
+  if(!leads.length){ doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133); doc.text('No purchases on file as of this date.',12,y); y+=10; }
+
+  if(y>255){ doc.addPage(); y=16; }
+  y=pdfDarkStatBar(doc,y,pageW,[{label:'Total across purchases',value:ghs(grandAll)},{label:'Total paid',value:ghs(paidAll)},{label:'Total balance',value:ghs(Math.max(grandAll-paidAll,0))}]);
+
+  if(y>255){ doc.addPage(); y=16; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,20,20);
+  doc.text('Payment history',12,y); y+=6;
+
+  const usableW=pageW-24, rowH=7, colX=[12,12+usableW*0.22,12+usableW*0.62];
+  const drawHead=()=>{
+    doc.setFillColor(11,30,61); doc.rect(12,y,usableW,rowH,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text('DATE',colX[0]+3,y+4.8); doc.text('FOR',colX[1],y+4.8); doc.text('AMOUNT',colX[2],y+4.8);
+    doc.setTextColor(20,20,20); y+=rowH;
+  };
+  if(payments.length){
+    drawHead();
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    const sorted=payments.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    sorted.forEach((p,i)=>{
+      if(y>272){ doc.addPage(); y=16; drawHead(); }
+      if(i%2===1){ doc.setFillColor(244,246,248); doc.rect(12,y,usableW,rowH,'F'); }
+      doc.setTextColor(20,20,20);
+      const lead=leads.find(l=>l.id===p.leadId);
+      doc.text(p.date||'—',colX[0]+3,y+4.8);
+      doc.text(String(lead?(lead.plotType+' × '+(lead.noPlots||1)):'Plot').slice(0,42),colX[1],y+4.8);
+      doc.text(ghs(p.amount),colX[2],y+4.8);
+      y+=rowH;
+    });
+  } else {
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133);
+    doc.text('No payments recorded as of this date.',12,y); y+=8;
+  }
+
+  const dateStr=new Date().toLocaleDateString('en-GB');
+  const pageCount=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140);
+    doc.text('Generated '+dateStr,12,290);
+    doc.text('Page '+i+' of '+pageCount,pageW-12,290,{align:'right'});
+  }
+  const uri=doc.output('datauristring');
+  return uri.slice(uri.indexOf('base64,')+7);
 }
 /* Staff-side "Send receipt" offer, shown right after Elias/Management logs a payment.
    Downloads the same branded receipt and offers WhatsApp/email deep-links prefilled
@@ -15058,13 +15341,27 @@ function mgrList(arr,kind){ if(!arr.length) return emptyState(ic.spark,'Nothing 
 }
 function mgrEnquiries(){ if(!DB.enquiries.length) return emptyState(ic.enquiry,'No enquiries logged','Submissions from agents will appear here live.');
   return `<div class="list">`+DB.enquiries.map(x=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(x.name)}" data-custcontact="${esc(x.contact||'')}">${esc(x.name)}</div><div class="meta">${esc(x.agentName)} · ${esc(x.createdAt)}</div></div>
-    <div style="display:flex;gap:6px"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
+    <div style="display:flex;gap:6px"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-editenq="${x.id}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="meta" style="margin-top:6px">${esc((x.types&&x.types.length?x.types.join(', '):'')+(x.location?(' · '+x.location):''))}</div>
     <div class="foot">${tg('ghost',x.source)}${x.follow==='Yes'?tg('warnt','Follow-up '+(x.followDate||'')):''}</div>
     ${x.details?`<div class="note">${esc(x.details)}</div>`:''}</div>`).join('')+`</div>`;
 }
+const ENQ_TYPE_OPTIONS=['Location','Price','Payment Plan','Documentation','Plot Availability','Title / Ownership','Site Visit','Other'];
 function bindEnquiryCtrls(){
   V.querySelectorAll('[data-pdfenq]').forEach(b=>b.onclick=()=>{ const e=DB.enquiries.find(x=>x.id===b.dataset.pdfenq); if(e) downloadRecordPDF('enquiry',e); });
+  V.querySelectorAll('[data-editenq]').forEach(b=>b.onclick=()=>{
+    const e=DB.enquiries.find(x=>x.id===b.dataset.editenq); if(!e) return;
+    openEditEntryModal({title:'Edit enquiry',fields:[
+      {key:'name',label:'Customer name',value:e.name},
+      {key:'contact',label:'Contact',value:e.contact},
+      {key:'location',label:'Location / area',value:e.location},
+      {key:'types',label:'Type of enquiry',type:'chips',options:ENQ_TYPE_OPTIONS,value:e.types||[]},
+      {key:'source',label:'Source',type:'select',options:['Walk-in','Phone Call','WhatsApp','Referral','Social Media','Advert','Other'],value:e.source},
+      {key:'details',label:'Enquiry details',type:'textarea',value:e.details},
+      {key:'follow',label:'Follow-up needed?',type:'select',options:['Yes','No'],value:e.follow},
+      {key:'followDate',label:'Follow-up date',type:'date',value:e.followDate},
+    ],onSave:async(v)=>{ await apiUpdateEnquiry(e.id,v); Object.assign(e,v); toast('Enquiry updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delenq]').forEach(b=>b.onclick=async()=>{
   const id=b.dataset.delenq; const e=DB.enquiries.find(x=>x.id===id); if(!confirm('Delete this enquiry from '+e.name+'?')) return;
   try{ await apiDeleteEnquiry(id); DB.enquiries=DB.enquiries.filter(x=>x.id!==id); toast('Enquiry deleted'); managerView(); }catch(err){ toast('Delete failed'); } }); }
@@ -15080,6 +15377,7 @@ function mgrComplaints(){
     return `<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(c.name)}" data-custcontact="${esc(c.contact||'')}">${esc(c.name)}</div><div class="meta">${esc(c.agentName)} · ${esc(c.createdAt)}${c.plot?(' · '+esc(c.plot)):''}</div></div>
     <div style="display:flex;gap:8px;align-items:center"><span class="tag pri-${esc(c.priority)}">${esc(c.priority)}</span>
     <button class="trashbtn" data-pdfcmp="${c.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="trashbtn" data-editcmp="${c.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delcmp="${c.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="foot"><span class="tag ghost">${esc(c.category)}</span><span class="tag ${statusTag}">${esc(c.status)}</span>${sentTag}${tg('portal',c.source==='Client portal'?'Client portal':'')}</div>
     <div class="note">${esc(c.details)}</div>${c.resolution?`<div class="note"><b>Wants:</b> ${esc(c.resolution)}</div>`:''}
@@ -15090,6 +15388,7 @@ function mgrVisits(){ if(!DB.sitevisits.length) return emptyState(ic.visit,'No s
   return `<div class="list">`+DB.sitevisits.map(v=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(v.name)}" data-custcontact="${esc(v.contact||'')}">${esc(v.name)}</div><div class="meta">${esc(v.agentName)} · ${esc(v.site)}</div></div>
     <div style="display:flex;gap:8px;align-items:center">${tg('gold',v.source==='Client portal'?'Client portal':'')}<span class="tag ${v.status==='Confirmed'?'ok':'warnt'}">${esc(v.status)}</span>
     <button class="trashbtn" data-pdfvisit="${v.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="trashbtn" data-editvisit="${v.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delvisit="${v.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="meta" style="margin-top:6px">${esc(v.date)} · ${esc(v.time)} · ${esc(v.people)} pax · ${esc(v.transport)}${v.pickup?(' · pickup: '+esc(v.pickup)):''}</div>${v.notes?`<div class="note">${esc(v.notes)}</div>`:''}
     <div class="foot" style="justify-content:space-between"><span class="mini">${esc(v.contact||'')}</span><select class="assign" data-vstatus="${v.id}">${['Pending','Confirmed'].map(s=>`<option ${s===v.status?'selected':''}>${s}</option>`).join('')}</select></div></div>`).join('')+`</div>`;
@@ -15099,6 +15398,17 @@ function bindComplaintCtrls(){
   V.querySelectorAll('select[data-status]').forEach(s=>s.onchange=async()=>{
     const c=DB.complaints.find(x=>x.id===s.dataset.status); try{ await apiUpdateComplaintStatus(c.id,s.value); c.status=s.value; toast('Complaint marked '+s.value); managerView(); }catch(e){ toast('Failed'); } });
   V.querySelectorAll('[data-pdfcmp]').forEach(b=>b.onclick=()=>{ const c=DB.complaints.find(x=>x.id===b.dataset.pdfcmp); if(c) downloadRecordPDF('complaint',c); });
+  V.querySelectorAll('[data-editcmp]').forEach(b=>b.onclick=()=>{
+    const c=DB.complaints.find(x=>x.id===b.dataset.editcmp); if(!c) return;
+    openEditEntryModal({title:'Edit client feedback',fields:[
+      {key:'name',label:'Client name',value:c.name},
+      {key:'contact',label:'Contact',value:c.contact},
+      {key:'category',label:'Category',type:'select',options:['Documentation','Payment / Refund','Land / Plot Issue','Service Quality','Communication','Delay','Other'],value:c.category},
+      {key:'priority',label:'Priority',type:'select',options:['High','Medium','Low'],value:c.priority},
+      {key:'details',label:'Feedback details',type:'textarea',value:c.details},
+      {key:'resolution',label:'Desired resolution',type:'textarea',value:c.resolution},
+    ],onSave:async(v)=>{ await apiUpdateComplaintFull(c.id,v); Object.assign(c,v); toast('Feedback updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delcmp]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.delcmp; const c=DB.complaints.find(x=>x.id===id); if(!confirm('Delete this complaint from '+c.name+'?')) return;
     try{ await apiDeleteComplaint(id); DB.complaints=DB.complaints.filter(x=>x.id!==id); toast('Complaint deleted'); managerView(); }catch(err){ toast('Delete failed'); } });
@@ -15107,6 +15417,19 @@ function bindVisitCtrls(){
   V.querySelectorAll('select[data-vstatus]').forEach(s=>s.onchange=async()=>{
     const v=DB.sitevisits.find(x=>x.id===s.dataset.vstatus); try{ await apiUpdateVisitStatus(v.id,s.value); v.status=s.value; toast('Visit marked '+s.value); }catch(e){ toast('Failed'); } });
   V.querySelectorAll('[data-pdfvisit]').forEach(b=>b.onclick=()=>{ const v=DB.sitevisits.find(x=>x.id===b.dataset.pdfvisit); if(v) downloadRecordPDF('sitevisit',v); });
+  V.querySelectorAll('[data-editvisit]').forEach(b=>b.onclick=()=>{
+    const v=DB.sitevisits.find(x=>x.id===b.dataset.editvisit); if(!v) return;
+    openEditEntryModal({title:'Edit site visit',fields:[
+      {key:'name',label:'Client name',value:v.name},
+      {key:'contact',label:'Contact',value:v.contact},
+      {key:'date',label:'Visit date',type:'date',value:v.date},
+      {key:'time',label:'Visit time',value:v.time},
+      {key:'people',label:'Number of accompaniment',type:'number',value:v.people},
+      {key:'transport',label:'Mode of transportation',type:'select',options:['Personal Vehicle','Company Vehicle'],value:v.transport},
+      {key:'pickup',label:'Pick-up location',value:v.pickup},
+      {key:'notes',label:'Notes',type:'textarea',value:v.notes},
+    ],onSave:async(vals)=>{ await apiUpdateVisitFull(v.id,vals); Object.assign(v,vals); toast('Site visit updated'); managerView(); }});
+  });
   V.querySelectorAll('[data-delvisit]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.delvisit; const v=DB.sitevisits.find(x=>x.id===id); if(!confirm('Delete this site visit request from '+v.name+'?')) return;
     try{ await apiDeleteVisit(id); DB.sitevisits=DB.sitevisits.filter(x=>x.id!==id); toast('Site visit deleted'); managerView(); }catch(err){ toast('Delete failed'); } });
@@ -16722,7 +17045,7 @@ function mgrBackupHtml(){
 function backupRowHtml(b){
   const counts=b.table_counts||{}; const totalRows=Object.values(counts).reduce((s,n)=>s+num(n),0);
   return `<div class="rowcard"><div class="top"><div><div class="nm">${fmtBackupWhen(b.created_at)}</div><div class="meta">${totalRows.toLocaleString()} records · ${fmtBytes(b.size_bytes)}${b.triggered_by_name?' · by '+esc(b.triggered_by_name):''}</div></div>${backupTriggerTag(b.trigger_type)}</div>
-    <div class="foot" style="gap:8px;flex-wrap:wrap"><button class="chip" data-bkdownload="${esc(b.id)}">Download JSON</button><button class="chip" data-bkrestore="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}" style="color:#B91C1C">Restore this backup</button></div></div>`;
+    <div class="foot" style="gap:8px;flex-wrap:wrap"><button class="chip" data-bkdownload="${esc(b.id)}">Download JSON</button><button class="chip" data-bksend="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}">Send records to…</button><button class="chip" data-bkrestore="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}" style="color:#B91C1C">Restore this backup</button></div></div>`;
 }
 function bindMgrBackupCtrls(){
   const nowBtn=document.getElementById('bkNowBtn');
@@ -16743,6 +17066,116 @@ function bindMgrBackupCtrls(){
     b.disabled=false; b.textContent=orig;
   });
   document.querySelectorAll('[data-bkrestore]').forEach(b=>b.onclick=()=>openRestoreConfirmModal(b.dataset.bkrestore,b.dataset.bkwhen));
+  document.querySelectorAll('[data-bksend]').forEach(b=>b.onclick=()=>openBackupSendModal(b.dataset.bksend,b.dataset.bkwhen));
+}
+/* Safe subset of client_portal_access (name/contact/email only -- never pin_hash/
+   shadow_password) exposed via the client_directory view specifically so
+   Management can look up a client's email here without any RLS path into the
+   base table itself (which stays locked to "own row only"). */
+async function apiLoadClientDirectory(){
+  if(DEMO_MODE) return [];
+  try{ const {data,error}=await sb.from('client_directory').select('*'); if(error) throw error; return data||[]; }
+  catch(e){ return []; }
+}
+// Pulls just one person's own leads/payments out of a full backup snapshot --
+// staff by agent_key, clients by the same name+contact identity match Customer
+// 360 uses (custMatches) -- so nobody ever receives anyone else's records.
+function extractPersonFromBackupSnapshot(snapshot,type,person){
+  const allLeads=(snapshot.leads||[]).map(mapLead);
+  const allPayments=(snapshot.payments||[]).map(mapClientPay);
+  const leads=type==='staff'
+    ? allLeads.filter(l=>l.agent===person.key)
+    : allLeads.filter(l=>custMatches(l.name,l.contact,person.name,person.contact));
+  const ids=new Set(leads.map(l=>l.id));
+  const payments=allPayments.filter(p=>ids.has(p.leadId));
+  return {leads,payments};
+}
+let BKSEND_TYPE='staff', BKSEND_QUERY='', BKSEND_SELECTED=new Set(), BKSEND_CLIENTS=null;
+async function openBackupSendModal(backupId,whenLabel){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  BKSEND_TYPE='staff'; BKSEND_QUERY=''; BKSEND_SELECTED=new Set(); BKSEND_CLIENTS=null;
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="bkSendTitle">Send records from ${esc(whenLabel)}</div><button id="closeBkSend" aria-label="Close" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="mini" style="margin-bottom:12px">Each person selected below only ever receives their own records as of this backup date — never anyone else's.</div>
+    ${fld('Recipient type',sel('bks_type',['Staff','Client'],'Staff'))}
+    <input id="bks_search" placeholder="Search by name…" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;margin:8px 0"/>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><button class="chip" id="bks_selectAll">Select all</button><span class="mini" id="bks_count">0 selected</span></div>
+    <div id="bks_list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="formactions" style="margin-top:14px"><button class="btn primary" id="bks_send" style="width:100%">Send</button></div>
+    <div id="bks_result" class="mini" style="margin-top:8px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','bkSendTitle');
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeBkSend').onclick=()=>ov.remove();
+
+  let currentItems=[];
+  const renderList=async()=>{
+    const listEl=document.getElementById('bks_list');
+    listEl.innerHTML='<div class="mini" style="padding:8px 0">Loading…</div>';
+    let items;
+    if(BKSEND_TYPE==='staff'){
+      items=STAFF_LIST.map(s=>({key:s.key,name:s.name,sub:(s.role==='manager'?'Management':'Agent')+(s.email?' · '+s.email:' · No email on file'),hasEmail:!!s.email,email:s.email}));
+    } else {
+      if(!BKSEND_CLIENTS) BKSEND_CLIENTS=await apiLoadClientDirectory();
+      items=(BKSEND_CLIENTS||[]).map(c=>({key:c.client_name+'|'+c.client_contact,name:c.client_name,contact:c.client_contact,sub:c.client_email||'No email on file',hasEmail:!!c.client_email,email:c.client_email}));
+    }
+    const q=BKSEND_QUERY.trim().toLowerCase();
+    const filtered=q?items.filter(it=>(it.name||'').toLowerCase().includes(q)):items;
+    listEl.innerHTML=filtered.length?filtered.map(it=>`
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);${it.hasEmail?'cursor:pointer':'opacity:.5'}">
+        <input type="checkbox" data-bksperson="${esc(it.key)}" ${BKSEND_SELECTED.has(it.key)?'checked':''} ${it.hasEmail?'':'disabled'}/>
+        <span style="flex:1"><div style="font-weight:700;font-size:13px">${esc(it.name)}</div><div class="mini">${esc(it.sub)}</div></span>
+      </label>`).join(''):emptyState(ic.grid,'No matches','');
+    listEl.querySelectorAll('[data-bksperson]').forEach(cb=>cb.onchange=()=>{
+      if(cb.checked) BKSEND_SELECTED.add(cb.dataset.bksperson); else BKSEND_SELECTED.delete(cb.dataset.bksperson);
+      document.getElementById('bks_count').textContent=BKSEND_SELECTED.size+' selected';
+    });
+    document.getElementById('bks_count').textContent=BKSEND_SELECTED.size+' selected';
+    currentItems=items;
+  };
+  await renderList();
+
+  document.getElementById('bks_type').onchange=async(e)=>{ BKSEND_TYPE=e.target.value==='Client'?'client':'staff'; BKSEND_SELECTED=new Set(); await renderList(); };
+  document.getElementById('bks_search').oninput=debounce(async(e)=>{ BKSEND_QUERY=e.target.value; await renderList(); },250);
+  document.getElementById('bks_selectAll').onclick=async()=>{
+    currentItems.filter(it=>it.hasEmail).forEach(it=>BKSEND_SELECTED.add(it.key));
+    await renderList();
+  };
+  document.getElementById('bks_send').onclick=async()=>{
+    const btn=document.getElementById('bks_send'); const resultEl=document.getElementById('bks_result');
+    if(!BKSEND_SELECTED.size){ toast('Select at least one recipient'); return; }
+    btn.disabled=true; btn.textContent='Sending…'; resultEl.textContent='';
+    try{
+      const full=await apiDownloadBackupSnapshot(backupId);
+      const snapshot=full.snapshot||{};
+      let sent=0, failed=0;
+      for(const key of BKSEND_SELECTED){
+        let person, email, extracted;
+        if(BKSEND_TYPE==='staff'){
+          const s=STAFF_LIST.find(x=>x.key===key); if(!s){ failed++; continue; }
+          person={key:s.key,name:s.name}; email=s.email;
+        } else {
+          const idx=key.indexOf('|'); const name=key.slice(0,idx), contact=key.slice(idx+1);
+          const dirRow=(BKSEND_CLIENTS||[]).find(c=>c.client_name===name&&c.client_contact===contact);
+          email=dirRow&&dirRow.client_email;
+          person={name,contact};
+        }
+        if(!email){ failed++; continue; }
+        extracted=extractPersonFromBackupSnapshot(snapshot,BKSEND_TYPE,person);
+        const pdfB64=buildPersonBackupStatementPDF(person.name,extracted.leads,extracted.payments,whenLabel);
+        const subject='Your statement as of '+whenLabel;
+        const html='<p>Hello '+esc(person.name)+',</p><p>Attached is your account statement as it stood on <b>'+esc(whenLabel)+'</b>, requested by Management.</p>';
+        const r=await apiSendEmail(email,subject,html,[{filename:'Statement_'+person.name.replace(/\s+/g,'_')+'.pdf',content:pdfB64}]);
+        if(r.ok) sent++; else failed++;
+      }
+      resultEl.textContent=sent+' sent'+(failed?', '+failed+' skipped (no email on file, or delivery failed)':'');
+      toast(sent+' statement(s) sent');
+    }catch(e){ resultEl.textContent='Failed: '+(e.message||e); }
+    btn.disabled=false; btn.textContent='Send';
+  };
 }
 function openRestoreConfirmModal(backupId,whenLabel){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
@@ -17136,6 +17569,17 @@ function mapFundReq(r){ return {id:r.id,type:r.req_type,amount:num(r.amount),pur
   status:r.status,decidedBy:r.decided_by,decidedByName:r.decided_by_name,decidedAt:r.decided_at,decisionNote:r.decision_note,approvalSignature:r.approval_signature,
   receiptData:r.receipt_data,receiptName:r.receipt_name,createdAt:r.created_at}; }
 function mapDailyBalance(r){ return {id:r.id,date:r.balance_date,cash:num(r.cash),momo:num(r.momo),bank:num(r.bank),loggedByName:r.logged_by_name,updatedAt:r.updated_at}; }
+async function apiUpdateFundRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id);
+    if(fr) Object.assign(fr,{type:patch.type==='General budget'?'budget':'specific',amount:num(patch.amount),purpose:patch.purpose});
+    await demoSave(); return; }
+  const row={req_type:patch.type==='General budget'?'budget':'specific',amount:num(patch.amount),purpose:patch.purpose};
+  const {error}=await sb.from('fund_requests').update(row).eq('id',id); if(error) throw error;
+}
+async function apiDeleteFundRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.fundRequests=(d.fundRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
+  const {error}=await sb.from('fund_requests').delete().eq('id',id); if(error) throw error;
+}
 async function apiLoadExpenseCategories(){ const {data,error}=await sb.from('expense_categories').select('*').eq('active',true).order('name'); if(error) throw error; return data||[]; }
 async function apiAddExpenseCategory(name,monthlyBudget){ const {data,error}=await sb.from('expense_categories').insert({name,monthly_budget:monthlyBudget||null}).select().single(); if(error) throw error; return data; }
 async function apiUpdateExpenseCategoryBudget(id,monthlyBudget){ const {data,error}=await sb.from('expense_categories').update({monthly_budget:monthlyBudget||null}).eq('id',id).select().single(); if(error) throw error; return data; }
@@ -17188,13 +17632,29 @@ async function apiDecideExpense(id,approve,note){
   const {data,error}=await sb.from('expenses').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null}).eq('id',id).select().single();
   if(error) throw error; return mapExpense(data);
 }
-async function apiLoadFundRequests(){ const {data,error}=await sb.from('fund_requests').select('*').order('created_at',{ascending:false}); if(error) throw error; return (data||[]).map(mapFundReq); }
+async function apiLoadFundRequests(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.fundRequests||[]).slice(); }
+  const {data,error}=await sb.from('fund_requests').select('*').order('created_at',{ascending:false}); if(error) throw error; return (data||[]).map(mapFundReq);
+}
 async function apiInsertFundRequest(type,amount,purpose,receiptData,receiptName){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.fundRequests=d.fundRequests||[];
+    const rec={id:uid(),type,amount:num(amount),purpose,requestedBy:PROFILE.key,requestedByName:PROFILE.name,status:'pending',
+      decidedBy:null,decidedByName:null,decidedAt:null,decisionNote:null,approvalSignature:null,
+      receiptData:receiptData||null,receiptName:receiptName||null,createdAt:today()+' '+nowTime()};
+    d.fundRequests.unshift(rec); await demoSave(); return rec;
+  }
   const {data,error}=await sb.from('fund_requests').insert({req_type:type,amount,purpose,requested_by:PROFILE.key,requested_by_name:PROFILE.name,
     receipt_data:receiptData||null,receipt_name:receiptName||null}).select().single();
   if(error) throw error; return mapFundReq(data);
 }
 async function apiDecideFundRequest(id,approve,note){
+  if(DEMO_MODE){
+    const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id); if(!fr) throw new Error('Fund request not found');
+    Object.assign(fr,{status:approve?'approved':'rejected',decidedBy:PROFILE.key,decidedByName:PROFILE.name,decidedAt:today()+' '+nowTime(),
+      decisionNote:note||null,approvalSignature:approve?getStaffSignature(PROFILE.key):null});
+    await demoSave(); return fr;
+  }
   const sig=approve?getStaffSignature(PROFILE.key):null;
   const {data,error}=await sb.from('fund_requests').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null,approval_signature:sig}).eq('id',id).select().single();
   if(error) throw error; return mapFundReq(data);
@@ -17204,14 +17664,23 @@ async function apiUpsertDailyBalance(date,cash,momo,bank){
   const {data,error}=await sb.from('daily_balances').upsert({balance_date:date,cash,momo,bank,logged_by:PROFILE.key,logged_by_name:PROFILE.name,updated_at:new Date().toISOString()},{onConflict:'balance_date'}).select().single();
   if(error) throw error; return mapDailyBalance(data);
 }
+// Expense logging, daily cash balances and receipts move real money, so that
+// side of this app stays live-only. Fund Requests is just a request/approval
+// workflow (no cash actually changes hands until someone logs real spend
+// against it later), so it's safe to demo -- see paintExpensesApp's tab
+// filtering for the other half of this carve-out.
 async function viewExpensesApp(){
   if(!canManageExpenses()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Expenses are restricted to Elias and Management.'); return; }
-  if(DEMO_MODE){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Only available live','Expenses track real money and receipts — connect to Supabase (Portal settings) to use it.'); return; }
-  EXP_TAB='log';
+  EXP_TAB='funds';
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Operations</div><h2>Expenses</h2><p>Log spending, request funds, and track the daily cash/MoMo/bank position.</p></div></div>
   <div class="pipeStatStrip" id="expStatStrip"></div>
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="expTabs"></div>
   <div id="expBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
+  if(DEMO_MODE){
+    if(!EXP_LOADED){ try{ FUND_REQUESTS_LIST=await apiLoadFundRequests(); EXP_LOADED=true; }catch(e){ toast('Could not load fund requests: '+(e.message||e)); } }
+    paintExpensesApp();
+    return;
+  }
   if(!EXP_LOADED){
     try{
       [EXP_CATEGORIES_LIST,EXPENSES_LIST,FUND_REQUESTS_LIST,DAILY_BALANCES_LIST,RECURRING_EXPENSES_LIST]=await withLoadTimeout(Promise.all([
@@ -17219,6 +17688,7 @@ async function viewExpensesApp(){
       EXP_LOADED=true;
     }catch(e){ toast('Could not load expenses: '+(e.message||e)); }
   }
+  EXP_TAB='log';
   paintExpensesApp();
 }
 function expPendingCount(){ return EXPENSES_LIST.filter(e=>e.status==='pending').length + FUND_REQUESTS_LIST.filter(f=>f.status==='pending').length; }
@@ -17232,10 +17702,12 @@ function paintExpensesApp(){
   }
   const tabs=document.getElementById('expTabs');
   const pc=expPendingCount();
-  tabs.innerHTML=[
+  tabs.innerHTML=(DEMO_MODE?[
+    ['funds','Fund Requests'],...(isMgr?[['approvals','Approvals'+(pc?' ('+pc+')':'')]]:[])
+  ]:[
     ['log','Log Expense'],['funds','Fund Requests'],['balance','Daily Balance'],
     ...(isMgr?[['approvals','Approvals'+(pc?' ('+pc+')':'')],['categories','Categories'],['recurring','Recurring'],['dashboard','Dashboard']]:[])
-  ].map(([k,l])=>`<button class="chip ${EXP_TAB===k?'on':''}" data-exptab="${k}">${l}</button>`).join('');
+  ]).map(([k,l])=>`<button class="chip ${EXP_TAB===k?'on':''}" data-exptab="${k}">${l}</button>`).join('');
   tabs.querySelectorAll('[data-exptab]').forEach(b=>b.onclick=()=>{ EXP_TAB=b.dataset.exptab; paintExpensesApp(); });
   const body=document.getElementById('expBody');
   if(EXP_TAB==='log') body.innerHTML=expLogTabHtml();
@@ -17425,7 +17897,8 @@ function expFundsTabHtml(){
 }
 function fundReqRowHtml(f){
   const logged=fundReqHasLoggedSpend(f.id);
-  return `<div class="rowcard"><div class="top"><div><div class="nm">${f.type==='budget'?'General budget':'Specific spend'} · ${ghs(f.amount)}</div><div class="meta">${esc((f.createdAt||'').slice(0,10))}${f.requestedByName?' · by '+esc(f.requestedByName):''}</div></div>${expStatusTag(f.status)}</div>
+  const mgrCtrls=PROFILE.role==='manager'?`<button class="trashbtn" data-editfr="${esc(f.id)}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delfr="${esc(f.id)}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`:'';
+  return `<div class="rowcard"><div class="top"><div><div class="nm">${f.type==='budget'?'General budget':'Specific spend'} · ${ghs(f.amount)}</div><div class="meta">${esc((f.createdAt||'').slice(0,10))}${f.requestedByName?' · by '+esc(f.requestedByName):''}</div></div><div style="display:flex;gap:6px;align-items:center">${expStatusTag(f.status)}${mgrCtrls}</div></div>
   <div class="note">${esc(f.purpose)}</div>
   ${f.status==='approved'?`<div class="foot" style="gap:8px;flex-wrap:wrap">${logged?'<span class="tag ok">✓ Spend logged</span>':'<span class="tag warnt">Not yet logged</span>'}<button class="chip" data-frslip="${esc(f.id)}">Download approval slip</button>${f.receiptData?`<button class="chip" data-frreceipt="${esc(f.id)}">View document</button>`:''}</div>`:f.receiptData?`<div class="foot" style="gap:8px"><button class="chip" data-frreceipt="${esc(f.id)}">View document</button></div>`:''}</div>`;
 }
@@ -17575,7 +18048,20 @@ function bindExpensesCtrls(){
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.frslip); if(f) buildFundRequestSlipPDF(f);
   });
   document.querySelectorAll('[data-logspend]').forEach(b=>b.onclick=()=>{
+    if(DEMO_MODE){ toast('Logging actual spend needs a live connection — it records a real expense receipt.'); return; }
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.logspend); if(f) openLogSpendModal(f);
+  });
+  document.querySelectorAll('[data-editfr]').forEach(b=>b.onclick=()=>{
+    const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.editfr); if(!f) return;
+    openEditEntryModal({title:'Edit fund request',fields:[
+      {key:'type',label:'Type',type:'select',options:['General budget','Specific / untagged spending'],value:f.type==='budget'?'General budget':'Specific / untagged spending'},
+      {key:'amount',label:'Amount (GHS)',type:'number',value:f.amount},
+      {key:'purpose',label:'Purpose',type:'textarea',value:f.purpose},
+    ],onSave:async(v)=>{ await apiUpdateFundRequestFull(f.id,v); f.type=v.type==='General budget'?'budget':'specific'; f.amount=v.amount; f.purpose=v.purpose; toast('Fund request updated'); paintExpensesApp(); }});
+  });
+  document.querySelectorAll('[data-delfr]').forEach(b=>b.onclick=()=>{
+    const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.delfr); if(!f) return;
+    confirmDeleteEntry('this fund request',apiDeleteFundRequest,f.id,()=>{ FUND_REQUESTS_LIST=FUND_REQUESTS_LIST.filter(x=>x.id!==f.id); toast('Fund request deleted'); paintExpensesApp(); });
   });
   const ecAddBtn=document.getElementById('ecAddBtn');
   if(ecAddBtn) ecAddBtn.onclick=async()=>{
@@ -19648,19 +20134,27 @@ function buildCommissionReportPDF(data){
 // CURRENT month arrives (that's when it's actually payable), and posts a personalized
 // announcement so it isn't just a silent download. Tracked in app_config so it only
 // fires once regardless of how many times or which device Management logs in from.
+// Posting the "Commission ready" announcement and owning CONFIG.lastCommissionMonth
+// used to be a race: run_monthly_commission_check() (pg_cron, daily 6am) and this
+// client-side check both gated on the exact same flag and both posted a near-
+// identical announcement -- whichever fired first silently won, sometimes
+// producing two announcements in the same month. The server cron is now the SOLE
+// writer of the announcement/flag; this is purely a client-local "grab this
+// month's PDF once" convenience (the Commission screen's own Download PDF button
+// always works on demand regardless), gated on its own localStorage flag and on
+// having actually observed the server's confirmation (CONFIG.lastCommissionMonth,
+// refreshed by apiLoadConfig() at sign-in) rather than racing to set it.
 async function checkMonthlyCommissionReport(){
   if(PROFILE.role!=='manager') return;
   try{
     if(+today().slice(8,10)<15) return;
     const reportMonth=shiftMonth(today().slice(0,7),-1);
-    if(CONFIG.lastCommissionMonth===reportMonth) return;
+    let already=null; try{ already=localStorage.getItem('pep_commission_pdf_month'); }catch(e){}
+    if(already===reportMonth) return;
+    if(CONFIG.lastCommissionMonth!==reportMonth) return;
     const data=computeCommissionForMonth(reportMonth);
     buildCommissionReportPDF(data);
-    const grandTotal=data.rows.reduce((s,r)=>s+r.total,0);
-    const body=`${monthLabel(reportMonth)} commission is ready to pay today — ${ghs(grandTotal)} total across ${data.rows.length} agents (${data.eligibleCount} sharing a ${ghs(data.poolTotal)} pool). Full breakdown downloaded as a PDF.`;
-    const rec=await apiInsertAnnouncement('Commission ready: '+monthLabel(reportMonth),body,null);
-    if(rec){ DB.announcements.unshift(rec); refreshAnnounceBubble(); }
-    await apiSaveConfig({lastCommissionMonth:reportMonth});
+    try{ localStorage.setItem('pep_commission_pdf_month',reportMonth); }catch(e){}
   }catch(e){}
 }
 
