@@ -17994,6 +17994,13 @@ async function computeDiagnostics(){
   if(!DEMO_MODE && sb){
     try{ const {data}=await sb.from('audit_events').select('summary,created_at,severity,actor_name').eq('category','error').order('created_at',{ascending:false}).limit(10); recentErrors=data||[]; }catch(e){}
   }
+  // Sec 87 "Job logs" -- pg_cron's own run history, previously invisible to
+  // anyone without a database console. Manager-only (matches the RPC's own
+  // gate); silently omitted for other roles rather than erroring.
+  let jobs=[];
+  if(!DEMO_MODE && sb && PROFILE.role==='manager'){
+    try{ const {data}=await sb.rpc('get_cron_job_summary'); jobs=data||[]; }catch(e){}
+  }
   return {
     appBootAt:APP_BOOT_AT,
     userAgent:navigator.userAgent,
@@ -18003,6 +18010,7 @@ async function computeDiagnostics(){
     lastSyncAt:LAST_LOAD_ALL_AT,
     pendingSyncCount:pending.length,
     recentErrors,
+    jobs,
   };
 }
 function diagnosticsHtml(d){
@@ -18017,6 +18025,8 @@ function diagnosticsHtml(d){
   </div>
   <div class="sectitle"><h3>Recent client errors</h3><span class="cnt">${d.recentErrors.length}</span></div>
   <div class="list">${d.recentErrors.length?d.recentErrors.map(e=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(e.summary)}</div><div class="meta">${esc(e.actor_name||'Unknown')} · ${esc((e.created_at||'').slice(0,16).replace('T',' '))}</div></div><span class="tag ${e.severity==='critical'?'dgr':'warnt'}">${esc(e.severity)}</span></div></div>`).join(''):emptyState(ic.check||ic.spark,'No recent errors','Nothing reported in the client error log.')}</div>
+  ${PROFILE.role==='manager'?`<div class="sectitle"><h3>Scheduled jobs</h3><span class="cnt">${d.jobs.length}</span></div>
+  <div class="list">${d.jobs.length?d.jobs.map(j=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(j.jobname)}</div><div class="meta">${esc(j.schedule)}${j.last_run_at?' · last ran '+esc(new Date(j.last_run_at).toLocaleString('en-GB')):' · never run yet'}</div></div><span class="tag ${!j.active?'ghost':j.last_run_status==='succeeded'?'ok':j.last_run_status==='failed'?'dgr':'warnt'}">${j.active?esc(j.last_run_status||'no runs yet'):'inactive'}</span></div></div>`).join(''):emptyState(ic.check||ic.spark,'No scheduled jobs found','')}</div>`:''}
   <div class="formactions" style="margin-top:10px"><button class="btn primary" id="exportDiagBtn" style="width:100%">Export diagnostics (.json)</button></div>`;
 }
 function bindDiagnosticsCtrls(d){
