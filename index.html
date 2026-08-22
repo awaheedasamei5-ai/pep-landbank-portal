@@ -12386,13 +12386,20 @@ function pdfScheduleTable(doc,y,pageW,rows){
    own navy branding used elsewhere in these PDF helpers). */
 const QGREEN_DARK=[13,77,45], QGREEN_LABEL=[21,110,64], QGREEN_LIGHT=[224,238,220], QGREEN_BG=[238,244,235], QRED=[196,42,30];
 function pdfQuoteBg(doc,pageW,pageH){ doc.setFillColor(QGREEN_BG[0],QGREEN_BG[1],QGREEN_BG[2]); doc.rect(0,0,pageW,pageH,'F'); }
-function pdfKV(doc,x,y,label,value,valueColor){
+// maxWidth constrains the value to its own column so a long name/address/email
+// wraps instead of visually running into a neighboring column's text (the
+// literal "screenshot problem" this was built to fix -- see Sec 21/91 of the
+// rebuild spec). Returns the number of lines drawn so callers can space the
+// next row down by the actual height used, not a fixed guess.
+function pdfKV(doc,x,y,label,value,valueColor,maxWidth){
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(QGREEN_LABEL[0],QGREEN_LABEL[1],QGREEN_LABEL[2]);
   doc.text(label,x,y);
   doc.setFont('helvetica','normal'); doc.setFontSize(9);
   if(valueColor) doc.setTextColor(valueColor[0],valueColor[1],valueColor[2]); else doc.setTextColor(20,20,20);
-  doc.text(String(value),x+40,y);
+  const lines=maxWidth?doc.splitTextToSize(String(value),maxWidth):[String(value)];
+  doc.text(lines,x+40,y);
   doc.setTextColor(20,20,20);
+  return lines.length;
 }
 function pdfGreenBar(doc,y,pageW,items){
   const barH=13; doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,y,pageW-24,barH,'F');
@@ -13077,12 +13084,27 @@ function openQuotationRequest(){
     <div class="grid2">${fld('Plot type',sel('q_plottype',['Full Plot','Half Plot']))}${fld('No. of plots','<input id="q_noplots" type="number" min="0.5" step="0.5" value="1"/>')}</div>
     ${fld('Payment period',sel('q_period',['Full Payment','3 Months','6 Months','9 Months','12 Months']))}
     <div class="grid2">${fld('Discount (GHS)','<input id="q_discount" type="number" min="0" placeholder="auto"/>','leave blank for the standard discount')}${fld('Deposit %','<input id="q_depositpct" type="number" min="0" max="100" value="'+Math.round(QUOTE_DEPOSIT_PCT*100)+'"/>','e.g. 50 for a 50% deposit')}</div>
+    ${fld('Deposit Amount (GHS)','<input id="q_depositamt" type="number" min="0" placeholder="auto"/>','enter a cash figure instead — the % above updates to match')}
     <div id="quotePreview" class="formwrap" style="margin-top:4px"></div>
     <div class="formactions"><button class="btn primary" id="genQuoteBtn" style="width:100%">Generate quotation PDF</button></div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeQuoteReq').onclick=()=>ov.remove();
+  // Deposit % and Deposit Amount are two views of the same number -- editing
+  // either one recalculates the other from the quote's grand total (which
+  // doesn't itself depend on deposit, so it's safe to read via any pct).
+  const currentGrand=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).grand;
+  document.getElementById('q_depositpct').addEventListener('input',()=>{
+    const grand=currentGrand(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
+    document.getElementById('q_depositamt').value=grand>0?Math.round(grand*pct/100):'';
+    paintPreview();
+  });
+  document.getElementById('q_depositamt').addEventListener('input',()=>{
+    const grand=currentGrand(); const amt=Math.max(0,Math.min(grand,num(val('q_depositamt'))));
+    document.getElementById('q_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
+    paintPreview();
+  });
   const paintPreview=()=>{
     const plotType=val('q_plottype'), noPlots=num(val('q_noplots'))||1, period=val('q_period');
     const t=computeQuotationTotals(plotType,noPlots,period,val('q_discount'),val('q_depositpct'));
@@ -13132,17 +13154,23 @@ function buildQuotationPDF(q){
 
   let y=44;
   const leftX=14, rightX=110;
-  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):Math.round(QUOTE_DEPOSIT_PCT*100);
-  const leftRows=[['Customer Name',q.clientName,null],['Address',q.address||'—',null],
-    ['Contact',[q.contact,q.email].filter(Boolean).join('  ·  ')||'—',null],
-    ['Payment Plan',q.planMonths?(depositPct+'%'):'Outright',null]];
+  // Fixed cell widths so a long name/address/email wraps within its own column
+  // instead of overlapping the neighboring one -- each column tracks its own y
+  // position (rows can be different heights once a value wraps).
+  const leftColWidth=rightX-leftX-40-4, rightColWidth=pageW-12-rightX-40;
+  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
+  const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
+    ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
+    ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
+    ['Deposit Amount',q.planMonths?ghs(q.deposit):'—'],
+    ['Deposit %',depositPct!=null?depositPct+'%':'—']];
   const rightRows=[['Date:',dateStr,null],['Credit Period months',q.planMonths||'—',QRED],['No of Plots',q.noPlots,QRED],
     ['Original Plot Price',ghs(q.listTotal/q.noPlots),null],['Discount',ghs((q.discountTotal||0)/q.noPlots),null],
     ['Interest',ghs((q.interestTotal||0)/q.noPlots),null],['Cost with Interest',ghs((q.net+q.interestTotal)/q.noPlots),null],
     ['Total',ghs(q.grand),null]];
-  leftRows.forEach((r,i)=>pdfKV(doc,leftX,y+i*6,r[0],r[1],r[2]));
-  rightRows.forEach((r,i)=>pdfKV(doc,rightX,y+i*6,r[0],r[1],r[2]));
-  y+=Math.max(leftRows.length,rightRows.length)*6+7;
+  let ly=y; leftRows.forEach(r=>{ const n=pdfKV(doc,leftX,ly,r[0],r[1],null,leftColWidth); ly+=Math.max(6,n*4.2+1.5); });
+  let ry=y; rightRows.forEach(r=>{ const n=pdfKV(doc,rightX,ry,r[0],r[1],r[2],rightColWidth); ry+=Math.max(6,n*4.2+1.5); });
+  y=Math.max(ly,ry)+4;
 
   if(q.planMonths){
     y=pdfGreenBar(doc,y,pageW,[
@@ -14544,6 +14572,11 @@ function contractAppSettingsHtml(){
   return `
   <div class="sectitle" style="margin-top:0"><h3>Contract settings</h3><span class="cnt">everything the PDF is built from</span></div>
   <p class="mini" style="margin:-2px 0 12px">Broken into segments matching the actual document — edit any of them, in any order, without breaking the layout. The party names, dates and money figures always come live from the client's own record; only the wording below is yours to change.</p>
+  <div class="formactions" style="margin:0 0 14px;gap:8px">
+    <button type="button" class="chip" id="ca_restoreDefault" style="width:100%">↺ Restore all clauses to default wording</button>
+    <button type="button" class="chip hidden" id="ca_undoRestore" style="width:100%">Undo restore</button>
+  </div>
+  <p class="mini" style="margin:-10px 0 12px">Restoring only affects contracts generated after you save — anything already issued keeps its original wording exactly as it was.</p>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:10px">Segment 1 — Cover &amp; branding</div>
@@ -14569,19 +14602,19 @@ function contractAppSettingsHtml(){
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 2 — Preamble (the "WHEREAS" lease background)</div>
     <p class="mini" style="margin:0 0 10px">Tap a clause to expand it for editing. Keep the "i. / ii. / iii." markers; {ACRES} is replaced with each client's own land size.</p>
-    ${clauseEditorHtml('ca_preamble',CONFIG.contractPreamble||'')}
+    <div id="ca_preamble_editorWrap">${clauseEditorHtml('ca_preamble',CONFIG.contractPreamble||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 3 — Definitions &amp; Interpretation (Section 1)</div>
     <p class="mini" style="margin:0 0 10px">Comes right after "NOW THEREFORE..." and before the Transaction clause — matches the real document's own order.</p>
-    ${clauseEditorHtml('ca_definitions',CONFIG.contractDefinitions||'')}
+    <div id="ca_definitions_editorWrap">${clauseEditorHtml('ca_definitions',CONFIG.contractDefinitions||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 4 — Clauses: Warranties, Payments &amp; Defaults, Governing Law, Notices (Sections 2-6)</div>
     <p class="mini" style="margin:0 0 10px">Each numbered clause is its own placeholder below — tap one to edit just that clause without touching the rest.</p>
-    ${clauseEditorHtml('ca_terms',CONFIG.contractTerms||'')}
+    <div id="ca_terms_editorWrap">${clauseEditorHtml('ca_terms',CONFIG.contractTerms||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:18px">
@@ -14609,6 +14642,39 @@ function bindContractAppCtrls(){
   const newBtn=document.getElementById('ca_newClient');
   if(newBtn) newBtn.onclick=openContractNewClientModal;
   bindClauseEditorCtrls('ca_preamble'); bindClauseEditorCtrls('ca_definitions'); bindClauseEditorCtrls('ca_terms');
+  // Restore Default swaps the in-editor draft back to the company's approved
+  // wording (defaultConfig()'s hardcoded text) -- it does NOT touch already-
+  // generated contracts (those bake their wording into the PDF at generation
+  // time) and does NOT save on its own; the user still has to press Save,
+  // matching "default restore affects future generated contracts only".
+  const CLAUSE_SEGMENTS=[['ca_preamble','contractPreamble'],['ca_definitions','contractDefinitions'],['ca_terms','contractTerms']];
+  let CONTRACT_RESTORE_UNDO=null;
+  const swapClauseText=(valuesByKey)=>{
+    CLAUSE_SEGMENTS.forEach(([prefix,key])=>{
+      const wrap=document.getElementById(prefix+'_editorWrap');
+      if(!wrap) return;
+      wrap.innerHTML=clauseEditorHtml(prefix,valuesByKey[key]||'');
+      bindClauseEditorCtrls(prefix);
+    });
+  };
+  const restoreBtn=document.getElementById('ca_restoreDefault');
+  if(restoreBtn) restoreBtn.onclick=()=>{
+    if(!confirm('This replaces the Preamble, Definitions, and Terms wording below with the company\'s approved default text. Your current draft is kept so you can Undo before leaving this screen, and anything already generated is unaffected. Continue?')) return;
+    const undoValues={}; CLAUSE_SEGMENTS.forEach(([prefix,key])=>{ undoValues[key]=collectClauseEditorValue(prefix); });
+    CONTRACT_RESTORE_UNDO=undoValues;
+    const dc=defaultConfig();
+    swapClauseText(dc);
+    document.getElementById('ca_undoRestore').classList.remove('hidden');
+    toast('Restored to default — click Save to apply, or Undo to bring back your draft');
+  };
+  const undoBtn=document.getElementById('ca_undoRestore');
+  if(undoBtn) undoBtn.onclick=()=>{
+    if(!CONTRACT_RESTORE_UNDO) return;
+    swapClauseText(CONTRACT_RESTORE_UNDO);
+    undoBtn.classList.add('hidden');
+    CONTRACT_RESTORE_UNDO=null;
+    toast('Your draft is back');
+  };
   const saveBtn=document.getElementById('ca_saveSettings');
   if(saveBtn) saveBtn.onclick=async()=>{
     saveBtn.disabled=true; saveBtn.textContent='Saving…';
