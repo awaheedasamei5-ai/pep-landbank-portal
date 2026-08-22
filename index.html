@@ -995,20 +995,28 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .bootLockup{display:flex;flex-direction:column;align-items:center;gap:0;position:relative}
 /* The source clip has built-in white padding around the pin/map graphic --
    object-fit:cover + a scale bigger than the wrap crops that padding away so
-   the icon itself (not empty space) fills the box, letting it sit right on
+   the icon itself (not empty space) fills the box, letting it sit close on
    top of the wordmark instead of floating with a big gap above it.
    mix-blend-mode:multiply drops the clip's own white background into the
    page's white seamlessly (no visible frame edge) regardless of the exact
    shade the source video was encoded with, without needing a real alpha
-   channel (mp4/h.264 has none). */
-.bootscreen .bootIconWrap{width:270px;height:270px;overflow:hidden;display:grid;place-items:center;margin-bottom:-58px}
+   channel (mp4/h.264 has none). Measured directly against the actual video
+   frame (canvas pixel-scan of the drawn, non-white content): even after the
+   scale(1.55) crop, the drawing itself only fills ~86% of the box's height,
+   with the remaining ~14% as genuine blank padding at the BOTTOM of the box
+   (almost none at the top). A -58px margin ate into that 14% and started
+   overlapping the drawn pin/circle itself, not just its padding, so the
+   letters and the graphic visibly collided -- pulled back to a value that
+   only closes up the blank padding, leaving a few px of real, non-overlapping
+   gap above the wordmark. */
+.bootscreen .bootIconWrap{width:270px;height:270px;overflow:hidden;display:grid;place-items:center;margin-bottom:-30px}
 .bootscreen .bootIconVideo{width:100%;height:100%;object-fit:cover;transform:scale(1.55);display:block;mix-blend-mode:multiply}
 .bootscreen .boot-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:46px;letter-spacing:.01em;color:#0D4D2D;
   opacity:0;transform:scale(.82);animation:namePopIn .6s cubic-bezier(.34,1.56,.64,1) 2.5s forwards}
 .bootscreen .boot-sub{font-size:12px;color:#5C7280;letter-spacing:.14em;text-transform:uppercase;opacity:0;margin-top:4px;animation:fadeIn .6s 2.9s ease forwards}
 .bootscreen .bootTap{position:absolute;bottom:34px;font-size:10.5px;color:#8592A3;opacity:0;animation:fadeIn .6s 3.3s ease forwards;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
 @media (max-width:380px){
-  .bootscreen .bootIconWrap{width:210px;height:210px;margin-bottom:-45px}
+  .bootscreen .bootIconWrap{width:210px;height:210px;margin-bottom:-22px}
   .bootscreen .boot-word{font-size:34px}
 }
 .greetScreen{position:fixed;inset:0;z-index:250;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
@@ -1911,14 +1919,18 @@ function monthsElapsedSince(dateStr){
 // automatically flows into installment tracking via the running-total math below. No
 // individual payment record ever needs to be split or tagged.
 function computeDepositStatus(lead,paymentsForLead){
-  const c=computeLead(lead); const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand;
-  // Default deposit target is 30% of the TOTAL (grand, interest included) --
-  // confirmed against live quotation tests (30% of a GHS 237,610 total must
-  // read as GHS 71,283, not 68,091) after an earlier "net-only" attempt turned
-  // out not to match what "Deposit (30%)" is expected to mean next to the
-  // Total line on screen. Only ever engages when no explicit depositTarget is
-  // on file -- a real, already-set deposit target is used exactly as stored.
-  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(grand*0.3);
+  const c=computeLead(lead); const net=lead.netTotal!=null?num(lead.netTotal):c.net;
+  // Default deposit target is 30% of the NET price (list minus discount,
+  // interest NOT included) -- confirmed against a live quotation test with
+  // real interest on the books (List price GHS 48,000, 12-month interest
+  // GHS 3,000, Total GHS 51,000): Deposit (30%) must read as GHS 14,400 (30%
+  // of the 48,000 net), not 15,300 (30% of the 51,000 grand). An earlier
+  // "grand" attempt looked confirmed by two prior test numbers, but those
+  // quotations turned out to have zero interest, so net and grand were
+  // identical and couldn't actually distinguish the two formulas. Only ever
+  // engages when no explicit depositTarget is on file -- a real, already-set
+  // deposit target is used exactly as stored.
+  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(net*0.3);
   const sorted=(paymentsForLead||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   let cum=0,clearedDate=null,overshoot=0;
   for(const p of sorted){
@@ -2715,14 +2727,14 @@ async function apiLoadBadgeCounts(){
 // so as soon as a lead row exists, that PIN genuinely already works.
 async function apiInsertLead(l,c,agentKeyOverride,opts){
   if(DEMO_MODE){ const key=agentKeyOverride||PROFILE.key; const d=await demoLoad(); const row={id:uid(),agent:key,...l,netTotal:c.net,grandTotal:c.grand,balance:c.bal,
-      depositTarget:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.grand*0.3)};
+      depositTarget:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.net*0.3)};
     d.leads[key]=d.leads[key]||[]; d.leads[key].unshift(row); await demoSave(); return row; }
   const row={agent_key:agentKeyOverride||PROFILE.agent_key,name:l.name,contact:l.contact,date_added:l.date||today(),stage:l.stage,
     plot_type:l.plotType,no_plots:num(l.noPlots),unit_price:l.unitPrice?num(l.unitPrice):PRICING()[l.plotType].list,
     discount:l.discount==null?PRICING()[l.plotType].disc*num(l.noPlots):num(l.discount),net_total:c.net,
     payment_plan:l.paymentPlan,grand_total:c.grand,site_visit:l.siteVisit,priority:l.priority,
     amt_paid:num(l.amtPaid),balance:c.bal,next_action:l.nextAction,notes:l.notes,
-    deposit_target:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.grand*0.3)};
+    deposit_target:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.net*0.3)};
   if(l.leadSource) row.lead_source=l.leadSource;
   if(l.bannerId) row.banner_id=l.bannerId;
   const {data,error}=await sb.from('leads').insert(row).select().single(); if(error) throw error;
@@ -4454,14 +4466,22 @@ async function apiDecideLeaveRequest(id,approve,declineReason){
   const {data,error}=await sb.from('leave_requests').update(patch).eq('id',id).select().single();
   if(error) throw error; return mapLeaveRequest(data);
 }
-// Reschedule is its own outcome, distinct from decline -- the staff member's dates
-// weren't rejected outright, Management just needs different ones, with a note saying
-// why. Frees up the dates (leaveConflictDatesFromOthers/myTaken both treat
-// 'rescheduled' as no-longer-blocking) so the staff member can plan fresh ones.
-async function apiRescheduleLeaveRequest(id,note){
-  const patch={status:'rescheduled',reschedule_note:note,decided_at:new Date().toISOString(),decided_by:PROFILE.key,decided_by_name:PROFILE.name};
+// Reschedule has two outcomes:
+//  - No newDates given: the staff member's dates weren't rejected outright,
+//    Management just needs different ones -- frees up the dates
+//    (leaveConflictDatesFromOthers/myTaken both treat 'rescheduled' as
+//    no-longer-blocking) so the staff member can plan fresh ones themselves.
+//  - newDates given (Management picked the actual replacement date(s) via the
+//    calendar in the reschedule modal): this IS the reschedule -- the request's
+//    own dates are updated in place and it's approved+signed immediately in the
+//    same action, so nothing further is needed from the staff member. Requires
+//    Management's own saved signature, same requirement as a normal approval.
+async function apiRescheduleLeaveRequest(id,note,newDates){
+  const patch=(newDates&&newDates.length)
+    ? {status:'approved',dates:newDates,days_count:newDates.length,reschedule_note:note||null,decided_at:new Date().toISOString(),decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_signature:getStaffSignature(PROFILE.key)}
+    : {status:'rescheduled',reschedule_note:note,decided_at:new Date().toISOString(),decided_by:PROFILE.key,decided_by_name:PROFILE.name};
   if(DEMO_MODE){ const d=await demoLoad(); const rec=(d.leaveRequests||[]).find(x=>x.id===id);
-    if(rec) Object.assign(rec,{status:patch.status,rescheduleNote:note,decidedAt:patch.decided_at,decidedBy:patch.decided_by,decidedByName:patch.decided_by_name});
+    if(rec) Object.assign(rec,{status:patch.status,dates:patch.dates||rec.dates,daysCount:patch.days_count||rec.daysCount,rescheduleNote:patch.reschedule_note!==undefined?patch.reschedule_note:rec.rescheduleNote,decidedAt:patch.decided_at,decidedBy:patch.decided_by,decidedByName:patch.decided_by_name,decidedSignature:patch.decided_signature!==undefined?patch.decided_signature:rec.decidedSignature});
     await demoSave(); return rec; }
   const {data,error}=await sb.from('leave_requests').update(patch).eq('id',id).select().single();
   if(error) throw error; return mapLeaveRequest(data);
@@ -11546,7 +11566,7 @@ function readLeadForm(){return {name:val('f_name').trim(),contact:val('f_contact
   depositTarget:val('f_deptarget')||null,
   amtPaid:val('f_paid')||0,nextAction:val('f_next').trim(),notes:val('f_notes').trim()};}
 function paintCalc(){ const c=computeLead(readLeadForm());
-  const depTarget=num(val('f_deptarget'))||Math.round(c.grand*0.3);
+  const depTarget=num(val('f_deptarget'))||Math.round(c.net*0.3);
   document.getElementById('calc').innerHTML=`<div><div class="cl">Net total</div><div class="cv">${ghs(c.net)}</div></div><div><div class="cl">+ Interest</div><div class="cv">${ghs(c.interest)}</div></div><div><div class="cl">Grand total</div><div class="cv">${ghs(c.grand)}</div></div><div><div class="cl">Balance</div><div class="cv">${ghs(c.bal)}</div></div><div><div class="cl">Deposit target</div><div class="cv">${ghs(depTarget)}</div></div>`;
 }
 async function saveNewLead(){ const l=readLeadForm();
@@ -13531,16 +13551,24 @@ async function saveAccountAboutMe(){
 /* ================= QUOTATION REQUEST (available on every dashboard) ================= */
 const QUOTE_DEPOSIT_PCT=0.3;
 // Shared by every quotation flavor (Standard + Technical): deposit is a % of
-// the TOTAL (grand, interest included) -- confirmed against live quotation
-// tests (30% of a GHS 237,610 total must read as GHS 71,283) after an earlier
-// net-only attempt didn't match what "Deposit (X%)" is expected to mean next
-// to the Total line on screen. See computeQuotationTotals/
-// computeTechnicalQuotationTotals for the two ways `net`/`interestTotal` get built.
+// the NET price only (list minus discount, interest NOT included) -- any
+// interest is added on top and spread across the remaining balance after the
+// deposit, exactly as requested ("add the interest to the remaining balance
+// after the deposit and spread it by the number of months"). Confirmed
+// against a live quotation test with real (non-zero) interest on the books:
+// List price GHS 48,000, 12-month interest GHS 3,000, Total GHS 51,000 --
+// Deposit (30%) must read as GHS 14,400 (30% of the 48,000 net), not 15,300
+// (30% of the 51,000 grand). A prior "grand" version of this formula had
+// looked confirmed by two earlier test numbers, but those quotations turned
+// out to carry zero interest, so net and grand were identical there and
+// couldn't actually distinguish the two formulas -- this test can, and it's
+// unambiguous. See computeQuotationTotals/computeTechnicalQuotationTotals for
+// the two ways `net`/`interestTotal` get built.
 function computeInstallmentPlan(net,interestTotal,planMonths,depositPct){
   const grand=net+interestTotal;
   let deposit=0,balance=grand,monthlyDue=0,schedule=[];
   if(planMonths && grand>0){
-    deposit=Math.round(grand*depositPct);
+    deposit=Math.round(net*depositPct);
     balance=grand-deposit;
     monthlyDue=Math.round(balance/planMonths);
     let opening=balance;
@@ -13640,18 +13668,18 @@ function openStandardQuotationRequest(){
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeQuoteReq').onclick=()=>ov.remove();
   // Deposit % and Deposit Amount are two views of the same number -- editing
-  // either one recalculates the other from the quote's grand (Total-line) figure,
-  // since deposit is a share of the Total, matching what "Deposit (X%)" reads as
-  // right next to it on screen.
-  const currentGrand=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).grand;
+  // either one recalculates the other from the quote's NET (pre-interest)
+  // figure, since deposit is a share of the net price, with interest added
+  // on top and spread across the balance afterward.
+  const currentNet=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).net;
   document.getElementById('q_depositpct').addEventListener('input',()=>{
-    const grand=currentGrand(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
-    document.getElementById('q_depositamt').value=grand>0?Math.round(grand*pct/100):'';
+    const net=currentNet(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
+    document.getElementById('q_depositamt').value=net>0?Math.round(net*pct/100):'';
     paintPreview();
   });
   document.getElementById('q_depositamt').addEventListener('input',()=>{
-    const grand=currentGrand(); const amt=Math.max(0,Math.min(grand,num(val('q_depositamt'))));
-    document.getElementById('q_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
+    const net=currentNet(); const amt=Math.max(0,Math.min(net,num(val('q_depositamt'))));
+    document.getElementById('q_depositpct').value=net>0?Math.round((amt/net)*1000)/10:0;
     paintPreview();
   });
   const paintPreview=()=>{
@@ -13747,13 +13775,13 @@ function openTechnicalQuotationRequest(){
   renderLots();
 
   document.getElementById('tq_depositpct').addEventListener('input',()=>{
-    const grand=currentTotals().grand; const pct=Math.max(0,Math.min(100,num(val('tq_depositpct'))));
-    document.getElementById('tq_depositamt').value=grand>0?Math.round(grand*pct/100):'';
+    const net=currentTotals().net; const pct=Math.max(0,Math.min(100,num(val('tq_depositpct'))));
+    document.getElementById('tq_depositamt').value=net>0?Math.round(net*pct/100):'';
     paintTechPreview();
   });
   document.getElementById('tq_depositamt').addEventListener('input',()=>{
-    const grand=currentTotals().grand; const amt=Math.max(0,Math.min(grand,num(val('tq_depositamt'))));
-    document.getElementById('tq_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
+    const net=currentTotals().net; const amt=Math.max(0,Math.min(net,num(val('tq_depositamt'))));
+    document.getElementById('tq_depositpct').value=net>0?Math.round((amt/net)*1000)/10:0;
     paintTechPreview();
   });
   function paintTechPreview(){
@@ -13818,7 +13846,7 @@ function buildQuotationPDF(q){
   // measures each label itself and subtracts that from these full-column
   // widths, rather than assuming every label fits a fixed 40mm gutter.
   const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
-  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
+  const depositPct=q.planMonths&&q.net>0?Math.round((q.deposit||0)/q.net*100):null;
   const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
     ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
     ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
@@ -13928,7 +13956,7 @@ function buildTechnicalQuotationPDF(q){
   let y=48;
   const leftX=14, rightX=110;
   const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
-  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
+  const depositPct=q.planMonths&&q.net>0?Math.round((q.deposit||0)/q.net*100):null;
   const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
     ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
     ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
@@ -14030,8 +14058,9 @@ function buildTechnicalQuotationPDF(q){
 function computeLeadQuotationTotals(lead){
   const c=computeLead(lead);
   const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand;
+  const net=lead.netTotal!=null?num(lead.netTotal):c.net;
   const planMonths=PLAN_MONTHS[lead.paymentPlan]||0;
-  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(grand*QUOTE_DEPOSIT_PCT);
+  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(net*QUOTE_DEPOSIT_PCT);
   let deposit=0,balance=grand,monthlyDue=0,schedule=[];
   if(planMonths && grand>0){
     deposit=Math.min(Math.max(target,0),grand);
@@ -14901,7 +14930,7 @@ async function buildContractOfSalePDF(lead){
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
   const t=computeLeadQuotationTotals(lead);
-  const depositPct=t.grand?Math.round((t.deposit/t.grand)*1000)/10:0;
+  const depositPct=t.net?Math.round((t.deposit/t.net)*1000)/10:0;
   const planLabel=lead.paymentPlan==='Full Payment'||!lead.paymentPlan?'Outright':lead.paymentPlan;
   const vendorName=(CONFIG.quoteCompanyName||'Trulander JSF Limited').toUpperCase();
   const ceo=(CONFIG.contractCeoName||'FRANK ADU PEPRAH').toUpperCase();
@@ -15168,16 +15197,24 @@ async function apiMarkContractRequestsRead(ids){
 // whatever's already saved (lead.address / lead.kyc), so it doubles as an
 // editor on repeat visits, not just a first-time blank prompt.
 const KYC_ID_TYPES=['Voters','Passport','Ghana Card',"Driver's License"];
-function promptForLeadKyc(lead){
-  const k=lead.kyc||{};
+// `prefill` (optional) lets a caller show the client's OWN submitted answers
+// (contract_requests.client_address/client_kyc) instead of whatever's already
+// saved on the lead -- used when Management is reviewing a client-submitted
+// contract request, so they see and can correct what the client actually
+// typed, not a blank form. Falls back to the lead's own address/kyc when no
+// prefill is given (the original staff-entering-fresh-KYC case).
+function promptForLeadKyc(lead,prefill){
+  const src=prefill||lead;
+  const k=src.kyc||{};
+  const address=src.address||'';
   const idTypes=KYC_ID_TYPES;
   return new Promise(resolve=>{
     let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
     ov=document.createElement('div'); ov.id='announceOverlay';
     ov.innerHTML=`<div id="announceModal" style="max-width:520px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">${esc(lead.name)}'s contract details</div><button id="pk_close" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-      <div class="mini" style="margin-bottom:14px">Fills in the Know Your Customer page of the contract instead of printing it blank. Anything left out just prints blank as before — nothing here is required.</div>
-      ${fld('Address','<textarea id="pk_address" rows="2" placeholder="e.g. 15 Lyneham Walk, Hackney E5 0HX">'+esc(lead.address||'')+'</textarea>')}
+      <div class="mini" style="margin-bottom:14px">${prefill?"Review what the client submitted below, correct anything that's wrong, then generate.":'Fills in the Know Your Customer page of the contract instead of printing it blank. Anything left out just prints blank as before — nothing here is required.'}</div>
+      ${fld('Address','<textarea id="pk_address" rows="2" placeholder="e.g. 15 Lyneham Walk, Hackney E5 0HX">'+esc(address)+'</textarea>')}
       <div class="grid2">${fld('Nationality','<input id="pk_nat" value="'+esc(k.nationality||'')+'"/>')}${fld('Occupation','<input id="pk_occ" value="'+esc(k.occupation||'')+'"/>')}</div>
       <div class="grid2">${fld('Date of birth','<input id="pk_dob" type="date" value="'+esc(k.dob||'')+'"/>')}${fld('ID type',sel('pk_idtype',idTypes,k.idType))}</div>
       ${fld('ID number','<input id="pk_idnum" value="'+esc(k.idNumber||'')+'"/>')}
@@ -15189,14 +15226,17 @@ function promptForLeadKyc(lead){
       ${fld('Relation to client','<input id="pk_crel" value="'+esc(k.contactRelation||'')+'"/>')}
       <div class="mini" style="font-weight:700;margin:14px 0 8px">Land usage</div>
       <div class="grid2">${fld('Usage',sel('pk_usage',['Residential','Commercial'],k.landUsage||'Residential'))}${fld('If commercial, exact usage','<input id="pk_usagedetail" value="'+esc(k.landUsageDetail||'')+'"/>')}</div>
-      <div class="formactions"><button class="btn ghost" id="pk_skip" style="flex:1">Skip for now</button><button class="btn primary" id="pk_save" style="flex:1">Save &amp; continue</button></div>
+      <div class="formactions"><button class="btn ghost" id="pk_skip" style="flex:1">${prefill?'Cancel':'Skip for now'}</button><button class="btn primary" id="pk_save" style="flex:1">${prefill?'Confirm &amp; generate contract':'Save &amp; continue'}</button></div>
     </div>`;
     document.body.appendChild(ov);
   makeModalAccessible(ov);
     const finish=v=>{ ov.remove(); resolve(v); };
     ov.addEventListener('click',e=>{ if(e.target===ov) finish(null); });
     document.getElementById('pk_close').onclick=()=>finish(null);
-    document.getElementById('pk_skip').onclick=()=>finish('skip');
+    // Reviewing a client's own submission has no meaningful "skip" -- there's
+    // nothing optional being asked for, so the button just backs out entirely
+    // rather than generating anyway with the client's edits silently discarded.
+    document.getElementById('pk_skip').onclick=()=>finish(prefill?null:'skip');
     document.getElementById('pk_save').onclick=()=>finish({
       address:val('pk_address').trim(),
       kyc:{nationality:val('pk_nat').trim(),occupation:val('pk_occ').trim(),dob:val('pk_dob'),idType:val('pk_idtype'),idNumber:val('pk_idnum').trim(),
@@ -15206,9 +15246,17 @@ function promptForLeadKyc(lead){
     });
   });
 }
-async function generateAndRecordContract(lead){
-  if(!lead.address && !(lead.kyc&&Object.keys(lead.kyc).length)){
-    const result=await promptForLeadKyc(lead);
+// `opts.forcePrompt`+`opts.prefill` make the KYC review a mandatory checkpoint
+// for a client-submitted contract request, even when the lead already has
+// SOME address/kyc on file (which would otherwise skip the prompt below) --
+// Management must see and confirm/correct the client's own submitted answers
+// before the contract generates and their request gets marked fulfilled,
+// rather than it happening invisibly. See the [data-cropen] handler.
+async function generateAndRecordContract(lead,opts){
+  opts=opts||{};
+  const needsPrompt=opts.forcePrompt||(!lead.address && !(lead.kyc&&Object.keys(lead.kyc).length));
+  if(needsPrompt){
+    const result=await promptForLeadKyc(lead,opts.prefill);
     if(result===null) return;
     if(result!=='skip'){
       lead.address=result.address; lead.kyc=result.kyc;
@@ -15293,15 +15341,20 @@ function bindContractRequestsCtrls(){
     const lead=findLeadById(b.dataset.croleadid);
     if(!lead){ toast('Could not find that client'); return; }
     const req=(DB.contractRequests||[]).find(r=>r.id===b.dataset.cropen);
-    // A client-submitted request carries their own proposed KYC answers -- surface
-    // them as the lead's own kyc/address before the usual prompt opens, so staff
-    // reviews and confirms what the client already filled in instead of re-typing
-    // it blank, while still getting the same edit-before-generate checkpoint.
-    if(req&&req.source==='client'&&(req.clientKyc||req.clientAddress)){
-      lead.kyc=req.clientKyc||lead.kyc; lead.address=req.clientAddress||lead.address;
-    }
+    // A client-submitted request carries their own proposed KYC answers, but they
+    // must never be silently applied to the lead -- that used to make the review
+    // prompt below skip itself entirely (it only opens when the lead has NO
+    // address/kyc yet), so the contract would generate with whatever the client
+    // typed, completely unseen by Management. Passing them as a `prefill` instead
+    // (and forcing the prompt open regardless of what's already on the lead) makes
+    // review-then-edit-then-generate a real, unskippable checkpoint for every
+    // client-submitted request.
+    const isClientReq=req&&req.source==='client';
     b.disabled=true;
-    try{ await generateAndRecordContract(lead); paintContractAppBody(); } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
+    try{
+      await generateAndRecordContract(lead,isClientReq?{forcePrompt:true,prefill:{address:req.clientAddress||lead.address||'',kyc:req.clientKyc||lead.kyc||{}}}:undefined);
+      paintContractAppBody();
+    } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
   });
   const unreadIds=(DB.contractRequests||[]).filter(r=>r.status==='pending'&&!r.read).map(r=>r.id);
   if(unreadIds.length){ apiMarkContractRequestsRead(unreadIds).then(()=>{ unreadIds.forEach(id=>{ const r=DB.contractRequests.find(x=>x.id===id); if(r) r.read=true; }); }); }
@@ -15503,7 +15556,16 @@ function bindContractResultRows(){
   document.querySelectorAll('[data-lpsel]').forEach(b=>b.onclick=async()=>{
     const lead=CLIENTDB_LIST.find(x=>x.id===b.dataset.lpsel); if(!lead) return;
     b.disabled=true;
-    try{ await generateAndRecordContract(lead); } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
+    // Same checkpoint as the Requests tab's [data-cropen] handler -- if this
+    // client already has a pending, client-submitted contract request sitting
+    // in DB.contractRequests, generating "directly" from this search tab must
+    // still force Management to review the client's own answers (not a blank
+    // form), otherwise that request would silently get auto-fulfilled below
+    // with the client's real submission never having been looked at.
+    const pendingClientReq=(DB.contractRequests||[]).find(r=>r.leadId===lead.id&&r.status==='pending'&&r.source==='client');
+    try{
+      await generateAndRecordContract(lead,pendingClientReq?{forcePrompt:true,prefill:{address:pendingClientReq.clientAddress||lead.address||'',kyc:pendingClientReq.clientKyc||lead.kyc||{}}}:undefined);
+    } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
   });
 }
 // A brand-new client (not yet anywhere in the pipeline) still needs a real lead
@@ -20615,21 +20677,88 @@ function openLeaveDeclineReasonModal(rec,parentOv){
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Decline & notify'; }
   };
 }
-// A reschedule isn't a decline -- the dates just don't work, so it asks for a reason
-// and frees the dates back up (see leaveIsBlocking) so the staff member can plan
-// fresh ones once they've read why.
+// Reschedule offers Management two ways to resolve a date conflict:
+//  1. Pick the actual replacement date(s) on the calendar below -- this updates
+//     the request in place and approves + signs it immediately, so nothing
+//     further is needed from the staff member (leaveIsBlocking treats the new
+//     dates as taken the instant this saves, real-time for every other view
+//     reading the same leave_requests row).
+//  2. No date in mind yet -- just send a note back and free the old dates so
+//     the staff member can plan fresh ones themselves (the original behavior).
+let LV_RESCHED_MONTH=new Date().getMonth(), LV_RESCHED_YEAR=new Date().getFullYear(), LV_RESCHED_SEL=[];
 function openLeaveRescheduleNoteModal(rec,parentOv){
   let ov2=document.getElementById('announceOverlayReschedule'); if(ov2) ov2.remove();
   ov2=document.createElement('div'); ov2.id='announceOverlayReschedule'; ov2.className='overlay';
   ov2.style.zIndex='10001';
+  LV_RESCHED_MONTH=new Date().getMonth(); LV_RESCHED_YEAR=new Date().getFullYear(); LV_RESCHED_SEL=[];
   ov2.innerHTML=`<div id="announceModal" style="max-width:480px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Ask ${esc(rec.agentName)} to reschedule</div><button id="closeReschedNote" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-    ${fld('Why do these dates need to change?','<textarea id="lv_reschednote" rows="4" placeholder="e.g. Two other agents are already off that week"></textarea>')}
-    <div class="formactions"><button class="btn primary" id="lv_reschedSend" style="width:100%">Send &amp; ask to reschedule</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Reschedule ${esc(rec.agentName)}'s leave</div><button id="closeReschedNote" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="sectitle" style="margin-top:0"><h3 style="font-size:14px">Pick the new date(s)</h3></div>
+    <div class="formwrap">
+      <div class="lvCalNav">
+        <button class="lvCalNavBtn" id="lvReschedPrevMonth" type="button" aria-label="Previous month">‹</button>
+        <div class="lvCalNavLabel" id="lvReschedCalLabel"></div>
+        <button class="lvCalNavBtn" id="lvReschedNextMonth" type="button" aria-label="Next month">›</button>
+      </div>
+      <div id="lvReschedCalGrid" class="lvCalGrid"></div>
+      <div class="mini" style="margin:10px 0 0">Selected: <span id="lvReschedSelSummary">none yet</span></div>
+    </div>
+    ${fld('Note (optional)','<textarea id="lv_reschednote" rows="3" placeholder="e.g. Moved to avoid clashing with another agent\'s leave"></textarea>')}
+    <div class="formactions" style="flex-wrap:wrap">
+      <button class="btn primary" id="lv_reschedConfirmDate" style="width:100%">Confirm this new date &amp; approve</button>
+      <button class="btn ghost" id="lv_reschedSend" style="width:100%">Or just send back a note, no date picked</button>
+    </div>
   </div>`;
   document.body.appendChild(ov2);
   ov2.addEventListener('click',e=>{ if(e.target===ov2) ov2.remove(); });
   document.getElementById('closeReschedNote').onclick=()=>ov2.remove();
+  const paintReschedCal=()=>{
+    document.getElementById('lvReschedCalLabel').textContent=LEAVE_MONTH_NAMES[LV_RESCHED_MONTH]+' '+LV_RESCHED_YEAR;
+    const grid=document.getElementById('lvReschedCalGrid');
+    const nDays=leaveDaysInMonth(LV_RESCHED_YEAR,LV_RESCHED_MONTH);
+    const firstDow=new Date(LV_RESCHED_YEAR,LV_RESCHED_MONTH,1).getDay();
+    const conflicts=leaveConflictDatesFromOthers(rec.agentKey);
+    const holidays=leaveHolidayMapForYear(LV_RESCHED_YEAR);
+    const observesEid=(CONFIG.eidObservingStaff||[]).includes(rec.agentKey);
+    const wdHtml=['S','M','T','W','T','F','S'].map(w=>`<div class="lvCalWd">${w}</div>`).join('');
+    let cells=''; for(let i=0;i<firstDow;i++) cells+=`<div class="lvCalCell empty"></div>`;
+    for(let d=1;d<=nDays;d++){
+      const iso=leaveISO(LV_RESCHED_YEAR,LV_RESCHED_MONTH,d);
+      const isPast=iso<today(); const isWeekend=isWeekendIso(iso);
+      const holiday=holidays.get(iso); const isHoliday=!!holiday&&!(holiday.isEid&&observesEid);
+      const isConflict=conflicts.has(iso)&&!LV_RESCHED_SEL.includes(iso);
+      const disabled=isPast||isWeekend||isHoliday||isConflict;
+      const isSel=LV_RESCHED_SEL.includes(iso);
+      let reason=''; if(isConflict) reason="Conflicts with a colleague's leave"; else if(isHoliday) reason=holiday.name; else if(isWeekend) reason='Weekend';
+      cells+=`<button class="lvCalCell${isSel?' sel':''}${isConflict?' taken':''}${isHoliday?' holiday':''}${isWeekend?' weekend':''}${isPast?' past':''}" data-reschediso="${iso}" ${disabled?'disabled':''} title="${esc(reason)}">${d}</button>`;
+    }
+    grid.innerHTML=wdHtml+cells;
+    grid.querySelectorAll('[data-reschediso]').forEach(b=>b.onclick=()=>{
+      const iso=b.dataset.reschediso; const idx=LV_RESCHED_SEL.indexOf(iso);
+      if(idx>=0) LV_RESCHED_SEL.splice(idx,1); else LV_RESCHED_SEL.push(iso);
+      paintReschedCal();
+    });
+    document.getElementById('lvReschedSelSummary').textContent=LV_RESCHED_SEL.length?LV_RESCHED_SEL.slice().sort().map(fmtLongDate).join(', '):'none yet';
+  };
+  document.getElementById('lvReschedPrevMonth').onclick=()=>{ LV_RESCHED_MONTH--; if(LV_RESCHED_MONTH<0){ LV_RESCHED_MONTH=11; LV_RESCHED_YEAR--; } paintReschedCal(); };
+  document.getElementById('lvReschedNextMonth').onclick=()=>{ LV_RESCHED_MONTH++; if(LV_RESCHED_MONTH>11){ LV_RESCHED_MONTH=0; LV_RESCHED_YEAR++; } paintReschedCal(); };
+  paintReschedCal();
+  document.getElementById('lv_reschedConfirmDate').onclick=async()=>{
+    if(!LV_RESCHED_SEL.length){ toast('Pick at least one date on the calendar first'); return; }
+    if(!getStaffSignature(PROFILE.key)){ toast('Save your signature first — open More > Settings > Account.'); return; }
+    const note=val('lv_reschednote').trim();
+    const newDates=LV_RESCHED_SEL.slice().sort();
+    const btn=document.getElementById('lv_reschedConfirmDate'); btn.disabled=true; btn.textContent='Saving…';
+    try{
+      const updated=await apiRescheduleLeaveRequest(rec.id,note,newDates);
+      Object.assign(rec,updated);
+      toast('Rescheduled & approved'); ov2.remove(); if(parentOv) parentOv.remove();
+      const staffMsg='Management has rescheduled your leave to '+newDates.map(fmtLongDate).join(', ')+' and approved it — you can download the signed letter from Office › Leave Schedules.'+(note?(' Note: "'+note+'"'):'');
+      try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
+      try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_rescheduled_approved'); }catch(e){}
+      paintLeaveApp();
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Confirm this new date & approve'; }
+  };
   document.getElementById('lv_reschedSend').onclick=async()=>{
     const note=val('lv_reschednote').trim();
     if(!note){ toast('Add a short note explaining why'); return; }
@@ -20642,7 +20771,7 @@ function openLeaveRescheduleNoteModal(rec,parentOv){
       try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
       try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_reschedule_requested'); }catch(e){}
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send & ask to reschedule'; }
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Or just send back a note, no date picked'; }
   };
 }
 function leaveSettingsHtml(){
