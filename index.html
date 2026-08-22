@@ -1301,7 +1301,17 @@ urlToDataUri(TRULANDER_LOGO_SRC).then(u=>TRULANDER_LOGO_DATA_URI=u).catch(()=>{}
 let sb=null, LIVE_MODE=false, DEMO_MODE=true, USER=null, PROFILE=null, pickStaff=null, ddOpen=false;
 let LAST_LOAD_ALL_AT=null; // last time apiLoadAll() finished -- feeds the Support Diagnostics panel's "last sync" field
 const APP_BOOT_AT=new Date().toISOString();
-let DB={leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],pendingPayments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[],leaveRequests:[],memos:[],banners:[],contracts:[],contractRequests:[],badgeCounts:{memo:0,contractRequest:0,approvals:0,sitevisit:0,complaint:0,plotrequest:0}};
+// Single source of truth for DB's empty shape -- used both at initial load and
+// on sign-out (below). Previously the sign-out reset had its own separate,
+// stale object literal that never got the newer fields (leaveRequests, memos,
+// banners, contracts, contractRequests, pendingPayments, badgeCounts) added
+// alongside them, so every sign-out silently made those screens crash with
+// "DB.x is undefined" until the user did a full page reload -- confirmed live
+// in production audit_events (leavePendingCountForMgr/bannerDashboardHtml
+// crashing on DB.leaveRequests.filter/undefined banner list). Routing both
+// spots through one factory means a future new DB.* field can't drift again.
+function emptyDB(){ return {leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],pendingPayments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[],leaveRequests:[],memos:[],banners:[],contracts:[],contractRequests:[],badgeCounts:{memo:0,contractRequest:0,approvals:0,sitevisit:0,complaint:0,plotrequest:0}}; }
+let DB=emptyDB();
 
 /* ================= audit / observability =================
    A single audit_events log (server table, Management-only RLS) covers three
@@ -6594,7 +6604,7 @@ document.getElementById('logoutBtn').onclick=async()=>{
   const bub=document.getElementById('announceBubble'); if(bub) bub.remove();
   const ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   USER=PROFILE=pickStaff=null; IS_CLIENT=false; CLIENT_PROFILE=null; CLIENT_DB=null;
-  DB={leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[]};
+  DB=emptyDB();
   applyWaveVariant();
   document.getElementById('app').classList.add('hidden'); document.getElementById('login').classList.remove('hidden');
   document.getElementById('clientCard').classList.add('hidden'); document.getElementById('authCard').classList.add('hidden');
