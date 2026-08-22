@@ -2556,6 +2556,8 @@ async function apiLoadBadgeCounts(){
       try{ const d=await demoLoad();
         counts.sitevisit=(d.sitevisits||[]).filter(v=>v.status==='Pending').length;
         counts.complaint=(d.complaints||[]).filter(c=>c.status!=='Resolved').length;
+        counts.plotrequest=(d.plotRequests||[]).filter(r=>r.status==='Pending').length;
+        counts.approvals=(d.fundRequests||[]).filter(f=>f.status==='pending').length;
       }catch(e){}
     }
     try{ const d=await demoLoad();
@@ -2877,6 +2879,14 @@ const mapPlotRequest=r=>({id:r.id,clientName:r.client_name,clientContact:r.clien
   notes:r.notes,status:r.status,resultingLeadId:r.resulting_lead_id,resolvedBy:r.resolved_by,
   createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
 async function apiClientInsertPlotRequest(row){
+  if(DEMO_MODE){
+    const {key:agentKey}=await apiClientAgentKeyName();
+    const d=await demoLoad(); d.plotRequests=d.plotRequests||[];
+    const rec={id:uid(),clientName:CLIENT_PROFILE.name,clientContact:CLIENT_PROFILE.contact,agentKey,
+      plotType:row.plotType,noPlots:num(row.noPlots),paymentPlan:row.paymentPlan,combineWithLeadId:row.combineWithLeadId||null,
+      notes:row.notes||null,status:'Pending',resultingLeadId:null,resolvedBy:null,createdAt:today()+' '+nowTime()};
+    d.plotRequests.unshift(rec); await demoSave(); return rec;
+  }
   const {key:agentKey}=await apiClientAgentKeyName();
   const dbrow={client_name:CLIENT_PROFILE.name,client_contact:CLIENT_PROFILE.contact,agent_key:agentKey,
     plot_type:row.plotType,no_plots:num(row.noPlots),payment_plan:row.paymentPlan,
@@ -2887,6 +2897,7 @@ async function apiClientInsertPlotRequest(row){
 // RLS scopes this automatically -- a client sees only their own requests, staff see
 // whatever their role/agent_key allows -- so one loader works for both contexts.
 async function apiLoadPlotRequests(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.plotRequests||[]).slice(); }
   const {data,error}=await sb.from('plot_requests').select('*').order('created_at',{ascending:false}); if(error) throw error;
   return (data||[]).map(mapPlotRequest);
 }
@@ -2896,6 +2907,31 @@ async function apiLoadPlotRequests(){
    Database, Master Pipeline and the client's own dashboard all pick it up with no
    separate sync step. */
 async function apiApprovePlotRequest(req){
+  if(DEMO_MODE){
+    const d=await demoLoad(); let resultingId;
+    if(req.combineWithLeadId){
+      let existing=null;
+      for(const k of Object.keys(d.leads)){ existing=(d.leads[k]||[]).find(x=>x.id===req.combineWithLeadId); if(existing) break; }
+      if(!existing) throw new Error('Lead not found');
+      const newNoPlots=num(existing.noPlots)+num(req.noPlots);
+      const cc=computeLead({...existing,noPlots:newNoPlots});
+      const patch={noPlots:newNoPlots,netTotal:cc.net,grandTotal:cc.grand,balance:cc.bal};
+      await apiUpdateLead(req.combineWithLeadId,patch);
+      const local=DB.leads.find(x=>x.id===req.combineWithLeadId); if(local) Object.assign(local,patch);
+      resultingId=req.combineWithLeadId;
+    } else {
+      const l={name:req.clientName,contact:req.clientContact,date:today(),stage:'1',priority:'Low',
+        plotType:req.plotType,noPlots:req.noPlots,paymentPlan:req.paymentPlan,siteVisit:'No',nextAction:'',notes:req.notes||''};
+      const cc=computeLead(l);
+      const rec=await apiInsertLead(l,cc,req.agentKey||undefined,{sendWelcome:true});
+      DB.leads.unshift(rec);
+      resultingId=rec.id;
+    }
+    const pr=(d.plotRequests||[]).find(x=>x.id===req.id);
+    if(pr){ pr.status='Approved'; pr.resolvedBy=PROFILE.name; pr.resultingLeadId=resultingId; }
+    await demoSave();
+    return resultingId;
+  }
   let resultingId;
   if(req.combineWithLeadId){
     const {data:leadRow,error:le}=await sb.from('leads').select('*').eq('id',req.combineWithLeadId).single(); if(le) throw le;
@@ -2919,14 +2955,20 @@ async function apiApprovePlotRequest(req){
   return resultingId;
 }
 async function apiRejectPlotRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); const pr=(d.plotRequests||[]).find(x=>x.id===id);
+    if(pr){ pr.status='Rejected'; pr.resolvedBy=PROFILE.name; } await demoSave(); return; }
   const {error}=await sb.from('plot_requests').update({status:'Rejected',resolved_at:new Date().toISOString(),resolved_by:PROFILE.name}).eq('id',id);
   if(error) throw error;
 }
 async function apiUpdatePlotRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const pr=(d.plotRequests||[]).find(x=>x.id===id);
+    if(pr) Object.assign(pr,{clientName:patch.clientName,plotType:patch.plotType,noPlots:num(patch.noPlots),paymentPlan:patch.paymentPlan,notes:patch.notes});
+    await demoSave(); return; }
   const row={client_name:patch.clientName,plot_type:patch.plotType,no_plots:num(patch.noPlots),payment_plan:patch.paymentPlan,notes:patch.notes};
   const {error}=await sb.from('plot_requests').update(row).eq('id',id); if(error) throw error;
 }
 async function apiDeletePlotRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.plotRequests=(d.plotRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('plot_requests').delete().eq('id',id); if(error) throw error;
 }
 /* Loads the site-visit authorization form for one specific day within a week,
@@ -3275,6 +3317,20 @@ async function apiSendSms(to,message,trigger){
     if(!DEMO_MODE) await sb.from('sms_log').insert({recipient:to,message,trigger:trigger||null,sent_by:PROFILE?PROFILE.key:null,status:ok?'sent':'failed',error:errMsg});
   }catch(e){}
   return ok;
+}
+/* ---- Email (Supabase Edge Function proxy over Resend -- same "key never touches
+   this file" shape as apiSendSms). attachments: [{filename, content}] where
+   content is base64 (no data: prefix) -- e.g. jsPDF's doc.output('datauristring')
+   with the "data:application/pdf;filename=generated.pdf;base64," prefix stripped. */
+async function apiSendEmail(to,subject,html,attachments){
+  if(!to) return {ok:false,error:'No recipient email'};
+  if(DEMO_MODE) return {ok:true};
+  try{
+    const {data,error}=await sb.functions.invoke('send-email',{body:{to,subject,html,attachments:attachments||[]}});
+    if(error) throw error;
+    if(!data||!data.ok) return {ok:false,error:(data&&data.error)||(data&&data.data&&data.data.message)||'Email provider rejected the request'};
+    return {ok:true};
+  }catch(e){ return {ok:false,error:e.message||String(e)}; }
 }
 
 /* ---- config (pricing + targets) ---- */
@@ -14645,6 +14701,81 @@ function buildClientStatementPDF(){
   const fname='Statement_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
 }
+// Personal, point-in-time statement built from a specific backup snapshot's own
+// leads/payments arrays (already filtered down to one person before this is called --
+// see openBackupSendModal) rather than the live CLIENT_DB/CLIENT_PROFILE globals
+// buildClientStatementPDF reads. Returns the PDF as base64 (no data: prefix) for
+// emailing, instead of triggering a browser download.
+function buildPersonBackupStatementPDF(personName,leads,payments,asOfLabel){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pageW=doc.internal.pageSize.getWidth();
+  const siteName=CONFIG.quoteSiteName||'Royal Palm Enclave, Tsopoli';
+  let y=pdfBrandedHeader(doc,'ACCOUNT STATEMENT',siteName,['Client: '+personName,'As of: '+asOfLabel]);
+  y+=8;
+  doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(100,112,133);
+  doc.text('This reflects records as they stood at the selected backup date, not live current data.',12,y); y+=8;
+  doc.setTextColor(20,20,20);
+
+  let grandAll=0,paidAll=0;
+  leads.forEach(l=>{
+    const c=computeLead(l); const grand=l.grandTotal!=null?num(l.grandTotal):c.grand;
+    const paid=num(l.amtPaid); const bal=Math.max(grand-paid,0);
+    grandAll+=grand; paidAll+=paid;
+    if(y>245){ doc.addPage(); y=16; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+    doc.text((l.plotType||'Plot')+' × '+(l.noPlots||1),12,y); y+=5;
+    const gap=4, cardW=(pageW-24-gap*2)/3;
+    pdfStatCard(doc,12,y,cardW,'Total price',ghs(grand));
+    pdfStatCard(doc,12+cardW+gap,y,cardW,'Paid as of date',ghs(paid));
+    pdfStatCard(doc,12+(cardW+gap)*2,y,cardW,'Balance',ghs(bal));
+    y+=17+8;
+  });
+  if(!leads.length){ doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133); doc.text('No purchases on file as of this date.',12,y); y+=10; }
+
+  if(y>255){ doc.addPage(); y=16; }
+  y=pdfDarkStatBar(doc,y,pageW,[{label:'Total across purchases',value:ghs(grandAll)},{label:'Total paid',value:ghs(paidAll)},{label:'Total balance',value:ghs(Math.max(grandAll-paidAll,0))}]);
+
+  if(y>255){ doc.addPage(); y=16; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,20,20);
+  doc.text('Payment history',12,y); y+=6;
+
+  const usableW=pageW-24, rowH=7, colX=[12,12+usableW*0.22,12+usableW*0.62];
+  const drawHead=()=>{
+    doc.setFillColor(11,30,61); doc.rect(12,y,usableW,rowH,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text('DATE',colX[0]+3,y+4.8); doc.text('FOR',colX[1],y+4.8); doc.text('AMOUNT',colX[2],y+4.8);
+    doc.setTextColor(20,20,20); y+=rowH;
+  };
+  if(payments.length){
+    drawHead();
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    const sorted=payments.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    sorted.forEach((p,i)=>{
+      if(y>272){ doc.addPage(); y=16; drawHead(); }
+      if(i%2===1){ doc.setFillColor(244,246,248); doc.rect(12,y,usableW,rowH,'F'); }
+      doc.setTextColor(20,20,20);
+      const lead=leads.find(l=>l.id===p.leadId);
+      doc.text(p.date||'—',colX[0]+3,y+4.8);
+      doc.text(String(lead?(lead.plotType+' × '+(lead.noPlots||1)):'Plot').slice(0,42),colX[1],y+4.8);
+      doc.text(ghs(p.amount),colX[2],y+4.8);
+      y+=rowH;
+    });
+  } else {
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133);
+    doc.text('No payments recorded as of this date.',12,y); y+=8;
+  }
+
+  const dateStr=new Date().toLocaleDateString('en-GB');
+  const pageCount=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140);
+    doc.text('Generated '+dateStr,12,290);
+    doc.text('Page '+i+' of '+pageCount,pageW-12,290,{align:'right'});
+  }
+  const uri=doc.output('datauristring');
+  return uri.slice(uri.indexOf('base64,')+7);
+}
 /* Staff-side "Send receipt" offer, shown right after Elias/Management logs a payment.
    Downloads the same branded receipt and offers WhatsApp/email deep-links prefilled
    with a thank-you message -- the file itself still has to be attached by hand in
@@ -16890,7 +17021,7 @@ function mgrBackupHtml(){
 function backupRowHtml(b){
   const counts=b.table_counts||{}; const totalRows=Object.values(counts).reduce((s,n)=>s+num(n),0);
   return `<div class="rowcard"><div class="top"><div><div class="nm">${fmtBackupWhen(b.created_at)}</div><div class="meta">${totalRows.toLocaleString()} records · ${fmtBytes(b.size_bytes)}${b.triggered_by_name?' · by '+esc(b.triggered_by_name):''}</div></div>${backupTriggerTag(b.trigger_type)}</div>
-    <div class="foot" style="gap:8px;flex-wrap:wrap"><button class="chip" data-bkdownload="${esc(b.id)}">Download JSON</button><button class="chip" data-bkrestore="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}" style="color:#B91C1C">Restore this backup</button></div></div>`;
+    <div class="foot" style="gap:8px;flex-wrap:wrap"><button class="chip" data-bkdownload="${esc(b.id)}">Download JSON</button><button class="chip" data-bksend="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}">Send records to…</button><button class="chip" data-bkrestore="${esc(b.id)}" data-bkwhen="${esc(fmtBackupWhen(b.created_at))}" style="color:#B91C1C">Restore this backup</button></div></div>`;
 }
 function bindMgrBackupCtrls(){
   const nowBtn=document.getElementById('bkNowBtn');
@@ -16911,6 +17042,116 @@ function bindMgrBackupCtrls(){
     b.disabled=false; b.textContent=orig;
   });
   document.querySelectorAll('[data-bkrestore]').forEach(b=>b.onclick=()=>openRestoreConfirmModal(b.dataset.bkrestore,b.dataset.bkwhen));
+  document.querySelectorAll('[data-bksend]').forEach(b=>b.onclick=()=>openBackupSendModal(b.dataset.bksend,b.dataset.bkwhen));
+}
+/* Safe subset of client_portal_access (name/contact/email only -- never pin_hash/
+   shadow_password) exposed via the client_directory view specifically so
+   Management can look up a client's email here without any RLS path into the
+   base table itself (which stays locked to "own row only"). */
+async function apiLoadClientDirectory(){
+  if(DEMO_MODE) return [];
+  try{ const {data,error}=await sb.from('client_directory').select('*'); if(error) throw error; return data||[]; }
+  catch(e){ return []; }
+}
+// Pulls just one person's own leads/payments out of a full backup snapshot --
+// staff by agent_key, clients by the same name+contact identity match Customer
+// 360 uses (custMatches) -- so nobody ever receives anyone else's records.
+function extractPersonFromBackupSnapshot(snapshot,type,person){
+  const allLeads=(snapshot.leads||[]).map(mapLead);
+  const allPayments=(snapshot.payments||[]).map(mapClientPay);
+  const leads=type==='staff'
+    ? allLeads.filter(l=>l.agent===person.key)
+    : allLeads.filter(l=>custMatches(l.name,l.contact,person.name,person.contact));
+  const ids=new Set(leads.map(l=>l.id));
+  const payments=allPayments.filter(p=>ids.has(p.leadId));
+  return {leads,payments};
+}
+let BKSEND_TYPE='staff', BKSEND_QUERY='', BKSEND_SELECTED=new Set(), BKSEND_CLIENTS=null;
+async function openBackupSendModal(backupId,whenLabel){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  BKSEND_TYPE='staff'; BKSEND_QUERY=''; BKSEND_SELECTED=new Set(); BKSEND_CLIENTS=null;
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px" id="bkSendTitle">Send records from ${esc(whenLabel)}</div><button id="closeBkSend" aria-label="Close" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="mini" style="margin-bottom:12px">Each person selected below only ever receives their own records as of this backup date — never anyone else's.</div>
+    ${fld('Recipient type',sel('bks_type',['Staff','Client'],'Staff'))}
+    <input id="bks_search" placeholder="Search by name…" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;margin:8px 0"/>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><button class="chip" id="bks_selectAll">Select all</button><span class="mini" id="bks_count">0 selected</span></div>
+    <div id="bks_list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="formactions" style="margin-top:14px"><button class="btn primary" id="bks_send" style="width:100%">Send</button></div>
+    <div id="bks_result" class="mini" style="margin-top:8px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  document.getElementById('announceModal').setAttribute('aria-labelledby','bkSendTitle');
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeBkSend').onclick=()=>ov.remove();
+
+  let currentItems=[];
+  const renderList=async()=>{
+    const listEl=document.getElementById('bks_list');
+    listEl.innerHTML='<div class="mini" style="padding:8px 0">Loading…</div>';
+    let items;
+    if(BKSEND_TYPE==='staff'){
+      items=STAFF_LIST.map(s=>({key:s.key,name:s.name,sub:(s.role==='manager'?'Management':'Agent')+(s.email?' · '+s.email:' · No email on file'),hasEmail:!!s.email,email:s.email}));
+    } else {
+      if(!BKSEND_CLIENTS) BKSEND_CLIENTS=await apiLoadClientDirectory();
+      items=(BKSEND_CLIENTS||[]).map(c=>({key:c.client_name+'|'+c.client_contact,name:c.client_name,contact:c.client_contact,sub:c.client_email||'No email on file',hasEmail:!!c.client_email,email:c.client_email}));
+    }
+    const q=BKSEND_QUERY.trim().toLowerCase();
+    const filtered=q?items.filter(it=>(it.name||'').toLowerCase().includes(q)):items;
+    listEl.innerHTML=filtered.length?filtered.map(it=>`
+      <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);${it.hasEmail?'cursor:pointer':'opacity:.5'}">
+        <input type="checkbox" data-bksperson="${esc(it.key)}" ${BKSEND_SELECTED.has(it.key)?'checked':''} ${it.hasEmail?'':'disabled'}/>
+        <span style="flex:1"><div style="font-weight:700;font-size:13px">${esc(it.name)}</div><div class="mini">${esc(it.sub)}</div></span>
+      </label>`).join(''):emptyState(ic.grid,'No matches','');
+    listEl.querySelectorAll('[data-bksperson]').forEach(cb=>cb.onchange=()=>{
+      if(cb.checked) BKSEND_SELECTED.add(cb.dataset.bksperson); else BKSEND_SELECTED.delete(cb.dataset.bksperson);
+      document.getElementById('bks_count').textContent=BKSEND_SELECTED.size+' selected';
+    });
+    document.getElementById('bks_count').textContent=BKSEND_SELECTED.size+' selected';
+    currentItems=items;
+  };
+  await renderList();
+
+  document.getElementById('bks_type').onchange=async(e)=>{ BKSEND_TYPE=e.target.value==='Client'?'client':'staff'; BKSEND_SELECTED=new Set(); await renderList(); };
+  document.getElementById('bks_search').oninput=debounce(async(e)=>{ BKSEND_QUERY=e.target.value; await renderList(); },250);
+  document.getElementById('bks_selectAll').onclick=async()=>{
+    currentItems.filter(it=>it.hasEmail).forEach(it=>BKSEND_SELECTED.add(it.key));
+    await renderList();
+  };
+  document.getElementById('bks_send').onclick=async()=>{
+    const btn=document.getElementById('bks_send'); const resultEl=document.getElementById('bks_result');
+    if(!BKSEND_SELECTED.size){ toast('Select at least one recipient'); return; }
+    btn.disabled=true; btn.textContent='Sending…'; resultEl.textContent='';
+    try{
+      const full=await apiDownloadBackupSnapshot(backupId);
+      const snapshot=full.snapshot||{};
+      let sent=0, failed=0;
+      for(const key of BKSEND_SELECTED){
+        let person, email, extracted;
+        if(BKSEND_TYPE==='staff'){
+          const s=STAFF_LIST.find(x=>x.key===key); if(!s){ failed++; continue; }
+          person={key:s.key,name:s.name}; email=s.email;
+        } else {
+          const idx=key.indexOf('|'); const name=key.slice(0,idx), contact=key.slice(idx+1);
+          const dirRow=(BKSEND_CLIENTS||[]).find(c=>c.client_name===name&&c.client_contact===contact);
+          email=dirRow&&dirRow.client_email;
+          person={name,contact};
+        }
+        if(!email){ failed++; continue; }
+        extracted=extractPersonFromBackupSnapshot(snapshot,BKSEND_TYPE,person);
+        const pdfB64=buildPersonBackupStatementPDF(person.name,extracted.leads,extracted.payments,whenLabel);
+        const subject='Your statement as of '+whenLabel;
+        const html='<p>Hello '+esc(person.name)+',</p><p>Attached is your account statement as it stood on <b>'+esc(whenLabel)+'</b>, requested by Management.</p>';
+        const r=await apiSendEmail(email,subject,html,[{filename:'Statement_'+person.name.replace(/\s+/g,'_')+'.pdf',content:pdfB64}]);
+        if(r.ok) sent++; else failed++;
+      }
+      resultEl.textContent=sent+' sent'+(failed?', '+failed+' skipped (no email on file, or delivery failed)':'');
+      toast(sent+' statement(s) sent');
+    }catch(e){ resultEl.textContent='Failed: '+(e.message||e); }
+    btn.disabled=false; btn.textContent='Send';
+  };
 }
 function openRestoreConfirmModal(backupId,whenLabel){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
@@ -17305,10 +17546,14 @@ function mapFundReq(r){ return {id:r.id,type:r.req_type,amount:num(r.amount),pur
   receiptData:r.receipt_data,receiptName:r.receipt_name,createdAt:r.created_at}; }
 function mapDailyBalance(r){ return {id:r.id,date:r.balance_date,cash:num(r.cash),momo:num(r.momo),bank:num(r.bank),loggedByName:r.logged_by_name,updatedAt:r.updated_at}; }
 async function apiUpdateFundRequestFull(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id);
+    if(fr) Object.assign(fr,{type:patch.type==='General budget'?'budget':'specific',amount:num(patch.amount),purpose:patch.purpose});
+    await demoSave(); return; }
   const row={req_type:patch.type==='General budget'?'budget':'specific',amount:num(patch.amount),purpose:patch.purpose};
   const {error}=await sb.from('fund_requests').update(row).eq('id',id); if(error) throw error;
 }
 async function apiDeleteFundRequest(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.fundRequests=(d.fundRequests||[]).filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('fund_requests').delete().eq('id',id); if(error) throw error;
 }
 async function apiLoadExpenseCategories(){ const {data,error}=await sb.from('expense_categories').select('*').eq('active',true).order('name'); if(error) throw error; return data||[]; }
@@ -17363,13 +17608,29 @@ async function apiDecideExpense(id,approve,note){
   const {data,error}=await sb.from('expenses').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null}).eq('id',id).select().single();
   if(error) throw error; return mapExpense(data);
 }
-async function apiLoadFundRequests(){ const {data,error}=await sb.from('fund_requests').select('*').order('created_at',{ascending:false}); if(error) throw error; return (data||[]).map(mapFundReq); }
+async function apiLoadFundRequests(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.fundRequests||[]).slice(); }
+  const {data,error}=await sb.from('fund_requests').select('*').order('created_at',{ascending:false}); if(error) throw error; return (data||[]).map(mapFundReq);
+}
 async function apiInsertFundRequest(type,amount,purpose,receiptData,receiptName){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.fundRequests=d.fundRequests||[];
+    const rec={id:uid(),type,amount:num(amount),purpose,requestedBy:PROFILE.key,requestedByName:PROFILE.name,status:'pending',
+      decidedBy:null,decidedByName:null,decidedAt:null,decisionNote:null,approvalSignature:null,
+      receiptData:receiptData||null,receiptName:receiptName||null,createdAt:today()+' '+nowTime()};
+    d.fundRequests.unshift(rec); await demoSave(); return rec;
+  }
   const {data,error}=await sb.from('fund_requests').insert({req_type:type,amount,purpose,requested_by:PROFILE.key,requested_by_name:PROFILE.name,
     receipt_data:receiptData||null,receipt_name:receiptName||null}).select().single();
   if(error) throw error; return mapFundReq(data);
 }
 async function apiDecideFundRequest(id,approve,note){
+  if(DEMO_MODE){
+    const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id); if(!fr) throw new Error('Fund request not found');
+    Object.assign(fr,{status:approve?'approved':'rejected',decidedBy:PROFILE.key,decidedByName:PROFILE.name,decidedAt:today()+' '+nowTime(),
+      decisionNote:note||null,approvalSignature:approve?getStaffSignature(PROFILE.key):null});
+    await demoSave(); return fr;
+  }
   const sig=approve?getStaffSignature(PROFILE.key):null;
   const {data,error}=await sb.from('fund_requests').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null,approval_signature:sig}).eq('id',id).select().single();
   if(error) throw error; return mapFundReq(data);
@@ -17379,14 +17640,23 @@ async function apiUpsertDailyBalance(date,cash,momo,bank){
   const {data,error}=await sb.from('daily_balances').upsert({balance_date:date,cash,momo,bank,logged_by:PROFILE.key,logged_by_name:PROFILE.name,updated_at:new Date().toISOString()},{onConflict:'balance_date'}).select().single();
   if(error) throw error; return mapDailyBalance(data);
 }
+// Expense logging, daily cash balances and receipts move real money, so that
+// side of this app stays live-only. Fund Requests is just a request/approval
+// workflow (no cash actually changes hands until someone logs real spend
+// against it later), so it's safe to demo -- see paintExpensesApp's tab
+// filtering for the other half of this carve-out.
 async function viewExpensesApp(){
   if(!canManageExpenses()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Expenses are restricted to Elias and Management.'); return; }
-  if(DEMO_MODE){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Only available live','Expenses track real money and receipts — connect to Supabase (Portal settings) to use it.'); return; }
-  EXP_TAB='log';
+  EXP_TAB='funds';
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Operations</div><h2>Expenses</h2><p>Log spending, request funds, and track the daily cash/MoMo/bank position.</p></div></div>
   <div class="pipeStatStrip" id="expStatStrip"></div>
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="expTabs"></div>
   <div id="expBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
+  if(DEMO_MODE){
+    if(!EXP_LOADED){ try{ FUND_REQUESTS_LIST=await apiLoadFundRequests(); EXP_LOADED=true; }catch(e){ toast('Could not load fund requests: '+(e.message||e)); } }
+    paintExpensesApp();
+    return;
+  }
   if(!EXP_LOADED){
     try{
       [EXP_CATEGORIES_LIST,EXPENSES_LIST,FUND_REQUESTS_LIST,DAILY_BALANCES_LIST,RECURRING_EXPENSES_LIST]=await withLoadTimeout(Promise.all([
@@ -17394,6 +17664,7 @@ async function viewExpensesApp(){
       EXP_LOADED=true;
     }catch(e){ toast('Could not load expenses: '+(e.message||e)); }
   }
+  EXP_TAB='log';
   paintExpensesApp();
 }
 function expPendingCount(){ return EXPENSES_LIST.filter(e=>e.status==='pending').length + FUND_REQUESTS_LIST.filter(f=>f.status==='pending').length; }
@@ -17407,10 +17678,12 @@ function paintExpensesApp(){
   }
   const tabs=document.getElementById('expTabs');
   const pc=expPendingCount();
-  tabs.innerHTML=[
+  tabs.innerHTML=(DEMO_MODE?[
+    ['funds','Fund Requests'],...(isMgr?[['approvals','Approvals'+(pc?' ('+pc+')':'')]]:[])
+  ]:[
     ['log','Log Expense'],['funds','Fund Requests'],['balance','Daily Balance'],
     ...(isMgr?[['approvals','Approvals'+(pc?' ('+pc+')':'')],['categories','Categories'],['recurring','Recurring'],['dashboard','Dashboard']]:[])
-  ].map(([k,l])=>`<button class="chip ${EXP_TAB===k?'on':''}" data-exptab="${k}">${l}</button>`).join('');
+  ]).map(([k,l])=>`<button class="chip ${EXP_TAB===k?'on':''}" data-exptab="${k}">${l}</button>`).join('');
   tabs.querySelectorAll('[data-exptab]').forEach(b=>b.onclick=()=>{ EXP_TAB=b.dataset.exptab; paintExpensesApp(); });
   const body=document.getElementById('expBody');
   if(EXP_TAB==='log') body.innerHTML=expLogTabHtml();
@@ -17751,6 +18024,7 @@ function bindExpensesCtrls(){
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.frslip); if(f) buildFundRequestSlipPDF(f);
   });
   document.querySelectorAll('[data-logspend]').forEach(b=>b.onclick=()=>{
+    if(DEMO_MODE){ toast('Logging actual spend needs a live connection — it records a real expense receipt.'); return; }
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.logspend); if(f) openLogSpendModal(f);
   });
   document.querySelectorAll('[data-editfr]').forEach(b=>b.onclick=()=>{
