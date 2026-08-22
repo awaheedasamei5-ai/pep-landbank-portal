@@ -1710,6 +1710,11 @@ function defaultConfig(){ return {
   receiptThanksText:'Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.',
   companyTin:'',
   companyAddress:'',
+  // Who the automated 9AM daily management report emails to -- a plain, editable
+  // setting rather than deriving it from staff profiles, since email addresses
+  // change and this shouldn't require a code change to update. Comma-separated
+  // for more than one recipient.
+  dailyReportRecipients:'fapeprah@landbankghana.com',
   leaveTotalDays:20,
   eidObservingStaff:[],
   leaderboardWeights:{collected:1/500,dealsClosed:20,siteVisits:5,tasksCompleted:8,todosCompleted:3,taskSpeedBonus:5,regularity:2,punctuality:3},
@@ -3347,6 +3352,7 @@ async function apiLoadConfig(){
       lastCommissionMonth:data.last_commission_month||'',
       targetPlotsPerMonth:data.target_plots_per_month!=null?num(data.target_plots_per_month):2, note:data.note||'',
       companyPhone:data.company_phone||'',companyWhatsapp:data.company_whatsapp||'',companyEmail:data.company_email||'',companyTin:data.company_tin||'',companyAddress:data.company_address||'',
+      dailyReportRecipients:data.daily_report_recipients||defaultConfig().dailyReportRecipients,
       leaveTotalDays:data.leave_total_days!=null?num(data.leave_total_days):20,
       eidObservingStaff:data.eid_observing_staff||[],
       quoteCompanyName:data.quote_company_name||defaultConfig().quoteCompanyName,
@@ -3388,6 +3394,7 @@ async function apiSaveConfig(patch){
     commission_full_cap:CONFIG.commissionFullCap,commission_half_cap:CONFIG.commissionHalfCap,
     commission_pool_per_plot:CONFIG.commissionPoolPerPlot,last_commission_month:CONFIG.lastCommissionMonth||'',
     company_phone:CONFIG.companyPhone||'',company_whatsapp:CONFIG.companyWhatsapp||'',company_email:CONFIG.companyEmail||'',company_tin:CONFIG.companyTin||'',company_address:CONFIG.companyAddress||'',
+    daily_report_recipients:CONFIG.dailyReportRecipients||'',
     leave_total_days:num(CONFIG.leaveTotalDays)||20,
     eid_observing_staff:CONFIG.eidObservingStaff||[],
     quote_company_name:CONFIG.quoteCompanyName||'',quote_site_name:CONFIG.quoteSiteName||'',
@@ -16598,6 +16605,11 @@ function mgrCompanySettingsHtml(){
   ${fld('Company address','<textarea id="cfg_companyAddress" rows="2">'+esc(CONFIG.companyAddress||'')+'</textarea>','used on memo letterheads and other formal correspondence')}
   <div class="formactions"><button class="btn primary" id="saveCompanyContact">Save company contact info</button></div>
   </div>
+  ${settingsSectionHead('mail','Daily Management Report','who receives the automated 9AM report')}
+  <div class="formwrap">
+  ${fld('Recipient email(s)','<input id="cfg_dailyReportRecipients" type="text" placeholder="name@example.com" value="'+esc(CONFIG.dailyReportRecipients||'')+'"/>','comma-separate more than one address — kept here so it can be updated any time an email address changes, without a code change')}
+  <div class="formactions"><button class="btn primary" id="saveDailyReportRecipients">Save recipients</button></div>
+  </div>
   ${settingsSectionHead('clock','Attendance','office location, work hours &amp; when a sign-in counts as late')}
   <div class="formwrap">
   ${fld('Cutoff time','<input id="cfg_attendanceCutoff" type="time" value="'+esc(CONFIG.attendanceCutoffTime||'09:00')+'"/>','signing in after this time flags as late on the Team Today view')}
@@ -16626,6 +16638,12 @@ function bindCompanySettingsCtrls(){
       toast('Company contact info saved');
     }catch(e){ toast('Failed: '+(e.message||e)); }
     btn.disabled=false; btn.textContent='Save company contact info';
+  };
+  document.getElementById('saveDailyReportRecipients').onclick=async()=>{
+    const btn=document.getElementById('saveDailyReportRecipients'); btn.disabled=true; btn.textContent='Saving…';
+    try{ await apiSaveConfig({dailyReportRecipients:val('cfg_dailyReportRecipients').trim()}); toast('Recipients saved'); }
+    catch(e){ toast('Failed: '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='Save recipients';
   };
   document.getElementById('saveAttendanceCutoff').onclick=async()=>{
     const btn=document.getElementById('saveAttendanceCutoff'); btn.disabled=true; btn.textContent='Saving…';
