@@ -1748,6 +1748,10 @@ function stageSel(id,cur){ return `<select id="${id}">`+STAGES.map(s=>`<option v
 function defaultConfig(){ return {
   fullPrice:48000, halfPrice:26500, fullDiscount:8000, halfDiscount:6500,
   int3:750, int6:1500, int9:2250, int12:3000,
+  // Baseline standard-plot dimensions the Technical Quotation app's dynamic
+  // price-per-sqft is derived from (P_sqft = fullPrice / (length*width)) --
+  // never hardcode the rate itself, always recompute from these + fullPrice.
+  techFullPlotLengthFt:70, techFullPlotWidthFt:100, techHalfPlotLengthFt:50, techHalfPlotWidthFt:70,
   targets:{elizabeth:300000, elias:600000, adams:500000, emmanuel:400000},
   targetPlotsPerMonth:2,
   commissionPct:3,
@@ -1855,6 +1859,19 @@ let CONFIG=defaultConfig();
 function PRICING(){ return {'Full Plot':{list:num(CONFIG.fullPrice),disc:num(CONFIG.fullDiscount),eq:1},
   'Half Plot':{list:num(CONFIG.halfPrice),disc:num(CONFIG.halfDiscount),eq:0.5}}; }
 const PLAN_MONTHS={'3 Months':3,'6 Months':6,'9 Months':9,'12 Months':12};
+/* ---- Technical Quotation geometry helpers -----------------------------------
+   One rate for everything (standard plots and custom/irregular lots alike),
+   derived from the configurable baseline plot + its current price so a pricing
+   change or a standard-size change automatically updates the rate system-wide --
+   never a hardcoded GHS/sqft figure anywhere below. */
+function techBaseAreaSqft(){ return num(CONFIG.techFullPlotLengthFt)*num(CONFIG.techFullPlotWidthFt); }
+function techHalfAreaSqft(){ return num(CONFIG.techHalfPlotLengthFt)*num(CONFIG.techHalfPlotWidthFt); }
+function techPricePerSqft(){ const a=techBaseAreaSqft(); return a>0?num(CONFIG.fullPrice)/a:0; }
+function techCustomLotArea(lot){
+  if(!lot) return 0;
+  if(lot.shape==='trapezoidal') return Math.max(0,(num(lot.a)+num(lot.b))/2*num(lot.h));
+  return Math.max(0,num(lot.len)*num(lot.wid));
+}
 function monthsElapsedSince(dateStr){
   if(!dateStr) return 1;
   const start=new Date(dateStr); const now=new Date();
@@ -3359,7 +3376,8 @@ async function apiInsertQuotationRequest(row){
     d.quotations=d.quotations||[]; d.quotations.unshift(rec); await demoSave(); return rec; }
   const dbrow={requested_by:PROFILE.key,requested_by_name:PROFILE.name,client_name:row.clientName,client_address:row.clientAddress||null,
     client_contact:row.clientContact||null,client_email:row.clientEmail||null,plot_type:row.plotType,no_plots:row.noPlots,payment_period:row.paymentPeriod,
-    list_total:row.listTotal,discount_total:row.discountTotal,interest_total:row.interestTotal,grand_total:row.grandTotal};
+    list_total:row.listTotal,discount_total:row.discountTotal,interest_total:row.interestTotal,grand_total:row.grandTotal,
+    quote_kind:row.quoteKind||'standard',details:row.details||null};
   try{ const {data,error}=await sb.from('quotation_requests').insert(dbrow).select().single(); if(error) throw error; return data; }
   catch(e){ return null; }
 }
@@ -3407,6 +3425,10 @@ async function apiLoadConfig(){
     if(!error && data){ CONFIG={fullPrice:num(data.full_price),halfPrice:num(data.half_price),
       fullDiscount:num(data.full_discount),halfDiscount:num(data.half_discount),
       int3:num(data.int_3),int6:num(data.int_6),int9:num(data.int_9),int12:num(data.int_12),
+      techFullPlotLengthFt:data.tech_full_plot_length_ft!=null?num(data.tech_full_plot_length_ft):defaultConfig().techFullPlotLengthFt,
+      techFullPlotWidthFt:data.tech_full_plot_width_ft!=null?num(data.tech_full_plot_width_ft):defaultConfig().techFullPlotWidthFt,
+      techHalfPlotLengthFt:data.tech_half_plot_length_ft!=null?num(data.tech_half_plot_length_ft):defaultConfig().techHalfPlotLengthFt,
+      techHalfPlotWidthFt:data.tech_half_plot_width_ft!=null?num(data.tech_half_plot_width_ft):defaultConfig().techHalfPlotWidthFt,
       targets:data.targets||defaultConfig().targets, commissionPct:data.commission_pct!=null?num(data.commission_pct):3,
       commissionFullCap:data.commission_full_cap!=null?num(data.commission_full_cap):1000,
       commissionHalfCap:data.commission_half_cap!=null?num(data.commission_half_cap):500,
@@ -3452,6 +3474,8 @@ async function apiSaveConfig(patch){
   if(DEMO_MODE){ const d=await demoLoad(); d.config=CONFIG; await demoSave(); return; }
   const row={id:1,full_price:CONFIG.fullPrice,half_price:CONFIG.halfPrice,full_discount:CONFIG.fullDiscount,
     half_discount:CONFIG.halfDiscount,int_3:CONFIG.int3,int_6:CONFIG.int6,int_9:CONFIG.int9,int_12:CONFIG.int12,
+    tech_full_plot_length_ft:num(CONFIG.techFullPlotLengthFt)||70,tech_full_plot_width_ft:num(CONFIG.techFullPlotWidthFt)||100,
+    tech_half_plot_length_ft:num(CONFIG.techHalfPlotLengthFt)||50,tech_half_plot_width_ft:num(CONFIG.techHalfPlotWidthFt)||70,
     targets:CONFIG.targets,commission_pct:CONFIG.commissionPct,target_plots_per_month:CONFIG.targetPlotsPerMonth,note:CONFIG.note||'',
     commission_full_cap:CONFIG.commissionFullCap,commission_half_cap:CONFIG.commissionHalfCap,
     commission_pool_per_plot:CONFIG.commissionPoolPerPlot,last_commission_month:CONFIG.lastCommissionMonth||'',
@@ -3496,7 +3520,9 @@ async function apiSaveConfig(patch){
    silently rewrites old deals. What was missing was a record of the change
    itself -- who, when, old value, new value -- an immutable trail (see the
    pricing_history migration: no UPDATE/DELETE policy on purpose). */
-const PRICING_FIELD_LABELS={fullPrice:'Full Plot price',halfPrice:'Half Plot price',fullDiscount:'Full Plot standard discount',halfDiscount:'Half Plot standard discount',int3:'3-month interest',int6:'6-month interest',int9:'9-month interest',int12:'12-month interest'};
+const PRICING_FIELD_LABELS={fullPrice:'Full Plot price',halfPrice:'Half Plot price',fullDiscount:'Full Plot standard discount',halfDiscount:'Half Plot standard discount',int3:'3-month interest',int6:'6-month interest',int9:'9-month interest',int12:'12-month interest',
+  techFullPlotLengthFt:'Technical Quote: Full Plot length (ft)',techFullPlotWidthFt:'Technical Quote: Full Plot width (ft)',
+  techHalfPlotLengthFt:'Technical Quote: Half Plot length (ft)',techHalfPlotWidthFt:'Technical Quote: Half Plot width (ft)'};
 async function apiLogPricingChange(field,oldValue,newValue){
   if(DEMO_MODE){ const d=await demoLoad(); const rec={id:uid(),changedBy:PROFILE.key,changedByName:PROFILE.name,field,fieldLabel:PRICING_FIELD_LABELS[field]||field,oldValue,newValue,changedAt:new Date().toISOString()};
     d.pricingHistory=d.pricingHistory||[]; d.pricingHistory.unshift(rec); await demoSave(); return rec; }
@@ -12819,6 +12845,28 @@ function pdfGreenTable(doc,y,pageW,rows){
   });
   return y+5;
 }
+// Technical Quotation's required "detailed line-item breakdown table" (standard
+// plots + custom/irregular lots, each with its own sub-area, then the combined
+// total) -- same green-header/striped-row visual language as pdfGreenTable so it
+// reads as one continuous branded document rather than a bolted-on section.
+function pdfLineItemTable(doc,y,pageW,rows){
+  const usableW=pageW-24, labelX=12+3, valueRightX=pageW-12, rowH=6.2;
+  doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,y,usableW,rowH,'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
+  doc.text('ITEM',labelX,y+4.1); doc.text('AREA (SQ FT)',valueRightX,y+4.1,{align:'right'});
+  y+=rowH;
+  rows.forEach((r,i)=>{
+    if(y>270){ doc.addPage(); pdfQuoteBg(doc,pageW,297); y=16; }
+    if(r.bold){ doc.setFillColor(QGREEN_LIGHT[0],QGREEN_LIGHT[1],QGREEN_LIGHT[2]); doc.rect(12,y,usableW,rowH,'F'); doc.setFont('helvetica','bold'); doc.setFontSize(8); }
+    else { doc.setFont('helvetica','normal'); doc.setFontSize(8); if(i%2===1){ doc.setFillColor(248,250,247); doc.rect(12,y,usableW,rowH,'F'); } }
+    doc.setTextColor(20,20,20);
+    const lines=doc.splitTextToSize(r.label,usableW-40);
+    doc.text(lines,labelX,y+4.1);
+    doc.text(r.value,valueRightX,y+4.1,{align:'right'});
+    y+=Math.max(rowH,lines.length*4.2+2);
+  });
+  return y+5;
+}
 function pdfFields(doc,y,fields){
   const pageW=doc.internal.pageSize.getWidth();
   fields.forEach(([label,value])=>{
@@ -13425,16 +13473,12 @@ async function saveAccountAboutMe(){
 }
 /* ================= QUOTATION REQUEST (available on every dashboard) ================= */
 const QUOTE_DEPOSIT_PCT=0.3;
-function computeQuotationTotals(plotType,noPlots,period,discountOverride,depositPctOverride){
-  const p=PRICING()[plotType]||PRICING()['Full Plot'];
-  const listTotal=p.list*noPlots;
-  const discountTotal=(discountOverride!=null&&discountOverride!=='')?num(discountOverride):p.disc*noPlots;
-  const net=Math.max(listTotal-discountTotal,0);
-  const eq=p.eq*noPlots;
-  const interestTotal=(INTEREST()[period]||0)*eq;
+// Shared by every quotation flavor (Standard + Technical): deposit is always
+// pure principal (net*depositPct) -- 100% of interest loads onto the balance,
+// spread evenly across the plan's months. See computeQuotationTotals/
+// computeTechnicalQuotationTotals for the two ways `net`/`interestTotal` get built.
+function computeInstallmentPlan(net,interestTotal,planMonths,depositPct){
   const grand=net+interestTotal;
-  const planMonths=PLAN_MONTHS[period]||0;
-  const depositPct=depositPctOverride!=null&&depositPctOverride!==''?Math.max(0,Math.min(100,num(depositPctOverride)))/100:QUOTE_DEPOSIT_PCT;
   let deposit=0,balance=grand,monthlyDue=0,schedule=[];
   if(planMonths && grand>0){
     deposit=Math.round(net*depositPct);
@@ -13448,9 +13492,76 @@ function computeQuotationTotals(plotType,noPlots,period,discountOverride,deposit
       opening=closing;
     }
   }
-  return {listTotal,discountTotal,net,interestTotal,grand,planMonths,deposit,balance,monthlyDue,schedule};
+  return {grand,deposit,balance,monthlyDue,schedule};
 }
+function computeQuotationTotals(plotType,noPlots,period,discountOverride,depositPctOverride){
+  const p=PRICING()[plotType]||PRICING()['Full Plot'];
+  const listTotal=p.list*noPlots;
+  const discountTotal=(discountOverride!=null&&discountOverride!=='')?num(discountOverride):p.disc*noPlots;
+  const net=Math.max(listTotal-discountTotal,0);
+  const eq=p.eq*noPlots;
+  const interestTotal=(INTEREST()[period]||0)*eq;
+  const planMonths=PLAN_MONTHS[period]||0;
+  const depositPct=depositPctOverride!=null&&depositPctOverride!==''?Math.max(0,Math.min(100,num(depositPctOverride)))/100:QUOTE_DEPOSIT_PCT;
+  const ip=computeInstallmentPlan(net,interestTotal,planMonths,depositPct);
+  return {listTotal,discountTotal,net,interestTotal,grand:ip.grand,planMonths,deposit:ip.deposit,balance:ip.balance,monthlyDue:ip.monthlyDue,schedule:ip.schedule};
+}
+// Technical Quotation: pricing is driven purely by geometry -- combined area
+// (standard plots at their configured baseline size, plus any custom/irregular
+// lots via rectangular or trapezoidal formulas) times one dynamic GHS/sqft rate
+// (see techPricePerSqft, always derived from CONFIG.fullPrice -- never hardcoded).
+// Interest scales the same way it already does for Standard Quotation (a flat
+// per-full-plot-equivalent figure), just using area/baseArea as the continuous
+// "plot equivalent" instead of a discrete plot count, since a custom lot has no
+// natural plot count of its own.
+function computeTechnicalQuotationTotals(fullCount,halfCount,customLots,period,depositPctOverride){
+  const rate=techPricePerSqft();
+  const baseArea=techBaseAreaSqft();
+  const fullArea=baseArea*num(fullCount);
+  const halfArea=techHalfAreaSqft()*num(halfCount);
+  const customAreas=(customLots||[]).map(techCustomLotArea);
+  const customArea=customAreas.reduce((s,a)=>s+a,0);
+  const totalArea=fullArea+halfArea+customArea;
+  const net=Math.round(totalArea*rate);
+  const eq=baseArea>0?totalArea/baseArea:0;
+  const interestTotal=Math.round((INTEREST()[period]||0)*eq);
+  const planMonths=PLAN_MONTHS[period]||0;
+  const depositPct=depositPctOverride!=null&&depositPctOverride!==''?Math.max(0,Math.min(100,num(depositPctOverride)))/100:QUOTE_DEPOSIT_PCT;
+  const ip=computeInstallmentPlan(net,interestTotal,planMonths,depositPct);
+  return {rate,fullCount:num(fullCount),halfCount:num(halfCount),fullArea,halfArea,
+    customLots:customLots||[],customAreas,customArea,totalArea,
+    net,interestTotal,grand:ip.grand,planMonths,deposit:ip.deposit,balance:ip.balance,monthlyDue:ip.monthlyDue,schedule:ip.schedule};
+}
+// Entry point used by every dashboard/route -- shows a small chooser between
+// the original flat-rate quotation and the new geometry-driven Technical
+// Quotation, then hands off to whichever flow was picked. Renamed from
+// openQuotationRequest so all 4 existing call sites (route dispatch, app tile,
+// both hero "Quotation" buttons) get the chooser for free with no changes.
 function openQuotationRequest(){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Request a quotation</div><button id="closeQuoteChoice" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <p class="mini" style="margin:-2px 0 14px">Choose the type of quotation to generate.</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn primary" id="chooseStdQuote" style="width:100%;text-align:left;padding:14px 16px">
+        <div style="font-weight:800;font-size:14px">Standard Quotation</div>
+        <div style="font-size:12px;font-weight:400;opacity:.85;margin-top:2px">Full or Half Plot(s) at the standard list price</div>
+      </button>
+      <button class="btn gold" id="chooseTechQuote" style="width:100%;text-align:left;padding:14px 16px">
+        <div style="font-weight:800;font-size:14px">Technical Quotation</div>
+        <div style="font-size:12px;font-weight:400;opacity:.85;margin-top:2px">Custom / irregular plots priced by area at the dynamic GHS/sq.ft rate</div>
+      </button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeQuoteChoice').onclick=()=>ov.remove();
+  document.getElementById('chooseStdQuote').onclick=()=>{ ov.remove(); openStandardQuotationRequest(); };
+  document.getElementById('chooseTechQuote').onclick=()=>{ ov.remove(); openTechnicalQuotationRequest(); };
+}
+function openStandardQuotationRequest(){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
@@ -13509,6 +13620,115 @@ function openQuotationRequest(){
         listTotal:t.listTotal,discountTotal:t.discountTotal,interestTotal:t.interestTotal,grandTotal:t.grand});
       buildQuotationPDF({clientName,address,contact,email,plotType,noPlots,period,...t});
       toast('Quotation generated'); ov.remove();
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
+  };
+}
+function sqft(x){ return num(x).toLocaleString('en-US',{maximumFractionDigits:0})+' sq ft'; }
+function ghsPerSqft(x){ return 'GHS '+num(x).toLocaleString('en-US',{maximumFractionDigits:4})+'/sq.ft'; }
+// Technical Quotation: geometry-driven pricing (standard plots + custom/
+// irregular lots, one dynamic GHS/sq.ft rate) -- see computeTechnicalQuotationTotals.
+// Custom-lot rows are held in local `lots` state and re-rendered on add/remove/
+// shape-change; every other input just repaints the live preview in place.
+function openTechnicalQuotationRequest(){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  let lots=[];
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Technical Quotation</div><button id="closeTechQuoteReq" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    ${fld('Client name *','<input id="tq_name" placeholder="Full name"/>')}
+    <div class="grid2">${fld('Contact','<input id="tq_contact" placeholder="0244…"/>')}${fld('Email','<input id="tq_email" type="email" placeholder="optional"/>')}</div>
+    ${fld('Address','<input id="tq_address" placeholder="City / area"/>')}
+    <div class="sectitle" style="margin-top:6px"><h3 style="font-size:14px">Step 1 · Standard plots</h3></div>
+    <div class="grid2">${fld('No. of Full Plots ('+num(CONFIG.techFullPlotLengthFt)+'×'+num(CONFIG.techFullPlotWidthFt)+' ft)','<input id="tq_fullcount" type="number" min="0" step="1" value="0"/>')}${fld('No. of Half Plots ('+num(CONFIG.techHalfPlotLengthFt)+'×'+num(CONFIG.techHalfPlotWidthFt)+' ft)','<input id="tq_halfcount" type="number" min="0" step="1" value="0"/>')}</div>
+    <div class="sectitle" style="margin-top:6px"><h3 style="font-size:14px">Step 2 · Custom / additional plots</h3><span class="cnt">optional</span></div>
+    <div id="techLotsList"></div>
+    <div class="formactions" style="margin-bottom:10px"><button class="btn" id="addTechLot" type="button" style="width:100%">+ Add custom / additional plot</button></div>
+    <div class="sectitle" style="margin-top:6px"><h3 style="font-size:14px">Step 3 · Payment terms</h3></div>
+    ${fld('Payment period',sel('tq_period',['Full Payment','3 Months','6 Months','9 Months','12 Months']))}
+    <div class="grid2">${fld('Deposit %','<input id="tq_depositpct" type="number" min="0" max="100" value="'+Math.round(QUOTE_DEPOSIT_PCT*100)+'"/>','e.g. 50 for a 50% deposit')}${fld('Deposit Amount (GHS)','<input id="tq_depositamt" type="number" min="0" placeholder="auto"/>','or enter a cash figure instead')}</div>
+    <div id="techPreview" class="formwrap" style="margin-top:4px"></div>
+    <div class="formactions"><button class="btn primary" id="genTechQuoteBtn" style="width:100%">Generate quotation PDF</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closeTechQuoteReq').onclick=()=>ov.remove();
+
+  const currentTotals=()=>computeTechnicalQuotationTotals(num(val('tq_fullcount')),num(val('tq_halfcount')),lots,val('tq_period'),0);
+
+  function renderLots(){
+    document.getElementById('techLotsList').innerHTML=lots.map((lot,i)=>{
+      const isTrap=lot.shape==='trapezoidal';
+      return `<div class="rowcard" style="margin-bottom:8px;padding:12px">
+        <div class="grid2">
+          ${fld('Shape','<select class="techLotShape" data-i="'+i+'"><option value="rectangular"'+(!isTrap?' selected':'')+'>Rectangular</option><option value="trapezoidal"'+(isTrap?' selected':'')+'>Trapezoidal</option></select>')}
+          <div style="display:flex;align-items:flex-end"><button class="btn danger techLotRemove" data-i="${i}" type="button" style="padding:8px 12px;width:100%">Remove</button></div>
+        </div>
+        ${isTrap
+          ? `<div class="grid2">${fld('Parallel side A (ft)','<input class="techLotA" data-i="'+i+'" type="number" min="0" value="'+(lot.a||'')+'"/>')}${fld('Parallel side B (ft)','<input class="techLotB" data-i="'+i+'" type="number" min="0" value="'+(lot.b||'')+'"/>')}</div>
+             ${fld('Height (ft)','<input class="techLotH" data-i="'+i+'" type="number" min="0" value="'+(lot.h||'')+'"/>','perpendicular distance between the two parallel sides')}`
+          : `<div class="grid2">${fld('Length (ft)','<input class="techLotLen" data-i="'+i+'" type="number" min="0" value="'+(lot.len||'')+'"/>')}${fld('Width (ft)','<input class="techLotWid" data-i="'+i+'" type="number" min="0" value="'+(lot.wid||'')+'"/>')}</div>`}
+        <div class="mini">Sub-area: ${sqft(techCustomLotArea(lot))}</div>
+      </div>`;
+    }).join('');
+    document.querySelectorAll('.techLotShape').forEach(elm=>elm.addEventListener('change',e=>{ lots[num(e.target.dataset.i)].shape=e.target.value; renderLots(); paintTechPreview(); }));
+    document.querySelectorAll('.techLotRemove').forEach(elm=>elm.addEventListener('click',e=>{ lots.splice(num(e.target.dataset.i),1); renderLots(); paintTechPreview(); }));
+    document.querySelectorAll('.techLotLen,.techLotWid,.techLotA,.techLotB,.techLotH').forEach(elm=>elm.addEventListener('input',e=>{
+      const i=num(e.target.dataset.i), lot=lots[i];
+      if(e.target.classList.contains('techLotLen')) lot.len=e.target.value;
+      else if(e.target.classList.contains('techLotWid')) lot.wid=e.target.value;
+      else if(e.target.classList.contains('techLotA')) lot.a=e.target.value;
+      else if(e.target.classList.contains('techLotB')) lot.b=e.target.value;
+      else if(e.target.classList.contains('techLotH')) lot.h=e.target.value;
+      const row=elm.closest('.rowcard'); if(row) row.querySelector('.mini').textContent='Sub-area: '+sqft(techCustomLotArea(lot));
+      paintTechPreview();
+    }));
+  }
+  document.getElementById('addTechLot').onclick=()=>{ lots.push({shape:'rectangular',len:'',wid:'',a:'',b:'',h:''}); renderLots(); paintTechPreview(); };
+  renderLots();
+
+  document.getElementById('tq_depositpct').addEventListener('input',()=>{
+    const net=currentTotals().net; const pct=Math.max(0,Math.min(100,num(val('tq_depositpct'))));
+    document.getElementById('tq_depositamt').value=net>0?Math.round(net*pct/100):'';
+    paintTechPreview();
+  });
+  document.getElementById('tq_depositamt').addEventListener('input',()=>{
+    const net=currentTotals().net; const amt=Math.max(0,Math.min(net,num(val('tq_depositamt'))));
+    document.getElementById('tq_depositpct').value=net>0?Math.round((amt/net)*1000)/10:0;
+    paintTechPreview();
+  });
+  function paintTechPreview(){
+    const period=val('tq_period');
+    const t=computeTechnicalQuotationTotals(num(val('tq_fullcount')),num(val('tq_halfcount')),lots,period,val('tq_depositpct'));
+    const depositPctShown=val('tq_depositpct')!==''?num(val('tq_depositpct')):Math.round(QUOTE_DEPOSIT_PCT*100);
+    document.getElementById('techPreview').innerHTML=`
+      ${t.fullCount?`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Full Plots × ${t.fullCount}</span><span>${sqft(t.fullArea)}</span></div>`:''}
+      ${t.halfCount?`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Half Plots × ${t.halfCount}</span><span>${sqft(t.halfArea)}</span></div>`:''}
+      ${t.customArea?`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Custom plots (${t.customLots.length})</span><span>${sqft(t.customArea)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-top:1px solid var(--line);margin-top:2px"><span class="mini">Combined total area</span><span>${sqft(t.totalArea)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Dynamic rate</span><span>${ghsPerSqft(t.rate)}</span></div>
+      ${t.interestTotal?`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Interest (${esc(period)})</span><span>${ghs(t.interestTotal)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-weight:800;font-size:15px;padding-top:6px;margin-top:4px;border-top:1px solid var(--line)"><span>Total</span><span>${ghs(t.grand)}</span></div>
+      ${t.planMonths?`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;margin-top:4px"><span class="mini">Deposit (${depositPctShown}%)</span><span>${ghs(t.deposit)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0"><span class="mini">Monthly due × ${t.planMonths}</span><span>${ghs(t.monthlyDue)}</span></div>`:''}`;
+  }
+  ['tq_fullcount','tq_halfcount','tq_period','tq_depositpct'].forEach(id=>document.getElementById(id).addEventListener('input',paintTechPreview));
+  paintTechPreview();
+
+  document.getElementById('genTechQuoteBtn').onclick=async()=>{
+    const clientName=val('tq_name').trim(); if(!clientName){ toast("Enter the client's name"); return; }
+    const fullCount=num(val('tq_fullcount')), halfCount=num(val('tq_halfcount')), period=val('tq_period');
+    const contact=val('tq_contact').trim(), address=val('tq_address').trim(), email=val('tq_email').trim();
+    if(!fullCount && !halfCount && !lots.length){ toast('Add at least one standard or custom plot'); return; }
+    const t=computeTechnicalQuotationTotals(fullCount,halfCount,lots,period,val('tq_depositpct'));
+    const btn=document.getElementById('genTechQuoteBtn'); btn.disabled=true; btn.textContent='Generating…';
+    try{
+      await apiInsertQuotationRequest({clientName,clientAddress:address,clientContact:contact,clientEmail:email,
+        plotType:'Technical',noPlots:fullCount+halfCount*0.5,paymentPeriod:period,
+        listTotal:t.net,discountTotal:0,interestTotal:t.interestTotal,grandTotal:t.grand,
+        quoteKind:'technical',details:{fullCount:t.fullCount,halfCount:t.halfCount,fullArea:t.fullArea,halfArea:t.halfArea,customLots:t.customLots,customAreas:t.customAreas,totalArea:t.totalArea,ratePerSqft:t.rate}});
+      buildTechnicalQuotationPDF({clientName,address,contact,email,period,...t});
+      toast('Technical quotation generated'); ov.remove();
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
   };
 }
@@ -13610,6 +13830,116 @@ function buildQuotationPDF(q){
   doc.text(CONFIG.quoteFooterAddress||'',pageW/2,pageH-11,{align:'center'});
 
   const fname='Quotation_'+q.clientName.replace(/\s+/g,'_')+'_'+today()+'.pdf';
+  const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
+}
+// Technical Quotation PDF -- same header/branding/payment-plan-schedule/notes/
+// signature skeleton as buildQuotationPDF (per spec: "must match our current PDF
+// template layout and branding styling"), with a geometry line-item breakdown
+// table in place of the flat plot-price KV rows.
+function buildTechnicalQuotationPDF(q){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return; }
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+  const dateStr=new Date().toLocaleDateString();
+  const siteName=CONFIG.quoteSiteName||'P.O Box CO3644, Tema, Accra-Ghana';
+  const companyName=CONFIG.quoteCompanyName||'Trulander JSF Limited';
+  const docType='Technical Quotation — Custom Land Area Pricing';
+  pdfQuoteBg(doc,pageW,pageH);
+
+  try{ doc.addImage(TRULANDER_LOGO_DATA_URI||TRULANDER_LOGO_IMG,'PNG',12,10,26,26); }catch(e){}
+  doc.setFont('times','bold'); doc.setFontSize(20); doc.setTextColor(20,20,20);
+  doc.text(companyName,44,22);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(100,112,133);
+  doc.text(siteName,44,29);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+  const typeLines=doc.splitTextToSize(docType,60);
+  typeLines.forEach((line,i)=>doc.text(line,pageW-12,15+i*5,{align:'right'}));
+
+  let y=48;
+  const leftX=14, rightX=110;
+  const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
+  const depositPct=q.planMonths&&q.net>0?Math.round((q.deposit||0)/q.net*100):null;
+  const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
+    ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
+    ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
+    ['Deposit Amount',q.planMonths?ghs(q.deposit):'—'],
+    ['Deposit %',depositPct!=null?depositPct+'%':'—']];
+  const rightRows=[['Date:',dateStr,null],['Credit Period months',q.planMonths||'—',QRED],
+    ['Combined Total Area',sqft(q.totalArea),null],
+    ['Dynamic Rate',ghsPerSqft(q.rate),null],
+    ['Interest',ghs(q.interestTotal||0),null],
+    ['Total',ghs(q.grand),null]];
+  let ly=y; leftRows.forEach(r=>{ const n=pdfKV(doc,leftX,ly,r[0],r[1],null,leftColWidth); ly+=n>1?n*4.6+4.5:8.6; });
+  let ry=y; rightRows.forEach(r=>{ const n=pdfKV(doc,rightX,ry,r[0],r[1],r[2],rightColWidth); ry+=n>1?n*4.6+4.5:8.6; });
+  y=Math.max(ly,ry)+7;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+  doc.text('Land Area Breakdown',14,y); y+=5;
+  const items=[];
+  if(q.fullCount) items.push({label:'Standard Full Plot ('+num(CONFIG.techFullPlotLengthFt)+'×'+num(CONFIG.techFullPlotWidthFt)+' ft) × '+q.fullCount,value:sqft(q.fullArea)});
+  if(q.halfCount) items.push({label:'Standard Half Plot ('+num(CONFIG.techHalfPlotLengthFt)+'×'+num(CONFIG.techHalfPlotWidthFt)+' ft) × '+q.halfCount,value:sqft(q.halfArea)});
+  (q.customLots||[]).forEach((lot,i)=>{
+    const dims=lot.shape==='trapezoidal'?('Trapezoidal, sides '+num(lot.a)+'/'+num(lot.b)+' ft, height '+num(lot.h)+' ft'):('Rectangular, '+num(lot.len)+'×'+num(lot.wid)+' ft');
+    items.push({label:'Custom Plot '+(i+1)+' ('+dims+')',value:sqft(q.customAreas[i])});
+  });
+  items.push({label:'Combined Total Area',value:sqft(q.totalArea),bold:true});
+  y=pdfLineItemTable(doc,y,pageW,items);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20);
+  doc.text('Dynamic Rate: '+ghsPerSqft(q.rate),14,y);
+  doc.text('Final Total Amount: '+ghs(q.net),pageW-12,y,{align:'right'});
+  y+=8;
+
+  if(q.planMonths){
+    y=pdfGreenBar(doc,y,pageW,[
+      {label:'Total Value',value:ghs(q.grand)},
+      {label:'Deposit',value:ghs(q.deposit),color:QRED},
+      {label:'Balance',value:ghs(q.balance)},
+      {label:'Monthly Due',value:ghs(q.monthlyDue)}
+    ]);
+    y=pdfGreenTable(doc,y,pageW,q.schedule);
+  } else {
+    y=pdfGreenBar(doc,y,pageW,[{label:'Total Due (Outright)',value:ghs(q.grand)}]);
+  }
+  y+=4;
+
+  if(y>265){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  const notesStartY=y;
+  const notes=(CONFIG.quoteNotesText||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,20,20);
+  doc.text('Note:',14,y); y+=4.5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(80,90,84);
+  notes.forEach((n,i)=>{
+    const lines=doc.splitTextToSize((i+1)+'. '+n,88);
+    doc.text(lines,14,y); y+=lines.length*3.2;
+  });
+  const totalsX=115;
+  let ty=notesStartY;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20);
+  const totalsRows=[['Total Monthly Payments',ghs(q.balance)],['Advance Payment',ghs(q.deposit)],['Total Invoice Amount',ghs(q.grand)]];
+  totalsRows.forEach((r,i)=>{
+    doc.text(r[0],totalsX,ty+i*7);
+    doc.text(r[1],pageW-12,ty+i*7,{align:'right'});
+  });
+  y=Math.max(y,ty+totalsRows.length*7)+7;
+
+  if(y>272){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+  doc.text('Offer Acceptance',14,y); y+=6.5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.text('Name......................................................',14,y);
+  doc.text('Signature............................................',95,y);
+  doc.text('Date .............................',165,y);
+  y+=8;
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  const landLines=doc.splitTextToSize('Note: '+(CONFIG.quoteLandNoteText||''),pageW-24);
+  doc.text(landLines,14,y); y+=landLines.length*4;
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]);
+  doc.text('Thank you for your business!',pageW/2,pageH-16,{align:'center'});
+  doc.setFontSize(8); doc.setTextColor(120,130,124);
+  doc.text(CONFIG.quoteFooterAddress||'',pageW/2,pageH-11,{align:'center'});
+
+  const fname='Technical_Quotation_'+q.clientName.replace(/\s+/g,'_')+'_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
 }
 /* Client-portal quotation: same document, but the terms come from the client's REAL
@@ -17122,6 +17452,10 @@ function mgrPricingTargetsHtml(){
   <div class="sectitle" style="margin-top:6px"><h3 style="font-size:14px">Payment plan interest (per full-plot-equivalent)</h3></div>
   <div class="grid2">${fld('3 Months (GHS)','<input id="cfg_int3" type="number" value="'+CONFIG.int3+'"/>')}${fld('6 Months (GHS)','<input id="cfg_int6" type="number" value="'+CONFIG.int6+'"/>')}</div>
   <div class="grid2">${fld('9 Months (GHS)','<input id="cfg_int9" type="number" value="'+CONFIG.int9+'"/>')}${fld('12 Months (GHS)','<input id="cfg_int12" type="number" value="'+CONFIG.int12+'"/>')}</div>
+  <div class="sectitle" style="margin-top:6px"><h3 style="font-size:14px">Technical Quotation — standard plot dimensions (ft)</h3></div>
+  <p class="mini" style="margin:-2px 0 14px">The Technical Quotation app's price-per-sq.ft is always derived from Full Plot price ÷ (length×width) above — never hardcoded. Update these if the standard plot sizes ever change.</p>
+  <div class="grid2">${fld('Full Plot length (ft)','<input id="cfg_techFullLen" type="number" value="'+CONFIG.techFullPlotLengthFt+'"/>')}${fld('Full Plot width (ft)','<input id="cfg_techFullWid" type="number" value="'+CONFIG.techFullPlotWidthFt+'"/>')}</div>
+  <div class="grid2">${fld('Half Plot length (ft)','<input id="cfg_techHalfLen" type="number" value="'+CONFIG.techHalfPlotLengthFt+'"/>')}${fld('Half Plot width (ft)','<input id="cfg_techHalfWid" type="number" value="'+CONFIG.techHalfPlotWidthFt+'"/>')}</div>
   <div class="formactions"><button class="btn primary" id="saveCfg">Save pricing</button></div>
   </div>
 
@@ -17148,7 +17482,9 @@ function bindPricingTargetsCtrls(){
     const btn=document.getElementById('saveCfg'); btn.disabled=true; btn.textContent='Saving…';
     const next={fullPrice:num(val('cfg_fullPrice')),halfPrice:num(val('cfg_halfPrice')),
       fullDiscount:num(val('cfg_fullDiscount')),halfDiscount:num(val('cfg_halfDiscount')),
-      int3:num(val('cfg_int3')),int6:num(val('cfg_int6')),int9:num(val('cfg_int9')),int12:num(val('cfg_int12'))};
+      int3:num(val('cfg_int3')),int6:num(val('cfg_int6')),int9:num(val('cfg_int9')),int12:num(val('cfg_int12')),
+      techFullPlotLengthFt:num(val('cfg_techFullLen'))||70,techFullPlotWidthFt:num(val('cfg_techFullWid'))||100,
+      techHalfPlotLengthFt:num(val('cfg_techHalfLen'))||50,techHalfPlotWidthFt:num(val('cfg_techHalfWid'))||70};
     const changed=Object.keys(next).filter(k=>num(CONFIG[k])!==next[k]);
     try{
       const prev={}; changed.forEach(k=>prev[k]=num(CONFIG[k]));
