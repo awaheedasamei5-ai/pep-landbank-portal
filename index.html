@@ -14970,53 +14970,41 @@ function buildClientStatementPDF(){
     doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
     doc.text((l.plotType||'Plot')+' × '+(l.noPlots||1)+'  ·  '+clientStageLabel(l.stage),12,y); y+=5;
     const gap=4, cardW=(pageW-24-gap*2)/3;
-    pdfStatCard(doc,12,y,cardW,'Total price',ghs(grand));
-    pdfStatCard(doc,12+cardW+gap,y,cardW,'Paid to date',ghs(paid));
-    pdfStatCard(doc,12+(cardW+gap)*2,y,cardW,'Balance',ghs(bal));
+    pdfAccentStatCard(doc,12,y,cardW,'Total price',ghs(grand),PDF_LEAF);
+    pdfAccentStatCard(doc,12+cardW+gap,y,cardW,'Paid to date',ghs(paid),PDF_OK);
+    pdfAccentStatCard(doc,12+(cardW+gap)*2,y,cardW,'Balance',ghs(bal),bal<=0?PDF_OK:PDF_WARN);
     y+=17+8;
   });
   if(!leads.length){ doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133); doc.text('No purchases on file yet.',12,y); y+=10; }
 
-  if(y>255){ doc.addPage(); y=16; }
-  y=pdfDarkStatBar(doc,y,pageW,[{label:'Total across purchases',value:ghs(grandAll)},{label:'Total paid',value:ghs(paidAll)},{label:'Total balance',value:ghs(Math.max(grandAll-paidAll,0))}]);
+  if(y>245){ doc.addPage(); y=16; }
+  y=pdfSectionTitle(doc,y,pageW,'Account summary');
+  y=pdfAccentStatRow(doc,y,pageW,[
+    {label:'Total across purchases',value:ghs(grandAll),accent:PDF_LEAF},
+    {label:'Total paid',value:ghs(paidAll),accent:PDF_OK},
+    {label:'Total balance',value:ghs(Math.max(grandAll-paidAll,0)),accent:grandAll-paidAll<=0?PDF_OK:PDF_WARN}
+  ]);
+  if(grandAll>0){
+    y=pdfCompositionBar(doc,12,y,pageW-24,[
+      {label:'Paid',value:paidAll,color:PDF_OK,fmt:ghs},
+      {label:'Balance remaining',value:Math.max(grandAll-paidAll,0),color:[148,163,184],fmt:ghs}
+    ]);
+  }
 
-  if(y>255){ doc.addPage(); y=16; }
-  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,20,20);
-  doc.text('Payment history',12,y); y+=6;
-
-  const usableW=pageW-24, rowH=7, colX=[12,12+usableW*0.22,12+usableW*0.62];
-  const drawHead=()=>{
-    doc.setFillColor(11,30,61); doc.rect(12,y,usableW,rowH,'F');
-    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-    doc.text('DATE',colX[0]+3,y+4.8); doc.text('FOR',colX[1],y+4.8); doc.text('AMOUNT',colX[2],y+4.8);
-    doc.setTextColor(20,20,20); y+=rowH;
-  };
+  if(y>245){ doc.addPage(); y=16; }
+  y=pdfSectionTitle(doc,y,pageW,'Payment history');
   if(payments.length){
-    drawHead();
-    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
     const sorted=payments.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    sorted.forEach((p,i)=>{
-      if(y>272){ doc.addPage(); y=16; drawHead(); }
-      if(i%2===1){ doc.setFillColor(244,246,248); doc.rect(12,y,usableW,rowH,'F'); }
-      doc.setTextColor(20,20,20);
-      const lead=leads.find(l=>l.id===p.leadId);
-      doc.text(p.date||'—',colX[0]+3,y+4.8);
-      doc.text(String(lead?(lead.plotType+' × '+(lead.noPlots||1)):'Plot').slice(0,42),colX[1],y+4.8);
-      doc.text(ghs(p.amount),colX[2],y+4.8);
-      y+=rowH;
-    });
+    y=pdfSimpleTable(doc,y,pageW,['DATE','FOR','AMOUNT'],
+      sorted.map(p=>{ const lead=leads.find(l=>l.id===p.leadId);
+        return [p.date||'—',String(lead?(lead.plotType+' × '+(lead.noPlots||1)):'Plot').slice(0,42),ghs(p.amount)]; }),
+      [0.22,0.48,0.3]);
   } else {
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(100,112,133);
     doc.text('No payments recorded yet.',12,y); y+=8;
   }
 
-  const pageCount=doc.internal.getNumberOfPages();
-  for(let i=1;i<=pageCount;i++){
-    doc.setPage(i);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140);
-    doc.text('Generated '+dateStr,12,290);
-    doc.text('Page '+i+' of '+pageCount,pageW-12,290,{align:'right'});
-  }
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
 
   const fname='Statement_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
@@ -18808,7 +18796,7 @@ function pdfReportFooter(doc,companyName){
     doc.setPage(i);
     doc.setDrawColor(220,224,230); doc.setLineWidth(0.3); doc.line(12,pageH-14,pageW-12,pageH-14);
     doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(120,130,145);
-    doc.text((companyName||'PEP Landbank')+' · Confidential — internal use only',12,pageH-9);
+    doc.text((companyName||'PEP Landbank')+' · Confidential',12,pageH-9);
     doc.text('Page '+i+' of '+pageCount,pageW-12,pageH-9,{align:'right'});
   }
   doc.setTextColor(20,20,20);
