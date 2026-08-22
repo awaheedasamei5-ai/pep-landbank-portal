@@ -3,7 +3,7 @@
    Your data (leads, enquiries, etc.) always comes live from Supabase when online —
    this only caches the app shell so the portal still opens with no signal. */
 
-const CACHE_NAME = 'pep-portal-v8';
+const CACHE_NAME = 'pep-portal-v10';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
@@ -16,7 +16,8 @@ const APP_SHELL = [
   './site-plan.jpg',
   './pipeline-template.xlsx',
   './contract-cover.jpg',
-  './trulander-wordmark.png'
+  './trulander-wordmark.png',
+  './splash-icon.mp4'
 ];
 
 self.addEventListener('install', (event) => {
@@ -54,6 +55,16 @@ self.addEventListener('fetch', (event) => {
   // changing query string to the OUTGOING request (never touching the cache
   // KEY, which stays the clean original URL) makes Fastly treat every fetch as
   // a fresh, uncacheable URL, so this now always reaches the true origin.
+  // Range requests (the splash video probing/seeking its own duration) go straight
+  // to the network with the original request untouched -- no cache-busting query
+  // string, no Cache API put. The branch below fetches a fresh no-store copy with
+  // no Range header at all, so the origin always answers 200 with the full file
+  // instead of a 206 partial response; Chrome's <video> element treats that as a
+  // broken stream and retries forever instead of ever playing a frame. Caching a
+  // 206 response under its plain URL key would also risk later serving a partial
+  // body to a normal (non-range) request for the same file, so this is
+  // deliberately fetch-only, never cache.put().
+  if (req.headers.has('range')) { event.respondWith(fetch(req)); return; }
   if (req.mode === 'navigate' || APP_SHELL.some((p) => req.url.endsWith(p.replace('./', '')))) {
     const bustedUrl = req.url + (req.url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
     event.respondWith(
