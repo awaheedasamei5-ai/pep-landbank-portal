@@ -83,11 +83,11 @@ a{color:var(--green2)}
    background-position instead -- a slow, subtle wash rather than a moving stripe. */
 @keyframes waveShift{0%{background-position:0% 30%}50%{background-position:100% 70%}100%{background-position:0% 30%}}
 @keyframes ringPulse{0%{box-shadow:0 0 0 0 rgba(132,204,22,.45)}100%{box-shadow:0 0 0 14px rgba(132,204,22,0)}}
-@keyframes logoRevealIn{0%{opacity:0;transform:scale(.25) rotate(-14deg)}60%{opacity:1}100%{opacity:1;transform:scale(1) rotate(0)}}
-@keyframes glowPulseOnce{0%{opacity:0;transform:scale(.6)}40%{opacity:1}100%{opacity:0;transform:scale(1.5)}}
-@keyframes letterDrop{0%{opacity:0;transform:translateY(-34px) scale(.5)}55%{opacity:1}100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes letterDropDown{0%{opacity:0;transform:translateY(34px) scale(.5)}55%{opacity:1}100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes fleckIn{0%{opacity:0;transform:scale(0) translateY(6px)}45%{opacity:1;transform:scale(1.3) translateY(-3px)}100%{opacity:.85;transform:scale(1) translateY(0)}}
+/* Boot splash: the location-icon video reveals itself (fades/scales in over its
+   own first ~0.5s, then holds on its settled frame) -- namePopIn times the
+   "Palmstead" wordmark to pop in right after, mirroring the icon-then-name
+   handoff in the reference app intro this was modeled on. */
+@keyframes namePopIn{0%{opacity:0;transform:scale(.82)}60%{opacity:1}100%{opacity:1;transform:scale(1)}}
 .view-enter{animation:fadeUp .38s cubic-bezier(.2,.8,.2,1) both}
 .skel{background:linear-gradient(90deg,#EDEAE0 25%,#F6F4EC 37%,#EDEAE0 63%);background-size:400px 100%;animation:shimmer 1.3s infinite linear;border-radius:10px}
 
@@ -981,38 +981,18 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   padding:4px 10px;border-radius:100px;letter-spacing:.04em;text-transform:uppercase}
 .demoflag .d{width:6px;height:6px;border-radius:50%;background:#8A6E12;animation:ringPulse 1.6s infinite}
 .bootscreen{position:fixed;inset:0;z-index:200;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
-  background:var(--wave-bg,radial-gradient(130% 100% at 50% 30%, #163B7A 0%, var(--ink) 60%, #050E1F 100%));
+  background:#fff;
   opacity:1;transition:opacity .5s ease;overflow:hidden}
 .bootscreen.fade{opacity:0;pointer-events:none}
-.bootLockup{display:flex;flex-direction:column;align-items:center;gap:22px;position:relative}
-.bootscreen .glyphwrap{position:relative;width:132px;height:132px;display:grid;place-items:center;animation:logoRevealIn .85s cubic-bezier(.34,1.56,.64,1) .15s both}
-.bootscreen .glowPulse{position:absolute;inset:-30%;border-radius:50%;background:radial-gradient(circle,rgba(103,232,239,.55) 0%,transparent 70%);opacity:0;animation:glowPulseOnce 1s ease-out .95s both}
-.bootscreen .glyph{width:112px;height:112px;border-radius:32px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.5);position:relative;z-index:1}
-.bootscreen .glyph img{width:100%;height:100%;display:block}
-.bootscreen .boot-word{display:flex;gap:1px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:46px;letter-spacing:.01em;color:#fff;position:relative}
-.bootscreen .boot-word span{display:inline-block;opacity:0;animation:letterDrop .55s cubic-bezier(.2,.9,.25,1.3) forwards}
-.bootscreen .boot-word span:nth-child(odd){animation-name:letterDropDown}
-.bootscreen .boot-word span:nth-child(1){animation-delay:.5s}
-.bootscreen .boot-word span:nth-child(2){animation-delay:.55s}
-.bootscreen .boot-word span:nth-child(3){animation-delay:.6s}
-.bootscreen .boot-word span:nth-child(4){animation-delay:.65s}
-.bootscreen .boot-word span:nth-child(5){animation-delay:.7s}
-.bootscreen .boot-word span:nth-child(6){animation-delay:.75s}
-.bootscreen .boot-word span:nth-child(7){animation-delay:.8s}
-.bootscreen .boot-word span:nth-child(8){animation-delay:.85s}
-.bootscreen .boot-word span:nth-child(9){animation-delay:.9s}
-.bootscreen .boot-sub{font-size:12px;color:#9DB2CC;letter-spacing:.14em;text-transform:uppercase;opacity:0;animation:fadeIn .6s 1.3s ease forwards}
-.bootscreen .fleck{position:absolute;border-radius:50%;background:#67E8F9;opacity:0;animation:fleckIn 1.1s ease-out both}
-.bootscreen .fleck.f1{width:7px;height:7px;top:8%;left:12%;background:var(--premium);animation-delay:.55s}
-.bootscreen .fleck.f2{width:5px;height:5px;top:70%;left:88%;animation-delay:.65s}
-.bootscreen .fleck.f3{width:4px;height:4px;top:80%;left:8%;background:var(--premium);animation-delay:.75s}
-.bootscreen .fleck.f4{width:6px;height:6px;top:15%;left:85%;animation-delay:.85s}
-.bootscreen .fleck.f5{width:3px;height:3px;top:45%;left:5%;animation-delay:.6s}
-.bootscreen .bootTap{position:absolute;bottom:34px;font-size:10.5px;color:#5E7396;opacity:0;animation:fadeIn .6s 1.9s ease forwards;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.bootLockup{display:flex;flex-direction:column;align-items:center;gap:8px;position:relative}
+.bootscreen .bootIconVideo{width:190px;height:190px;object-fit:contain;display:block}
+.bootscreen .boot-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:42px;letter-spacing:.01em;color:#0B1E3D;
+  opacity:0;transform:scale(.82);animation:namePopIn .6s cubic-bezier(.34,1.56,.64,1) .55s forwards}
+.bootscreen .boot-sub{font-size:12px;color:#5C7280;letter-spacing:.14em;text-transform:uppercase;opacity:0;animation:fadeIn .6s 1.1s ease forwards}
+.bootscreen .bootTap{position:absolute;bottom:34px;font-size:10.5px;color:#8592A3;opacity:0;animation:fadeIn .6s 1.5s ease forwards;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
 @media (max-width:380px){
-  .bootscreen .glyphwrap{width:104px;height:104px}
-  .bootscreen .glyph{width:88px;height:88px;border-radius:26px}
-  .bootscreen .boot-word{font-size:34px}
+  .bootscreen .bootIconVideo{width:150px;height:150px}
+  .bootscreen .boot-word{font-size:32px}
 }
 .greetScreen{position:fixed;inset:0;z-index:250;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   background:var(--wave-bg,radial-gradient(130% 100% at 50% 30%, #163B7A 0%, var(--ink) 60%, #050E1F 100%));opacity:1;transition:opacity .5s ease;cursor:pointer;padding:24px;text-align:center}
@@ -1053,10 +1033,9 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 
 <!-- BOOT -->
 <div class="bootscreen" id="boot">
-  <span class="fleck f1"></span><span class="fleck f2"></span><span class="fleck f3"></span><span class="fleck f4"></span><span class="fleck f5"></span>
   <div class="bootLockup">
-    <span class="glyphwrap"><span class="glowPulse"></span><span class="glyph"><img alt="" id="bootLogo"/></span></span>
-    <div class="boot-word"><span>P</span><span>A</span><span>L</span><span>M</span><span>S</span><span>T</span><span>E</span><span>A</span><span>D</span></div>
+    <video class="bootIconVideo" id="bootIconVideo" autoplay muted playsinline disablePictureInPicture preload="auto"></video>
+    <div class="boot-word" id="bootWord">Palmstead</div>
   </div>
   <div class="boot-sub">by PEP Landbank</div>
   <div class="bootTap" id="bootTap">Tap to continue</div>
@@ -1280,7 +1259,8 @@ const DEMO_PIPELINES = {"elizabeth": [{"name": "Ps Charles", "contact": "0277966
 /* ================= boot: place logo everywhere ================= */
  // your real uploaded Excel template, untouched (ExcelJS cannot re-write chart objects on save, so we start from the original file and clear/overwrite data rows at runtime instead of pre-editing it)
 const SITE_PLAN_IMG = "./site-plan.jpg";
-document.getElementById('bootLogo').src = LOGO_SRC;
+const BOOT_ICON_SRC = "./splash-icon.mp4";
+{ const bv=document.getElementById('bootIconVideo'); bv.src=BOOT_ICON_SRC; bv.play().catch(()=>{}); }
 document.getElementById('topbarLogo').src = LOGO_SRC;
 const favicon = document.querySelector('link[rel="icon"]'); if(favicon) favicon.href = LOGO_SRC;
 // Preloaded <img> elements (not data URIs) so jsPDF's addImage still has pixel data
@@ -1365,10 +1345,15 @@ function cfg(){ let u=SUPABASE_URL,k=SUPABASE_ANON_KEY;
 function tryInitClient(){ const c=cfg(); if(!c.url||!c.key) return false;
   try{ sb=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}); return true; }catch(e){ return false; } }
 function syncDemoBannerVisibility(){
-  const banner=document.getElementById('demoBanner'), resetLink=document.getElementById('resetDemoLink');
+  const banner=document.getElementById('demoBanner'), resetLink=document.getElementById('resetDemoLink'), cfgLink=document.getElementById('cfgLink');
   if(!banner||!resetLink) return;
   if(DEMO_MODE){ banner.classList.remove('hidden'); resetLink.classList.remove('hidden'); }
   else{ banner.classList.add('hidden'); resetLink.classList.add('hidden'); }
+  // Portal settings (paste a Supabase URL/key) only makes sense before this
+  // deploy is already wired to its real project -- once connected/live, hide it
+  // from the sign-in screen entirely so no real staff member ever sees a control
+  // that could repoint the whole app's database.
+  if(cfgLink){ if(LIVE_MODE) cfgLink.classList.add('hidden'); else cfgLink.classList.remove('hidden'); }
 }
 
 /* ================= helpers ================= */
@@ -3059,7 +3044,16 @@ async function apiDeletePlotRequest(id){
    with zero manual setup: the moment anyone opens a day that doesn't have a row
    yet, one is created. One form per (week, day) -- see weekly_visit_forms_per_day
    migration -- so each day's cost breakdown and approval are independent. */
+function demoWeeklyVisitFormDefaults(weekStart,visitDate){
+  return {id:uid(),weekStart,visitDate,vehicleRentalEst:0,driversTipEst:0,fuelEst:0,refreshmentEst:0,tntEst:0,
+    vehicleRentalAct:0,driversTipAct:0,fuelAct:0,refreshmentAct:0,tntAct:0,status:'Open',
+    approvedBy:null,approvedByName:null,approvedSignature:null,finalizedAt:null};
+}
 async function apiLoadOrCreateWeeklyVisitForm(weekStart,visitDate){
+  if(DEMO_MODE){ const d=await demoLoad(); d.weeklyVisitForms=d.weeklyVisitForms||[];
+    let f=d.weeklyVisitForms.find(x=>x.weekStart===weekStart&&x.visitDate===visitDate);
+    if(!f){ f=demoWeeklyVisitFormDefaults(weekStart,visitDate); d.weeklyVisitForms.unshift(f); await demoSave(); }
+    return {...f}; }
   let {data,error}=await sb.from('weekly_visit_forms').select('*').eq('week_start',weekStart).eq('visit_date',visitDate).maybeSingle();
   if(error) throw error;
   if(!data){
@@ -3073,11 +3067,13 @@ async function apiLoadOrCreateWeeklyVisitForm(weekStart,visitDate){
   return mapWeeklyVisitForm(data);
 }
 async function apiListWeeklyVisitForms(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.weeklyVisitForms||[]).slice().sort((a,b)=>(b.weekStart||'').localeCompare(a.weekStart||'')).slice(0,26); }
   const {data,error}=await sb.from('weekly_visit_forms').select('*').order('week_start',{ascending:false}).limit(26);
   if(error) throw error;
   return (data||[]).map(mapWeeklyVisitForm);
 }
 async function apiSaveWeeklyVisitCosts(id,patch){
+  if(DEMO_MODE){ const d=await demoLoad(); const f=(d.weeklyVisitForms||[]).find(x=>x.id===id); if(f) Object.assign(f,patch); await demoSave(); return; }
   const map={vehicleRentalEst:'vehicle_rental_est',driversTipEst:'drivers_tip_est',fuelEst:'fuel_est',refreshmentEst:'refreshment_est',tntEst:'tnt_est',
     vehicleRentalAct:'vehicle_rental_act',driversTipAct:'drivers_tip_act',fuelAct:'fuel_act',refreshmentAct:'refreshment_act',tntAct:'tnt_act'};
   const dbPatch={updated_at:new Date().toISOString()};
@@ -3087,6 +3083,9 @@ async function apiSaveWeeklyVisitCosts(id,patch){
 }
 async function apiFinalizeWeeklyVisitForm(id){
   const sig=getStaffSignature(PROFILE.key);
+  if(DEMO_MODE){ const d=await demoLoad(); const f=(d.weeklyVisitForms||[]).find(x=>x.id===id);
+    if(f) Object.assign(f,{status:'Finalized',approvedBy:PROFILE.key,approvedByName:PROFILE.name,approvedSignature:sig,finalizedAt:new Date().toISOString()});
+    await demoSave(); return {...f}; }
   const {data,error}=await sb.from('weekly_visit_forms').update({status:'Finalized',approved_by:PROFILE.key,
     approved_by_name:PROFILE.name,approved_signature:sig,finalized_at:new Date().toISOString()}).eq('id',id).select().single();
   if(error) throw error;
@@ -3094,6 +3093,7 @@ async function apiFinalizeWeeklyVisitForm(id){
 }
 async function apiLoadSiteVisitsForWeek(weekStart){
   const friday=weekFridayIso(weekStart);
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sitevisits||[]).filter(v=>v.date>=weekStart&&v.date<=friday).map(v=>({...v})); }
   const {data,error}=await sb.from('site_visits').select('*').gte('visit_date',weekStart).lte('visit_date',friday).order('created_at');
   if(error) throw error;
   return (data||[]).map(mapSV);
@@ -12356,6 +12356,16 @@ const SVA_COST_ROWS=[
 ];
 const SVA_VISIT_COLS=[['Client Name','name'],['Contact','contact'],['Accompanied','accompanied'],['Purpose of visit','purpose'],
   ['Pick-up Location','pickup'],['Transport Medium','transport'],['Feedback/Remarks','feedback'],['Staff','agentName']];
+// The "Accompanied" column must always show the actual headcount when one was
+// given, not just the (often-blank -- staff intake didn't collect it until now)
+// free-text "who" field -- a visit logged as "2" with no name should still read
+// "2", not a blank cell that looks like nobody checked.
+function svaAccompaniedText(v){
+  const n=num(v.people), who=(v.accompanied||'').trim();
+  if(!n && !who) return '-';
+  if(n && who) return n+' ('+who+')';
+  return n?String(n):who;
+}
 function svaCostTotal(form,suffix){ return SVA_COST_ROWS.reduce((n,r)=>n+num(form[suffix==='Est'?r.estKey:r.actKey]),0); }
 function svaMoney(n){ n=num(n); return n?n.toFixed(2):'-'; }
 async function viewSiteVisitAuth(weekStartArg,dayArg){
@@ -12407,7 +12417,7 @@ function siteVisitAuthBodyHtml(form,visits){
     <table class="league-table svaTable" style="min-width:960px">
       <thead><tr>${SVA_VISIT_COLS.map(([label])=>`<th>${esc(label)}</th>`).join('')}<th></th></tr></thead>
       <tbody>${!visits.length?`<tr><td colspan="${SVA_VISIT_COLS.length+1}" style="text-align:center;color:var(--muted)">No site visits logged for this day yet.</td></tr>`:
-        visits.map(v=>`<tr>${SVA_VISIT_COLS.map(([label,key])=>`<td data-label="${esc(label)}">${esc(v[key]||'—')}</td>`).join('')}
+        visits.map(v=>`<tr>${SVA_VISIT_COLS.map(([label,key])=>`<td data-label="${esc(label)}">${esc(key==='accompanied'?svaAccompaniedText(v):(v[key]||'—'))}</td>`).join('')}
           <td data-label=""><button class="trashbtn" data-svadelvisit="${esc(v.id)}" title="Remove from this form"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td></tr>`).join('')}
       </tbody>
     </table>
@@ -12542,7 +12552,7 @@ function buildWeeklyVisitAuthPDF(form,visits){
   y+=svaGridRow(doc,x0,y,colW,SVA_VISIT_COLS.map(([label])=>({text:label,bold:true})));
   visits.forEach(v=>{
     if(y>272){ doc.addPage(); y=16; }
-    y+=svaGridRow(doc,x0,y,colW,SVA_VISIT_COLS.map(([,key])=>({text:v[key]||''})));
+    y+=svaGridRow(doc,x0,y,colW,SVA_VISIT_COLS.map(([,key])=>({text:key==='accompanied'?svaAccompaniedText(v):(v[key]||'')})));
   });
   const blankRows=Math.max(3,8-visits.length);
   for(let i=0;i<blankRows;i++){
@@ -13023,7 +13033,8 @@ function buildSiteVisitFormPDF(rec,asDataUri){
 
   h1=pdfLabeledPair(doc,12,y,88,'Number of client accompaniment',rec.people);
   h2=pdfLabeledPair(doc,108,y,88,'Site visit requested by',rec.agentName);
-  y+=Math.max(h1,h2)*5+9;
+  y+=Math.max(h1,h2)*5+7;
+  if(rec.accompanied){ h1=pdfLabeledPair(doc,12,y,184,'Who is accompanying',rec.accompanied); y+=h1*5+9; }
 
   if(y>230){ doc.addPage(); y=16; }
   y=pdfSectionBar(doc,y,pageW,'DISCUSSION & NEXT STEPS');
@@ -13186,7 +13197,7 @@ function formSiteVisit(){
   <div class="sectitle"><h3>3.0 Visit preferences</h3></div>
   <div class="grid2">${fld('3.1 Mode of transportation',sel('s_trans',['Personal Vehicle','Company Vehicle']))}${fld('3.2 Purpose of visit',sel('s_purpose',['Viewing','Allocation','Picking','Others']))}</div>
   ${fld('3.3 Site visit day',sel('s_day',['Tuesday 9:00am','Wednesday 9:00am','Friday 9:00am','Sunday 12:00pm']))}
-  ${fld('Number of client accompaniment','<input id="s_ppl" type="number" min="0" value="0"/>','if applicable')}
+  <div class="grid2">${fld('Number of client accompaniment','<input id="s_ppl" type="number" min="0" value="0"/>','if applicable')}${fld('Who is accompanying?','<input id="s_accompanied" placeholder="e.g. Spouse, Relative"/>','optional — leave blank if none')}</div>
   <div class="rowcard" style="margin:14px 0;padding:12px 14px"><div class="mini">Site visit requested by</div><div style="font-weight:700">${esc(PROFILE.name)}</div></div>
 
   <div class="sectitle"><h3>Notes (optional \u2014 can fill now or after the visit)</h3></div>
@@ -13207,6 +13218,7 @@ async function saveSV(){ const name=val('s_name').trim();
   const row={name,contact:val('s_contact').trim(),plot:siteVisitPlotValue(val('s_interest'),val('s_interestCustom')),site:'Royal Palm Enclave, Tsopoli',date:today(),
     time:val('s_day'),people:num(val('s_ppl')),transport:val('s_trans'),pickup:val('s_pickup').trim(),notes:'',
     placeOfWork:val('s_work').trim(),position:val('s_position').trim(),nationality:val('s_nat').trim(),purpose:val('s_purpose'),
+    accompanied:val('s_accompanied').trim(),
     discussion:val('s_disc').trim(),understanding:val('s_understand').trim(),feedback:val('s_feedback').trim(),nextSteps:val('s_next').trim()};
   try{
     const rec=await apiInsertSiteVisit(row); DB.sitevisits.unshift(rec);
@@ -21574,7 +21586,7 @@ function hideBoot(){
 playChime('reveal');
 (async function(){
   const bootStart=Date.now();
-  // Full reveal takes ~2.4s to play out (logo + letters + flecks + glow + tagline) --
+  // Minimum ~2.4s so the icon video + "Palmstead" pop-in + tagline aren't cut off --
   // but a returning user who's seen it a hundred times shouldn't have to sit through
   // it every single sign-in, so a tap anywhere ends the wait immediately.
   let skipBoot;
