@@ -1997,7 +1997,8 @@ const mapLead=r=>({id:r.id,agent:r.agent_key,name:r.name,contact:r.contact,date:
   plotType:r.plot_type,noPlots:r.no_plots,unitPrice:r.unit_price,discount:r.discount,netTotal:r.net_total,
   paymentPlan:r.payment_plan,grandTotal:r.grand_total,siteVisit:r.site_visit,priority:r.priority,
   amtPaid:r.amt_paid,balance:r.balance,nextAction:r.next_action,notes:r.notes,tags:r.tags,depositTarget:r.deposit_target,
-  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at,version:r.version});
+  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at,version:r.version,
+  lastModifiedAt:r.last_modified_at,lastModifiedBy:r.last_modified_by});
 const mapEnq=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,name:r.name,contact:r.contact,location:r.location,
   types:(r.types||'').split(',').filter(Boolean),plot:r.plot,source:r.source,details:r.details,follow:r.follow,
   followDate:r.follow_date,createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
@@ -15383,6 +15384,23 @@ function runDataIntegrityCheck(scopeToLeads){
     if(l.plotType==='Half Plot' && num(l.noPlots)>0 && num(l.noPlots)<1){
       issues.push({lead:l,type:'Quantity error',cls:'dgr',detail:`No. of plots is ${l.noPlots} on a Half Plot — that's half of an already-half unit. This almost always means it should be 1 (one Half Plot), not ${l.noPlots}.`});
     }
+    // ---- Sec 61: staff record-hygiene checks -- these are about whether the
+    // owning staff member kept their own record's basic fields filled in and
+    // current, distinct from the financial-consistency checks above. ----
+    const isDead=l.stage==='Lost'||isFullyPaid(l);
+    if(!l.contact){
+      issues.push({lead:l,type:'Missing contact',cls:'warnt',detail:'No phone number on file — this client can\'t be reached or receive SMS/portal login.'});
+    }
+    if(!l.nextAction && !isDead){
+      issues.push({lead:l,type:'Missing next action',cls:'warnt',detail:'No next action set — this lead has no follow-up plan.'});
+    }
+    if(!l.paymentPlan && storedGrand>0 && l.stage!=='Lost'){
+      issues.push({lead:l,type:'Missing payment plan',cls:'warnt',detail:'No payment plan selected despite a grand total being set.'});
+    }
+    if(l.lastModifiedAt && !isDead){
+      const staleDays=Math.round((Date.now()-new Date(l.lastModifiedAt).getTime())/86400000);
+      if(staleDays>30) issues.push({lead:l,type:'Stale lead',cls:'warnt',detail:`No updates in ${staleDays} days — this lead may need a follow-up call.`});
+    }
   });
   // Two different clients sharing a phone number is a data-entry error, not a
   // real household -- the client portal / Customer 360 view now keep them apart
@@ -15410,14 +15428,21 @@ function runDataIntegrityCheck(scopeToLeads){
 function renderDataCheck(scopeToLeads){
   const issues=runDataIntegrityCheck(scopeToLeads);
   const scopeLabel=scopeToLeads?'your pipeline':'the company';
+  // Sec 61: a transparent hygiene score alongside the existing issue list --
+  // % of leads with zero flagged issues, so staff see one number for "how am
+  // I doing" without having to count rows themselves.
+  const totalLeads=(scopeToLeads||allAgentLists().flatMap(a=>a.list)).length;
+  const flaggedLeadCount=new Set(issues.map(i=>i.lead.id)).size;
+  const hygieneScore=totalLeads?Math.round((totalLeads-flaggedLeadCount)/totalLeads*100):100;
   const rows=issues.map((iss)=>{ const key=issueDismissKey(iss);
     return `<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(iss.lead.name)}" data-custcontact="${esc(iss.lead.contact||'')}">${esc(iss.lead.name)}</div>
     <div class="meta">${esc(iss.lead.agentDisplay||'')} · ${esc(iss.lead.plotType||'')}${iss.lead.noPlots?' ×'+esc(iss.lead.noPlots):''}</div></div>
     <span class="tag ${iss.cls}">${esc(iss.type)}</span></div>
     <div class="note" style="margin-top:9px">${esc(iss.detail)}</div>
     <div class="foot"><button class="chip" onclick="route('updateOne','${iss.lead.id}')">Fix this lead →</button><button class="chip" data-dismississue="${esc(key)}">Not an error, dismiss</button></div></div>`; }).join('');
-  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Data Check</div><h2>${issues.length? issues.length+' thing'+(issues.length===1?'':'s')+' worth reviewing':'Everything checks out'}</h2><p>Scans every lead in ${scopeLabel} for pricing/payment inconsistencies — automatically, every time you open this.</p></div></div>
-  <div class="list" id="dataCheckList">${issues.length?rows:emptyState(ic.check||ic.spark,'No issues found','Every lead\'s unit price, totals, and payments are internally consistent.')}</div>`;
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Data Check</div><h2>${issues.length? issues.length+' thing'+(issues.length===1?'':'s')+' worth reviewing':'Everything checks out'}</h2><p>Scans every lead in ${scopeLabel} for pricing/payment inconsistencies and record hygiene — automatically, every time you open this.</p></div></div>
+  <div class="kpis">${kpi('Hygiene score',hygieneScore+'%',hygieneScore>=90?'':'gold')}${kpi('Clean leads',(totalLeads-flaggedLeadCount)+' / '+totalLeads)}</div>
+  <div class="list" id="dataCheckList">${issues.length?rows:emptyState(ic.check||ic.spark,'No issues found','Every lead\'s unit price, totals, payments and basic record fields are all in order.')}</div>`;
 }
 function bindDataCheckCtrls(scopeToLeads,rerenderFn){
   document.querySelectorAll('[data-dismississue]').forEach(b=>b.onclick=()=>{
@@ -17430,11 +17455,19 @@ async function computeSystemHealth(){
   const mostRecentBackup=backups[0]||null;
   const hoursSinceBackup=mostRecentBackup?Math.round((Date.now()-new Date(mostRecentBackup.created_at).getTime())/3600000):null;
   const integrityIssues=DEMO_MODE?[]:runDataIntegrityCheck();
+  // Sec 61: team-wide hygiene view -- same detection as Data Check, scored
+  // per agent so Management sees who needs a nudge without reading every row.
+  const staffHygiene=DEMO_MODE?[]:allAgentLists().map(a=>{
+    const agentIssues=runDataIntegrityCheck(a.list);
+    const leadCount=a.list.length;
+    const flaggedCount=new Set(agentIssues.map(i=>i.lead.id)).size;
+    return {agentName:a.name,leadCount,flaggedCount,score:leadCount?Math.round((leadCount-flaggedCount)/leadCount*100):100};
+  }).sort((x,y)=>x.score-y.score);
   const pendingPayments=(DB.pendingPayments||[]);
   const pendingExpenses=(EXPENSES_LIST||[]).filter(e=>e.status==='pending');
   const pendingFunds=(FUND_REQUESTS_LIST||[]).filter(f=>f.status==='pending');
   const oldestPendingAgeDays=(list,dateKey)=>{ if(!list.length) return null; const oldest=list.reduce((a,b)=>(a[dateKey]||'')<(b[dateKey]||'')?a:b); const d=new Date(oldest[dateKey]||oldest.createdAt||Date.now()); return Math.round((Date.now()-d.getTime())/86400000); };
-  return {sms,backups,last7dBackups,mostRecentBackup,hoursSinceBackup,integrityIssues,
+  return {sms,backups,last7dBackups,mostRecentBackup,hoursSinceBackup,integrityIssues,staffHygiene,
     pendingPayments,pendingExpenses,pendingFunds,
     oldestPendingPaymentDays:oldestPendingAgeDays(pendingPayments,'createdAt'),
     oldestPendingExpenseDays:oldestPendingAgeDays(pendingExpenses,'createdAt'),
@@ -17457,6 +17490,10 @@ function systemHealthHtml(h){
     <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Data integrity</div><div class="mini">${h.integrityIssues.length?h.integrityIssues.length+' pricing/payment issue(s) flagged':'No pricing/payment inconsistencies found'}</div></div></div>${healthTag(integrityOk,h.integrityIssues.length+' issue(s)')}</div>
     <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Pending approvals</div><div class="mini">${pendingTotal?`${h.pendingPayments.length} payment(s) · ${h.pendingExpenses.length} expense(s) · ${h.pendingFunds.length} fund request(s)${oldestPendingDays?' · oldest '+oldestPendingDays+'d':''}`:'Nothing waiting on a decision'}</div></div></div>${healthTag(pendingOk,'Stuck items')}</div>
   </div>
+  ${h.staffHygiene&&h.staffHygiene.length?`${settingsSectionHead('people','Staff data hygiene','who needs a nudge to clean up their pipeline')}
+  <div class="formwrap" style="padding:6px 15px">
+    ${h.staffHygiene.map(s=>`<div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">${esc(s.agentName)}</div><div class="mini">${s.leadCount} lead${s.leadCount===1?'':'s'} · ${s.flaggedCount} flagged</div></div></div><span class="tag ${s.score>=90?'ok':s.score>=70?'warnt':'dgr'}">${s.score}%</span></div>`).join('')}
+  </div>`:''}
   <div class="formactions" style="flex-direction:column;gap:8px;margin-top:6px">
     ${h.integrityIssues.length?`<button class="chip" id="healthGoIntegrity" style="width:100%">Review data integrity issues →</button>`:''}
     ${h.pendingPayments.length?`<button class="chip" id="healthGoPayments" style="width:100%">Review pending payments →</button>`:''}
