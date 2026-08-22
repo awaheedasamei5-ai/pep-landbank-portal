@@ -7196,7 +7196,7 @@ function viewMore(){
     const all=MGR_APPS.filter(a=>!a.section);
     const byKey=k=>all.find(a=>a.key===k);
     const groups=[
-      {title:'Insights & data',items:['Data Check','Analytics','Reports','News','Insights'].map(byKey).filter(Boolean)},
+      {title:'Insights & data',items:['Data Check','Analytics','Reports','Report Archive','News','Insights'].map(byKey).filter(Boolean)},
       {title:'Tools',items:['Settings','Downloads'].map(byKey).filter(Boolean)}
     ];
     const items=groups.flatMap(g=>g.items);
@@ -15154,6 +15154,7 @@ const MGR_APPS=[
   {key:'Leaderboard',fic:'leaderboard',label:'Leaderboard',section:'officedesk'},
   {key:'Reports',fic:'analytics',label:'Reports'},
   {key:'Analytics',fic:'analytics',label:'Analytics'},
+  {key:'Report Archive',fic:'reportdoc',label:'Report Archive'},
   {key:'Plots',fic:'map',label:'Plot Inventory',section:'salesdesk'},
   {key:'Allocations',fic:'allocation',label:'Allocations',section:'salesdesk'},
   {key:'Client Database',fic:'clientdb',label:'Client Database',section:'salesdesk'},
@@ -15217,6 +15218,11 @@ async function managerView(){
   }
   else if(mgrTab==='Reports'){ body.innerHTML=mgrReports(); bindReportCtrls(); }
   else if(mgrTab==='Analytics'){ body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls(); }
+  else if(mgrTab==='Report Archive'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
     const pend=(DB.allocations||[]).filter(a=>a.status==='Pending').sort((x,y)=>y.percent-x.percent);
@@ -17450,6 +17456,53 @@ function bindAuditLogCtrls(){
   document.querySelectorAll('[data-auditcat]').forEach(b=>b.onclick=()=>{ AUDIT_LOG_FILTER.category=b.dataset.auditcat; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } });
   const critBtn=document.querySelector('[data-auditcritonly]'); if(critBtn) critBtn.onclick=()=>{ AUDIT_LOG_FILTER.criticalOnly=!AUDIT_LOG_FILTER.criticalOnly; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } };
   document.querySelectorAll('[data-auditrow]').forEach(row=>row.onclick=()=>{ const id=row.dataset.auditrow; const det=document.getElementById('auditDetail_'+id); if(det) det.classList.toggle('hidden'); });
+}
+/* Report Archive -- every automated 9AM report, kept even when the email fails,
+   so a lost email never means a lost report (Sec 41 of the rebuild spec).
+   Written by the daily-management-report edge function on every real run; the
+   list load deliberately excludes pdf_base64 (can be large) -- the PDF itself
+   is only fetched on-demand when a manager actually taps Download. */
+let REPORT_ARCHIVE_LOADED=false, REPORT_ARCHIVE_LIST=[];
+async function apiLoadReportArchive(){
+  if(DEMO_MODE) return [];
+  const {data,error}=await sb.from('report_archive').select('id,report_date,generated_at,recipients,generation_status,email_status,error_detail,retry_count').order('report_date',{ascending:false}).limit(60);
+  if(error) throw error;
+  return (data||[]).map(r=>({id:r.id,reportDate:r.report_date,generatedAt:r.generated_at,recipients:r.recipients,generationStatus:r.generation_status,emailStatus:r.email_status,errorDetail:r.error_detail,retryCount:r.retry_count}));
+}
+async function apiLoadReportArchivePdf(id){
+  const {data,error}=await sb.from('report_archive').select('pdf_base64,report_date').eq('id',id).single();
+  if(error) throw error;
+  return {pdfBase64:data.pdf_base64,reportDate:data.report_date};
+}
+function reportArchiveStatusTag(r){
+  if(r.generationStatus==='failed') return '<span class="tag dgr">Generation failed</span>';
+  if(r.emailStatus==='sent') return '<span class="tag ok">Emailed</span>';
+  if(r.emailStatus==='skipped') return '<span class="tag warnt">No recipients</span>';
+  return '<span class="tag dgr">Email failed</span>';
+}
+function reportArchiveHtml(){
+  if(DEMO_MODE) return `<div class="formwrap">${emptyState(ic.alert,'Only meaningful live','Report Archive stores real daily reports — connect to Supabase to use it.')}</div>`;
+  const rows=REPORT_ARCHIVE_LIST;
+  const rowsHtml=rows.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(fmtLongDate(r.reportDate))}</div><div class="meta">${r.recipients?esc(r.recipients):'no recipients on file'} · generated ${esc((r.generatedAt||'').slice(0,16).replace('T',' '))}</div></div>${reportArchiveStatusTag(r)}</div>
+    ${r.errorDetail?`<div class="note" style="margin-top:6px;color:#B91C1C">${esc(r.errorDetail)}</div>`:''}
+    <div class="foot"><button class="chip" data-dlreport="${r.id}">Download PDF</button></div></div>`).join('');
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Insights &amp; data</div><h2>Report Archive</h2><p>Every automated 9AM report, kept even if the email failed — most recent ${rows.length}.</p></div></div>
+  <div class="list">${rows.length?rowsHtml:emptyState(ic.reportdoc||ic.doc,'Nothing yet','Fills in automatically once the 9AM report runs.')}</div>`;
+}
+function bindReportArchiveCtrls(){
+  document.querySelectorAll('[data-dlreport]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; const orig=b.textContent; b.textContent='Preparing…';
+    try{
+      const {pdfBase64,reportDate}=await apiLoadReportArchivePdf(b.dataset.dlreport);
+      if(!pdfBase64){ toast('No PDF stored for this report'); }
+      else{
+        const a=document.createElement('a'); a.href='data:application/pdf;base64,'+pdfBase64; a.download='Palmstead_Daily_Report_'+reportDate+'.pdf';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        logDownload(a.download,'pdf',a.href);
+      }
+    }catch(e){ toast('Could not load report: '+(e.message||e)); }
+    b.disabled=false; b.textContent=orig;
+  });
 }
 /* Notes app -- simple private jot-down/save/send/download tool. Each agent/manager only
    ever sees their own notes (RLS-enforced live; client-side filtered in demo). */
