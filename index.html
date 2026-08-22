@@ -1292,6 +1292,8 @@ urlToDataUri(TRULANDER_LOGO_SRC).then(u=>TRULANDER_LOGO_DATA_URI=u).catch(()=>{}
 
 /* ================= client / mode state ================= */
 let sb=null, LIVE_MODE=false, DEMO_MODE=true, USER=null, PROFILE=null, pickStaff=null, ddOpen=false;
+let LAST_LOAD_ALL_AT=null; // last time apiLoadAll() finished -- feeds the Support Diagnostics panel's "last sync" field
+const APP_BOOT_AT=new Date().toISOString();
 let DB={leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],pendingPayments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[],leaveRequests:[],memos:[],banners:[],contracts:[],contractRequests:[],badgeCounts:{memo:0,contractRequest:0,approvals:0,sitevisit:0,complaint:0,plotrequest:0}};
 
 /* ================= audit / observability =================
@@ -1997,7 +1999,8 @@ const mapLead=r=>({id:r.id,agent:r.agent_key,name:r.name,contact:r.contact,date:
   plotType:r.plot_type,noPlots:r.no_plots,unitPrice:r.unit_price,discount:r.discount,netTotal:r.net_total,
   paymentPlan:r.payment_plan,grandTotal:r.grand_total,siteVisit:r.site_visit,priority:r.priority,
   amtPaid:r.amt_paid,balance:r.balance,nextAction:r.next_action,notes:r.notes,tags:r.tags,depositTarget:r.deposit_target,
-  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at,version:r.version});
+  docStage:r.doc_stage,docStageUpdatedAt:r.doc_stage_updated_at,leadSource:r.lead_source,bannerId:r.banner_id,address:r.address,kyc:r.kyc||{},deletedAt:r.deleted_at,version:r.version,
+  lastModifiedAt:r.last_modified_at,lastModifiedBy:r.last_modified_by});
 const mapEnq=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,name:r.name,contact:r.contact,location:r.location,
   types:(r.types||'').split(',').filter(Boolean),plot:r.plot,source:r.source,details:r.details,follow:r.follow,
   followDate:r.follow_date,createdAt:(r.created_at||'').slice(0,16).replace('T',' ')});
@@ -2515,6 +2518,7 @@ async function apiLoadAll(){
     DB.feedback=await apiLoadFeedback();
     DB.downloads=await apiLoadDownloads();
     DB.badgeCounts=await apiLoadBadgeCounts();
+    LAST_LOAD_ALL_AT=new Date().toISOString();
     return;
   }
   // site_visits/activity_log get capped here -- both are effectively append-only
@@ -2575,6 +2579,7 @@ async function apiLoadAll(){
   DB.feedback=results[15];
   DB.downloads=results[16];
   DB.badgeCounts=results[17];
+  LAST_LOAD_ALL_AT=new Date().toISOString();
 }
 // Cheap COUNT-only queries (no row data) so the "this app needs you" dots on Memo,
 // Contract of Sale and Expenses/Fund Requests can show up on the dashboard itself,
@@ -3533,6 +3538,32 @@ async function checkBirthdaysToday(){
 const REMINDER_LEAD_DAYS=5, DEFAULT_GRACE_DAYS=5;
 function ordinalLabel(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; switch(n%10){ case 1:return n+'st'; case 2:return n+'nd'; case 3:return n+'rd'; default:return n+'th'; } }
 function sameCalendarDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+// Sec 60: Client Payment-Risk Engine. A pure classifier -- never mutates
+// anything, never touches contract terms -- reusing the exact same schedule
+// math and day-of-month anchoring as the reminder system above so the risk
+// label a client sees always agrees with what actually triggers their SMS.
+// Six states: On track, Due soon, Partial (deposit not yet cleared but paying),
+// Overdue, Severely overdue (missed a prior month, i.e. real arrears), Paid in full.
+function computePaymentRiskState(lead,payments){
+  if(isFullyPaid(lead)) return 'Paid in full';
+  const sched=computeMonthlySchedule(lead,payments||[]);
+  if(!sched) return num(lead.amtPaid)>0 ? 'Partial' : 'On track';
+  if(sched.arrears>0.5) return 'Severely overdue';
+  if(sched.expectedThisMonth<=0.5) return 'On track';
+  const anchorDay=new Date(sched.nextDueDate+'T00:00:00').getDate();
+  const now=new Date(today()+'T00:00:00');
+  const y=now.getFullYear(), m=now.getMonth();
+  const daysInThisMonth=new Date(y,m+1,0).getDate();
+  const thisMonthDueDay=Math.min(anchorDay,daysInThisMonth);
+  const dueDateThisCycle=new Date(y,m,thisMonthDueDay);
+  const reminderDate=new Date(dueDateThisCycle); reminderDate.setDate(dueDateThisCycle.getDate()-REMINDER_LEAD_DAYS);
+  const defaultDate=new Date(dueDateThisCycle); defaultDate.setDate(dueDateThisCycle.getDate()+DEFAULT_GRACE_DAYS);
+  if(now>=defaultDate) return 'Severely overdue';
+  if(now>=dueDateThisCycle) return 'Overdue';
+  if(now>=reminderDate) return 'Due soon';
+  return 'On track';
+}
+const PAYMENT_RISK_TAG_CLS={'Paid in full':'ok','On track':'ok','Due soon':'warnt','Partial':'warnt','Overdue':'dgr','Severely overdue':'dgr'};
 async function checkPaymentDueReminders(){
   if(PROFILE.role!=='manager' || DEMO_MODE) return;
   try{
@@ -4172,6 +4203,17 @@ async function apiLoadTaskEvents(taskId){
   try{ const {data,error}=await sb.from('task_events').select('*').eq('task_id',taskId).order('created_at',{ascending:true}); if(error) throw error;
     return (data||[]).map(mapTaskEvent); }
   catch(e){ return []; }
+}
+// Company-wide task_events fetch for the Ops Report's analytics (reopen rate
+// specifically needs event-level history -- a task's current status alone
+// can't reveal it was ever bounced back to Open after being Done). Bounded
+// the same way apiLoadFullTasks()'s siblings are -- this is only called
+// on-demand when actually generating a report, never on sign-in.
+async function apiLoadAllTaskEvents(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.taskEvents||[]).slice(); }
+  const {data,error}=await sb.from('task_events').select('*').order('created_at',{ascending:false}).limit(5000);
+  if(error) throw error;
+  return (data||[]).map(mapTaskEvent);
 }
 async function apiLogTaskEvent(taskId,type,extra){
   const rec={taskId,type,actorKey:PROFILE.key,actorName:PROFILE.name,fromKey:null,fromName:null,toKey:null,toName:null,note:null,...(extra||{})};
@@ -7196,7 +7238,7 @@ function viewMore(){
     const all=MGR_APPS.filter(a=>!a.section);
     const byKey=k=>all.find(a=>a.key===k);
     const groups=[
-      {title:'Insights & data',items:['Data Check','Analytics','Reports','News','Insights'].map(byKey).filter(Boolean)},
+      {title:'Insights & data',items:['Data Check','Analytics','Reports','Report Archive','News','Insights'].map(byKey).filter(Boolean)},
       {title:'Tools',items:['Settings','Downloads'].map(byKey).filter(Boolean)}
     ];
     const items=groups.flatMap(g=>g.items);
@@ -8284,10 +8326,13 @@ function paintPipe(){ const wrap=document.getElementById('plist'); const q=pf.q.
   if(!list.length){ wrap.innerHTML=emptyState(ic.grid,'No matching leads','Adjust your search or add a new lead.'); return; }
   wrap.innerHTML=list.map((l,i)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; const bal=Math.max(g-num(l.amtPaid),0); const paidFull=isFullyPaid(l);
     const initials=(l.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    // Payment-risk badge (Sec 60) -- only shown for states actually worth a
+    // glance; "On track"/"Paid in full" would just repeat the existing tags.
+    const risk=paidFull?null:computePaymentRiskState(l,(DB.payments||[]).filter(p=>p.leadId===l.id));
     return `<div class="rowcard pipeCard stage-${esc(l.stage||'')}" style="animation-delay:${Math.min(i*30,300)}ms">
       <div class="top"><div class="pipeAvatar">${esc(initials)}</div><div style="flex:1;min-width:0"><div class="nm nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}">${esc(l.name)}</div><div class="meta">${esc(l.contact||'—')}${contactLinks(l.contact)} · ${esc(l.plotType||'')}${l.noPlots?' ×'+esc(l.noPlots):''}</div></div>
       <div style="text-align:right"><div class="amt">${ghs(g)}</div><div class="meta">${bal>0?('Bal '+ghs(bal)):'Paid in full'}</div></div></div>
-      <div class="foot">${paidFull?'<span class="tag ok">✓ Paid in full</span>':''}<span class="tag stage-${esc(l.stage||'')}">${esc(l.stage||'—')}</span><span class="tag pri-${esc(l.priority||'Low')}">${esc(l.priority||'Low')} priority</span>${l.siteVisit==='Yes'?'<span class="tag ok">Site visited</span>':''}${l.paymentPlan?`<span class="tag ghost">${esc(l.paymentPlan)}</span>`:''}${(l.tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tagchip">🏷 ${esc(t)}</span>`).join('')}</div>
+      <div class="foot">${paidFull?'<span class="tag ok">✓ Paid in full</span>':''}${risk&&risk!=='On track'?`<span class="tag ${PAYMENT_RISK_TAG_CLS[risk]}">${esc(risk)}</span>`:''}<span class="tag stage-${esc(l.stage||'')}">${esc(l.stage||'—')}</span><span class="tag pri-${esc(l.priority||'Low')}">${esc(l.priority||'Low')} priority</span>${l.siteVisit==='Yes'?'<span class="tag ok">Site visited</span>':''}${l.paymentPlan?`<span class="tag ghost">${esc(l.paymentPlan)}</span>`:''}${(l.tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tagchip">🏷 ${esc(t)}</span>`).join('')}</div>
       ${l.nextAction?`<div class="note"><b>Next:</b> ${esc(l.nextAction)}</div>`:''}
       <div class="foot"><button class="chip" onclick="route('updateOne','${l.id}')">Update this lead →</button></div></div>`; }).join('');
 }
@@ -10408,7 +10453,7 @@ async function paintOpsReportsTab(){
   ${isCustom?`<div class="grid2">${fld('From','<input id="opsrpt_from" type="date" value="'+(OPSRPT_FROM||today())+'"/>')}${fld('To','<input id="opsrpt_to" type="date" value="'+(OPSRPT_TO||today())+'"/>')}</div>`:''}
   <label class="mini" style="display:flex;align-items:center;gap:8px;margin:2px 0 14px;cursor:pointer"><input type="checkbox" id="opsrpt_compare"${OPSRPT_COMPARE?' checked':''}/> Compare to the same-length previous period</label>
   <div class="formactions"><button class="btn primary" id="opsRptGoBtn" style="width:100%">Generate PDF report</button></div>
-  <p class="mini" style="margin-top:10px">Per-staff and per-duty (category) assigned/completed/overdue/escalated, average days and hours to close, and company-wide To-Do List activity for the period.</p>
+  <p class="mini" style="margin-top:10px">Per-staff and per-duty (category) assigned/completed/overdue/escalated, average days and hours to close, phase-by-phase timing (open/start/complete), median close time, reopen rate, and company-wide To-Do List activity for the period.</p>
   </div>`;
   body.querySelectorAll('[data-opsrptperiod]').forEach(b=>b.onclick=()=>{ OPSRPT_PERIOD=b.dataset.opsrptperiod; paintOpsReportsTab(); });
   document.getElementById('opsrpt_compare').onchange=e=>{ OPSRPT_COMPARE=e.target.checked; };
@@ -10417,10 +10462,10 @@ async function paintOpsReportsTab(){
     const range=reportPeriodRange(OPSRPT_PERIOD,OPSRPT_FROM,OPSRPT_TO);
     const btn=document.getElementById('opsRptGoBtn'); btn.disabled=true; btn.textContent='Building…';
     try{
-      const [todos,tasksData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks()]);
-      const data=computeOpsReportData(range.from,range.to,todos,tasksData);
+      const [todos,tasksData,taskEventsData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks(),apiLoadAllTaskEvents()]);
+      const data=computeOpsReportData(range.from,range.to,todos,tasksData,taskEventsData);
       let prior=null, priorData=null;
-      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData); }
+      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData,taskEventsData); }
       buildOpsReportPDF(range,data,prior,priorData);
     }catch(e){ toast('Could not build report: '+(e.message||e)); }
     btn.disabled=false; btn.textContent='Generate PDF report';
@@ -11061,10 +11106,20 @@ async function formCustomer(arg){
   // DB.sitevisits/DB.activity are capped for everyday screens (see apiLoadAll) --
   // a customer's own full history shouldn't silently truncate on their 360 profile,
   // so this fetches fresh, uncapped copies specifically for the two capped tables.
-  const [fullSiteVisitsForCust,fullActivityForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity()]);
+  const [fullSiteVisitsForCust,fullActivityForCust,contractReqsForCust,plotReqsForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity(),apiLoadContractRequests().catch(()=>[]),apiLoadPlotRequests().catch(()=>[])]);
   const mVis=fullSiteVisitsForCust.filter(v=>custMatches(v.name,v.contact,name,contact));
   const mAct=fullActivityForCust.filter(a=>custMatches(a.client,'',name,contact));
   const mPay=(DB.payments||[]).filter(p=>custMatches(p.clientName,'',name,contact)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
+  // Contracts, contract requests, plot requests and allocations all already
+  // exist elsewhere in the app -- Sec 55 just asks that a client's full journey
+  // merge them into ONE chronological timeline instead of making Management
+  // visit each app separately, so these fold straight into the same `events`
+  // array the rest of this screen already builds.
+  const nameLowerForTimeline=name.trim().toLowerCase();
+  const mContracts=(DB.contracts||[]).filter(c=>(c.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mContractReqs=contractReqsForCust.filter(r=>(r.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mPlotReqs=plotReqsForCust.filter(r=>(r.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mAllocs=(DB.allocations||[]).filter(a=>custMatches(a.clientName,'',name,contact));
 
   const events=[];
   mLeads.forEach(l=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand;
@@ -11080,6 +11135,16 @@ async function formCustomer(arg){
       detail:a.detail||a.note||''}); });
   mPay.forEach(p=>{ events.push({date:p.date||'',type:'Payment',label:ghs(num(p.amount))+' received',icon:kpiIc.check,cls:'green',
       detail:''}); });
+  mContracts.forEach(c=>{ events.push({date:(c.createdAt||'').slice(0,10),type:'Contract',label:'Contract of Sale generated',icon:ic.contract||ic.doc,cls:'gold',
+      detail:c.createdByName||c.createdBy?('By '+(c.createdByName||c.createdBy)):''}); });
+  mContractReqs.forEach(r=>{ events.push({date:(r.createdAt||'').slice(0,10),type:'Contract request',label:'Contract requested'+(r.status==='fulfilled'?' · fulfilled':' · pending'),icon:ic.contract||ic.doc,cls:r.status==='fulfilled'?'green':'gold',
+      detail:r.requestedByName||r.requestedBy?('By '+(r.requestedByName||r.requestedBy)):''}); });
+  mPlotReqs.forEach(r=>{ events.push({date:(r.createdAt||'').slice(0,10),type:'Plot request',label:'Additional plot requested'+(r.status==='pending'?' · pending':' · '+(r.status||'')),icon:ic.plotrequest||ic.doc,cls:'lime',
+      detail:(r.plotType||'')+(r.noPlots?' ×'+r.noPlots:'')}); });
+  mAllocs.forEach(a=>{
+    events.push({date:(a.createdAt||'').slice(0,10),type:'Allocation',label:'Allocation requested ('+(a.percent!=null?a.percent+'% paid':'')+')',icon:ic.allocation||ic.doc,cls:'gold',detail:a.note||''});
+    if(a.status==='Allocated' && a.resolvedAt) events.push({date:(a.resolvedAt||'').slice(0,10),type:'Allocation',label:'Plot allocated'+(a.plotNumber?' · '+a.plotNumber:''),icon:ic.allocation||ic.doc,cls:'green',detail:''});
+  });
   events.sort((x,y)=>(y.date||'').localeCompare(x.date||''));
 
   const totalValue=mLeads.reduce((s,l)=>s+num(l.grandTotal!=null?l.grandTotal:computeLead(l).grand),0);
@@ -12386,19 +12451,44 @@ function pdfScheduleTable(doc,y,pageW,rows){
    own navy branding used elsewhere in these PDF helpers). */
 const QGREEN_DARK=[13,77,45], QGREEN_LABEL=[21,110,64], QGREEN_LIGHT=[224,238,220], QGREEN_BG=[238,244,235], QRED=[196,42,30];
 function pdfQuoteBg(doc,pageW,pageH){ doc.setFillColor(QGREEN_BG[0],QGREEN_BG[1],QGREEN_BG[2]); doc.rect(0,0,pageW,pageH,'F'); }
-function pdfKV(doc,x,y,label,value,valueColor){
+// Renders "Label: value" as one tight unit -- label ends in a colon, then a
+// single space, then the value starts immediately after (not at a fixed
+// x+40 column like before, which left a wide gap for short labels and let
+// long labels visually collide with the value). maxWidth still constrains
+// the VALUE to its own column so a long name/address/email wraps instead of
+// running into a neighboring column's text, but the width available to it is
+// now maxWidth-minus-however-wide-this-particular-label-turned-out-to-be, not
+// a one-size-fits-all guess. Returns the number of lines drawn so callers can
+// space the next row down by the actual height used, not a fixed guess.
+function pdfKV(doc,x,y,label,value,valueColor,maxWidth){
+  const labelText=String(label).replace(/:\s*$/,'')+':';
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(QGREEN_LABEL[0],QGREEN_LABEL[1],QGREEN_LABEL[2]);
-  doc.text(label,x,y);
+  doc.text(labelText,x,y);
+  const gap=doc.getTextWidth(labelText)+1.6;
   doc.setFont('helvetica','normal'); doc.setFontSize(9);
   if(valueColor) doc.setTextColor(valueColor[0],valueColor[1],valueColor[2]); else doc.setTextColor(20,20,20);
-  doc.text(String(value),x+40,y);
+  const valueW=maxWidth?Math.max(maxWidth-gap,22):null;
+  const lines=valueW?doc.splitTextToSize(String(value),valueW):[String(value)];
+  doc.text(lines,x+gap,y);
   doc.setTextColor(20,20,20);
+  return lines.length;
 }
+// Shared column fractions -- pdfGreenBar (Total Value/Deposit/Balance/Monthly
+// Due) sits directly above pdfGreenTable (Month/Opening/Monthly Payment/
+// Closing) in the quotation, so both use the exact same 4 vertical column
+// boundaries. Without this the bar's evenly-split columns didn't line up with
+// the table's underneath -- the two blocks looked like unrelated grids
+// stacked on top of each other instead of one continuous table.
+const QCOL_FRACS=[0,0.20,0.48,0.74,1];
 function pdfGreenBar(doc,y,pageW,items){
   const barH=13; doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,y,pageW-24,barH,'F');
-  const w=(pageW-24)/items.length;
+  const usableW=pageW-24;
+  const fracs=items.length===4?QCOL_FRACS:items.map((_,i)=>i/items.length).concat([1]);
   items.forEach((it,i)=>{
-    const x=12+w*i+6;
+    // Column 0 gets the same +3 left padding pdfGreenTable's MONTH cell uses;
+    // columns 1+ sit flush on the column edge, matching the table's other
+    // header cells -- this is what actually makes the two blocks' verticals align.
+    const x=12+usableW*fracs[i]+(i===0?3:0);
     doc.setFont('helvetica','bold'); doc.setFontSize(6.4); doc.setTextColor(220,232,224);
     doc.text(it.label.toUpperCase(),x,y+5);
     doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
@@ -12414,7 +12504,7 @@ function pdfGreenBar(doc,y,pageW,items){
 // document spilling most of its content onto an otherwise near-empty page 2.
 function pdfGreenTable(doc,y,pageW,rows){
   const usableW=pageW-24;
-  const colX=[12,12+usableW*0.20,12+usableW*0.48,12+usableW*0.74];
+  const colX=[12+usableW*QCOL_FRACS[0],12+usableW*QCOL_FRACS[1],12+usableW*QCOL_FRACS[2],12+usableW*QCOL_FRACS[3]];
   const rowH=5.6;
   const drawHeader=(yy)=>{
     doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,yy,usableW,rowH,'F');
@@ -12428,7 +12518,7 @@ function pdfGreenTable(doc,y,pageW,rows){
     if(y>280){ doc.addPage(); pdfQuoteBg(doc,pageW,297); y=16; drawHeader(y); y+=rowH; }
     if(i%2===1){ doc.setFillColor(QGREEN_LIGHT[0],QGREEN_LIGHT[1],QGREEN_LIGHT[2]); doc.rect(12,y,usableW,rowH,'F'); }
     doc.setTextColor(20,20,20);
-    doc.text(String(r.month.toFixed?r.month.toFixed(2):r.month),colX[0]+3,y+3.9);
+    doc.text(String(Number.isInteger(r.month)?r.month:r.month.toFixed(2)),colX[0]+3,y+3.9);
     doc.text(ghs(r.opening),colX[1],y+3.9);
     doc.text(ghs(r.payment),colX[2],y+3.9);
     doc.text(ghs(r.closing),colX[3],y+3.9);
@@ -13077,12 +13167,27 @@ function openQuotationRequest(){
     <div class="grid2">${fld('Plot type',sel('q_plottype',['Full Plot','Half Plot']))}${fld('No. of plots','<input id="q_noplots" type="number" min="0.5" step="0.5" value="1"/>')}</div>
     ${fld('Payment period',sel('q_period',['Full Payment','3 Months','6 Months','9 Months','12 Months']))}
     <div class="grid2">${fld('Discount (GHS)','<input id="q_discount" type="number" min="0" placeholder="auto"/>','leave blank for the standard discount')}${fld('Deposit %','<input id="q_depositpct" type="number" min="0" max="100" value="'+Math.round(QUOTE_DEPOSIT_PCT*100)+'"/>','e.g. 50 for a 50% deposit')}</div>
+    ${fld('Deposit Amount (GHS)','<input id="q_depositamt" type="number" min="0" placeholder="auto"/>','enter a cash figure instead — the % above updates to match')}
     <div id="quotePreview" class="formwrap" style="margin-top:4px"></div>
     <div class="formactions"><button class="btn primary" id="genQuoteBtn" style="width:100%">Generate quotation PDF</button></div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeQuoteReq').onclick=()=>ov.remove();
+  // Deposit % and Deposit Amount are two views of the same number -- editing
+  // either one recalculates the other from the quote's grand total (which
+  // doesn't itself depend on deposit, so it's safe to read via any pct).
+  const currentGrand=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).grand;
+  document.getElementById('q_depositpct').addEventListener('input',()=>{
+    const grand=currentGrand(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
+    document.getElementById('q_depositamt').value=grand>0?Math.round(grand*pct/100):'';
+    paintPreview();
+  });
+  document.getElementById('q_depositamt').addEventListener('input',()=>{
+    const grand=currentGrand(); const amt=Math.max(0,Math.min(grand,num(val('q_depositamt'))));
+    document.getElementById('q_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
+    paintPreview();
+  });
   const paintPreview=()=>{
     const plotType=val('q_plottype'), noPlots=num(val('q_noplots'))||1, period=val('q_period');
     const t=computeQuotationTotals(plotType,noPlots,period,val('q_discount'),val('q_depositpct'));
@@ -13130,23 +13235,34 @@ function buildQuotationPDF(q){
   const typeLines=doc.splitTextToSize(docType,60);
   typeLines.forEach((line,i)=>doc.text(line,pageW-12,15+i*5,{align:'right'}));
 
-  let y=44;
+  let y=48;
   const leftX=14, rightX=110;
-  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):Math.round(QUOTE_DEPOSIT_PCT*100);
-  const leftRows=[['Customer Name',q.clientName,null],['Address',q.address||'—',null],
-    ['Contact',[q.contact,q.email].filter(Boolean).join('  ·  ')||'—',null],
-    ['Payment Plan',q.planMonths?(depositPct+'%'):'Outright',null]];
+  // Fixed cell widths so a long name/address/email wraps within its own column
+  // instead of overlapping the neighboring one -- each column tracks its own y
+  // position (rows can be different heights once a value wraps). pdfKV now
+  // measures each label itself and subtracts that from these full-column
+  // widths, rather than assuming every label fits a fixed 40mm gutter.
+  const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
+  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
+  const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
+    ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
+    ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
+    ['Deposit Amount',q.planMonths?ghs(q.deposit):'—'],
+    ['Deposit %',depositPct!=null?depositPct+'%':'—']];
   const rightRows=[['Date:',dateStr,null],['Credit Period months',q.planMonths||'—',QRED],['No of Plots',q.noPlots,QRED],
     ['Original Plot Price',ghs(q.listTotal/q.noPlots),null],['Discount',ghs((q.discountTotal||0)/q.noPlots),null],
     ['Interest',ghs((q.interestTotal||0)/q.noPlots),null],['Cost with Interest',ghs((q.net+q.interestTotal)/q.noPlots),null],
     ['Total',ghs(q.grand),null]];
-  leftRows.forEach((r,i)=>pdfKV(doc,leftX,y+i*6,r[0],r[1],r[2]));
-  rightRows.forEach((r,i)=>pdfKV(doc,rightX,y+i*6,r[0],r[1],r[2]));
-  y+=Math.max(leftRows.length,rightRows.length)*6+7;
+  // Generous, even per-row spacing -- each field reads as its own distinct
+  // line (like a real form) rather than a run of continuous text; only a
+  // wrapped multi-line value earns extra room, via the n*lineH term.
+  let ly=y; leftRows.forEach(r=>{ const n=pdfKV(doc,leftX,ly,r[0],r[1],null,leftColWidth); ly+=n>1?n*4.6+4.5:8.6; });
+  let ry=y; rightRows.forEach(r=>{ const n=pdfKV(doc,rightX,ry,r[0],r[1],r[2],rightColWidth); ry+=n>1?n*4.6+4.5:8.6; });
+  y=Math.max(ly,ry)+5;
 
   if(q.planMonths){
     y=pdfGreenBar(doc,y,pageW,[
-      {label:'Total Value(GHS)',value:ghs(q.grand)},
+      {label:'Total Value',value:ghs(q.grand)},
       {label:'Deposit',value:ghs(q.deposit),color:QRED},
       {label:'Balance',value:ghs(q.balance)},
       {label:'Monthly Due',value:ghs(q.monthlyDue)}
@@ -13750,15 +13866,19 @@ function pdfReceiptHeaderBand(doc,pageW,ref,dateStr,companyName){
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(205,213,222);
   doc.text('Receipt No. '+ref,14,34);
   doc.text(dateStr,pageW-14,34,{align:'right'});
-  if(CONFIG.receiptLogoImage){
+  // Defaults to the same Trulander mark used on the quotation (not the
+  // Palmstead app icon) so a client's quote and receipt visibly match --
+  // Management can still override it with its own upload via Config.
+  const logoSrc=CONFIG.receiptLogoImage||TRULANDER_LOGO_DATA_URI||TRULANDER_LOGO_IMG;
+  if(logoSrc){
     try{
-      const props=doc.getImageProperties(CONFIG.receiptLogoImage);
+      const props=doc.getImageProperties(logoSrc);
       const maxW=28,maxH=14; let lw=maxW,lh=lw*props.height/props.width;
       if(lh>maxH){ lh=maxH; lw=lh*props.width/props.height; }
       const padX=4,padY=3;
       doc.setFillColor(255,255,255);
       doc.roundedRect(pageW-14-lw-padX*2,(bandH-lh-padY*2)/2,lw+padX*2,lh+padY*2,2,2,'F');
-      doc.addImage(CONFIG.receiptLogoImage,'PNG',pageW-14-lw-padX,(bandH-lh)/2,lw,lh);
+      doc.addImage(logoSrc,'PNG',pageW-14-lw-padX,(bandH-lh)/2,lw,lh);
     }catch(e){}
   }
   return bandH+1.1;
@@ -14544,6 +14664,11 @@ function contractAppSettingsHtml(){
   return `
   <div class="sectitle" style="margin-top:0"><h3>Contract settings</h3><span class="cnt">everything the PDF is built from</span></div>
   <p class="mini" style="margin:-2px 0 12px">Broken into segments matching the actual document — edit any of them, in any order, without breaking the layout. The party names, dates and money figures always come live from the client's own record; only the wording below is yours to change.</p>
+  <div class="formactions" style="margin:0 0 14px;gap:8px">
+    <button type="button" class="chip" id="ca_restoreDefault" style="width:100%">↺ Restore all clauses to default wording</button>
+    <button type="button" class="chip hidden" id="ca_undoRestore" style="width:100%">Undo restore</button>
+  </div>
+  <p class="mini" style="margin:-10px 0 12px">Restoring only affects contracts generated after you save — anything already issued keeps its original wording exactly as it was.</p>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:10px">Segment 1 — Cover &amp; branding</div>
@@ -14569,19 +14694,19 @@ function contractAppSettingsHtml(){
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 2 — Preamble (the "WHEREAS" lease background)</div>
     <p class="mini" style="margin:0 0 10px">Tap a clause to expand it for editing. Keep the "i. / ii. / iii." markers; {ACRES} is replaced with each client's own land size.</p>
-    ${clauseEditorHtml('ca_preamble',CONFIG.contractPreamble||'')}
+    <div id="ca_preamble_editorWrap">${clauseEditorHtml('ca_preamble',CONFIG.contractPreamble||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 3 — Definitions &amp; Interpretation (Section 1)</div>
     <p class="mini" style="margin:0 0 10px">Comes right after "NOW THEREFORE..." and before the Transaction clause — matches the real document's own order.</p>
-    ${clauseEditorHtml('ca_definitions',CONFIG.contractDefinitions||'')}
+    <div id="ca_definitions_editorWrap">${clauseEditorHtml('ca_definitions',CONFIG.contractDefinitions||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:14px">
     <div class="mini" style="font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;color:var(--muted);margin-bottom:2px">Segment 4 — Clauses: Warranties, Payments &amp; Defaults, Governing Law, Notices (Sections 2-6)</div>
     <p class="mini" style="margin:0 0 10px">Each numbered clause is its own placeholder below — tap one to edit just that clause without touching the rest.</p>
-    ${clauseEditorHtml('ca_terms',CONFIG.contractTerms||'')}
+    <div id="ca_terms_editorWrap">${clauseEditorHtml('ca_terms',CONFIG.contractTerms||'')}</div>
   </div>
 
   <div class="rowcard" style="margin-bottom:18px">
@@ -14609,6 +14734,39 @@ function bindContractAppCtrls(){
   const newBtn=document.getElementById('ca_newClient');
   if(newBtn) newBtn.onclick=openContractNewClientModal;
   bindClauseEditorCtrls('ca_preamble'); bindClauseEditorCtrls('ca_definitions'); bindClauseEditorCtrls('ca_terms');
+  // Restore Default swaps the in-editor draft back to the company's approved
+  // wording (defaultConfig()'s hardcoded text) -- it does NOT touch already-
+  // generated contracts (those bake their wording into the PDF at generation
+  // time) and does NOT save on its own; the user still has to press Save,
+  // matching "default restore affects future generated contracts only".
+  const CLAUSE_SEGMENTS=[['ca_preamble','contractPreamble'],['ca_definitions','contractDefinitions'],['ca_terms','contractTerms']];
+  let CONTRACT_RESTORE_UNDO=null;
+  const swapClauseText=(valuesByKey)=>{
+    CLAUSE_SEGMENTS.forEach(([prefix,key])=>{
+      const wrap=document.getElementById(prefix+'_editorWrap');
+      if(!wrap) return;
+      wrap.innerHTML=clauseEditorHtml(prefix,valuesByKey[key]||'');
+      bindClauseEditorCtrls(prefix);
+    });
+  };
+  const restoreBtn=document.getElementById('ca_restoreDefault');
+  if(restoreBtn) restoreBtn.onclick=()=>{
+    if(!confirm('This replaces the Preamble, Definitions, and Terms wording below with the company\'s approved default text. Your current draft is kept so you can Undo before leaving this screen, and anything already generated is unaffected. Continue?')) return;
+    const undoValues={}; CLAUSE_SEGMENTS.forEach(([prefix,key])=>{ undoValues[key]=collectClauseEditorValue(prefix); });
+    CONTRACT_RESTORE_UNDO=undoValues;
+    const dc=defaultConfig();
+    swapClauseText(dc);
+    document.getElementById('ca_undoRestore').classList.remove('hidden');
+    toast('Restored to default — click Save to apply, or Undo to bring back your draft');
+  };
+  const undoBtn=document.getElementById('ca_undoRestore');
+  if(undoBtn) undoBtn.onclick=()=>{
+    if(!CONTRACT_RESTORE_UNDO) return;
+    swapClauseText(CONTRACT_RESTORE_UNDO);
+    undoBtn.classList.add('hidden');
+    CONTRACT_RESTORE_UNDO=null;
+    toast('Your draft is back');
+  };
   const saveBtn=document.getElementById('ca_saveSettings');
   if(saveBtn) saveBtn.onclick=async()=>{
     saveBtn.disabled=true; saveBtn.textContent='Saving…';
@@ -15088,6 +15246,7 @@ const MGR_APPS=[
   {key:'Leaderboard',fic:'leaderboard',label:'Leaderboard',section:'officedesk'},
   {key:'Reports',fic:'analytics',label:'Reports'},
   {key:'Analytics',fic:'analytics',label:'Analytics'},
+  {key:'Report Archive',fic:'reportdoc',label:'Report Archive'},
   {key:'Plots',fic:'map',label:'Plot Inventory',section:'salesdesk'},
   {key:'Allocations',fic:'allocation',label:'Allocations',section:'salesdesk'},
   {key:'Client Database',fic:'clientdb',label:'Client Database',section:'salesdesk'},
@@ -15151,6 +15310,11 @@ async function managerView(){
   }
   else if(mgrTab==='Reports'){ body.innerHTML=mgrReports(); bindReportCtrls(); }
   else if(mgrTab==='Analytics'){ body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls(); }
+  else if(mgrTab==='Report Archive'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
     const pend=(DB.allocations||[]).filter(a=>a.status==='Pending').sort((x,y)=>y.percent-x.percent);
@@ -15199,6 +15363,11 @@ async function managerView(){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ AUDIT_LOG_LIST=await withLoadTimeout(apiLoadAuditEvents(),15000,'Audit Log'); AUDIT_LOG_LOADED=true; body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); }
     catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Audit Log',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
+  else if(mgrTab==='Support Diagnostics'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ const d=await withLoadTimeout(computeDiagnostics(),15000,'Diagnostics'); body.innerHTML=diagnosticsHtml(d); bindDiagnosticsCtrls(d); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load diagnostics',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='Referrals'){ if(!REFERRALS_LOADED){ try{ REFERRALS_LIST=await withLoadTimeout(apiLoadReferrals(),15000,'Referrals'); REFERRALS_LOADED=true; }catch(e){} } body.innerHTML=mgrReferralsHtml(); bindReferralsCtrls(); }
   else if(mgrTab==='Referral Settings'){ body.innerHTML=mgrReferralSettingsHtml(); bindReferralSettingsCtrls(); }
@@ -15251,6 +15420,23 @@ function runDataIntegrityCheck(scopeToLeads){
     if(l.plotType==='Half Plot' && num(l.noPlots)>0 && num(l.noPlots)<1){
       issues.push({lead:l,type:'Quantity error',cls:'dgr',detail:`No. of plots is ${l.noPlots} on a Half Plot — that's half of an already-half unit. This almost always means it should be 1 (one Half Plot), not ${l.noPlots}.`});
     }
+    // ---- Sec 61: staff record-hygiene checks -- these are about whether the
+    // owning staff member kept their own record's basic fields filled in and
+    // current, distinct from the financial-consistency checks above. ----
+    const isDead=l.stage==='Lost'||isFullyPaid(l);
+    if(!l.contact){
+      issues.push({lead:l,type:'Missing contact',cls:'warnt',detail:'No phone number on file — this client can\'t be reached or receive SMS/portal login.'});
+    }
+    if(!l.nextAction && !isDead){
+      issues.push({lead:l,type:'Missing next action',cls:'warnt',detail:'No next action set — this lead has no follow-up plan.'});
+    }
+    if(!l.paymentPlan && storedGrand>0 && l.stage!=='Lost'){
+      issues.push({lead:l,type:'Missing payment plan',cls:'warnt',detail:'No payment plan selected despite a grand total being set.'});
+    }
+    if(l.lastModifiedAt && !isDead){
+      const staleDays=Math.round((Date.now()-new Date(l.lastModifiedAt).getTime())/86400000);
+      if(staleDays>30) issues.push({lead:l,type:'Stale lead',cls:'warnt',detail:`No updates in ${staleDays} days — this lead may need a follow-up call.`});
+    }
   });
   // Two different clients sharing a phone number is a data-entry error, not a
   // real household -- the client portal / Customer 360 view now keep them apart
@@ -15278,14 +15464,21 @@ function runDataIntegrityCheck(scopeToLeads){
 function renderDataCheck(scopeToLeads){
   const issues=runDataIntegrityCheck(scopeToLeads);
   const scopeLabel=scopeToLeads?'your pipeline':'the company';
+  // Sec 61: a transparent hygiene score alongside the existing issue list --
+  // % of leads with zero flagged issues, so staff see one number for "how am
+  // I doing" without having to count rows themselves.
+  const totalLeads=(scopeToLeads||allAgentLists().flatMap(a=>a.list)).length;
+  const flaggedLeadCount=new Set(issues.map(i=>i.lead.id)).size;
+  const hygieneScore=totalLeads?Math.round((totalLeads-flaggedLeadCount)/totalLeads*100):100;
   const rows=issues.map((iss)=>{ const key=issueDismissKey(iss);
     return `<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(iss.lead.name)}" data-custcontact="${esc(iss.lead.contact||'')}">${esc(iss.lead.name)}</div>
     <div class="meta">${esc(iss.lead.agentDisplay||'')} · ${esc(iss.lead.plotType||'')}${iss.lead.noPlots?' ×'+esc(iss.lead.noPlots):''}</div></div>
     <span class="tag ${iss.cls}">${esc(iss.type)}</span></div>
     <div class="note" style="margin-top:9px">${esc(iss.detail)}</div>
     <div class="foot"><button class="chip" onclick="route('updateOne','${iss.lead.id}')">Fix this lead →</button><button class="chip" data-dismississue="${esc(key)}">Not an error, dismiss</button></div></div>`; }).join('');
-  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Data Check</div><h2>${issues.length? issues.length+' thing'+(issues.length===1?'':'s')+' worth reviewing':'Everything checks out'}</h2><p>Scans every lead in ${scopeLabel} for pricing/payment inconsistencies — automatically, every time you open this.</p></div></div>
-  <div class="list" id="dataCheckList">${issues.length?rows:emptyState(ic.check||ic.spark,'No issues found','Every lead\'s unit price, totals, and payments are internally consistent.')}</div>`;
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Data Check</div><h2>${issues.length? issues.length+' thing'+(issues.length===1?'':'s')+' worth reviewing':'Everything checks out'}</h2><p>Scans every lead in ${scopeLabel} for pricing/payment inconsistencies and record hygiene — automatically, every time you open this.</p></div></div>
+  <div class="kpis">${kpi('Hygiene score',hygieneScore+'%',hygieneScore>=90?'':'gold')}${kpi('Clean leads',(totalLeads-flaggedLeadCount)+' / '+totalLeads)}</div>
+  <div class="list" id="dataCheckList">${issues.length?rows:emptyState(ic.check||ic.spark,'No issues found','Every lead\'s unit price, totals, payments and basic record fields are all in order.')}</div>`;
 }
 function bindDataCheckCtrls(scopeToLeads,rerenderFn){
   document.querySelectorAll('[data-dismississue]').forEach(b=>b.onclick=()=>{
@@ -16441,7 +16634,8 @@ const SETTINGS_APPS=[
   {key:'Backup & Restore',fic:'backup',label:'Backup & Restore',section:'settingshub'},
   {key:'System Health',fic:'pulse',label:'System Health',section:'settingshub'},
   {key:'System',fic:'serverconfig',label:'System',section:'settingshub'},
-  {key:'Audit Log',fic:'clipboard',label:'Audit Log',section:'settingshub'}
+  {key:'Audit Log',fic:'clipboard',label:'Audit Log',section:'settingshub'},
+  {key:'Support Diagnostics',fic:'pulse',label:'Support Diagnostics',section:'settingshub'}
 ];
 function mgrSettingsHubHtml(){
   const byKey=k=>SETTINGS_APPS.find(a=>a.key===k);
@@ -16449,7 +16643,7 @@ function mgrSettingsHubHtml(){
     {title:'Pricing & money',items:['Quotation Settings','Commission Settings','Pricing & Targets'].map(byKey)},
     {title:'Team & company',items:['Staff Settings','Company Settings','Achievement Settings'].map(byKey)},
     {title:'Referrals',items:['Referral Settings'].map(byKey)},
-    {title:'System',items:['Backup & Restore','System Health','System','Audit Log'].map(byKey)}
+    {title:'System',items:['Backup & Restore','System Health','System','Audit Log','Support Diagnostics'].map(byKey)}
   ];
   return `<div id="mgrSettingsGrid">${vaultGridHtml(groups,{hubId:'settingsHub'})}</div>`;
 }
@@ -17298,11 +17492,19 @@ async function computeSystemHealth(){
   const mostRecentBackup=backups[0]||null;
   const hoursSinceBackup=mostRecentBackup?Math.round((Date.now()-new Date(mostRecentBackup.created_at).getTime())/3600000):null;
   const integrityIssues=DEMO_MODE?[]:runDataIntegrityCheck();
+  // Sec 61: team-wide hygiene view -- same detection as Data Check, scored
+  // per agent so Management sees who needs a nudge without reading every row.
+  const staffHygiene=DEMO_MODE?[]:allAgentLists().map(a=>{
+    const agentIssues=runDataIntegrityCheck(a.list);
+    const leadCount=a.list.length;
+    const flaggedCount=new Set(agentIssues.map(i=>i.lead.id)).size;
+    return {agentName:a.name,leadCount,flaggedCount,score:leadCount?Math.round((leadCount-flaggedCount)/leadCount*100):100};
+  }).sort((x,y)=>x.score-y.score);
   const pendingPayments=(DB.pendingPayments||[]);
   const pendingExpenses=(EXPENSES_LIST||[]).filter(e=>e.status==='pending');
   const pendingFunds=(FUND_REQUESTS_LIST||[]).filter(f=>f.status==='pending');
   const oldestPendingAgeDays=(list,dateKey)=>{ if(!list.length) return null; const oldest=list.reduce((a,b)=>(a[dateKey]||'')<(b[dateKey]||'')?a:b); const d=new Date(oldest[dateKey]||oldest.createdAt||Date.now()); return Math.round((Date.now()-d.getTime())/86400000); };
-  return {sms,backups,last7dBackups,mostRecentBackup,hoursSinceBackup,integrityIssues,
+  return {sms,backups,last7dBackups,mostRecentBackup,hoursSinceBackup,integrityIssues,staffHygiene,
     pendingPayments,pendingExpenses,pendingFunds,
     oldestPendingPaymentDays:oldestPendingAgeDays(pendingPayments,'createdAt'),
     oldestPendingExpenseDays:oldestPendingAgeDays(pendingExpenses,'createdAt'),
@@ -17325,6 +17527,10 @@ function systemHealthHtml(h){
     <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Data integrity</div><div class="mini">${h.integrityIssues.length?h.integrityIssues.length+' pricing/payment issue(s) flagged':'No pricing/payment inconsistencies found'}</div></div></div>${healthTag(integrityOk,h.integrityIssues.length+' issue(s)')}</div>
     <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Pending approvals</div><div class="mini">${pendingTotal?`${h.pendingPayments.length} payment(s) · ${h.pendingExpenses.length} expense(s) · ${h.pendingFunds.length} fund request(s)${oldestPendingDays?' · oldest '+oldestPendingDays+'d':''}`:'Nothing waiting on a decision'}</div></div></div>${healthTag(pendingOk,'Stuck items')}</div>
   </div>
+  ${h.staffHygiene&&h.staffHygiene.length?`${settingsSectionHead('people','Staff data hygiene','who needs a nudge to clean up their pipeline')}
+  <div class="formwrap" style="padding:6px 15px">
+    ${h.staffHygiene.map(s=>`<div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">${esc(s.agentName)}</div><div class="mini">${s.leadCount} lead${s.leadCount===1?'':'s'} · ${s.flaggedCount} flagged</div></div></div><span class="tag ${s.score>=90?'ok':s.score>=70?'warnt':'dgr'}">${s.score}%</span></div>`).join('')}
+  </div>`:''}
   <div class="formactions" style="flex-direction:column;gap:8px;margin-top:6px">
     ${h.integrityIssues.length?`<button class="chip" id="healthGoIntegrity" style="width:100%">Review data integrity issues →</button>`:''}
     ${h.pendingPayments.length?`<button class="chip" id="healthGoPayments" style="width:100%">Review pending payments →</button>`:''}
@@ -17384,6 +17590,101 @@ function bindAuditLogCtrls(){
   document.querySelectorAll('[data-auditcat]').forEach(b=>b.onclick=()=>{ AUDIT_LOG_FILTER.category=b.dataset.auditcat; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } });
   const critBtn=document.querySelector('[data-auditcritonly]'); if(critBtn) critBtn.onclick=()=>{ AUDIT_LOG_FILTER.criticalOnly=!AUDIT_LOG_FILTER.criticalOnly; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } };
   document.querySelectorAll('[data-auditrow]').forEach(row=>row.onclick=()=>{ const id=row.dataset.auditrow; const det=document.getElementById('auditDetail_'+id); if(det) det.classList.toggle('hidden'); });
+}
+/* Report Archive -- every automated 9AM report, kept even when the email fails,
+   so a lost email never means a lost report (Sec 41 of the rebuild spec).
+   Written by the daily-management-report edge function on every real run; the
+   list load deliberately excludes pdf_base64 (can be large) -- the PDF itself
+   is only fetched on-demand when a manager actually taps Download. */
+let REPORT_ARCHIVE_LOADED=false, REPORT_ARCHIVE_LIST=[];
+async function apiLoadReportArchive(){
+  if(DEMO_MODE) return [];
+  const {data,error}=await sb.from('report_archive').select('id,report_date,generated_at,recipients,generation_status,email_status,error_detail,retry_count').order('report_date',{ascending:false}).limit(60);
+  if(error) throw error;
+  return (data||[]).map(r=>({id:r.id,reportDate:r.report_date,generatedAt:r.generated_at,recipients:r.recipients,generationStatus:r.generation_status,emailStatus:r.email_status,errorDetail:r.error_detail,retryCount:r.retry_count}));
+}
+async function apiLoadReportArchivePdf(id){
+  const {data,error}=await sb.from('report_archive').select('pdf_base64,report_date').eq('id',id).single();
+  if(error) throw error;
+  return {pdfBase64:data.pdf_base64,reportDate:data.report_date};
+}
+function reportArchiveStatusTag(r){
+  if(r.generationStatus==='failed') return '<span class="tag dgr">Generation failed</span>';
+  if(r.emailStatus==='sent') return '<span class="tag ok">Emailed</span>';
+  if(r.emailStatus==='skipped') return '<span class="tag warnt">No recipients</span>';
+  return '<span class="tag dgr">Email failed</span>';
+}
+function reportArchiveHtml(){
+  if(DEMO_MODE) return `<div class="formwrap">${emptyState(ic.alert,'Only meaningful live','Report Archive stores real daily reports — connect to Supabase to use it.')}</div>`;
+  const rows=REPORT_ARCHIVE_LIST;
+  const rowsHtml=rows.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(fmtLongDate(r.reportDate))}</div><div class="meta">${r.recipients?esc(r.recipients):'no recipients on file'} · generated ${esc((r.generatedAt||'').slice(0,16).replace('T',' '))}</div></div>${reportArchiveStatusTag(r)}</div>
+    ${r.errorDetail?`<div class="note" style="margin-top:6px;color:#B91C1C">${esc(r.errorDetail)}</div>`:''}
+    <div class="foot"><button class="chip" data-dlreport="${r.id}">Download PDF</button></div></div>`).join('');
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Insights &amp; data</div><h2>Report Archive</h2><p>Every automated 9AM report, kept even if the email failed — most recent ${rows.length}.</p></div></div>
+  <div class="list">${rows.length?rowsHtml:emptyState(ic.reportdoc||ic.doc,'Nothing yet','Fills in automatically once the 9AM report runs.')}</div>`;
+}
+function bindReportArchiveCtrls(){
+  document.querySelectorAll('[data-dlreport]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; const orig=b.textContent; b.textContent='Preparing…';
+    try{
+      const {pdfBase64,reportDate}=await apiLoadReportArchivePdf(b.dataset.dlreport);
+      if(!pdfBase64){ toast('No PDF stored for this report'); }
+      else{
+        const a=document.createElement('a'); a.href='data:application/pdf;base64,'+pdfBase64; a.download='Palmstead_Daily_Report_'+reportDate+'.pdf';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        logDownload(a.download,'pdf',a.href);
+      }
+    }catch(e){ toast('Could not load report: '+(e.message||e)); }
+    b.disabled=false; b.textContent=orig;
+  });
+}
+/* Support Diagnostics -- enough state to diagnose a staff complaint without
+   asking them to open developer tools (Sec 86). Reuses infrastructure
+   already built this phase rather than adding new tracking: the offline
+   mutation queue's own store, the realtime teardown registry, and the
+   audit_events 'error' category fed by the global window.onerror handler
+   near the top of the file. Degrades gracefully in DEMO_MODE (connection/
+   browser/session fields still work; sync-dependent fields just read 0/empty
+   rather than the screen being blocked outright, since none of this needs
+   Supabase to be meaningful). */
+async function computeDiagnostics(){
+  const pending=DEMO_MODE?[]:await offlineDbAll();
+  let recentErrors=[];
+  if(!DEMO_MODE && sb){
+    try{ const {data}=await sb.from('audit_events').select('summary,created_at,severity,actor_name').eq('category','error').order('created_at',{ascending:false}).limit(10); recentErrors=data||[]; }catch(e){}
+  }
+  return {
+    appBootAt:APP_BOOT_AT,
+    userAgent:navigator.userAgent,
+    online:navigator.onLine,
+    connectionMode:DEMO_MODE?'Demo mode':'Live',
+    realtimeChannels:REALTIME_CHANNELS.length,
+    lastSyncAt:LAST_LOAD_ALL_AT,
+    pendingSyncCount:pending.length,
+    recentErrors,
+  };
+}
+function diagnosticsHtml(d){
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">System</div><h2>Support Diagnostics</h2><p>Everything support needs to diagnose a complaint, without asking anyone to open developer tools.</p></div></div>
+  <div class="formwrap" style="padding:6px 15px">
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Connection</div><div class="mini">${esc(d.connectionMode)} · ${d.online?'Online':'Offline'}</div></div></div>${healthTag(d.online,'Offline')}</div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Last full sync</div><div class="mini">${d.lastSyncAt?esc(new Date(d.lastSyncAt).toLocaleString('en-GB')):'Not yet this session'}</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Realtime channels</div><div class="mini">${d.realtimeChannels} subscribed</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Pending sync</div><div class="mini">${d.pendingSyncCount} change${d.pendingSyncCount===1?'':'s'} waiting to sync</div></div></div>${healthTag(d.pendingSyncCount===0,'Waiting')}</div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">App session started</div><div class="mini">${esc(new Date(d.appBootAt).toLocaleString('en-GB'))}</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Browser/device</div><div class="mini" style="word-break:break-all">${esc(d.userAgent)}</div></div></div></div>
+  </div>
+  <div class="sectitle"><h3>Recent client errors</h3><span class="cnt">${d.recentErrors.length}</span></div>
+  <div class="list">${d.recentErrors.length?d.recentErrors.map(e=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(e.summary)}</div><div class="meta">${esc(e.actor_name||'Unknown')} · ${esc((e.created_at||'').slice(0,16).replace('T',' '))}</div></div><span class="tag ${e.severity==='critical'?'dgr':'warnt'}">${esc(e.severity)}</span></div></div>`).join(''):emptyState(ic.check||ic.spark,'No recent errors','Nothing reported in the client error log.')}</div>
+  <div class="formactions" style="margin-top:10px"><button class="btn primary" id="exportDiagBtn" style="width:100%">Export diagnostics (.json)</button></div>`;
+}
+function bindDiagnosticsCtrls(d){
+  const btn=document.getElementById('exportDiagBtn');
+  if(btn) btn.onclick=()=>{
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    triggerDownload(url,'Palmstead_Diagnostics_'+today()+'.json','diagnostics',blob);
+  };
 }
 /* Notes app -- simple private jot-down/save/send/download tool. Each agent/manager only
    ever sees their own notes (RLS-enforced live; client-side filtered in demo). */
@@ -18344,28 +18645,59 @@ function computeManagementReportData(from,to,siteVisitsData){
     expensesTotal,byCategory,pendingPayments,pendingExpenses,pendingFunds};
 }
 function pdfSectionTitle(doc,y,pageW,text){
+  // A small gold accent tick ahead of the heading (echoes the quote/receipt's
+  // gold rule) instead of a bare full-width divider -- gives every section a
+  // little more visual weight rather than looking like a plain text label.
+  doc.setFillColor(201,162,39); doc.rect(12,y-3.6,3,3,'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(11,30,61);
-  doc.text(text,12,y);
-  doc.setDrawColor(200,208,220); doc.setLineWidth(0.4); doc.line(12,y+2,pageW-12,y+2);
+  doc.text(text,17,y);
+  doc.setDrawColor(200,208,220); doc.setLineWidth(0.4); doc.line(12,y+2.5,pageW-12,y+2.5);
   doc.setTextColor(20,20,20);
-  return y+9;
+  return y+10;
 }
+// Numeric-looking columns (amounts, percentages, plain counts) right-align --
+// judged once per column from that column's own first data row -- so figures
+// stack on their ones place like a real ledger instead of every cell sitting
+// flush-left regardless of whether it holds a name or a number.
+function pdfIsNumericCell(v){ return /^-?(GHS\s?)?[\d,]+(\.\d+)?%?$/.test(String(v==null?'':v).trim()); }
 function pdfSimpleTable(doc,y,pageW,headers,rows,colPct){
   const usableW=pageW-24; const colW=colPct.map(p=>usableW*p); const colX=[12]; for(let i=1;i<colW.length;i++) colX.push(colX[i-1]+colW[i-1]);
-  const rowH=7;
+  const rowH=7.4;
+  const numCol=headers.map((h,i)=>rows.length?pdfIsNumericCell(rows[0][i]):false);
   doc.setFillColor(11,30,61); doc.rect(12,y,usableW,rowH,'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  headers.forEach((h,i)=>doc.text(h,colX[i]+3,y+4.8));
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.3); doc.setTextColor(255,255,255);
+  headers.forEach((h,i)=>{
+    if(numCol[i]) doc.text(h,colX[i]+colW[i]-3,y+5,{align:'right'}); else doc.text(h,colX[i]+3,y+5);
+  });
   y+=rowH;
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.3);
   rows.forEach((r,i)=>{
-    if(y>272){ doc.addPage(); y=16; }
-    if(i%2===1){ doc.setFillColor(244,246,248); doc.rect(12,y,usableW,rowH,'F'); }
+    if(y>270){ doc.addPage(); y=16; }
+    if(i%2===1){ doc.setFillColor(245,247,250); doc.rect(12,y,usableW,rowH,'F'); }
     doc.setTextColor(20,20,20);
-    r.forEach((cell,ci)=>doc.text(String(cell),colX[ci]+3,y+4.8));
+    r.forEach((cell,ci)=>{
+      if(numCol[ci]) doc.text(String(cell),colX[ci]+colW[ci]-3,y+5,{align:'right'}); else doc.text(pdfFitText(doc,cell,colW[ci]-5),colX[ci]+3,y+5);
+    });
+    doc.setDrawColor(232,236,241); doc.setLineWidth(0.2); doc.line(12,y+rowH,12+usableW,y+rowH);
     y+=rowH;
   });
   return y+7;
+}
+// Stamps every page of a finished report with a thin rule + confidentiality
+// line + "Page X of Y" -- call this once, right before doc.save(), after all
+// content (including any addPage() calls) is already in place. Without this
+// a multi-page report just stopped abruptly with no page numbers at all.
+function pdfReportFooter(doc,companyName){
+  const pageCount=doc.internal.getNumberOfPages();
+  const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setDrawColor(220,224,230); doc.setLineWidth(0.3); doc.line(12,pageH-14,pageW-12,pageH-14);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(120,130,145);
+    doc.text((companyName||'PEP Landbank')+' · Confidential — internal use only',12,pageH-9);
+    doc.text('Page '+i+' of '+pageCount,pageW-12,pageH-9,{align:'right'});
+  }
+  doc.setTextColor(20,20,20);
 }
 function buildManagementReportPDF(range,d,prior,priorData){
   if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return; }
@@ -18413,6 +18745,7 @@ function buildManagementReportPDF(range,d,prior,priorData){
     y=pdfSimpleTable(doc,y,pageW,['CATEGORY','TOTAL'],Object.keys(d.byCategory).map(c=>[c,ghs(d.byCategory[c])]),[0.7,0.3]);
   }
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Management_Report_'+range.from+'_to_'+range.to+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
@@ -18429,7 +18762,7 @@ function buildManagementReportPDF(range,d,prior,priorData){
 // are full timestamps already, so hour-level precision falls out of the same
 // data daysBetween uses, just without rounding to a whole day first.
 function hoursBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,(d2-d1)/3600000); }
-function computeOpsReportData(from,to,todos,tasksData){
+function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   const inRange=d=>{ const s=(d||'').slice(0,10); return !!s && s>=from && s<=to; };
   // tasksData: a fresh, uncapped fetch (apiLoadFullTasks()) passed in by the
   // caller -- DB.tasks itself is capped to the most recent tasks for everyday
@@ -18467,9 +18800,29 @@ function computeOpsReportData(from,to,todos,tasksData){
   const byCategory={}; assignedInRange.forEach(t=>{ const c=t.category||'General'; byCategory[c]=(byCategory[c]||0)+1; });
   const todoStats={total:(todos||[]).length,closed:(todos||[]).filter(t=>t.status==='closed').length,rescheduled:(todos||[]).filter(t=>t.status==='rescheduled').length};
   const allCloseHours=completedInRange.map(t=>hoursBetween(t.createdAt,t.completedAt)).filter(h=>h!=null);
+  // ---- Sec 33 task-analytics additions: phase-by-phase timing (not just the
+  // full create->complete span above), median (a few very slow tasks shouldn't
+  // drag the whole picture the way they do to an average), and reopen rate
+  // (needs task_events -- a task's current status alone can't reveal it was
+  // ever bounced back to Open after being marked Done). All scoped to the same
+  // assigned-in-period cohort as everything else in this report, for
+  // consistency with how every other stat here is period-bound. ----
+  const median=arr=>{ if(!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); const mid=Math.floor(s.length/2); return s.length%2?s[mid]:(s[mid-1]+s[mid])/2; };
+  const phaseHours=(fromField,toField)=>assignedInRange.map(t=>(t[fromField]&&t[toField])?hoursBetween(t[fromField],t[toField]):null).filter(h=>h!=null);
+  const avgTimeToOpenHrs=avg(phaseHours('createdAt','openedAt'));
+  const avgOpenToStartHrs=avg(phaseHours('openedAt','startedAt'));
+  const avgStartToCompleteHrs=avg(phaseHours('startedAt','completedAt'));
+  const medianCloseHours=median(assignedInRange.map(t=>(t.createdAt&&t.completedAt)?hoursBetween(t.createdAt,t.completedAt):null).filter(h=>h!=null));
+  const reopenedIds=new Set((taskEventsData||[]).filter(e=>e.type==='reopened').map(e=>e.taskId));
+  const reopenRate=assignedInRange.length?(assignedInRange.filter(t=>reopenedIds.has(t.id)).length/assignedInRange.length*100):0;
   return {perStaffRows,byCategory,byCategoryStats,todoStats,
     totalAssigned:assignedInRange.length,totalCompleted:completedInRange.length,totalOverdue:overdueNow.length,totalEscalated:escalatedInRange.length,
-    avgHoursPerTask:allCloseHours.length?Math.round(avg(allCloseHours)*10)/10:null};
+    avgHoursPerTask:allCloseHours.length?Math.round(avg(allCloseHours)*10)/10:null,
+    avgTimeToOpenHrs:avgTimeToOpenHrs!=null?Math.round(avgTimeToOpenHrs*10)/10:null,
+    avgOpenToStartHrs:avgOpenToStartHrs!=null?Math.round(avgOpenToStartHrs*10)/10:null,
+    avgStartToCompleteHrs:avgStartToCompleteHrs!=null?Math.round(avgStartToCompleteHrs*10)/10:null,
+    medianCloseHours:medianCloseHours!=null?Math.round(medianCloseHours*10)/10:null,
+    reopenRatePct:Math.round(reopenRate*10)/10};
 }
 // prior/priorData are both optional -- only present when "Compare to previous
 // period" was checked. Adds one extra comparison stat bar right under the main
@@ -18498,6 +18851,19 @@ function buildOpsReportPDF(range,d,prior,priorData){
       [0.34,0.22,0.22,0.22]);
   }
 
+  // Task lifecycle timing -- how long each phase actually takes (not just the
+  // full create-to-complete span above), plus reopen rate. Median sits next to
+  // the average deliberately: a handful of very slow tasks shouldn't make the
+  // whole team look slower than they are.
+  y=pdfSectionTitle(doc,y,pageW,'Task lifecycle timing');
+  y=pdfDarkStatBar(doc,y,pageW,[
+    {label:'Avg hrs to open',value:d.avgTimeToOpenHrs!=null?d.avgTimeToOpenHrs:'—'},
+    {label:'Avg open→start',value:d.avgOpenToStartHrs!=null?d.avgOpenToStartHrs:'—'},
+    {label:'Avg start→done',value:d.avgStartToCompleteHrs!=null?d.avgStartToCompleteHrs:'—'},
+    {label:'Median hrs/task',value:d.medianCloseHours!=null?d.medianCloseHours:'—'},
+    {label:'Reopen rate',value:d.reopenRatePct+'%'}
+  ]);
+
   y=pdfSectionTitle(doc,y,pageW,'By staff member');
   if(d.perStaffRows.length) y=pdfSimpleTable(doc,y,pageW,['STAFF','ASSIGNED','COMPLETED','OVERDUE','ESCALATED','AVG DAYS','AVG HRS'],
     d.perStaffRows.map(s=>[s.name,String(s.assigned),String(s.completed),String(s.overdue),String(s.escalated),s.avgCloseDays!=null?String(s.avgCloseDays):'—',s.avgCloseHours!=null?String(s.avgCloseHours):'—']),[0.24,0.12,0.13,0.12,0.13,0.13,0.13]);
@@ -18514,6 +18880,7 @@ function buildOpsReportPDF(range,d,prior,priorData){
   y=pdfSimpleTable(doc,y,pageW,['METRIC','COUNT'],
     [['Logged',String(d.todoStats.total)],['Completed',String(d.todoStats.closed)],['Rescheduled',String(d.todoStats.rescheduled)]],[0.7,0.3]);
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Ops_Report_'+range.from+'_to_'+range.to+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
@@ -18548,6 +18915,7 @@ function buildWhoOwesPDF(monthlyList,owingList,scopeLabel){
     owingList.map(l=>[l.name,l.agentDisplay||'—',ghs(l.__bal)]),[0.4,0.3,0.3]);
   else{ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120); doc.text('Nobody owes an outstanding balance right now.',12,y); doc.setTextColor(20,20,20); y+=10; }
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Who_Owes_Us_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
