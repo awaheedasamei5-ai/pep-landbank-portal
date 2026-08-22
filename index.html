@@ -12451,26 +12451,44 @@ function pdfScheduleTable(doc,y,pageW,rows){
    own navy branding used elsewhere in these PDF helpers). */
 const QGREEN_DARK=[13,77,45], QGREEN_LABEL=[21,110,64], QGREEN_LIGHT=[224,238,220], QGREEN_BG=[238,244,235], QRED=[196,42,30];
 function pdfQuoteBg(doc,pageW,pageH){ doc.setFillColor(QGREEN_BG[0],QGREEN_BG[1],QGREEN_BG[2]); doc.rect(0,0,pageW,pageH,'F'); }
-// maxWidth constrains the value to its own column so a long name/address/email
-// wraps instead of visually running into a neighboring column's text (the
-// literal "screenshot problem" this was built to fix -- see Sec 21/91 of the
-// rebuild spec). Returns the number of lines drawn so callers can space the
-// next row down by the actual height used, not a fixed guess.
+// Renders "Label: value" as one tight unit -- label ends in a colon, then a
+// single space, then the value starts immediately after (not at a fixed
+// x+40 column like before, which left a wide gap for short labels and let
+// long labels visually collide with the value). maxWidth still constrains
+// the VALUE to its own column so a long name/address/email wraps instead of
+// running into a neighboring column's text, but the width available to it is
+// now maxWidth-minus-however-wide-this-particular-label-turned-out-to-be, not
+// a one-size-fits-all guess. Returns the number of lines drawn so callers can
+// space the next row down by the actual height used, not a fixed guess.
 function pdfKV(doc,x,y,label,value,valueColor,maxWidth){
+  const labelText=String(label).replace(/:\s*$/,'')+':';
   doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(QGREEN_LABEL[0],QGREEN_LABEL[1],QGREEN_LABEL[2]);
-  doc.text(label,x,y);
+  doc.text(labelText,x,y);
+  const gap=doc.getTextWidth(labelText)+1.6;
   doc.setFont('helvetica','normal'); doc.setFontSize(9);
   if(valueColor) doc.setTextColor(valueColor[0],valueColor[1],valueColor[2]); else doc.setTextColor(20,20,20);
-  const lines=maxWidth?doc.splitTextToSize(String(value),maxWidth):[String(value)];
-  doc.text(lines,x+40,y);
+  const valueW=maxWidth?Math.max(maxWidth-gap,22):null;
+  const lines=valueW?doc.splitTextToSize(String(value),valueW):[String(value)];
+  doc.text(lines,x+gap,y);
   doc.setTextColor(20,20,20);
   return lines.length;
 }
+// Shared column fractions -- pdfGreenBar (Total Value/Deposit/Balance/Monthly
+// Due) sits directly above pdfGreenTable (Month/Opening/Monthly Payment/
+// Closing) in the quotation, so both use the exact same 4 vertical column
+// boundaries. Without this the bar's evenly-split columns didn't line up with
+// the table's underneath -- the two blocks looked like unrelated grids
+// stacked on top of each other instead of one continuous table.
+const QCOL_FRACS=[0,0.20,0.48,0.74,1];
 function pdfGreenBar(doc,y,pageW,items){
   const barH=13; doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,y,pageW-24,barH,'F');
-  const w=(pageW-24)/items.length;
+  const usableW=pageW-24;
+  const fracs=items.length===4?QCOL_FRACS:items.map((_,i)=>i/items.length).concat([1]);
   items.forEach((it,i)=>{
-    const x=12+w*i+6;
+    // Column 0 gets the same +3 left padding pdfGreenTable's MONTH cell uses;
+    // columns 1+ sit flush on the column edge, matching the table's other
+    // header cells -- this is what actually makes the two blocks' verticals align.
+    const x=12+usableW*fracs[i]+(i===0?3:0);
     doc.setFont('helvetica','bold'); doc.setFontSize(6.4); doc.setTextColor(220,232,224);
     doc.text(it.label.toUpperCase(),x,y+5);
     doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
@@ -12486,7 +12504,7 @@ function pdfGreenBar(doc,y,pageW,items){
 // document spilling most of its content onto an otherwise near-empty page 2.
 function pdfGreenTable(doc,y,pageW,rows){
   const usableW=pageW-24;
-  const colX=[12,12+usableW*0.20,12+usableW*0.48,12+usableW*0.74];
+  const colX=[12+usableW*QCOL_FRACS[0],12+usableW*QCOL_FRACS[1],12+usableW*QCOL_FRACS[2],12+usableW*QCOL_FRACS[3]];
   const rowH=5.6;
   const drawHeader=(yy)=>{
     doc.setFillColor(QGREEN_DARK[0],QGREEN_DARK[1],QGREEN_DARK[2]); doc.rect(12,yy,usableW,rowH,'F');
@@ -12500,7 +12518,7 @@ function pdfGreenTable(doc,y,pageW,rows){
     if(y>280){ doc.addPage(); pdfQuoteBg(doc,pageW,297); y=16; drawHeader(y); y+=rowH; }
     if(i%2===1){ doc.setFillColor(QGREEN_LIGHT[0],QGREEN_LIGHT[1],QGREEN_LIGHT[2]); doc.rect(12,y,usableW,rowH,'F'); }
     doc.setTextColor(20,20,20);
-    doc.text(String(r.month.toFixed?r.month.toFixed(2):r.month),colX[0]+3,y+3.9);
+    doc.text(String(Number.isInteger(r.month)?r.month:r.month.toFixed(2)),colX[0]+3,y+3.9);
     doc.text(ghs(r.opening),colX[1],y+3.9);
     doc.text(ghs(r.payment),colX[2],y+3.9);
     doc.text(ghs(r.closing),colX[3],y+3.9);
@@ -13217,12 +13235,14 @@ function buildQuotationPDF(q){
   const typeLines=doc.splitTextToSize(docType,60);
   typeLines.forEach((line,i)=>doc.text(line,pageW-12,15+i*5,{align:'right'}));
 
-  let y=44;
+  let y=48;
   const leftX=14, rightX=110;
   // Fixed cell widths so a long name/address/email wraps within its own column
   // instead of overlapping the neighboring one -- each column tracks its own y
-  // position (rows can be different heights once a value wraps).
-  const leftColWidth=rightX-leftX-40-4, rightColWidth=pageW-12-rightX-40;
+  // position (rows can be different heights once a value wraps). pdfKV now
+  // measures each label itself and subtracts that from these full-column
+  // widths, rather than assuming every label fits a fixed 40mm gutter.
+  const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
   const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
   const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
     ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
@@ -13233,13 +13253,16 @@ function buildQuotationPDF(q){
     ['Original Plot Price',ghs(q.listTotal/q.noPlots),null],['Discount',ghs((q.discountTotal||0)/q.noPlots),null],
     ['Interest',ghs((q.interestTotal||0)/q.noPlots),null],['Cost with Interest',ghs((q.net+q.interestTotal)/q.noPlots),null],
     ['Total',ghs(q.grand),null]];
-  let ly=y; leftRows.forEach(r=>{ const n=pdfKV(doc,leftX,ly,r[0],r[1],null,leftColWidth); ly+=Math.max(6,n*4.2+1.5); });
-  let ry=y; rightRows.forEach(r=>{ const n=pdfKV(doc,rightX,ry,r[0],r[1],r[2],rightColWidth); ry+=Math.max(6,n*4.2+1.5); });
-  y=Math.max(ly,ry)+4;
+  // Generous, even per-row spacing -- each field reads as its own distinct
+  // line (like a real form) rather than a run of continuous text; only a
+  // wrapped multi-line value earns extra room, via the n*lineH term.
+  let ly=y; leftRows.forEach(r=>{ const n=pdfKV(doc,leftX,ly,r[0],r[1],null,leftColWidth); ly+=n>1?n*4.6+4.5:8.6; });
+  let ry=y; rightRows.forEach(r=>{ const n=pdfKV(doc,rightX,ry,r[0],r[1],r[2],rightColWidth); ry+=n>1?n*4.6+4.5:8.6; });
+  y=Math.max(ly,ry)+5;
 
   if(q.planMonths){
     y=pdfGreenBar(doc,y,pageW,[
-      {label:'Total Value(GHS)',value:ghs(q.grand)},
+      {label:'Total Value',value:ghs(q.grand)},
       {label:'Deposit',value:ghs(q.deposit),color:QRED},
       {label:'Balance',value:ghs(q.balance)},
       {label:'Monthly Due',value:ghs(q.monthlyDue)}
@@ -13843,15 +13866,19 @@ function pdfReceiptHeaderBand(doc,pageW,ref,dateStr,companyName){
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(205,213,222);
   doc.text('Receipt No. '+ref,14,34);
   doc.text(dateStr,pageW-14,34,{align:'right'});
-  if(CONFIG.receiptLogoImage){
+  // Defaults to the same Trulander mark used on the quotation (not the
+  // Palmstead app icon) so a client's quote and receipt visibly match --
+  // Management can still override it with its own upload via Config.
+  const logoSrc=CONFIG.receiptLogoImage||TRULANDER_LOGO_DATA_URI||TRULANDER_LOGO_IMG;
+  if(logoSrc){
     try{
-      const props=doc.getImageProperties(CONFIG.receiptLogoImage);
+      const props=doc.getImageProperties(logoSrc);
       const maxW=28,maxH=14; let lw=maxW,lh=lw*props.height/props.width;
       if(lh>maxH){ lh=maxH; lw=lh*props.width/props.height; }
       const padX=4,padY=3;
       doc.setFillColor(255,255,255);
       doc.roundedRect(pageW-14-lw-padX*2,(bandH-lh-padY*2)/2,lw+padX*2,lh+padY*2,2,2,'F');
-      doc.addImage(CONFIG.receiptLogoImage,'PNG',pageW-14-lw-padX,(bandH-lh)/2,lw,lh);
+      doc.addImage(logoSrc,'PNG',pageW-14-lw-padX,(bandH-lh)/2,lw,lh);
     }catch(e){}
   }
   return bandH+1.1;
@@ -18618,28 +18645,59 @@ function computeManagementReportData(from,to,siteVisitsData){
     expensesTotal,byCategory,pendingPayments,pendingExpenses,pendingFunds};
 }
 function pdfSectionTitle(doc,y,pageW,text){
+  // A small gold accent tick ahead of the heading (echoes the quote/receipt's
+  // gold rule) instead of a bare full-width divider -- gives every section a
+  // little more visual weight rather than looking like a plain text label.
+  doc.setFillColor(201,162,39); doc.rect(12,y-3.6,3,3,'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(11,30,61);
-  doc.text(text,12,y);
-  doc.setDrawColor(200,208,220); doc.setLineWidth(0.4); doc.line(12,y+2,pageW-12,y+2);
+  doc.text(text,17,y);
+  doc.setDrawColor(200,208,220); doc.setLineWidth(0.4); doc.line(12,y+2.5,pageW-12,y+2.5);
   doc.setTextColor(20,20,20);
-  return y+9;
+  return y+10;
 }
+// Numeric-looking columns (amounts, percentages, plain counts) right-align --
+// judged once per column from that column's own first data row -- so figures
+// stack on their ones place like a real ledger instead of every cell sitting
+// flush-left regardless of whether it holds a name or a number.
+function pdfIsNumericCell(v){ return /^-?(GHS\s?)?[\d,]+(\.\d+)?%?$/.test(String(v==null?'':v).trim()); }
 function pdfSimpleTable(doc,y,pageW,headers,rows,colPct){
   const usableW=pageW-24; const colW=colPct.map(p=>usableW*p); const colX=[12]; for(let i=1;i<colW.length;i++) colX.push(colX[i-1]+colW[i-1]);
-  const rowH=7;
+  const rowH=7.4;
+  const numCol=headers.map((h,i)=>rows.length?pdfIsNumericCell(rows[0][i]):false);
   doc.setFillColor(11,30,61); doc.rect(12,y,usableW,rowH,'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
-  headers.forEach((h,i)=>doc.text(h,colX[i]+3,y+4.8));
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.3); doc.setTextColor(255,255,255);
+  headers.forEach((h,i)=>{
+    if(numCol[i]) doc.text(h,colX[i]+colW[i]-3,y+5,{align:'right'}); else doc.text(h,colX[i]+3,y+5);
+  });
   y+=rowH;
-  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.3);
   rows.forEach((r,i)=>{
-    if(y>272){ doc.addPage(); y=16; }
-    if(i%2===1){ doc.setFillColor(244,246,248); doc.rect(12,y,usableW,rowH,'F'); }
+    if(y>270){ doc.addPage(); y=16; }
+    if(i%2===1){ doc.setFillColor(245,247,250); doc.rect(12,y,usableW,rowH,'F'); }
     doc.setTextColor(20,20,20);
-    r.forEach((cell,ci)=>doc.text(String(cell),colX[ci]+3,y+4.8));
+    r.forEach((cell,ci)=>{
+      if(numCol[ci]) doc.text(String(cell),colX[ci]+colW[ci]-3,y+5,{align:'right'}); else doc.text(pdfFitText(doc,cell,colW[ci]-5),colX[ci]+3,y+5);
+    });
+    doc.setDrawColor(232,236,241); doc.setLineWidth(0.2); doc.line(12,y+rowH,12+usableW,y+rowH);
     y+=rowH;
   });
   return y+7;
+}
+// Stamps every page of a finished report with a thin rule + confidentiality
+// line + "Page X of Y" -- call this once, right before doc.save(), after all
+// content (including any addPage() calls) is already in place. Without this
+// a multi-page report just stopped abruptly with no page numbers at all.
+function pdfReportFooter(doc,companyName){
+  const pageCount=doc.internal.getNumberOfPages();
+  const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setDrawColor(220,224,230); doc.setLineWidth(0.3); doc.line(12,pageH-14,pageW-12,pageH-14);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(120,130,145);
+    doc.text((companyName||'PEP Landbank')+' · Confidential — internal use only',12,pageH-9);
+    doc.text('Page '+i+' of '+pageCount,pageW-12,pageH-9,{align:'right'});
+  }
+  doc.setTextColor(20,20,20);
 }
 function buildManagementReportPDF(range,d,prior,priorData){
   if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return; }
@@ -18687,6 +18745,7 @@ function buildManagementReportPDF(range,d,prior,priorData){
     y=pdfSimpleTable(doc,y,pageW,['CATEGORY','TOTAL'],Object.keys(d.byCategory).map(c=>[c,ghs(d.byCategory[c])]),[0.7,0.3]);
   }
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Management_Report_'+range.from+'_to_'+range.to+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
@@ -18821,6 +18880,7 @@ function buildOpsReportPDF(range,d,prior,priorData){
   y=pdfSimpleTable(doc,y,pageW,['METRIC','COUNT'],
     [['Logged',String(d.todoStats.total)],['Completed',String(d.todoStats.closed)],['Rescheduled',String(d.todoStats.rescheduled)]],[0.7,0.3]);
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Ops_Report_'+range.from+'_to_'+range.to+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
@@ -18855,6 +18915,7 @@ function buildWhoOwesPDF(monthlyList,owingList,scopeLabel){
     owingList.map(l=>[l.name,l.agentDisplay||'—',ghs(l.__bal)]),[0.4,0.3,0.3]);
   else{ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120); doc.text('Nobody owes an outstanding balance right now.',12,y); doc.setTextColor(20,20,20); y+=10; }
 
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
   const fname='Who_Owes_Us_'+today()+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
