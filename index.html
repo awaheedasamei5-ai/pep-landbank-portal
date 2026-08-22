@@ -817,7 +817,7 @@ body.dark .achEarned{color:#E8C158}
    viewport, which is what read as "text spilling out of the placeholder" and the
    page wobbling while scrolling on narrow screens. */
 input[type="file"]{max-width:100%;box-sizing:border-box}
-.dayGridWrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:16px}
+.dayGridWrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:16px;touch-action:pan-y}
 .dayGrid{display:grid;min-width:100%}
 .dayGridStaffHead{padding:8px 10px;font-size:11.5px;font-weight:800;color:var(--text);text-align:center;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card)}
 .dayGridHourCol{border-bottom:1px solid var(--line)}
@@ -886,7 +886,7 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
   background-size:250% 100%;background-position:150% 0;transition:background-position .55s ease}
 .btn:hover:not(:disabled)::before{background-position:-50% 0}
 .btn.primary{background:linear-gradient(180deg,var(--leaf),var(--green));color:#fff;box-shadow:0 10px 24px -8px rgba(37,99,235,.5)}
-.btn.gold{background:linear-gradient(180deg,var(--gold),var(--accent-dark,#4D7C0F));color:#152106;box-shadow:0 10px 24px -8px rgba(132,204,22,.5)}
+.btn.gold{background:linear-gradient(180deg,var(--gold),var(--accent-dark,#4D7C0F));color:#fff;box-shadow:0 10px 24px -8px rgba(132,204,22,.5)}
 .btn.ghost{background:#EEF1F6;color:#3c433c;flex:0 0 auto;padding-left:22px;padding-right:22px}
 .btn:hover:not(:disabled){transform:translateY(-1.5px)}
 .btn:active:not(:disabled){transform:translateY(0) scale(.98)}
@@ -943,7 +943,15 @@ body.dark .empty .bigicon{background:linear-gradient(135deg,#182541,#132038)}
 .mini{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
 select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-size:13px}
 .footer-note{text-align:center;color:var(--muted);font-size:11.5px;padding:20px 10px 4px;display:flex;align-items:center;justify-content:center;gap:8px}
-.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both}
+/* touch-action:pan-y on wide data-table wrappers (this one, dayGridWrap,
+   svaTableWrap) -- without it, a vertical swipe that starts anywhere over the
+   table (which is almost the whole screen width on mobile, since the table is
+   wider than the viewport) can get captured as an attempt to pan the table
+   horizontally instead of scrolling the page, leaving only a narrow margin
+   (e.g. the right edge, past the table's own bounds) where a normal vertical
+   swipe reliably scrolls. Chip/tab carousels deliberately keep default touch
+   handling since horizontal swipe IS their primary interaction there. */
+.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both;touch-action:pan-y}
 .league-table{width:100%;border-collapse:collapse;min-width:640px}
 .league-table thead th{position:sticky;top:0;background:var(--ink);color:#fff;text-align:left;font-size:11px;letter-spacing:.08em;
   text-transform:uppercase;font-weight:700;padding:13px 16px;white-space:nowrap}
@@ -1715,7 +1723,19 @@ function loadFailBannerHtml(label,retryFnCall){
 }
 function fld(l,inner,hint){return `<div class="field"><label>${l}${hint?` <span class="hint">— ${hint}</span>`:''}</label>${inner}</div>`;}
 function sel(id,opts,cur){return `<select id="${id}">`+opts.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('')+`</select>`;}
-function back(to){return `<button class="backlink" onclick="goBack('${to}')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Back</button>`;}
+// The refresh icon next to Back exists for the "a screen got stuck loading and
+// never recovers" case (seen live -- a stale DB reset made a couple of new
+// screens crash mid-render and leave their loading skeleton stuck forever).
+// It re-runs the current route in place via refreshCurrentRoute() instead of
+// a full browser reload, which was the only previous option and always threw
+// the user back to the home screen.
+function back(to){return `<button class="backlink" onclick="goBack('${to}')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Back</button><button class="backlink" onclick="refreshCurrentRoute()" title="Refresh this section" style="padding:9px;width:38px;justify-content:center;margin-left:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 10-2.34 5.66M20 8v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;}
+function refreshCurrentRoute(){
+  const st=window.history.state;
+  const arg=(st&&st.routeName===CURRENT_ROUTE_NAME)?st.routeArg:undefined;
+  try{ route(CURRENT_ROUTE_NAME,arg,true); toast('Refreshed'); }
+  catch(e){ toast('Could not refresh -- try the back button instead'); }
+}
 function toast(m){const t=document.getElementById('toast');document.getElementById('toastMsg').textContent=m;t.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2600);}
 /* Short Web Audio tones for the boot animation, sign-in, and success popups --
    no audio asset to host, works offline. Browsers block audio before any user
@@ -4424,11 +4444,12 @@ async function apiSendPlannedLeaveRequest(id){
   const {data,error}=await sb.from('leave_requests').update(patch).eq('id',id).select().single();
   if(error) throw error; return mapLeaveRequest(data);
 }
-async function apiDecideLeaveRequest(id,approve){
+async function apiDecideLeaveRequest(id,approve,declineReason){
   const sig=approve?getStaffSignature(PROFILE.key):null;
   const patch={status:approve?'approved':'declined',decided_at:new Date().toISOString(),decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_signature:sig};
+  if(!approve) patch.reschedule_note=declineReason||null;
   if(DEMO_MODE){ const d=await demoLoad(); const rec=(d.leaveRequests||[]).find(x=>x.id===id);
-    if(rec) Object.assign(rec,{status:patch.status,decidedAt:patch.decided_at,decidedBy:patch.decided_by,decidedByName:patch.decided_by_name,decidedSignature:patch.decided_signature});
+    if(rec) Object.assign(rec,{status:patch.status,decidedAt:patch.decided_at,decidedBy:patch.decided_by,decidedByName:patch.decided_by_name,decidedSignature:patch.decided_signature,rescheduleNote:approve?rec.rescheduleNote:(declineReason||null)});
     await demoSave(); return rec; }
   const {data,error}=await sb.from('leave_requests').update(patch).eq('id',id).select().single();
   if(error) throw error; return mapLeaveRequest(data);
@@ -4504,6 +4525,12 @@ async function apiUpdateMemo(id,patch){
   if('status' in patch) dbPatch.status=patch.status;
   if(DEMO_MODE){ const d=await demoLoad(); const m=(d.memos||[]).find(x=>x.id===id); if(m) Object.assign(m,patch); await demoSave(); return; }
   const {error}=await sb.from('memos').update(dbPatch).eq('id',id); if(error) throw error;
+}
+// RLS (memos_del) already permits this for the sender or a manager -- only ever
+// offered in the UI for the sender's own drafts, same boundary as editing.
+async function apiDeleteMemo(id){
+  if(DEMO_MODE){ const d=await demoLoad(); d.memos=(d.memos||[]).filter(x=>x.id!==id); await demoSave(); return; }
+  const {error}=await sb.from('memos').delete().eq('id',id); if(error) throw error;
 }
 async function apiMarkMemoRead(id){
   if(DEMO_MODE){ const d=await demoLoad(); const m=(d.memos||[]).find(x=>x.id===id); if(m) m.read=true; await demoSave(); return; }
@@ -12431,7 +12458,7 @@ function siteVisitAuthBodyHtml(form,visits){
   </div>
 
   <div class="sectitle" style="margin-top:0"><h3>AUTHORIZATION FORM-TSOPOLI SITE VISIT</h3><span class="cnt">${esc(fmtLongDate(SVA_SELECTED_DAY))} · ${visits.length} visit${visits.length===1?'':'s'}</span></div>
-  <div class="svaTableWrap" style="overflow-x:auto;margin-bottom:18px;border:1px solid var(--line);border-radius:12px">
+  <div class="svaTableWrap" style="overflow-x:auto;margin-bottom:18px;border:1px solid var(--line);border-radius:12px;touch-action:pan-y">
     <table class="league-table svaTable" style="min-width:960px">
       <thead><tr>${SVA_VISIT_COLS.map(([label])=>`<th>${esc(label)}</th>`).join('')}<th></th></tr></thead>
       <tbody>${!visits.length?`<tr><td colspan="${SVA_VISIT_COLS.length+1}" style="text-align:center;color:var(--muted)">No site visits logged for this day yet.</td></tr>`:
@@ -13844,7 +13871,18 @@ function buildQuotationPDF(q){
   });
   y=Math.max(y,ty+totalsRows.length*7)+7;
 
-  if(y>272){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  if(y>260){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  // Prepared-by signoff -- whoever's signed in and generating this quote, stamped
+  // with their own saved signature (same per-staff signature already used on the
+  // leave letter), so every quotation carries a genuine personal signoff rather
+  // than just a name printed in text.
+  const preparerSig=(typeof PROFILE!=='undefined'&&PROFILE&&typeof getStaffSignature==='function')?getStaffSignature(PROFILE.key):null;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,20,20);
+  doc.text('Prepared by:',14,y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.text((typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.name)||'',45,y);
+  if(preparerSig) pdfStampSignature(doc,95,y-9,28,12,preparerSig);
+  y+=13;
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
   doc.text('Offer Acceptance',14,y); y+=6.5;
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
@@ -13954,7 +13992,18 @@ function buildTechnicalQuotationPDF(q){
   });
   y=Math.max(y,ty+totalsRows.length*7)+7;
 
-  if(y>272){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  if(y>260){ doc.addPage(); pdfQuoteBg(doc,pageW,pageH); y=20; }
+  // Prepared-by signoff -- whoever's signed in and generating this quote, stamped
+  // with their own saved signature (same per-staff signature already used on the
+  // leave letter), so every quotation carries a genuine personal signoff rather
+  // than just a name printed in text.
+  const preparerSig=(typeof PROFILE!=='undefined'&&PROFILE&&typeof getStaffSignature==='function')?getStaffSignature(PROFILE.key):null;
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,20,20);
+  doc.text('Prepared by:',14,y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.text((typeof PROFILE!=='undefined'&&PROFILE&&PROFILE.name)||'',45,y);
+  if(preparerSig) pdfStampSignature(doc,95,y-9,28,12,preparerSig);
+  y+=13;
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
   doc.text('Offer Acceptance',14,y); y+=6.5;
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
@@ -14656,6 +14705,12 @@ function buildReceiptPDF(clientName,payment,lead,existingDoc,portfolioTotal,rece
   });
   y=Math.max(y+4*rowH,ny)+6;
 
+  // Whoever's signed in and issuing this receipt, stamped with their own saved
+  // signature (same per-staff signature system already used on the leave
+  // letter and quotation PDFs) -- sits directly above the existing "Authorized
+  // Signature" line, which previously was always left blank.
+  const issuerSig=(typeof PROFILE!=='undefined'&&PROFILE&&typeof getStaffSignature==='function')?getStaffSignature(PROFILE.key):null;
+  if(issuerSig) pdfStampSignature(doc,L,y-2,40,14,issuerSig);
   doc.setDrawColor(RECEIPT_GOLD[0],RECEIPT_GOLD[1],RECEIPT_GOLD[2]); doc.setLineWidth(0.6); doc.line(L,y,L+65,y); y+=5;
   doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(RECEIPT_GRAY[0],RECEIPT_GRAY[1],RECEIPT_GRAY[2]);
   doc.text('Authorized Signature',L,y);
@@ -20103,25 +20158,34 @@ function buildLeaveLetterPDF(req){
       doc.text(wrapped,marginL+6,y); y+=wrapped.length*5.6; continue;
     }
     if(/^yours faithfully,?$/i.test(line)){
-      doc.text(line,marginL,y); y+=16;
-      if(staffSig) pdfStampSignature(doc,marginL,y-3,32,13,staffSig);
+      // Staff signs on the left; if this has already been approved, Management's
+      // signature is stamped directly opposite it on the right at the very same
+      // y-position, side by side like a real signed contract, rather than as a
+      // separate block further down the page.
+      doc.text(line,marginL,y);
+      const sigTopY=y+16;
+      if(staffSig) pdfStampSignature(doc,marginL,sigTopY-3,32,13,staffSig);
+      if(req.status==='approved'){
+        doc.setFont('times','bold'); doc.setFontSize(10);
+        doc.text('Approved by:',marginR-70,y);
+        doc.setFont('times','normal'); doc.setFontSize(11);
+        if(req.decidedSignature) pdfStampSignature(doc,marginR-70,sigTopY-3,32,13,req.decidedSignature);
+      }
+      y=sigTopY;
       afterSig=true; continue;
     }
     if(afterSig){
-      doc.setFont('times','bold'); doc.text(line,marginL,y); doc.setFont('times','normal'); y+=5.6;
+      doc.setFont('times','bold'); doc.text(line,marginL,y);
+      if(req.status==='approved'){
+        doc.setFont('times','normal'); doc.setFontSize(9.5); doc.setTextColor(90,98,110);
+        doc.text((req.decidedByName||'Management')+' — '+fmtLongDate((req.decidedAt||'').slice(0,10)),marginR-70,y);
+        doc.setTextColor(20,20,20); doc.setFontSize(11);
+      }
+      doc.setFont('times','normal'); y+=5.6;
       afterSig=false; continue;
     }
     const wrapped=doc.splitTextToSize(line,marginR-marginL);
     doc.text(wrapped,marginL,y); y+=wrapped.length*5.6;
-  }
-  if(req.status==='approved'){
-    y+=10; if(y>255){ doc.addPage(); y=20; }
-    doc.setDrawColor(220,220,220); doc.line(marginL,y,marginR,y); y+=8;
-    doc.setFont('times','bold'); doc.setFontSize(10); doc.text('MANAGEMENT APPROVAL',marginL,y); y+=14;
-    if(req.decidedSignature) pdfStampSignature(doc,marginL,y-3,32,13,req.decidedSignature);
-    doc.setFont('times','normal'); doc.setFontSize(9.5); doc.setTextColor(90,98,110);
-    doc.text((req.decidedByName||'Management')+' — Approved '+fmtLongDate((req.decidedAt||'').slice(0,10)),marginL,y+6);
-    doc.setTextColor(20,20,20);
   }
   doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(140,140,140);
   doc.text('Generated '+new Date().toLocaleDateString('en-GB'),marginR,290,{align:'right'});
@@ -20204,9 +20268,9 @@ function leaveRowHtml(r){
     :'<span class="tag warnt">Pending approval</span>';
   const emTag=r.isEmergency?`<span class="tag warnt" style="margin-left:6px">🚨 Emergency${r.deductQuota===false?' · not deducted':''}</span>`:'';
   return `<div class="rowcard"><div class="top"><div><div class="nm">${esc(r.agentName)} · ${r.daysCount} day${r.daysCount===1?'':'s'} (${r.year})${emTag}</div><div class="meta">${(r.dates||[]).slice().sort().map(fmtLongDate).join(', ')}</div></div>${badge}</div>
-  ${r.status==='rescheduled'&&r.rescheduleNote?`<div class="note"><b>Management's note:</b> ${esc(r.rescheduleNote)}</div>`:''}
+  ${(r.status==='rescheduled'||r.status==='declined')&&r.rescheduleNote?`<div class="note"><b>${r.status==='declined'?'Reason':"Management's note"}:</b> ${esc(r.rescheduleNote)}</div>`:''}
   <div class="foot" style="display:flex;gap:7px;flex-wrap:wrap">
-    ${r.status==='planned'?`<button class="chip" data-leavesendnow="${r.id}">Send to Management now</button>`:''}
+    ${r.status==='planned'?`<button class="chip" data-leavesendnow="${r.id}">Send to Management now</button><button class="trashbtn" data-leaveplandel="${r.id}" title="Delete this planned leave">${ic.trash}</button>`:''}
     <button class="chip" data-leavepreview="${r.id}">Preview letter</button>
     ${r.status==='approved'?`<button class="chip" data-leavedownload="${r.id}">⬇ Download</button>`:''}
   </div></div>`;
@@ -20278,6 +20342,13 @@ function bindLeaveMineCtrls(){
   document.querySelectorAll('[data-leavepreview]').forEach(b=>b.onclick=()=>previewLeaveLetter(b.dataset.leavepreview));
   document.querySelectorAll('[data-leavedownload]').forEach(b=>b.onclick=()=>downloadLeaveLetter(b.dataset.leavedownload));
   document.querySelectorAll('[data-lvsendplanned],[data-leavesendnow]').forEach(b=>b.onclick=()=>sendPlannedLeaveNow(b.dataset.lvsendplanned||b.dataset.leavesendnow));
+  document.querySelectorAll('[data-leaveplandel]').forEach(b=>b.onclick=async(e)=>{
+    e.stopPropagation();
+    const id=b.dataset.leaveplandel; const rec=DB.leaveRequests.find(x=>x.id===id); if(!rec) return;
+    if(!confirm('Delete this planned leave? This can\'t be undone.')) return;
+    try{ await apiDeleteLeaveRequest(id); DB.leaveRequests=DB.leaveRequests.filter(x=>x.id!==id); toast('Deleted'); paintLeaveApp(); }
+    catch(err){ toast('Failed: '+(err.message||err)); }
+  });
 }
 async function sendPlannedLeaveNow(id){
   const rec=DB.leaveRequests.find(x=>x.id===id); if(!rec) return;
@@ -20285,7 +20356,9 @@ async function sendPlannedLeaveNow(id){
   try{
     const updated=await apiSendPlannedLeaveRequest(id);
     Object.assign(rec,updated);
-    try{ await apiSendMessage('manager','New leave request from '+PROFILE.name+' — '+rec.daysCount+' day(s) in '+rec.year+'. Open Office › Leave Schedules › Leave Requests to review.'); }catch(e){}
+    const mgrMsg='New leave request from '+PROFILE.name+' — '+rec.daysCount+' day(s) in '+rec.year+'. Open Office › Leave Schedules › Leave Requests to review.';
+    try{ await apiSendMessage('manager',mgrMsg); }catch(e){}
+    try{ const mgrPhone=phoneForStaffKey('manager'); if(mgrPhone) await apiSendSms(mgrPhone,mgrMsg,'leave_request_sent'); }catch(e){}
     toast('Sent to Management');
     offerSendLeaveLetter(rec);
     paintLeaveApp();
@@ -20501,25 +20574,46 @@ function openLeaveReviewModal(id){
         const updated=await apiDecideLeaveRequest(rec.id,true);
         Object.assign(rec,updated);
         toast('Approved'); ov.remove();
-        try{ await apiSendMessage(rec.agentKey,'Your leave request for '+rec.daysCount+' day(s) in '+rec.year+' has been approved — you can now download the signed letter from Office › Leave Schedules.'); }catch(e){}
+        const staffMsg='Your leave request for '+rec.daysCount+' day(s) in '+rec.year+' has been approved — you can now download the signed letter from Office › Leave Schedules.';
+        try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
+        try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_approved'); }catch(e){}
         paintLeaveApp();
       }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Approve & sign'; }
     };
-    document.getElementById('lvDeclineBtn').onclick=async()=>{
-      if(!confirm('Decline this leave request?')) return;
-      const btn=document.getElementById('lvDeclineBtn'); btn.disabled=true; btn.textContent='Declining…';
-      try{
-        const updated=await apiDecideLeaveRequest(rec.id,false);
-        Object.assign(rec,updated);
-        toast('Declined'); ov.remove();
-        try{ await apiSendMessage(rec.agentKey,'Your leave request for '+rec.daysCount+' day(s) in '+rec.year+' was declined. Reach out to Management for details.'); }catch(e){}
-        paintLeaveApp();
-      }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Decline'; }
-    };
+    document.getElementById('lvDeclineBtn').onclick=()=>openLeaveDeclineReasonModal(rec,ov);
     document.getElementById('lvRescheduleBtn').onclick=()=>openLeaveRescheduleNoteModal(rec,ov);
   } else {
     document.getElementById('lvReviewDownload').onclick=()=>downloadLeaveLetter(rec.id);
   }
+}
+// Decline asks for a reason too (same shape as reschedule below) rather than a
+// bare confirm() -- the staff member sees exactly why on their side.
+function openLeaveDeclineReasonModal(rec,parentOv){
+  let ov3=document.getElementById('announceOverlayDecline'); if(ov3) ov3.remove();
+  ov3=document.createElement('div'); ov3.id='announceOverlayDecline'; ov3.className='overlay';
+  ov3.style.zIndex='10001';
+  ov3.innerHTML=`<div id="announceModal" style="max-width:480px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px">Decline ${esc(rec.agentName)}'s leave request</div><button id="closeDeclineNote" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    ${fld('Reason for declining','<textarea id="lv_declinenote" rows="4" placeholder="e.g. Too many staff already off that week"></textarea>')}
+    <div class="formactions"><button class="btn danger" id="lv_declineSend" style="width:100%">Decline &amp; notify</button></div>
+  </div>`;
+  document.body.appendChild(ov3);
+  ov3.addEventListener('click',e=>{ if(e.target===ov3) ov3.remove(); });
+  document.getElementById('closeDeclineNote').onclick=()=>ov3.remove();
+  document.getElementById('lv_declineSend').onclick=async()=>{
+    const reason=val('lv_declinenote').trim();
+    if(!reason){ toast('Add a short reason'); return; }
+    const btn=document.getElementById('lv_declineSend'); btn.disabled=true; btn.textContent='Declining…';
+    try{
+      const updated=await apiDecideLeaveRequest(rec.id,false,reason);
+      Object.assign(rec,updated);
+      toast('Declined'); ov3.remove(); if(parentOv) parentOv.remove();
+      const staffMsg='Your leave request for '+rec.daysCount+' day(s) in '+rec.year+' was declined: "'+reason+'" — open Office › Leave Schedules for details.';
+      try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
+      try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_declined'); }catch(e){}
+      paintLeaveApp();
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Decline & notify'; }
+  };
 }
 // A reschedule isn't a decline -- the dates just don't work, so it asks for a reason
 // and frees the dates back up (see leaveIsBlocking) so the staff member can plan
@@ -20544,7 +20638,9 @@ function openLeaveRescheduleNoteModal(rec,parentOv){
       const updated=await apiRescheduleLeaveRequest(rec.id,note);
       Object.assign(rec,updated);
       toast('Sent back for rescheduling'); ov2.remove(); if(parentOv) parentOv.remove();
-      try{ await apiSendMessage(rec.agentKey,'Management has asked you to reschedule your leave request for '+rec.daysCount+' day(s) in '+rec.year+': "'+note+'" — open Office › Leave Schedules to pick new dates.'); }catch(e){}
+      const staffMsg='Management has asked you to reschedule your leave request for '+rec.daysCount+' day(s) in '+rec.year+': "'+note+'" — open Office › Leave Schedules to pick new dates.';
+      try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
+      try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_reschedule_requested'); }catch(e){}
       paintLeaveApp();
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send & ask to reschedule'; }
   };
@@ -20860,9 +20956,20 @@ function memoSentHtml(){
 function memoDraftsHtml(){
   const drafts=DB.memos.filter(m=>m.fromKey===PROFILE.key&&m.status==='draft').sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   return `<div class="sectitle" style="margin-top:0"><h3>Drafts</h3><span class="cnt">${drafts.length}</span></div>
-  <div class="list">${drafts.length?drafts.map(m=>`<button class="rowcard" style="text-align:left;width:100%" data-memodraft="${m.id}"><div class="top"><div><div class="nm">${esc(m.subject||'(no subject)')}</div><div class="meta">To ${esc(m.toName)} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></div><span class="tag ghost">Draft</span></div></button>`).join(''):emptyState(ic.mail,'No drafts','Memos you save without sending will show up here.')}</div>`;
+  <div class="list">${drafts.length?drafts.map(m=>`<div class="rowcard"><div class="top">
+      <button data-memodraft="${m.id}" style="text-align:left;background:none;border:none;padding:0;cursor:pointer;flex:1;min-width:0"><div class="nm">${esc(m.subject||'(no subject)')}</div><div class="meta">To ${esc(m.toName)} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></button>
+      <span class="tag ghost">Draft</span>
+      <button class="trashbtn" data-memodraftdel="${m.id}" title="Delete draft">${ic.trash}</button>
+    </div></div>`).join(''):emptyState(ic.mail,'No drafts','Memos you save without sending will show up here.')}</div>`;
 }
 function bindMemoDraftCtrls(){
+  document.querySelectorAll('[data-memodraftdel]').forEach(b=>b.onclick=async(e)=>{
+    e.stopPropagation();
+    const id=b.dataset.memodraftdel; const m=DB.memos.find(x=>x.id===id); if(!m) return;
+    if(!confirm(`Delete this draft ("${m.subject||'(no subject)'}")? This can't be undone.`)) return;
+    try{ await apiDeleteMemo(id); DB.memos=DB.memos.filter(x=>x.id!==id); toast('Draft deleted'); paintMemoApp(); }
+    catch(err){ toast('Failed: '+(err.message||err)); }
+  });
   document.querySelectorAll('[data-memodraft]').forEach(b=>b.onclick=()=>{
     const m=DB.memos.find(x=>x.id===b.dataset.memodraft); if(!m) return;
     memoComposeSeed={ editId:m.id, toKey:m.toKey, subject:m.subject, bodyHtml:m.bodyHtml, ccKeys:(m.cc||[]).map(c=>c.staffKey) };
@@ -21201,12 +21308,22 @@ function viewBannerDetail(bannerId){
     <div class="formactions"><button class="btn primary" id="bdSaveBtn" style="width:100%">Log update</button></div>
   </div>
   <div class="sectitle"><h3>History</h3><span class="cnt" id="bdHistCount"></span></div>
-  <div class="list" id="bdTimeline"><div class="mini" style="padding:10px 0">Loading…</div></div>`;
+  <div class="list" id="bdTimeline"><div class="mini" style="padding:10px 0">Loading…</div></div>
+  <div class="formactions" style="margin-top:16px"><button class="btn danger" id="bdDeleteBtn" style="width:100%">Delete this banner</button></div>`;
   bindBannerDetailCtrls(b);
   loadBannerTimeline(b);
   renderBottomNavNow();
 }
 function bindBannerDetailCtrls(b){
+  document.getElementById('bdDeleteBtn').onclick=async()=>{
+    if(!confirm(`Delete "${b.name}"? This removes the banner and its whole status history — this can't be undone.`)) return;
+    const btn=document.getElementById('bdDeleteBtn'); btn.disabled=true; btn.textContent='Deleting…';
+    try{
+      await apiDeleteBanner(b.id);
+      DB.banners=(DB.banners||[]).filter(x=>x.id!==b.id);
+      toast('Banner deleted'); route('bannerapp');
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Delete this banner'; }
+  };
   let images=[];
   const preview=()=>{ document.getElementById('bd_imgPreview').innerHTML=images.map(src=>`<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:10px"/>`).join(''); };
   const handlePhotos=async(e)=>{
