@@ -6002,6 +6002,8 @@ async function enterApp(){
   ensureMemosLiveSubscribed();
   ensureBannersLiveSubscribed();
   ensureStaffRosterLiveSubscribed();
+  ensurePlotsLiveSubscribed();
+  ensureAllocationsLiveSubscribed();
   ensurePresenceSubscribed();
   ensureOfflineQueueRunning();
   if(PROFILE.role!=='manager') evaluateMyAchievements();
@@ -6290,19 +6292,87 @@ function ensureStaffRosterLiveSubscribed(){
         if(i>=0) STAFF_LIST[i]=mapped; else STAFF_LIST.push(mapped);
       }
       buildDropdown();
-      if(document.getElementById('mgrBody') && mgrTab==='Staff Settings') managerView();
+      if(document.getElementById('mbody') && mgrTab==='Staff Settings') managerView();
     };
     const removeStaff=oldRow=>{
       const key=oldRow&&oldRow.agent_key; if(!key) return;
       STAFF_LIST=STAFF_LIST.filter(s=>s.key!==key);
       buildDropdown();
-      if(document.getElementById('mgrBody') && mgrTab==='Staff Settings') managerView();
+      if(document.getElementById('mbody') && mgrTab==='Staff Settings') managerView();
     };
     STAFF_ROSTER_LIVE_CHANNEL=subscribeRealtimeTable('staff-roster-live',[
       {event:'INSERT',table:'profiles',handler:payload=>upsertStaff(payload.new)},
       {event:'UPDATE',table:'profiles',handler:payload=>upsertStaff(payload.new)},
       {event:'DELETE',table:'profiles',handler:payload=>removeStaff(payload.old)},
     ],()=>{ STAFF_ROSTER_LIVE_CHANNEL=null; });
+  }catch(e){}
+}
+// ---- cross-app realtime, round 4: plot inventory + allocations -- a real gap
+// surfaced by running Sec 94's own final-acceptance-test scenario ("allocate
+// plot" -> every authorized session updates within seconds): neither table had
+// ever been added to the supabase_realtime publication at all (confirmed via
+// pg_publication_tables, same class of gap this project already learned to
+// check for once before), so Plot Inventory and Allocations had no live sync
+// whatsoever despite everything else being unified under
+// subscribeRealtimeTable() since Phase 2. plots_sel only grants manager/elias/
+// emmanuel SELECT on the base table (regular agents read a separate
+// plots_availability view instead), so this only subscribes for that same
+// audience -- matching the exact gate the initial full-table load already uses.
+let PLOTS_LIVE_CHANNEL=null;
+function ensurePlotsLiveSubscribed(){
+  if(DEMO_MODE || !sb || PLOTS_LIVE_CHANNEL || IS_CLIENT || !canManagePlots()) return;
+  try{
+    const upsertPlot=row=>{
+      const p=mapPlot(row); DB.plots=DB.plots||[];
+      const i=DB.plots.findIndex(x=>x.id===p.id);
+      if(i>=0) DB.plots[i]=p; else DB.plots.unshift(p);
+      DB.myPlots=DB.plots.filter(x=>x.agentKey===PROFILE.key);
+      refreshPlotsView();
+    };
+    const removePlot=oldRow=>{
+      const id=oldRow&&oldRow.id; if(!id) return;
+      DB.plots=(DB.plots||[]).filter(x=>x.id!==id);
+      DB.myPlots=(DB.myPlots||[]).filter(x=>x.id!==id);
+      refreshPlotsView();
+    };
+    PLOTS_LIVE_CHANNEL=subscribeRealtimeTable('plots-live',[
+      {event:'INSERT',table:'plots',handler:payload=>upsertPlot(payload.new)},
+      {event:'UPDATE',table:'plots',handler:payload=>upsertPlot(payload.new)},
+      {event:'DELETE',table:'plots',handler:payload=>removePlot(payload.old)},
+    ],()=>{ PLOTS_LIVE_CHANNEL=null; });
+  }catch(e){}
+}
+function mapAllocationRow(r){
+  return {id:r.id,leadId:r.lead_id,clientName:r.client_name,agentKey:r.agent_key,agentName:r.agent_name,
+    percent:r.percent_paid,grandTotal:r.grand_total,amtPaid:r.amt_paid,status:r.status,agentSeen:r.agent_seen,
+    createdAt:(r.created_at||'').slice(0,16).replace('T',' '),plotNumber:r.plot_number,note:r.note,
+    allocatedBy:r.allocated_by,resolvedAt:(r.resolved_at||'').slice(0,16).replace('T',' '),suggestedPlots:r.suggested_plots,
+    flagReason:r.flag_reason,flaggedBy:r.flagged_by,flaggedAt:r.flagged_at};
+}
+let ALLOCATIONS_LIVE_CHANNEL=null;
+function ensureAllocationsLiveSubscribed(){
+  if(DEMO_MODE || !sb || ALLOCATIONS_LIVE_CHANNEL || IS_CLIENT) return;
+  try{
+    const repaintAllocations=()=>{
+      if(PROFILE.role==='manager'){ if(document.getElementById('mbody') && mgrTab==='Allocations') managerView(); }
+      else if(CURRENT_ROUTE_NAME==='allocations') viewAllocations();
+    };
+    const upsertAlloc=row=>{
+      const a=mapAllocationRow(row); DB.allocations=DB.allocations||[];
+      const i=DB.allocations.findIndex(x=>x.id===a.id);
+      if(i>=0) DB.allocations[i]=a; else DB.allocations.unshift(a);
+      repaintAllocations();
+    };
+    const removeAlloc=oldRow=>{
+      const id=oldRow&&oldRow.id; if(!id) return;
+      DB.allocations=(DB.allocations||[]).filter(x=>x.id!==id);
+      repaintAllocations();
+    };
+    ALLOCATIONS_LIVE_CHANNEL=subscribeRealtimeTable('allocations-live',[
+      {event:'INSERT',table:'allocation_requests',handler:payload=>upsertAlloc(payload.new)},
+      {event:'UPDATE',table:'allocation_requests',handler:payload=>upsertAlloc(payload.new)},
+      {event:'DELETE',table:'allocation_requests',handler:payload=>removeAlloc(payload.old)},
+    ],()=>{ ALLOCATIONS_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- chat presence: who's actually online right now, not the old hardcoded
