@@ -1026,6 +1026,23 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .greetScreen .gText{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:25px;color:#fff;max-width:340px;text-align:center;opacity:0;animation:fadeUp .6s .3s ease forwards}
 .greetScreen .gSub{font-size:13px;color:#9DB2CC;letter-spacing:.02em;max-width:300px;text-align:center;line-height:1.5;opacity:0;animation:fadeUp .6s .5s ease forwards}
 .greetScreen .gTap{position:absolute;bottom:34px;font-size:10.5px;color:#5E7396;opacity:0;animation:fadeIn .6s 1.1s ease forwards;letter-spacing:.1em;text-transform:uppercase}
+/* Sec 88 (Accessibility) "Reduced motion" -- a blanket animation:none would
+   permanently hide every element above that starts at opacity:0 and relies
+   on its own "forwards" animation to reveal itself (the greet screen, most
+   fade-ins) -- exactly the trap most naive reduced-motion CSS falls into.
+   Collapsing the DURATION to near-zero instead (the standard pattern MDN/
+   web.dev recommend for this) lets every animation still run to completion
+   -- so forwards-filled end states like opacity:1 still apply -- just too
+   fast to perceive, and forces infinite/looping animations (ring pulses,
+   spinners) to stop after a single, effectively-instant iteration. */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:0.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:0.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
