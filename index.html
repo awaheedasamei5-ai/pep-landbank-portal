@@ -3461,13 +3461,30 @@ async function checkBirthdaysToday(){
   }catch(e){}
 }
 /* Runs from a Management session only, same reasoning as checkBirthdaysToday --
-   avoids two different sessions both texting the same client the same day.
-   payment_reminders_log dedupes per lead per month so this is safe to run on
-   every sign-in rather than needing a real cron job. */
-/* Three stages of the same nudge, each deduped independently per (lead, month, kind)
-   so a client due on the 5th gets: a heads-up on the 2nd, the day-of reminder on the
-   5th, and — if still unpaid — one overdue nudge once they're 3+ days late, never a
-   repeat of the same kind within the same month. */
+   avoids two different sessions both texting the same client the same day. The
+   real 7am pg_cron job (daily-reminders Edge Function) is the reliable path now;
+   this stays as an additional same-day convenience, sharing the exact same
+   payment_reminders_log dedup key so whichever fires first wins, zero double-send
+   risk either way. */
+/* Rebuilt: each reminder is anchored to the client's own deposit-clearing DAY OF
+   THE MONTH (deposit cleared the 15th -> payment due the 15th every month ->
+   reminder starts the 10th), using real Date arithmetic instead of the old
+   nextDueDate/monthsElapsed-derived timing, which turned out to be structurally
+   unreachable for the "due"/"overdue" cases (confirmed by hand against real
+   production data). anchorDay is read off computeMonthlySchedule's own
+   nextDueDate day-of-month component (always correct even though that date's
+   MONTH is a cycle ahead, per how monthsElapsed is derived) rather than changing
+   computeMonthlySchedule itself, which several other screens (Expected Revenue,
+   Monthly Plan Clients, buildInstallmentSchedule) still depend on unchanged.
+   Three stages, each deduped independently per (lead, month, kind): "upcoming"
+   (REMINDER_LEAD_DAYS before the due day), "due" (on the day), "defaulted"
+   (DEFAULT_GRACE_DAYS after, still unpaid -- asks them to reach out with a
+   reason, notes a possible penalty). Since every lead's own deposit date
+   differs, this naturally spreads messages across the month instead of
+   contacting everyone at once. */
+const REMINDER_LEAD_DAYS=5, DEFAULT_GRACE_DAYS=5;
+function ordinalLabel(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; switch(n%10){ case 1:return n+'st'; case 2:return n+'nd'; case 3:return n+'rd'; default:return n+'th'; } }
+function sameCalendarDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
 async function checkPaymentDueReminders(){
   if(PROFILE.role!=='manager' || DEMO_MODE) return;
   try{
@@ -3477,24 +3494,31 @@ async function checkPaymentDueReminders(){
     const sentSet=new Set((already||[]).map(r=>r.lead_id+'|'+r.kind));
     const nudges=[];
     const todayDate=new Date(today()+'T00:00:00');
+    const monthName=todayDate.toLocaleDateString('en-GB',{month:'long'});
     for(const l of (DB.leads||[])){
       if(!PLAN_MONTHS[l.paymentPlan] || isFullyPaid(l)) continue;
       const myPayments=(DB.payments||[]).filter(p=>p.leadId===l.id);
       const sched=computeMonthlySchedule(l,myPayments);
       if(!sched) continue;
-      const dueDate=new Date(sched.nextDueDate+'T00:00:00');
-      const daysDiff=Math.round((todayDate-dueDate)/86400000);
+      const anchorDay=new Date(sched.nextDueDate+'T00:00:00').getDate();
+      const y=todayDate.getFullYear(), m=todayDate.getMonth();
+      const daysInThisMonth=new Date(y,m+1,0).getDate();
+      const thisMonthDueDay=Math.min(anchorDay,daysInThisMonth);
+      const dueDateThisCycle=new Date(y,m,thisMonthDueDay);
+      const reminderDate=new Date(dueDateThisCycle); reminderDate.setDate(dueDateThisCycle.getDate()-REMINDER_LEAD_DAYS);
+      const defaultDate=new Date(dueDateThisCycle); defaultDate.setDate(dueDateThisCycle.getDate()+DEFAULT_GRACE_DAYS);
+      const dueLabel=ordinalLabel(thisMonthDueDay)+' of '+monthName;
       let kind=null,msg=null;
-      if(daysDiff===-3 && sched.expectedThisMonth>0){
+      if(sameCalendarDay(todayDate,reminderDate) && sched.expectedThisMonth>0){
         kind='upcoming';
-        msg=`Hi ${l.name}, a friendly reminder — your monthly payment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due in 3 days (${sched.nextDueDate}). - PEP Landbank`;
-      } else if(daysDiff===0){
+        msg=`Dear ${l.name}, this is a friendly reminder that your monthly installment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due on the ${dueLabel}. Kindly ensure payment is made by then to keep your account in good standing. Thank you for choosing PEP Landbank.`;
+      } else if(sameCalendarDay(todayDate,dueDateThisCycle) && sched.expectedThisMonth>0){
         kind='due';
-        msg=`Hi ${l.name}, a friendly reminder that your monthly payment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due today. - PEP Landbank`;
-      } else if(daysDiff>=3 && (sched.expectedThisMonth>0.5 || sched.arrears>0.5)){
-        kind='overdue';
+        msg=`Dear ${l.name}, your monthly installment of ${ghs(sched.monthlyInstallment)} for your plot at Royal Palm Enclave is due today. Please make your payment at your earliest convenience. We appreciate your continued commitment. - PEP Landbank`;
+      } else if(sameCalendarDay(todayDate,defaultDate) && (sched.expectedThisMonth>0.5 || sched.arrears>0.5)){
+        kind='defaulted';
         const owed=Math.round((sched.expectedThisMonth||0)+(sched.arrears||0));
-        msg=`Hi ${l.name}, your payment of ${ghs(owed)} for your plot at Royal Palm Enclave is now overdue. Please make payment as soon as possible or contact us. - PEP Landbank`;
+        msg=`Dear ${l.name}, we note that your monthly installment of ${ghs(owed)} for your plot at Royal Palm Enclave, due on the ${dueLabel}, has not yet been received. Kindly reach out to us as soon as possible with the reason for the delay so we can assist you appropriately. Please note that continued default on payments may attract additional penalty charges. We value your commitment and look forward to resolving this together. - PEP Landbank`;
       }
       if(!kind || sentSet.has(l.id+'|'+kind)) continue;
       if(l.contact){
