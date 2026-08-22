@@ -11030,7 +11030,17 @@ function bindAllocationDoneCtrls(a){
   wrap.querySelectorAll('[data-undoalloc]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Undo this allocation? Plot '+a.plotNumber+' goes back to Available and this request returns to Pending so you can pick a different plot.')) return;
     b.disabled=true; b.textContent='Undoing…';
-    try{ await vacatePlotForAllocation(a); await apiRevertAllocation(a.id);
+    try{
+      if(DEMO_MODE){ await vacatePlotForAllocation(a); await apiRevertAllocation(a.id); }
+      else{
+        // Atomic server-side RPC -- replaces the old two-step client sequence
+        // (vacate the plot, then separately revert the allocation record) with
+        // one transaction, closing the same "network dies mid-sequence leaves
+        // inconsistent state" gap already fixed for payment approval and plot
+        // confirmation.
+        const {data:r,error}=await sb.rpc('revert_allocation',{p_allocation_id:a.id}); if(error) throw error;
+        if(r.plot){ const pIdx=DB.plots.findIndex(x=>x.id===r.plot.id); if(pIdx>=0) Object.assign(DB.plots[pIdx],{status:r.plot.status,clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey}); }
+      }
       Object.assign(a,{status:'Pending',plotNumber:'',note:'',allocatedBy:''});
       toast('Allocation undone — back in Pending'); selectedAllocId=null;
       PROFILE.role==='manager'?managerView():viewAllocations();
@@ -11039,7 +11049,12 @@ function bindAllocationDoneCtrls(a){
   wrap.querySelectorAll('[data-delalloc]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this allocation request entirely? '+(a.plotNumber?('Plot '+a.plotNumber+' goes back to Available. '):'')+'This cannot be undone.')) return;
     b.disabled=true;
-    try{ await vacatePlotForAllocation(a); await apiDeleteAllocation(a.id);
+    try{
+      if(DEMO_MODE){ await vacatePlotForAllocation(a); await apiDeleteAllocation(a.id); }
+      else{
+        const {data:r,error}=await sb.rpc('delete_allocation',{p_allocation_id:a.id}); if(error) throw error;
+        if(r.plot){ const pIdx=DB.plots.findIndex(x=>x.id===r.plot.id); if(pIdx>=0) Object.assign(DB.plots[pIdx],{status:r.plot.status,clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey}); }
+      }
       DB.allocations=(DB.allocations||[]).filter(x=>x.id!==a.id);
       toast('Allocation request deleted'); selectedAllocId=null;
       PROFILE.role==='manager'?managerView():viewAllocations();
@@ -11066,12 +11081,26 @@ function openEditAllocatedPlotModal(a){
     const btn=document.getElementById('saveEditAlloc'); btn.disabled=true; btn.textContent='Saving…';
     try{
       const oldPlotNumber=a.plotNumber;
-      await vacatePlotForAllocation(a);
-      await apiResolveAllocation(a.id,newPlot,a.note||'');
-      if(canManagePlots()){
-        if(conflict){ await apiUpdatePlot(conflict.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); Object.assign(conflict,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); }
-        else{ const newPlotRec=await apiInsertPlot({site:PLOT_SITE,plotNumber:newPlot,plotType:'Full Plot',status:'Allocated',
-          price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Reassigned from Plot '+(oldPlotNumber||'—')}); DB.plots.unshift(newPlotRec); }
+      if(DEMO_MODE){
+        await vacatePlotForAllocation(a);
+        await apiResolveAllocation(a.id,newPlot,a.note||'');
+        if(canManagePlots()){
+          if(conflict){ await apiUpdatePlot(conflict.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); Object.assign(conflict,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); }
+          else{ const newPlotRec=await apiInsertPlot({site:PLOT_SITE,plotNumber:newPlot,plotType:'Full Plot',status:'Allocated',
+            price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Reassigned from Plot '+(oldPlotNumber||'—')}); DB.plots.unshift(newPlotRec); }
+        }
+      } else {
+        // Atomic server-side RPC -- replaces the old 3-step client sequence
+        // (vacate old plot, update allocation record, insert/update new plot)
+        // with one transaction, including a server-side re-check that the new
+        // plot isn't already taken (closing the same race confirm_allocation
+        // already closed for the initial allocation).
+        const {data:r,error}=await sb.rpc('edit_allocated_plot',{p_allocation_id:a.id,p_new_plot_number:newPlot}); if(error) throw error;
+        if(oldPlotNumber){ const oldIdx=DB.plots.findIndex(p=>p.plotNumber.toLowerCase()===oldPlotNumber.toLowerCase()); if(oldIdx>=0) Object.assign(DB.plots[oldIdx],{status:'Available',clientName:'',clientContact:'',agentKey:''}); }
+        const plotObj={id:r.plot.id,site:r.plot.site,plotNumber:r.plot.plotNumber,plotType:r.plot.plotType,status:r.plot.status,price:r.plot.price,
+          clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey,notes:r.plot.notes,updatedAt:r.plot.updatedAt};
+        const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
+        if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
       }
       Object.assign(a,{plotNumber:newPlot});
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocation updated','Your allocated plot is now '+newPlot+'. Log in to view the details.').catch(()=>{}); }
