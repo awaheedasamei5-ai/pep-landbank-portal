@@ -1561,6 +1561,7 @@ function openAvatarCropper(file){
             <button id="cropUse" class="btn primary">Use photo</button>
           </div>`;
         document.body.appendChild(ov);
+  makeModalAccessible(ov);
         const vp=document.getElementById('cropViewport'), cImg=document.getElementById('cropImg'), zoomInp=document.getElementById('cropZoom');
         const iw=img.naturalWidth, ih=img.naturalHeight;
         const baseScale=Math.max(VP/iw,VP/ih);
@@ -3174,6 +3175,7 @@ async function openClientNotifications(){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeClientNotif').onclick=()=>ov.remove();
   const unreadIds=rows.filter(n=>!n.read).map(n=>n.id);
@@ -3992,6 +3994,7 @@ function openAttendanceDetailModal(rec,staffName){
     <button class="btn danger" id="att_deleteRec">Delete record</button></div>`:''}
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAttDetail').onclick=()=>ov.remove();
   if(isMgr){
@@ -4031,6 +4034,7 @@ function promptLateReason(){
       <div class="formactions"><button class="btn primary" id="lr_save" style="width:100%">Continue sign-in</button></div>
     </div>`;
     document.body.appendChild(ov);
+  makeModalAccessible(ov);
     const finish=v=>{ ov.remove(); resolve(v); };
     ov.addEventListener('click',e=>{ if(e.target===ov) finish(null); });
     document.getElementById('lr_close').onclick=()=>finish(null);
@@ -4057,6 +4061,7 @@ function promptOffSiteReason(kind){
       <div class="formactions"><button class="btn primary" id="osr_save" style="width:100%">Continue sign-${kind}</button></div>
     </div>`;
     document.body.appendChild(ov);
+  makeModalAccessible(ov);
     const finish=v=>{ ov.remove(); resolve(v); };
     ov.addEventListener('click',e=>{ if(e.target===ov) finish(null); });
     document.getElementById('osr_close').onclick=()=>finish(null);
@@ -4085,6 +4090,7 @@ function captureSelfie(){
       <div class="formactions"><button class="btn primary" id="sf_save" style="width:100%" disabled>Continue sign-in</button></div>
     </div>`;
     document.body.appendChild(ov);
+  makeModalAccessible(ov);
     let photoB64=null;
     const finish=v=>{ ov.remove(); resolve(v); };
     ov.addEventListener('click',e=>{ if(e.target===ov) finish(null); });
@@ -5014,6 +5020,7 @@ function openAddClientDbLead(){
     <div class="formactions"><button class="btn primary" id="saveCdbLead" style="width:100%">Save client</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAddCdb').onclick=()=>ov.remove();
   document.getElementById('saveCdbLead').onclick=async()=>{
@@ -5193,6 +5200,7 @@ async function openLeadSourceModal(lead,onSaved){
     <div class="formactions"><button class="btn primary" id="ls_save" style="width:100%">Save</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLeadSource').onclick=()=>ov.remove();
   const refreshBannerOptions=(selectedBannerId)=>{
@@ -5253,6 +5261,7 @@ function openAddCompanyLeadModal(){
     <div class="formactions"><button class="btn primary" id="saveCompanyLead" style="width:100%">Save lead</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAddCompanyLead').onclick=()=>ov.remove();
   bindLeadSourceFieldsCtrls('cl',()=>(COMPANY_LEADS_LIST.length?COMPANY_LEADS_LIST:[]).concat(CLIENTDB_LOADED?CLIENTDB_LIST:[]).map(l=>({id:l.id,name:l.name,contact:l.contact})));
@@ -5285,6 +5294,7 @@ function openAssignCompanyLeadModal(lead){
     <div class="formactions"><button class="btn primary" id="saveAssignLead" style="width:100%">Assign</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAssignLead').onclick=()=>ov.remove();
   document.getElementById('saveAssignLead').onclick=async()=>{
@@ -7502,6 +7512,7 @@ function openFilePreview(dataUrl,filename,kind){
     </div>
     <div style="flex:1;overflow:auto" id="filePreviewBody">${body}</div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   /* This overlay lives outside #view, so a route change underneath it (including a
      swipe-back gesture, which fires a real popstate) never removes it on its own --
      it used to just sit there stuck while the page underneath silently changed, and
@@ -7622,6 +7633,7 @@ async function openAnnounceModal(){
     <div id="announceCardsWrap">${active.map(a=>renderAnnounceCard(a)).join('')}</div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAnnounceModal').onclick=()=>ov.remove();
   active.forEach(a=>loadAndRenderComments(a.id));
@@ -7836,6 +7848,7 @@ function viewAgentOfMonthDetail(agentKey){
     :'<div class="mini" style="text-align:center;padding:6px 0">Individual client payments stay private to the agent and Management — only totals are shared here.</div>'}
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAomModal').onclick=()=>ov.remove();
 }
@@ -7852,6 +7865,7 @@ function openSingleAnnounceModal(id){
     <div id="announceCardsWrap">${renderAnnounceCard(a)}</div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeSingleAnnounce').onclick=()=>ov.remove();
   loadAndRenderComments(a.id);
@@ -8070,6 +8084,7 @@ async function openTargetSelector(){
     <div class="formactions" style="margin-top:14px"><button class="btn primary" id="saveTargetSel" style="width:100%">Save selections</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeTargetSel').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-selchk]').forEach(chk=>chk.onchange=()=>{
@@ -8451,6 +8466,7 @@ function openPipelineBackupModal(){
     <div class="formactions"><button class="btn primary" id="doBackup" style="width:100%">Download backup</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeBackupModal').onclick=()=>ov.remove();
   const selAllBtn=document.getElementById('backupSelectAll');
@@ -8497,6 +8513,7 @@ function renderRestorePicker(data){
     <div class="formactions"><button class="btn primary" id="doRestore" style="width:100%">Restore selected</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeRestoreModal').onclick=()=>ov.remove();
   document.getElementById('restoreSelectAll').onclick=()=>{
@@ -9401,6 +9418,7 @@ function openChatMenu(otherKey){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeChatMenu').onclick=()=>ov.remove();
   document.getElementById('clearChatBtn').onclick=async()=>{
@@ -9453,6 +9471,7 @@ function openForwardPicker(msgId){
     <div class="convList">${others.map(s=>`<button class="convRow" data-fwdto="${esc(s.key)}"><div class="convAvatar">${avatarHtml(s.key,s.name)}</div><div style="text-align:left;font-weight:700">${esc(s.name)}</div></button>`).join('')}</div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeFwd').onclick=()=>ov.remove();
   ov.querySelectorAll('[data-fwdto]').forEach(b=>b.onclick=async()=>{
@@ -9571,6 +9590,7 @@ function openAttachMenu(otherKey){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAttachMenu').onclick=()=>ov.remove();
   document.getElementById('attachPhotoBtn').onclick=()=>{ ov.remove(); document.getElementById('chatFileInput').click(); };
@@ -9600,6 +9620,7 @@ function openEventComposer(otherKey){
     <div class="formactions"><button class="btn primary" id="sendEventBtn" style="width:100%">Send</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeEventComposer').onclick=()=>ov.remove();
   document.getElementById('sendEventBtn').onclick=async()=>{
@@ -9926,6 +9947,7 @@ function openTodoEditModal(t){
     <div class="formactions"><button class="btn primary" id="tde_save" style="width:100%">Save changes</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('tde_close').onclick=()=>ov.remove();
   document.getElementById('tde_save').onclick=async()=>{
@@ -10002,6 +10024,7 @@ function openTodoNewModal(){
     <div class="formactions"><button class="btn primary" id="td_save" style="width:100%">Save to-do</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeTodoNew').onclick=()=>ov.remove();
   document.getElementById('td_repeat').onchange=e=>{ document.getElementById('td_repeatUntilWrap').classList.toggle('hidden',e.target.value==='Does not repeat'); };
@@ -10065,6 +10088,7 @@ function openTodoRescheduleModal(t){
     <div class="formactions"><button class="btn primary" id="tr_save" style="width:100%">Reschedule</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeTodoResched').onclick=()=>ov.remove();
   const checkTrConflict=debounce(async()=>{
@@ -10097,6 +10121,7 @@ function openTodoReportModal(){
     <div class="formactions"><button class="btn primary" id="tp_go" style="width:100%">Generate PDF</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeTodoReport').onclick=()=>ov.remove();
   document.getElementById('tp_go').onclick=async()=>{
@@ -10616,6 +10641,7 @@ function openEscalateItemModal(item,currentAssignee,onEscalated){
     <div class="formactions"><button class="btn primary" id="doEscalate" style="width:100%">Escalate</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   const checkEscConflict=async()=>{
     const toKey=val('esc_to'); const toStaff=STAFF_LIST.find(s=>s.key===toKey);
@@ -10852,6 +10878,7 @@ function openNewTaskModal(){
     <div class="formactions"><button class="btn primary" id="saveNewTask" style="width:100%">Assign task</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeNewTask').onclick=()=>ov.remove();
   // Lead options built lazily from every agent's leads -- a plain datalist
@@ -11055,6 +11082,7 @@ function openFlagAllocationModal(a){
     <div class="formactions"><button class="btn ghost" id="cancelFlagAlloc">Cancel</button><button class="btn primary" id="saveFlagAlloc">Send &amp; flag</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('cancelFlagAlloc').onclick=()=>ov.remove();
   document.getElementById('saveFlagAlloc').onclick=async()=>{
@@ -11171,6 +11199,7 @@ function openEditAllocatedPlotModal(a){
     <div class="formactions"><button class="btn primary" id="saveEditAlloc" style="width:100%">Save change</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('ea_plot').value=a.plotNumber||'';
   document.getElementById('saveEditAlloc').onclick=async()=>{
@@ -11494,6 +11523,7 @@ function openContractRequestModal(lead){
     <div class="formactions"><button class="btn primary" id="cr_send" style="width:100%">Send request</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeContractReq').onclick=()=>ov.remove();
   document.getElementById('cr_send').onclick=async()=>{
@@ -11894,6 +11924,7 @@ function openEditPaymentModal(p,lead){
     <div class="formactions"><button class="btn primary" id="saveEditPayment" style="width:100%">Save correction</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeEditPayment').onclick=()=>ov.remove();
   document.getElementById('saveEditPayment').onclick=async()=>{
@@ -11959,6 +11990,7 @@ function openLogMonthPayment(lead,slotKey,expected){
     <div class="formactions"><button class="btn primary" id="saveLogMonth" style="width:100%">Save payment</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLogMonth').onclick=()=>ov.remove();
   document.getElementById('saveLogMonth').onclick=async()=>{
@@ -12220,6 +12252,7 @@ function openLogPayEditModal(p,lead){
     <div class="formactions"><button class="btn primary" id="saveLpEdit" style="width:100%">Save correction</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLpEdit').onclick=()=>ov.remove();
   document.getElementById('saveLpEdit').onclick=async()=>{
@@ -13007,6 +13040,7 @@ function showClientSuccessModal(title,thanksMsg){
     <button class="btn primary" id="closeClientSuccess" style="width:100%">Done</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   return new Promise(resolve=>{
     const close=()=>{ ov.remove(); resolve(); };
     ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
@@ -13407,6 +13441,7 @@ function openQuotationRequest(){
     <div class="formactions"><button class="btn primary" id="genQuoteBtn" style="width:100%">Generate quotation PDF</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeQuoteReq').onclick=()=>ov.remove();
   // Deposit % and Deposit Amount are two views of the same number -- editing
@@ -13892,6 +13927,7 @@ function openClientReferralModal(){
     <div class="formactions"><button class="btn primary" id="cref_save" style="width:100%">Send referral</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeCrefModal').onclick=()=>ov.remove();
   document.getElementById('cref_save').onclick=async()=>{
@@ -13930,6 +13966,7 @@ function offerShareReferral(name,contact,location,plots){
     <button class="btn ghost" id="closeShareRef2" style="width:100%;margin-top:14px">Done</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeShareRef').onclick=()=>ov.remove();
   document.getElementById('closeShareRef2').onclick=()=>ov.remove();
@@ -14011,6 +14048,7 @@ function openClientPlotRequestModal(leads){
     <div class="formactions"><button class="btn gold" id="submitPlotReq" style="width:100%">Send request</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closePlotReq').onclick=()=>ov.remove();
   document.getElementById('submitPlotReq').onclick=async()=>{
@@ -14711,6 +14749,7 @@ function promptForLeadKyc(lead){
       <div class="formactions"><button class="btn ghost" id="pk_skip" style="flex:1">Skip for now</button><button class="btn primary" id="pk_save" style="flex:1">Save &amp; continue</button></div>
     </div>`;
     document.body.appendChild(ov);
+  makeModalAccessible(ov);
     const finish=v=>{ ov.remove(); resolve(v); };
     ov.addEventListener('click',e=>{ if(e.target===ov) finish(null); });
     document.getElementById('pk_close').onclick=()=>finish(null);
@@ -15043,6 +15082,7 @@ function openContractNewClientModal(){
     <div class="formactions"><button class="btn primary" id="ca_saveNewClient" style="width:100%">Save &amp; download contract</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('ca_closeNewClient').onclick=()=>ov.remove();
   document.getElementById('ca_saveNewClient').onclick=async()=>{
@@ -15244,6 +15284,7 @@ async function offerSendReceipt(lead,payment){
     <button class="btn ghost" id="closeSendReceipt2" style="width:100%;margin-top:14px">Not now</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeSendReceipt').onclick=()=>ov.remove();
   document.getElementById('closeSendReceipt2').onclick=()=>ov.remove();
@@ -16079,6 +16120,7 @@ function openAchievementUnlockModal(def){
     <button class="btn primary" id="closeAchUnlock" style="width:100%;margin-top:18px">Nice!</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAchUnlock').onclick=()=>ov.remove();
 }
@@ -16100,6 +16142,7 @@ function openLeaderboardWeightsModal(){
     <div class="formactions"><button class="btn primary" id="lbw_save" style="width:100%">Save weights</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLbWeights').onclick=()=>ov.remove();
   document.getElementById('lbw_save').onclick=async()=>{
@@ -16622,6 +16665,7 @@ function openImportPreviewModal(file,opts,scan){
     <div class="formactions"><button class="btn primary" id="ip_confirm" style="width:100%">${scan.warnings.length?'Import anyway':'Import now'}</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeImportPreview').onclick=()=>ov.remove();
   document.getElementById('ip_confirm').onclick=async()=>{
@@ -17367,6 +17411,7 @@ function openReferralEditModal(r){
     <div class="formactions"><button class="btn primary" id="refe_save" style="width:100%">Save changes</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('refe_close').onclick=()=>ov.remove();
   document.getElementById('refe_save').onclick=async()=>{
@@ -17438,6 +17483,7 @@ function openReferralClearModal(r){
     <div class="formactions"><button class="btn primary" id="refc_save" style="width:100%" disabled>Clear &amp; award points</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeRefClear').onclick=()=>ov.remove();
   let pickedLeadId=r.referredLeadId||null, pickedLead=null;
@@ -17564,6 +17610,7 @@ function openAchievementDefModal(def){
     <div class="formactions"><button class="btn primary" id="ach_save" style="width:100%">${def?'Save changes':'Create achievement'}</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('ach_close').onclick=()=>ov.remove();
   document.getElementById('ach_save').onclick=async()=>{
@@ -17788,6 +17835,7 @@ function openRestoreConfirmModal(backupId,whenLabel){
     <div class="formactions"><button class="btn primary" id="rc_go" style="width:100%;background:#B91C1C" disabled>Restore now</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeRestoreConfirm').onclick=()=>ov.remove();
   const input=document.getElementById('rc_confirm'), goBtn=document.getElementById('rc_go');
@@ -18098,6 +18146,7 @@ function openNoteModal(note){
     <div class="formactions"><button class="btn primary" id="nt_save" style="width:100%">Save note</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeNoteModal').onclick=()=>ov.remove();
   document.getElementById('nt_save').onclick=async()=>{
@@ -18126,6 +18175,7 @@ function openNoteSendModal(note){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeNoteSend').onclick=()=>ov.remove();
   document.getElementById('nt_sendWa').onclick=()=>{ window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank'); ov.remove(); };
@@ -18536,6 +18586,7 @@ function openLogRecurringModal(r){
     <div class="formactions"><button class="btn primary" id="lr_save" style="width:100%">Log expense</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   let receiptPending=null;
   document.getElementById('lr_receipt').onchange=async()=>{
@@ -18678,6 +18729,7 @@ function openLogSpendModal(f){
     <div class="formactions"><button class="btn primary" id="ls_save" style="width:100%">Log spend</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   let receiptPending=null;
   document.getElementById('ls_receipt').onchange=async()=>{
@@ -19875,6 +19927,7 @@ function openLeaveApplyModal(){
     <div class="formactions"><button class="btn primary" id="lvSendBtn" style="width:100%">Save to my leave plan</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLeaveApply').onclick=()=>ov.remove();
   document.getElementById('lvSendBtn').onclick=async()=>{
@@ -19921,6 +19974,7 @@ function openEmergencyLeaveModal(){
     <div class="formactions"><button class="btn primary" id="em_send" style="width:100%">Send to Management</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeEmLeave').onclick=()=>ov.remove();
   let deduct=true;
@@ -19967,6 +20021,7 @@ function offerSendLeaveLetter(rec){
     <button class="btn ghost" id="closeSendLeave2" style="width:100%;margin-top:14px">Done</button>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeSendLeave').onclick=()=>ov.remove();
   document.getElementById('closeSendLeave2').onclick=()=>ov.remove();
@@ -19988,6 +20043,7 @@ function previewLeaveLetter(id){
     <div class="formactions" style="margin-top:14px"><button class="btn ghost" id="lvPreviewDownload" style="width:100%">⬇ Download PDF</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLeavePreview').onclick=()=>ov.remove();
   document.getElementById('lvPreviewDownload').onclick=()=>downloadLeaveLetter(id);
@@ -20040,6 +20096,7 @@ function openLeaveReviewModal(id){
     <div class="formactions" style="margin-top:14px"><button class="btn ghost" id="lvReviewDownload" style="width:100%">⬇ Download PDF</button></div>`}
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeLeaveReview').onclick=()=>ov.remove();
   if(isPending){
@@ -20443,6 +20500,7 @@ function openMemoView(id){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeMemoView').onclick=()=>{ ov.remove(); paintMemoApp(); };
   document.getElementById('memoDownloadBtn').onclick=()=>{ const doc=buildMemoPDF(m); if(doc) doc.save('Memo_'+m.subject.replace(/\s+/g,'_')+'.pdf'); };
@@ -20464,6 +20522,7 @@ function openMemoEscalatePicker(m){
     <div class="formactions"><button class="btn primary" id="escSendBtn" style="width:100%">Escalate</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeEscalatePick').onclick=()=>ov.remove();
   document.getElementById('escSendBtn').onclick=()=>{
@@ -20668,6 +20727,7 @@ function openBannerModal(){
     <div class="formactions"><button class="btn primary" id="bnSaveBtn" style="width:100%">Add entry</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeBannerModal').onclick=()=>ov.remove();
   let imageB64=null;
@@ -20995,6 +21055,7 @@ function openCommissionDisputeModal(monthKey,total){
     <div class="formactions"><button class="btn primary" id="sendCommDispute" style="width:100%">Send to Management</button></div>
   </div>`;
   document.body.appendChild(ov);
+  makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('sendCommDispute').onclick=async()=>{
     const note=val('cd_note').trim(); if(!note){ toast('Describe the concern first'); return; }
