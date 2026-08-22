@@ -420,6 +420,27 @@ a{color:var(--green2)}
 .kpi-ic.teal{background:linear-gradient(150deg,#4FBFA6,#1E7A6E)}
 .kpi-ic.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .kpi-ic.grey{background:linear-gradient(150deg,#94A3B8,#64748B)}
+/* Premium UI rebuild, Phase 2 (Home dashboards) -- compact period-over-period
+   trend badge, additive/optional (kpi()'s existing 4-arg call sites are
+   unaffected; only sites that explicitly pass a 5th `delta` argument show
+   this). Direction communicated by icon+color together, never color alone. */
+.kpi-delta{position:absolute;top:14px;right:14px;display:flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;
+  padding:2px 6px 2px 5px;border-radius:100px;z-index:1}
+.kpi-delta.up{background:rgba(22,163,74,.12);color:var(--ok)}
+.kpi-delta.down{background:rgba(180,71,47,.12);color:var(--danger)}
+/* Dashboard-first two-column shell: DOM order is unchanged from before this
+   rebuild (attention/side content first, analytics/main content second) --
+   .dashGrid stays a plain block below 1024px, so mobile stacks in that exact
+   same order it always has. At/above 1024px it becomes a real 2-column grid
+   and `order` repositions .dashMain to the wide left column without touching
+   DOM order, so nothing here can silently change what mobile users see. */
+.dashGrid{display:block}
+.dashGrid>.dashMain,.dashGrid>.dashSide{margin-bottom:var(--sp-5)}
+@media(min-width:1024px){
+  .dashGrid{display:grid;grid-template-columns:1fr 360px;gap:var(--sp-5);align-items:start}
+  .dashGrid>.dashMain{order:1;margin-bottom:0}
+  .dashGrid>.dashSide{order:2;margin-bottom:0;position:sticky;top:20px}
+}
 .plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px}
 /* Team chat */
 .convList{display:flex;flex-direction:column;gap:4px}
@@ -7397,8 +7418,9 @@ const KPI_STYLE={
  'Available':{icon:'check',color:'green'}, 'Reserved':{icon:'clock',color:'amber'}, 'Sold':{icon:'coins',color:'lime'},
  'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'}
 };
-function kpi(k,v,cls='',routeTo=''){ const st=KPI_STYLE[k]||{icon:'grid',color:'blue'};
-  return `<div class="kpi ${cls}${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}><span class="kpi-ic ${st.color}">${kpiIc[st.icon]}</span><div class="k">${k}</div><div class="v">${v}</div></div>`;}
+function kpi(k,v,cls='',routeTo='',delta){ const st=KPI_STYLE[k]||{icon:'grid',color:'blue'};
+  const deltaHtml=delta==null?'':`<div class="kpi-delta ${delta>=0?'up':'down'}" title="vs last month"><svg viewBox="0 0 24 24" width="10" height="10" fill="none"><path d="M12 ${delta>=0?'19V5M5 12l7-7 7 7':'5v14M5 12l7 7 7-7'}" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>${Math.abs(Math.round(delta))}%</div>`;
+  return `<div class="kpi ${cls}${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}><span class="kpi-ic ${st.color}">${kpiIc[st.icon]}</span><div class="k">${k}</div><div class="v">${v}</div>${deltaHtml}</div>`;}
 
 // The exact same "current month back 5" window was duplicated in agentDetailView
 // and mgrLeaderboard -- one shared helper so every "last 6 months" chart in the
@@ -8593,7 +8615,7 @@ function renderCompanionWidget(nudges,checklist,opts){
     <div class="companionInner">
       <div class="companionHead" id="companionToggle">
         <span class="companionOrb">${ic.spark}</span>
-        <div class="companionTitle"><div class="t">✨ Companion</div><div class="s">${esc(opts.subtitle||'Proactive nudges, tailored to you')}</div></div>
+        <div class="companionTitle"><div class="t">✨ ${esc(opts.title||'Companion')}</div><div class="s">${esc(opts.subtitle||'Proactive nudges, tailored to you')}</div></div>
         <span class="companionCaret"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </div>
       <div class="companionBody"><div class="companionBodyIn">
@@ -8666,6 +8688,14 @@ function agentHome(){ const k=kpisOf(DB.leads);
   const thisMonth=today().slice(0,7);
   const wonAll=DB.leads.filter(l=>isFullyPaid(l));
   const monthCollected=DB.payments.filter(p=>(p.date||'').slice(0,7)===thisMonth).reduce((s,p)=>s+num(p.amount),0);
+  // Delta only ever attaches to a KPI whose own value IS the period being
+  // compared (Monthly collected genuinely is this month's figure) -- not
+  // applied to cumulative totals like Active leads/Outstanding, where a
+  // "monthly change" would describe a different sub-metric than the number
+  // actually shown and risk reading as a wrong/confusing trend.
+  const lastMonthKey=(()=>{ const d=new Date(today()+'T00:00:00'); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); })();
+  const lastMonthCollected=DB.payments.filter(p=>(p.date||'').slice(0,7)===lastMonthKey).reduce((s,p)=>s+num(p.amount),0);
+  const monthCollectedDelta=lastMonthCollected>0?(monthCollected-lastMonthCollected)/lastMonthCollected*100:null;
   const target=num((CONFIG.targets||{})[PROFILE.key])||0;
   const myCommission=computeMyPersonalCommission(thisMonth);
   V.innerHTML=`
@@ -8680,12 +8710,18 @@ function agentHome(){ const k=kpisOf(DB.leads);
       <div class="heroChip" id="heroQuoteChip"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
     </div>
   </div>
-  ${renderBannerSlideshow()}
-  ${renderAllocationBanners()}
-  ${renderComplaintAssignBanners()}
-  ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{subtitle:'Your next best actions, auto-generated'})}
-  <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'gold','monthlyclosed')}</div>
-  <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
+  <div class="dashGrid">
+    <div class="dashSide">
+      ${renderBannerSlideshow()}
+      ${renderAllocationBanners()}
+      ${renderComplaintAssignBanners()}
+      ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
+    </div>
+    <div class="dashMain">
+      <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'gold','monthlyclosed',monthCollectedDelta)}</div>
+      <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
+    </div>
+  </div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
   <div class="footer-note" style="padding-top:2px">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
@@ -16524,20 +16560,26 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       <div class="heroChip" id="heroQuoteChipMgr"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
     </div>
   </div>
-  ${renderBannerSlideshow()}
-  ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
-  <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
-  <div class="kpis">${kpi('Total leads',tot.leads,'','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
+  <div class="dashGrid">
+    <div class="dashSide">
+      ${renderBannerSlideshow()}
+      ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
+    </div>
+    <div class="dashMain">
+      <div class="kpis">${kpi('Total leads',tot.leads,'','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
+      <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
 
-  <div class="sectitle"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
-  <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
+      <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
+      <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
 
-  <div class="sectitle"><h3>By agent</h3><span class="cnt">tap an agent for their full client breakdown</span></div><div class="formwrap" style="padding:6px 15px">${rows||'<div class="empty">No agent profiles yet</div>'}</div>
+      <div class="sectitle"><h3>By agent</h3><span class="cnt">tap an agent for their full client breakdown</span></div><div class="formwrap" style="padding:6px 15px">${rows||'<div class="empty">No agent profiles yet</div>'}</div>
 
-  <div class="sectitle"><h3>Pipeline by stage</h3><span class="cnt">${allLeads.length} leads company-wide · tap a stage</span></div>
-  <div class="formwrap">${allLeads.length?funnel:emptyState(ic.grid,'No leads yet','')}</div>
+      <div class="sectitle"><h3>Pipeline by stage</h3><span class="cnt">${allLeads.length} leads company-wide · tap a stage</span></div>
+      <div class="formwrap">${allLeads.length?funnel:emptyState(ic.grid,'No leads yet','')}</div>
 
-  <p class="mini" style="margin:8px 2px 0">Enquiry sources moved to the Enquiries app · outstanding balances now live inside Monthly Plan clients, next to what's actually expected.</p>`;
+      <p class="mini" style="margin:8px 2px 0">Enquiry sources moved to the Enquiries app · outstanding balances now live inside Monthly Plan clients, next to what's actually expected.</p>
+    </div>
+  </div>`;
 }
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
