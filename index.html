@@ -1293,6 +1293,36 @@ urlToDataUri(TRULANDER_LOGO_SRC).then(u=>TRULANDER_LOGO_DATA_URI=u).catch(()=>{}
 /* ================= client / mode state ================= */
 let sb=null, LIVE_MODE=false, DEMO_MODE=true, USER=null, PROFILE=null, pickStaff=null, ddOpen=false;
 let DB={leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],pendingPayments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[],leaveRequests:[],memos:[],banners:[],contracts:[],contractRequests:[],badgeCounts:{memo:0,contractRequest:0,approvals:0,sitevisit:0,complaint:0,plotrequest:0}};
+
+/* ================= audit / observability =================
+   A single audit_events log (server table, Management-only RLS) covers three
+   things: (1) sensitive audit actions -- see logAudit(), called from a narrow,
+   deliberately-chosen set of call sites, not a blanket sweep; (2) automated
+   data-integrity findings -- written server-side by the scheduled-integrity-check
+   cron job, nothing to do here; (3) a lightweight safety net for uncaught JS
+   errors, since today nothing anywhere catches these and they simply vanish.
+   Never lets a logging failure break the thing it's trying to observe. */
+async function logAudit(eventType,severity,summary,detail,entityType,entityId){
+  if(DEMO_MODE||!sb) return;
+  try{ await sb.rpc('record_audit_event',{p_category:'audit',p_event_type:eventType,p_severity:severity||'info',p_entity_type:entityType||null,p_entity_id:entityId||null,p_summary:summary,p_detail:detail||null}); }
+  catch(e){ /* auditing must never break the calling flow */ }
+}
+const CLIENT_ERROR_DEDUPE=new Map();
+async function logClientError(message,stack,context){
+  if(DEMO_MODE||!sb) return;
+  try{
+    const key=String(message).slice(0,200);
+    const now=Date.now();
+    const last=CLIENT_ERROR_DEDUPE.get(key);
+    if(last && now-last<60000) return; // same error repeating fast (e.g. a render loop) -- don't flood the log
+    CLIENT_ERROR_DEDUPE.set(key,now);
+    await sb.rpc('record_audit_event',{p_category:'error',p_event_type:'error.uncaught',p_severity:'warning',p_entity_type:null,p_entity_id:null,
+      p_summary:String(message||'Unknown error').slice(0,500),
+      p_detail:{stack:String(stack||'').slice(0,4000),context:context||null,url:String(location.href||''),role:(typeof PROFILE!=='undefined'&&PROFILE)?PROFILE.role:null}});
+  }catch(e){ /* an error handler must never itself throw */ }
+}
+window.addEventListener('error',(ev)=>{ try{ logClientError(ev.message,ev.error&&ev.error.stack,'window.onerror'); }catch(e){} });
+window.addEventListener('unhandledrejection',(ev)=>{ try{ const r=ev.reason; logClientError((r&&r.message)||String(r),r&&r.stack,'unhandledrejection'); }catch(e){} });
 /* ---- display preferences (font size / family), applied via CSS custom
    properties so they take effect instantly with no per-page rework ---- */
 const DISPLAY_FONT_FAMILIES={
@@ -3415,6 +3445,17 @@ async function apiSaveConfig(patch){
     referral_points_per_referral:num(CONFIG.referralPointsPerReferral)||50,
     referral_rewards:CONFIG.referralRewards||defaultConfig().referralRewards};
   const {error}=await sb.from('app_config').upsert(row); if(error) throw error;
+  // Only audit-log the money/incentive-adjacent fields -- most Company Settings
+  // saves (address, quote text, attendance cutoff) are routine and would just
+  // bury the genuinely sensitive changes in noise. Pricing itself already has
+  // its own dedicated pricing_history trail (see apiLogPricingChange) so it's
+  // deliberately not duplicated here.
+  const sensitiveKeys=['commissionPct','commissionFullCap','commissionHalfCap','commissionPoolPerPlot','int3','int6','int9','int12','referralPointsPerReferral','referralRewards','leaderboardWeights'];
+  const changedSensitive=Object.keys(patch||{}).filter(k=>sensitiveKeys.includes(k));
+  if(changedSensitive.length){
+    const changes={}; changedSensitive.forEach(k=>changes[k]=patch[k]);
+    logAudit('config.changed','warning',changedSensitive.join(', ')+' updated by '+(PROFILE?PROFILE.name:'someone'),changes,'app_config','1');
+  }
 }
 /* ---- pricing change audit trail --------------------------------------------
    Existing leads already store their OWN unitPrice/discount/netTotal/grandTotal
@@ -15154,6 +15195,11 @@ async function managerView(){
     catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load System Health',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='System'){ body.innerHTML=mgrSystemHtml(); bindSystemCtrls(); }
+  else if(mgrTab==='Audit Log'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ AUDIT_LOG_LIST=await withLoadTimeout(apiLoadAuditEvents(),15000,'Audit Log'); AUDIT_LOG_LOADED=true; body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Audit Log',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
   else if(mgrTab==='Referrals'){ if(!REFERRALS_LOADED){ try{ REFERRALS_LIST=await withLoadTimeout(apiLoadReferrals(),15000,'Referrals'); REFERRALS_LOADED=true; }catch(e){} } body.innerHTML=mgrReferralsHtml(); bindReferralsCtrls(); }
   else if(mgrTab==='Referral Settings'){ body.innerHTML=mgrReferralSettingsHtml(); bindReferralSettingsCtrls(); }
   else if(mgrTab==='Achievement Settings'){
@@ -16394,7 +16440,8 @@ const SETTINGS_APPS=[
   {key:'Achievement Settings',fic:'leaderboard',label:'Achievement Settings',section:'settingshub'},
   {key:'Backup & Restore',fic:'backup',label:'Backup & Restore',section:'settingshub'},
   {key:'System Health',fic:'pulse',label:'System Health',section:'settingshub'},
-  {key:'System',fic:'serverconfig',label:'System',section:'settingshub'}
+  {key:'System',fic:'serverconfig',label:'System',section:'settingshub'},
+  {key:'Audit Log',fic:'clipboard',label:'Audit Log',section:'settingshub'}
 ];
 function mgrSettingsHubHtml(){
   const byKey=k=>SETTINGS_APPS.find(a=>a.key===k);
@@ -16402,7 +16449,7 @@ function mgrSettingsHubHtml(){
     {title:'Pricing & money',items:['Quotation Settings','Commission Settings','Pricing & Targets'].map(byKey)},
     {title:'Team & company',items:['Staff Settings','Company Settings','Achievement Settings'].map(byKey)},
     {title:'Referrals',items:['Referral Settings'].map(byKey)},
-    {title:'System',items:['Backup & Restore','System Health','System'].map(byKey)}
+    {title:'System',items:['Backup & Restore','System Health','System','Audit Log'].map(byKey)}
   ];
   return `<div id="mgrSettingsGrid">${vaultGridHtml(groups,{hubId:'settingsHub'})}</div>`;
 }
@@ -17297,6 +17344,46 @@ function bindSystemHealthCtrls(){
     const container=document.getElementById('systemHealthBody');
     if(container){ container.outerHTML=systemHealthHtml(health); bindSystemHealthCtrls(); }
   };
+}
+/* Audit Log -- Management-only browsable view of audit_events: sensitive
+   actions (payment edit/delete, backup restore, commission finalized, sensitive
+   config changes), daily automated data-integrity findings, and a lightweight
+   uncaught-error safety net. See logAudit()/logClientError() near the top of
+   the file for what writes into it, and scheduled-integrity-check (edge
+   function) for the daily integrity row. RLS restricts SELECT to managers. */
+let AUDIT_LOG_LOADED=false, AUDIT_LOG_LIST=[];
+let AUDIT_LOG_FILTER={category:'all',criticalOnly:false};
+async function apiLoadAuditEvents(){
+  if(DEMO_MODE) return [];
+  const {data,error}=await sb.from('audit_events').select('*').order('created_at',{ascending:false}).limit(200);
+  if(error) throw error;
+  return (data||[]).map(r=>({id:r.id,category:r.category,eventType:r.event_type,severity:r.severity,actorKey:r.actor_key,actorName:r.actor_name,entityType:r.entity_type,entityId:r.entity_id,summary:r.summary,detail:r.detail,source:r.source,createdAt:r.created_at}));
+}
+function auditCategoryLabel(c){ return {audit:'Audit',integrity:'Integrity',error:'Error',cron:'Cron'}[c]||c; }
+function auditSeverityTag(sev){
+  if(sev==='critical') return '<span class="tag dgr">Critical</span>';
+  if(sev==='warning') return '<span class="tag warnt">Warning</span>';
+  return '<span class="tag">Info</span>';
+}
+function auditLogHtml(){
+  if(DEMO_MODE) return `<div class="formwrap">${emptyState(ic.alert,'Only meaningful live','Audit Log reads real system events — connect to Supabase to use it.')}</div>`;
+  const f=AUDIT_LOG_FILTER;
+  let rows=AUDIT_LOG_LIST;
+  if(f.category!=='all') rows=rows.filter(r=>r.category===f.category);
+  if(f.criticalOnly) rows=rows.filter(r=>r.severity==='critical');
+  const cats=[['all','All'],['audit','Audit'],['integrity','Integrity'],['error','Errors'],['cron','Cron']];
+  const chipsHtml=cats.map(([k,label])=>`<button class="chip ${f.category===k?'on':''}" data-auditcat="${k}">${label}</button>`).join('');
+  const rowsHtml=rows.map(r=>`<div class="rowcard" data-auditrow="${r.id}" style="cursor:pointer"><div class="top"><div><div class="nm">${esc(r.summary)}</div><div class="meta">${auditCategoryLabel(r.category)}${r.actorName?' · '+esc(r.actorName):''} · ${esc((r.createdAt||'').slice(0,16).replace('T',' '))}</div></div>${auditSeverityTag(r.severity)}</div>
+    ${r.detail?`<div class="auditDetail hidden" id="auditDetail_${r.id}"><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;background:#F4F6F8;border-radius:8px;padding:10px;margin-top:8px">${esc(JSON.stringify(r.detail,null,2))}</pre></div>`:''}
+  </div>`).join('');
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">System</div><h2>Audit Log</h2><p>Sensitive actions, daily data-integrity findings, and system errors — most recent ${AUDIT_LOG_LIST.length} events.</p></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">${chipsHtml}<button class="chip ${f.criticalOnly?'on':''}" data-auditcritonly="1">Critical only</button></div>
+  <div class="list" id="auditLogList">${rows.length?rowsHtml:emptyState(ic.check||ic.spark,'Nothing here','No events match this filter.')}</div>`;
+}
+function bindAuditLogCtrls(){
+  document.querySelectorAll('[data-auditcat]').forEach(b=>b.onclick=()=>{ AUDIT_LOG_FILTER.category=b.dataset.auditcat; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } });
+  const critBtn=document.querySelector('[data-auditcritonly]'); if(critBtn) critBtn.onclick=()=>{ AUDIT_LOG_FILTER.criticalOnly=!AUDIT_LOG_FILTER.criticalOnly; const body=document.getElementById('mbody'); if(body){ body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); } };
+  document.querySelectorAll('[data-auditrow]').forEach(row=>row.onclick=()=>{ const id=row.dataset.auditrow; const det=document.getElementById('auditDetail_'+id); if(det) det.classList.toggle('hidden'); });
 }
 /* Notes app -- simple private jot-down/save/send/download tool. Each agent/manager only
    ever sees their own notes (RLS-enforced live; client-side filtered in demo). */
