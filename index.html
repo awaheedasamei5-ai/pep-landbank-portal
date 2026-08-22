@@ -72,6 +72,7 @@ a{color:var(--green2)}
 ::selection{background:var(--gold2);color:#1a1a1a}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes updatePulse{0%,100%{box-shadow:0 12px 32px rgba(0,0,0,.4)}50%{box-shadow:0 12px 32px rgba(0,0,0,.4),0 0 0 6px rgba(201,162,39,.35)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes pop{0%{transform:scale(.94)}60%{transform:scale(1.015)}100%{transform:scale(1)}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -21182,18 +21183,31 @@ async function checkMonthlyCommissionReport(){
 // stuff" kept happening until someone signed out and back in (which does reload).
 // This actively checks for a new deployed version and offers a one-tap reload
 // instead of leaving staff to discover that by accident.
+// Moved to the TOP (was a small pill above the bottom nav, easy to miss during
+// a busy work day scrolled deep into a screen) and given a gold pulse -- staff
+// were staying on stale, possibly-buggy builds far longer than intended because
+// the old banner's position/subtlety meant it was easy to work right past.
+// No auto-reload without a click: force-reloading mid-form-entry could lose
+// someone's half-typed lead, which is worse than a slightly-stale build.
 function showUpdateBanner(){
   if(document.getElementById('updateBanner')) return;
   const b=document.createElement('div'); b.id='updateBanner';
-  b.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:500;background:var(--ink);color:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.35);animation:fadeUp .3s ease both';
-  b.innerHTML='<span style="flex:1;font-size:12.5px;font-weight:600">A new version of Palmstead is ready.</span><button style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">Reload</button>';
+  b.style.cssText='position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));z-index:2000;background:var(--premium,#C9A227);color:#1A1400;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease both,updatePulse 2.2s ease-in-out infinite';
+  b.innerHTML='<span style="flex:1;font-size:12.5px;font-weight:700">⬆ A new version of Palmstead is ready — reload to get the latest fixes.</span><button style="background:var(--ink);color:#fff;border:none;border-radius:100px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Reload now</button>';
   b.querySelector('button').onclick=()=>window.location.reload();
   document.body.appendChild(b);
 }
 if('serviceWorker' in navigator){
   window.addEventListener('load',async()=>{
     try{
-      const reg=await navigator.serviceWorker.register('./sw.js');
+      // updateViaCache:'none' -- stops the BROWSER's own HTTP cache from ever
+      // satisfying the update-check fetch of sw.js itself (a separate layer
+      // from GitHub Pages' own CDN cache, which sw.js's own fetch handler now
+      // busts directly -- see sw.js for why cache:'no-store' alone wasn't
+      // enough there either). Belt and suspenders: staff were seeing new
+      // features/fixes take a long time to actually reach them, traced to
+      // real cache-control:max-age=600 headers on the live site, not assumed.
+      const reg=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
       if(reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
       reg.addEventListener('updatefound',()=>{
         const installing=reg.installing; if(!installing) return;
@@ -21201,7 +21215,9 @@ if('serviceWorker' in navigator){
           if(installing.state==='installed' && navigator.serviceWorker.controller) showUpdateBanner();
         });
       });
-      setInterval(()=>reg.update().catch(()=>{}),5*60*1000);
+      // Checked every 2 minutes now (was 5) -- cheap, and gets a fix in front
+      // of staff faster once it's actually live past GitHub's own CDN cache window.
+      setInterval(()=>reg.update().catch(()=>{}),2*60*1000);
       document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') reg.update().catch(()=>{}); });
     }catch(e){}
   });
