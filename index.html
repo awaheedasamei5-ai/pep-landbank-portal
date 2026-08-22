@@ -4157,8 +4157,8 @@ function bindAttendanceCtrls(){
    see schedule_items below for the to-do side, which shares the same table. mapTask/apiXxxTask keep
    translating to/from schedule_items' lowercase status vocabulary so none of the existing Tasks UI
    (which still thinks in 'Open'/'In Progress'/'Done'/'Cancelled') needs to change. */
-function scheduleStatusToTaskStatus(s){ return {open:'Open',in_progress:'In Progress',done:'Done',cancelled:'Cancelled',rescheduled:'Open'}[s]||'Open'; }
-function taskStatusToScheduleStatus(s){ return {'Open':'open','In Progress':'in_progress','Done':'done','Cancelled':'cancelled'}[s]||'open'; }
+function scheduleStatusToTaskStatus(s){ return {open:'Open',in_progress:'In Progress',done:'Done',cancelled:'Cancelled',rescheduled:'Open',blocked:'Blocked',awaiting_approval:'Awaiting Approval'}[s]||'Open'; }
+function taskStatusToScheduleStatus(s){ return {'Open':'open','In Progress':'in_progress','Done':'done','Cancelled':'cancelled','Blocked':'blocked','Awaiting Approval':'awaiting_approval'}[s]||'open'; }
 const mapTask=r=>({id:r.id,title:r.title,description:r.description,category:r.category,priority:r.priority,
   assignedTo:r.assigned_to,assignedToName:r.assigned_to_name,assignedBy:r.assigned_by,assignedByName:r.assigned_by_name,
   status:scheduleStatusToTaskStatus(r.status),dueDate:r.due_date,createdAt:r.created_at,completedAt:r.completed_at,
@@ -4239,19 +4239,28 @@ async function apiInsertTask(t){
   }
   return rec;
 }
-async function apiUpdateTaskStatus(id,status,fromStatus){
+async function apiUpdateTaskStatus(id,status,fromStatus,note){
   const now=new Date().toISOString();
   const patch={status:taskStatusToScheduleStatus(status)};
-  let eventType='reopened';
-  if(status==='In Progress' && fromStatus==='Open'){ patch.started_at=now; eventType='started'; }
+  // Blocked/Awaiting Approval have no dedicated timestamp columns -- their
+  // duration is computed from these task_events pairs (blocked/unblocked,
+  // awaiting_approval/approved), the same pattern reopen rate already uses,
+  // rather than adding more single-purpose columns to schedule_items.
+  let eventType;
+  if(status==='In Progress' && fromStatus==='Blocked'){ eventType='unblocked'; }
+  else if(status==='In Progress' && fromStatus==='Awaiting Approval'){ eventType='approved'; }
+  else if(status==='In Progress' && fromStatus==='Open'){ patch.started_at=now; eventType='started'; }
   else if(status==='Done'){ patch.completed_at=now; eventType='done'; }
   else if(status==='Cancelled'){ patch.cancelled_at=now; eventType='cancelled'; }
+  else if(status==='Blocked'){ eventType='blocked'; }
+  else if(status==='Awaiting Approval'){ eventType='awaiting_approval'; }
   else if(status==='Open'||status==='In Progress'){ patch.completed_at=null; patch.cancelled_at=null; eventType='reopened'; }
+  else eventType='reopened';
   if(DEMO_MODE){ const d=await demoLoad(); const t=(d.tasks||[]).find(x=>x.id===id);
     if(t){ t.status=status; if('completed_at' in patch) t.completedAt=patch.completed_at; if('started_at' in patch) t.startedAt=patch.started_at; if('cancelled_at' in patch) t.cancelledAt=patch.cancelled_at; }
-    await apiLogTaskEvent(id,eventType,{}); await demoSave(); return; }
+    await apiLogTaskEvent(id,eventType,{note:note||null}); await demoSave(); return; }
   const {error}=await sb.from('schedule_items').update(patch).eq('id',id); if(error) throw error;
-  try{ await apiLogTaskEvent(id,eventType,{}); }catch(e){}
+  try{ await apiLogTaskEvent(id,eventType,{note:note||null}); }catch(e){}
 }
 async function apiDeleteTask(id){
   if(DEMO_MODE){ const d=await demoLoad(); d.tasks=(d.tasks||[]).filter(x=>x.id!==id); d.taskEvents=(d.taskEvents||[]).filter(e=>e.taskId!==id); await demoSave(); return; }
@@ -9574,7 +9583,7 @@ function renderAllocMonthFilterChips(resolved){
 }
 /* ================= DUTIES (operations tasks -- assigned by management, or self/peer-assigned) ================= */
 const TASK_CATEGORIES=['Sales','Digital Operations','Site Operations','Executive/Admin','Facilities','General'];
-const TASK_STATUSES=['Open','In Progress','Done','Cancelled'];
+const TASK_STATUSES=['Open','In Progress','Blocked','Awaiting Approval','Done','Cancelled'];
 let dutiesFilter='mine';
 let dutiesSearch='';
 let dutiesCatFilter='';
@@ -9582,7 +9591,7 @@ let dutiesStatusFilter='';
 function daysBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,Math.round((d2-d1)/86400000)); }
 function taskDaysOpen(t){ const end=t.completedAt||new Date().toISOString(); return daysBetween(t.createdAt,end); }
 function computeDutiesSummary(tasks){
-  const open=tasks.filter(t=>t.status==='Open'||t.status==='In Progress');
+  const open=tasks.filter(t=>t.status==='Open'||t.status==='In Progress'||t.status==='Blocked'||t.status==='Awaiting Approval');
   const overdue=open.filter(t=>t.dueDate&&t.dueDate<today());
   const done=tasks.filter(t=>t.status==='Done'&&t.completedAt);
   const avgDays=done.length?Math.round(done.reduce((s,t)=>s+(daysBetween(t.createdAt,t.completedAt)||0),0)/done.length):null;
@@ -10232,7 +10241,7 @@ function groupItemsByStaff(items,staffList){
 function dueTaskChipsHtml(dueTasks){
   if(!dueTasks.length) return '';
   return `<div class="sectitle" style="margin-top:0"><h3>Due today (no fixed time)</h3></div>
-  <div class="list" style="margin-bottom:16px">${dueTasks.map(t=>`<div class="rowcard" data-taskopen="${esc(t.id)}" style="cursor:pointer${t.status==='Done'||t.status==='Cancelled'?';opacity:.6':''}"><div class="top"><div><div class="nm"${t.status==='Done'||t.status==='Cancelled'?' style="text-decoration:line-through"':''}>${esc(t.title)}</div><div class="meta">${esc(t.assignedToName||t.assignedTo)}</div></div><span class="tag ${t.status==='In Progress'?'warnt':t.status==='Done'?'ok':t.status==='Cancelled'?'dgr':'ghost'}">${esc(t.status)}</span></div></div>`).join('')}</div>`;
+  <div class="list" style="margin-bottom:16px">${dueTasks.map(t=>`<div class="rowcard" data-taskopen="${esc(t.id)}" style="cursor:pointer${t.status==='Done'||t.status==='Cancelled'?';opacity:.6':''}"><div class="top"><div><div class="nm"${t.status==='Done'||t.status==='Cancelled'?' style="text-decoration:line-through"':''}>${esc(t.title)}</div><div class="meta">${esc(t.assignedToName||t.assignedTo)}</div></div><span class="tag ${t.status==='In Progress'||t.status==='Awaiting Approval'?'warnt':t.status==='Done'?'ok':t.status==='Cancelled'||t.status==='Blocked'?'dgr':'ghost'}">${esc(t.status)}</span></div></div>`).join('')}</div>`;
 }
 function weekListHtml(startDate,itemsByDate){
   const days=[]; for(let i=0;i<7;i++) days.push(isoPlusDays(startDate,i));
@@ -10488,7 +10497,8 @@ function paintDuties(){
   if(q) list=list.filter(t=>(t.assignedToName||t.assignedTo||'').toLowerCase().includes(q)||(t.title||'').toLowerCase().includes(q));
   if(dutiesCatFilter) list=list.filter(t=>t.category===dutiesCatFilter);
   if(dutiesStatusFilter) list=list.filter(t=>t.status===dutiesStatusFilter);
-  const statusMeta={Open:{cls:'ghost',rail:'#6C7269'},'In Progress':{cls:'warnt',rail:'#8A6E12'},Done:{cls:'ok',rail:'#1E7A56'},Cancelled:{cls:'dgr',rail:'var(--danger)'}};
+  const statusMeta={Open:{cls:'ghost',rail:'#6C7269'},'In Progress':{cls:'warnt',rail:'#8A6E12'},Done:{cls:'ok',rail:'#1E7A56'},Cancelled:{cls:'dgr',rail:'var(--danger)'},
+    Blocked:{cls:'dgr',rail:'var(--danger)'},'Awaiting Approval':{cls:'warnt',rail:'#8A6E12'}};
   const rowOf=t=>{
     const overdue=t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled';
     const daysOpen=taskDaysOpen(t);
@@ -10583,7 +10593,11 @@ function taskEventMeta(type){
     edited:{icon:ic.edit,label:'Content edited',cls:'grey'},
     done:{icon:kpiIc.check,label:'Marked done',cls:'green'},
     cancelled:{icon:ic.close,label:'Cancelled',cls:'red'},
-    reopened:{icon:ic.clock,label:'Reopened',cls:'amber'}
+    reopened:{icon:ic.clock,label:'Reopened',cls:'amber'},
+    blocked:{icon:ic.alert,label:'Blocked',cls:'red'},
+    unblocked:{icon:ic.check2,label:'Unblocked',cls:'amber'},
+    awaiting_approval:{icon:ic.clock,label:'Awaiting approval',cls:'amber'},
+    approved:{icon:ic.check2,label:'Approved — resumed',cls:'amber'}
   };
   return M[type]||{icon:ic.grid,label:type,cls:'grey'};
 }
@@ -10647,10 +10661,10 @@ async function deleteTaskWithPaperTrail(t){
     route('duties');
   }catch(e){ toast('Delete failed: '+(e.message||e)); }
 }
-async function changeTaskStatus(t,status){
+async function changeTaskStatus(t,status,note){
   const fromStatus=t.status;
   try{
-    await apiUpdateTaskStatus(t.id,status,fromStatus);
+    await apiUpdateTaskStatus(t.id,status,fromStatus,note);
     t.status=status;
     const now=new Date().toISOString();
     if(status==='Done') t.completedAt=now;
@@ -10684,7 +10698,7 @@ function viewTaskDetail(id){
   const canEdit=t.assignedTo===PROFILE.key||t.assignedBy===PROFILE.key||PROFILE.role==='manager';
   const isAssignee=t.assignedTo===PROFILE.key;
   const canDelete=t.assignedTo===PROFILE.key||t.assignedBy===PROFILE.key||PROFILE.role==='manager';
-  const statusMeta={Open:{cls:'ghost'},'In Progress':{cls:'warnt'},Done:{cls:'ok'},Cancelled:{cls:'dgr'}};
+  const statusMeta={Open:{cls:'ghost'},'In Progress':{cls:'warnt'},Done:{cls:'ok'},Cancelled:{cls:'dgr'},Blocked:{cls:'dgr'},'Awaiting Approval':{cls:'warnt'}};
   const overdue=t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled';
   V.innerHTML=`${back('duties')}
   <div class="pagehead"><div><div class="eyebrow">Operations Tracker</div><h2>${esc(t.title)}</h2><p>${esc(t.category)} · ${esc(t.priority)} priority</p></div>
@@ -10706,6 +10720,8 @@ function viewTaskDetail(id){
   </div>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
     ${t.status==='Open'?`<button class="chip" id="taskStartBtn">▶ Start working</button>`:''}
+    ${(t.status==='Open'||t.status==='In Progress')?`<button class="chip" id="taskBlockBtn">⛔ Mark blocked</button><button class="chip" id="taskAwaitBtn">⏳ Awaiting approval</button>`:''}
+    ${(t.status==='Blocked'||t.status==='Awaiting Approval')?`<button class="chip" id="taskResumeBtn">▶ Resume</button>`:''}
     ${t.status!=='Done'&&t.status!=='Cancelled'?`<button class="chip" id="taskDoneBtn">✓ Mark done</button><button class="chip" id="taskCancelBtn">✕ Cancel</button><button class="chip" id="taskEscalateBtn">⬆ Escalate</button>`:''}
     <button class="chip" id="taskPdfBtn">⬇ Download PDF paper trail</button>
     ${canDelete?`<button class="trashbtn" id="taskDeleteBtn">${ic.trash}</button>`:''}
@@ -10742,6 +10758,9 @@ function bindTaskDetailCtrls(t){
     progBtn.disabled=false;
   };
   const startBtn=document.getElementById('taskStartBtn'); if(startBtn) startBtn.onclick=()=>changeTaskStatus(t,'In Progress');
+  const blockBtn=document.getElementById('taskBlockBtn'); if(blockBtn) blockBtn.onclick=()=>{ const reason=prompt('Why is this task blocked? (optional)')||''; changeTaskStatus(t,'Blocked',reason); };
+  const awaitBtn=document.getElementById('taskAwaitBtn'); if(awaitBtn) awaitBtn.onclick=()=>{ const reason=prompt('Waiting on whose approval, or for what? (optional)')||''; changeTaskStatus(t,'Awaiting Approval',reason); };
+  const resumeBtn=document.getElementById('taskResumeBtn'); if(resumeBtn) resumeBtn.onclick=()=>changeTaskStatus(t,'In Progress');
   const doneBtn=document.getElementById('taskDoneBtn'); if(doneBtn) doneBtn.onclick=()=>changeTaskStatus(t,'Done');
   const cancelBtn=document.getElementById('taskCancelBtn'); if(cancelBtn) cancelBtn.onclick=()=>{ if(confirm('Cancel this task?')) changeTaskStatus(t,'Cancelled'); };
   const escBtn=document.getElementById('taskEscalateBtn'); if(escBtn) escBtn.onclick=()=>openEscalateTaskModal(t.id);
@@ -18984,6 +19003,33 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   const medianCloseHours=median(assignedInRange.map(t=>(t.createdAt&&t.completedAt)?hoursBetween(t.createdAt,t.completedAt):null).filter(h=>h!=null));
   const reopenedIds=new Set((taskEventsData||[]).filter(e=>e.type==='reopened').map(e=>e.taskId));
   const reopenRate=assignedInRange.length?(assignedInRange.filter(t=>reopenedIds.has(t.id)).length/assignedInRange.length*100):0;
+  // Blocked duration / approval waiting time (Sec 33's two previously-declined
+  // metrics -- now real, since Blocked/Awaiting Approval are real task states).
+  // Neither has a dedicated timestamp column, so duration is derived by pairing
+  // each start event with the next event on that SAME task that closes it,
+  // walking that task's own events in chronological order (a task can be
+  // blocked more than once, so this pairs each span independently rather than
+  // just diffing the first/last occurrence).
+  const pairPhaseDurations=(events,startType,endTypes)=>{
+    const byTask={};
+    events.forEach(e=>{ (byTask[e.taskId]=byTask[e.taskId]||[]).push(e); });
+    const durations=[];
+    Object.values(byTask).forEach(evs=>{
+      const sorted=evs.slice().sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
+      let openAt=null;
+      sorted.forEach(e=>{
+        if(e.type===startType) openAt=e.createdAt;
+        else if(openAt && endTypes.includes(e.type)){ const h=hoursBetween(openAt,e.createdAt); if(h!=null) durations.push(h); openAt=null; }
+      });
+    });
+    return durations;
+  };
+  const assignedIds=new Set(assignedInRange.map(t=>t.id));
+  const periodEvents=(taskEventsData||[]).filter(e=>assignedIds.has(e.taskId));
+  const avgBlockedHrs=avg(pairPhaseDurations(periodEvents,'blocked',['unblocked','done','cancelled']));
+  const avgApprovalWaitHrs=avg(pairPhaseDurations(periodEvents,'awaiting_approval',['approved','done','cancelled']));
+  const currentlyBlocked=all.filter(t=>t.status==='Blocked').length;
+  const currentlyAwaitingApproval=all.filter(t=>t.status==='Awaiting Approval').length;
   return {perStaffRows,byCategory,byCategoryStats,todoStats,
     totalAssigned:assignedInRange.length,totalCompleted:completedInRange.length,totalOverdue:overdueNow.length,totalEscalated:escalatedInRange.length,
     avgHoursPerTask:allCloseHours.length?Math.round(avg(allCloseHours)*10)/10:null,
@@ -18991,7 +19037,10 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
     avgOpenToStartHrs:avgOpenToStartHrs!=null?Math.round(avgOpenToStartHrs*10)/10:null,
     avgStartToCompleteHrs:avgStartToCompleteHrs!=null?Math.round(avgStartToCompleteHrs*10)/10:null,
     medianCloseHours:medianCloseHours!=null?Math.round(medianCloseHours*10)/10:null,
-    reopenRatePct:Math.round(reopenRate*10)/10};
+    reopenRatePct:Math.round(reopenRate*10)/10,
+    avgBlockedHrs:avgBlockedHrs!=null?Math.round(avgBlockedHrs*10)/10:null,
+    avgApprovalWaitHrs:avgApprovalWaitHrs!=null?Math.round(avgApprovalWaitHrs*10)/10:null,
+    currentlyBlocked,currentlyAwaitingApproval};
 }
 // prior/priorData are both optional -- only present when "Compare to previous
 // period" was checked. Adds one extra comparison stat bar right under the main
@@ -19033,7 +19082,12 @@ function buildOpsReportPDF(range,d,prior,priorData){
     {label:'Started→Done',value:d.avgStartToCompleteHrs!=null?d.avgStartToCompleteHrs:0,color:PDF_PALETTE[2]},
     {label:'Median hrs/task',value:d.medianCloseHours!=null?d.medianCloseHours:0,color:PDF_PALETTE[6]}
   ]);
-  y=pdfAccentStatRow(doc,y,pageW,[{label:'Reopen rate',value:d.reopenRatePct+'%',accent:d.reopenRatePct>0?PDF_WARN:PDF_OK}]);
+  y=pdfAccentStatRow(doc,y,pageW,[
+    {label:'Reopen rate',value:d.reopenRatePct+'%',accent:d.reopenRatePct>0?PDF_WARN:PDF_OK},
+    {label:'Avg blocked duration',value:d.avgBlockedHrs!=null?d.avgBlockedHrs+' hrs':'—',accent:d.avgBlockedHrs?PDF_WARN:PDF_OK},
+    {label:'Avg approval wait',value:d.avgApprovalWaitHrs!=null?d.avgApprovalWaitHrs+' hrs':'—',accent:d.avgApprovalWaitHrs?PDF_WARN:PDF_OK},
+    {label:'Blocked / awaiting now',value:d.currentlyBlocked+' / '+d.currentlyAwaitingApproval,accent:(d.currentlyBlocked+d.currentlyAwaitingApproval)>0?PDF_DANGER:PDF_OK}
+  ]);
 
   if(y>210){ doc.addPage(); y=16; }
   y=pdfSectionTitle(doc,y,pageW,'By staff member');
