@@ -11109,7 +11109,14 @@ async function formCustomer(arg){
   if(!name && !contact){ V.innerHTML=back(backRoute)+emptyState(ic.grid,'No customer selected',''); return; }
   trackRecentlyViewed(name,contact);
 
-  const mLeads=DB.leads.filter(l=>custMatches(l.name,l.contact,name,contact));
+  // DB.leads is scoped to the signed-in profile -- empty/partial for a manager
+  // viewing a client that belongs to a different agent. allAgentLists() is the
+  // one source that's always synchronously ready with every agent's leads the
+  // instant a manager signs in (same fallback findLeadById() already uses for
+  // this exact reason), so Customer 360 no longer silently shows an empty
+  // purchases list for Management on a cross-agent client.
+  const leadsSource=PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list):DB.leads;
+  const mLeads=leadsSource.filter(l=>custMatches(l.name,l.contact,name,contact));
   const mEnq=DB.enquiries.filter(e=>custMatches(e.name,e.contact,name,contact));
   const mCmp=DB.complaints.filter(c=>custMatches(c.name,c.contact,name,contact));
   // DB.sitevisits/DB.activity are capped for everyday screens (see apiLoadAll) --
