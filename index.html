@@ -7536,6 +7536,43 @@ function svgLineChart(values,labels,opts={}){
     ${dots}${lbls}
   </svg>`;
 }
+// Reference's Revenue card is a bar chart, not a line chart -- solid bars,
+// light dashed gridlines, one bar optionally highlighted with a floating
+// value tooltip. Same viewBox/scaling convention as svgLineChart above so
+// both primitives drop into the same card shell interchangeably.
+function svgBarChart(values,labels,opts={}){
+  const w=opts.width||600,h=opts.height||170,pad=30;
+  const n=values.length;
+  if(!n) return `<div class="empty" style="padding:24px">${emptyState(ic.spark,'No data yet','')}</div>`;
+  const padTop=opts.highlightIndex!=null?38:18;
+  const max=Math.max(1,...values);
+  const innerH=h-pad-padTop;
+  const barColor=opts.color||'#4F46E5';
+  const hlColor=opts.highlightColor||barColor;
+  const gap=opts.gap!=null?opts.gap:0.42;
+  const slot=(w-2*pad)/n;
+  const barW=slot*(1-gap);
+  const scaleY=v=>(v/max)*innerH;
+  const grid=[0.25,0.5,0.75,1].map(f=>{
+    const y=((h-pad)-innerH*f).toFixed(1);
+    return `<line x1="${pad}" y1="${y}" x2="${w-pad}" y2="${y}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4"/>`;
+  }).join('');
+  const bars=values.map((v,i)=>{
+    const bh=Math.max(scaleY(v),2), x=(pad+i*slot+(slot-barW)/2).toFixed(1), y=((h-pad)-bh).toFixed(1);
+    const hl=opts.highlightIndex===i, r=Math.min(6,barW/2).toFixed(1);
+    return `<rect x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="${r}" fill="${hl?hlColor:barColor}" fill-opacity="${hl?1:0.32}"/>`;
+  }).join('');
+  let tooltip='';
+  if(opts.highlightIndex!=null && values[opts.highlightIndex]!=null){
+    const i=opts.highlightIndex, v=values[i], bh=scaleY(v), x=pad+i*slot+slot/2, y=(h-pad)-bh;
+    const label=opts.highlightLabel!=null?String(opts.highlightLabel):String(v);
+    const tw=Math.max(46,label.length*7.2+16), tx=Math.min(Math.max(x-tw/2,pad),w-pad-tw), ty=Math.max(y-34,2);
+    tooltip=`<rect x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" width="${tw.toFixed(1)}" height="24" rx="7" fill="${hlColor}"/>
+      <text x="${(tx+tw/2).toFixed(1)}" y="${(ty+16).toFixed(1)}" font-size="11.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="'IBM Plex Mono',monospace">${esc(label)}</text>`;
+  }
+  const lbls=labels.map((l,i)=>`<text x="${(pad+i*slot+slot/2).toFixed(1)}" y="${h-8}" font-size="10.5" fill="var(--muted)" text-anchor="middle" font-family="Inter,sans-serif">${esc(l)}</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;display:block" preserveAspectRatio="none">${grid}${bars}${tooltip}${lbls}</svg>`;
+}
 function svgDonut(segments,opts={}){
   const size=opts.size||128,stroke=opts.stroke||20,r=(size-stroke)/2,c=size/2,circ=2*Math.PI*r;
   const total=segments.reduce((s,x)=>s+x.value,0);
@@ -7561,6 +7598,25 @@ function chartLegend(segments){
       <span style="flex:1;color:var(--text);font-weight:600">${esc(s.label)}</span>
       <span style="color:var(--muted)">${s.value} · ${Math.round(s.value/total*100)}%</span>
     </div>`).join('')}</div>`;
+}
+// Every reference chart card shares one header: title + subtitle on the
+// left, a plain circular expand-arrow affordance (visual only, matching
+// kpi()'s) on the right. One wrapper keeps every chart card in sync.
+function chartCardHtml(title,subtitle,bodyHtml){
+  return `<div class="rowcard chartCard" style="margin-bottom:18px;padding:17px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div><div style="font-weight:700;font-size:13.5px">${esc(title)}</div>${subtitle?`<div class="mini">${esc(subtitle)}</div>`:''}</div>
+      <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+    ${bodyHtml}
+  </div>`;
+}
+// Reference's Revenue card -- real "last 6 months collected" bars (same
+// last6MonthKeys() window every other 6-month chart in the app uses), most
+// recent month highlighted with its value as a floating tooltip.
+function renderRevenueCard(monthVals,monthLbls){
+  const hi=monthVals.length-1;
+  return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi])}));
 }
 function bindTasks(){ V.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>route(b.dataset.r)); }
 const AGENT_HUBS={
@@ -8829,6 +8885,9 @@ function agentHome(){ const k=kpisOf(DB.leads);
   const monthCollectedDelta=lastMonthCollected>0?(monthCollected-lastMonthCollected)/lastMonthCollected*100:null;
   const target=num((CONFIG.targets||{})[PROFILE.key])||0;
   const myCommission=computeMyPersonalCommission(thisMonth);
+  const revMonths=last6MonthKeys();
+  const revVals=revMonths.map(mk=>(DB.payments||[]).filter(p=>p.agentKey===PROFILE.key && (p.date||'').slice(0,7)===mk).reduce((s,p)=>s+num(p.amount),0));
+  const revLbls=revMonths.map(mk=>monthLabel2(mk).split(' ')[0]);
   V.innerHTML=`
   <div class="homeHero">
     <div class="heroTop">
@@ -8853,7 +8912,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
       <div id="homeQuickAccess">${tileGridHtml(withTileColors(agentQuickAccessItems()))}</div>
       <div class="sectitle"><h3>Today at a glance</h3></div>
       <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}</div>
-      <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
+      <div class="insightCarousel">${renderRevenueCard(revVals,revLbls)}${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
     </div>
   </div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
@@ -16695,6 +16754,9 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
   const fullyPaid=allLeads.filter(l=>isFullyPaid(l));
 
   const mySmartInsightsMgr=computeSmartInsights(allLeads,DB.payments);
+  const revMonthsMgr=last6MonthKeys();
+  const revValsMgr=revMonthsMgr.map(mk=>(DB.payments||[]).filter(p=>(p.date||'').slice(0,7)===mk).reduce((s,p)=>s+num(p.amount),0));
+  const revLblsMgr=revMonthsMgr.map(mk=>monthLabel2(mk).split(' ')[0]);
   return `
   <div class="homeHero">
     <div class="heroTop">
@@ -16717,7 +16779,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       <div id="homeQuickAccessMgr">${tileGridHtml(withTileColors(mgrQuickAccessItems()))}</div>
       <div class="sectitle"><h3>Today at a glance</h3></div>
       <div class="kpis">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
-      <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
+      <div class="insightCarousel">${renderRevenueCard(revValsMgr,revLblsMgr)}${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
 
       <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
       <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
