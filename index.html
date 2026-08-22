@@ -4162,7 +4162,7 @@ function taskStatusToScheduleStatus(s){ return {'Open':'open','In Progress':'in_
 const mapTask=r=>({id:r.id,title:r.title,description:r.description,category:r.category,priority:r.priority,
   assignedTo:r.assigned_to,assignedToName:r.assigned_to_name,assignedBy:r.assigned_by,assignedByName:r.assigned_by_name,
   status:scheduleStatusToTaskStatus(r.status),dueDate:r.due_date,createdAt:r.created_at,completedAt:r.completed_at,
-  openedAt:r.opened_at,startedAt:r.started_at,cancelledAt:r.cancelled_at,
+  openedAt:r.opened_at,startedAt:r.started_at,cancelledAt:r.cancelled_at,leadId:r.lead_id,
   escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note});
 const mapTaskEvent=r=>({id:r.id,taskId:r.task_id,type:r.type,actorKey:r.actor_key,actorName:r.actor_name,
   fromKey:r.from_key,fromName:r.from_name,toKey:r.to_key,toName:r.to_name,note:r.note,createdAt:r.created_at});
@@ -4229,7 +4229,7 @@ async function apiInsertTask(t){
     await apiLogTaskEvent(rec.id,'assigned',{toKey:t.assignedTo,toName:t.assignedToName,note:t.description||null});
     await demoSave(); return rec; }
   const row={kind:'task',owner_key:PROFILE.key,owner_name:PROFILE.name,title:t.title,description:t.description||null,category:t.category,priority:t.priority,
-    assigned_to:t.assignedTo,assigned_to_name:t.assignedToName,assigned_by:PROFILE.key,assigned_by_name:PROFILE.name,due_date:t.dueDate||null};
+    assigned_to:t.assignedTo,assigned_to_name:t.assignedToName,assigned_by:PROFILE.key,assigned_by_name:PROFILE.name,due_date:t.dueDate||null,lead_id:t.leadId||null};
   const {data,error}=await sb.from('schedule_items').insert(row).select().single(); if(error) throw error;
   const rec=mapTask(data);
   try{ await apiLogTaskEvent(rec.id,'assigned',{toKey:t.assignedTo,toName:t.assignedToName,note:t.description||null}); }catch(e){}
@@ -10776,18 +10776,27 @@ function openNewTaskModal(){
     ${fld('Description','<textarea id="nt_desc" placeholder="Details, context…"></textarea>')}
     <div class="grid2">${fld('Category',sel('nt_cat',TASK_CATEGORIES))}${fld('Priority',sel('nt_pri',['Low','Medium','High','Critical'],'Medium'))}</div>
     <div class="grid2">${fld('Assign to',`<select id="nt_to">${STAFF_LIST.map(s=>`<option value="${s.key}" ${s.key===PROFILE.key?'selected':''}>${esc(s.name)}${s.key===PROFILE.key?' (myself)':''}</option>`).join('')}</select>`)}${fld('Due date','<input id="nt_due" type="date"/>')}</div>
+    ${fld('Link to a client (optional)',`<input id="nt_lead" list="nt_lead_opts" placeholder="Start typing a client name…" autocomplete="off"/><datalist id="nt_lead_opts"></datalist>`,'Lets this task show up on that client\'s record and count toward per-lead hygiene checks')}
     <div class="formactions"><button class="btn primary" id="saveNewTask" style="width:100%">Assign task</button></div>
   </div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeNewTask').onclick=()=>ov.remove();
+  // Lead options built lazily from every agent's leads -- a plain datalist
+  // (no new search-modal infrastructure) since this field is optional and the
+  // typed text only needs to resolve to a lead id on save, not drive any other
+  // UI while typing.
+  const leadOptions=allAgentLists().flatMap(a=>a.list.map(l=>({id:l.id,label:l.name+(l.contact?(' ('+l.contact+')'):'')})));
+  document.getElementById('nt_lead_opts').innerHTML=leadOptions.map(o=>`<option value="${esc(o.label)}">`).join('');
   document.getElementById('saveNewTask').onclick=async()=>{
     const title=val('nt_title').trim(); if(!title){ toast('Add a title'); return; }
     const btn=document.getElementById('saveNewTask'); btn.disabled=true; btn.textContent='Saving…';
     try{
       const toKey=val('nt_to'); const toStaff=STAFF_LIST.find(s=>s.key===toKey);
+      const leadTyped=val('nt_lead').trim();
+      const matchedLead=leadTyped?leadOptions.find(o=>o.label===leadTyped):null;
       const rec=await apiInsertTask({title,description:val('nt_desc').trim(),category:val('nt_cat'),priority:val('nt_pri'),
-        assignedTo:toKey,assignedToName:toStaff?toStaff.name:toKey,dueDate:val('nt_due')||null});
+        assignedTo:toKey,assignedToName:toStaff?toStaff.name:toKey,dueDate:val('nt_due')||null,leadId:matchedLead?matchedLead.id:null});
       rec.assignedByName=PROFILE.name; rec.assignedBy=PROFILE.key;
       DB.tasks.unshift(rec); toast('Task assigned'); ov.remove(); viewDuties();
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Assign task'; }
@@ -15566,6 +15575,21 @@ function runDataIntegrityCheck(scopeToLeads){
       const staleDays=Math.round((Date.now()-new Date(l.lastModifiedAt).getTime())/86400000);
       if(staleDays>30) issues.push({lead:l,type:'Stale lead',cls:'warnt',detail:`No updates in ${staleDays} days — this lead may need a follow-up call.`});
     }
+    // "Unlogged site visit outcome" -- previously declined for having no
+    // reliable way to link a record back to a specific lead. Site visits
+    // already carry a client name+contact, so this reuses the exact same
+    // custMatches() fuzzy match Customer 360's own timeline already relies on
+    // to associate a site visit with a lead -- not a new/unproven mechanism.
+    (DB.sitevisits||[]).filter(v=>v.date&&v.date<today()&&!(v.feedback||'').trim()&&custMatches(v.name,v.contact,l.name,l.contact))
+      .forEach(v=>{ issues.push({lead:l,type:'Unlogged site visit outcome',cls:'warnt',detail:`Site visit on ${v.date} has no outcome/feedback recorded — was the result of this visit ever logged?`}); });
+    // "Unresolved task" -- previously declined for having no reliable way to
+    // link a task to a specific lead at all (unlike site visits, tasks carry
+    // no client name/contact field to fuzzy-match). Now that tasks can
+    // optionally be linked via schedule_items.lead_id when created, this
+    // flags a lead whose linked task has sat open for two weeks or more.
+    (DB.tasks||[]).filter(t=>t.leadId===l.id&&(t.status==='Open'||t.status==='In Progress'||t.status==='Blocked'||t.status==='Awaiting Approval'))
+      .forEach(t=>{ const d=daysBetween(t.createdAt,new Date().toISOString());
+        if(d!=null&&d>=14) issues.push({lead:l,type:'Unresolved task',cls:'warnt',detail:`"${t.title}" has been ${t.status.toLowerCase()} for ${d} days without being resolved.`}); });
   });
   // Two different clients sharing a phone number is a data-entry error, not a
   // real household -- the client portal / Customer 360 view now keep them apart
