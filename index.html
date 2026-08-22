@@ -6835,7 +6835,7 @@ function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
     agentDetail:agentDetailView,stageList:viewStageList,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
     clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
-    clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); }}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
+    clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
   if(!skipPush && !ROUTE_NAV_LOCK && typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
     try{ history.pushState({routeName:name,routeArg:arg}, '', '#'+name); }catch(e){}
   }
@@ -6856,7 +6856,7 @@ function tabForRoute(name){
     if(name==='clientallocation') return 'clienthome';
     return 'clienthome';
   }
-  if(['salesdesk','mgrSalesDesk','mgrCrmTools','mgrPlotInv','crm','addlead','update','updateOne','myDataCheck','plots','pipeline','sitevisit','enquiry','complaint','plotrequests','clientdb','allocations'].includes(name)) return 'salesdesk';
+  if(['salesdesk','mgrSalesDesk','mgrCrmTools','mgrPlotInv','crm','addlead','update','updateOne','myDataCheck','plots','pipeline','sitevisit','enquiry','complaint','plotrequests','clientdb','allocations','importHistory'].includes(name)) return 'salesdesk';
   if(name==='officedesk'||name==='duties'||name==='taskDetail'||name==='feedback'||name==='companyleads'||name==='leaveapp'||name==='memoapp'||name==='bannerapp'||name==='bannerDetail'||name==='attendanceapp'||name==='contractapp'||name==='sitevisitauth'||name==='logpayment'||name==='expenses'||name==='mgmtreports') return 'officedesk';
   if(name==='chat'||name==='chatThread') return 'chat';
   if(name==='home'||name==='mgr') return 'home';
@@ -8365,6 +8365,7 @@ function viewPipeline(){
   <div class="pipeToolsBar">
     <button id="xlMyPipelineBtn">${ic.download}Download Excel</button>
     <button id="xlImportBtn">${ic.upload}Import edited file</button>
+    <button id="importHistoryBtn">${ic.doc}Import history</button>
     ${PROFILE.role==='manager'?`<button id="pipeBackupBtn">${ic.update}Back up clients</button><button id="pipeRestoreBtn">${ic.update}Restore backup</button>`
       :`<button id="reqBackupBtn">${ic.update}Request backup</button><button id="reqRestoreBtn">${ic.update}Request restore</button>`}
     <input type="file" id="xlImportFile" accept=".xlsx" class="hidden"/>
@@ -8381,6 +8382,7 @@ function viewPipeline(){
   V.querySelectorAll('[data-recentcust]').forEach(b=>b.onclick=()=>route('customer',{name:b.dataset.recentcust,contact:b.dataset.recentcontact}));
   document.getElementById('xlMyPipelineBtn').onclick=downloadAgentPipelineExcel;
   document.getElementById('xlImportBtn').onclick=()=>document.getElementById('xlImportFile').click();
+  document.getElementById('importHistoryBtn').onclick=()=>route('importHistory');
   document.getElementById('xlImportFile').onchange=e=>{ if(e.target.files[0]) startPipelineImport(e.target.files[0]); e.target.value=''; };
   if(PROFILE.role==='manager'){
     document.getElementById('pipeBackupBtn').onclick=openPipelineBackupModal;
@@ -15455,6 +15457,7 @@ const MGR_APPS=[
   {key:'Reports',fic:'analytics',label:'Reports'},
   {key:'Analytics',fic:'analytics',label:'Analytics'},
   {key:'Report Archive',fic:'reportdoc',label:'Report Archive'},
+  {key:'Import History',fic:'document',label:'Import History',section:'salesdesk'},
   {key:'Plots',fic:'map',label:'Plot Inventory',section:'salesdesk'},
   {key:'Allocations',fic:'allocation',label:'Allocations',section:'salesdesk'},
   {key:'Client Database',fic:'clientdb',label:'Client Database',section:'salesdesk'},
@@ -15522,6 +15525,11 @@ async function managerView(){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
     catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
+  else if(mgrTab==='Import History'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ IMPORT_BATCHES_LIST=await withLoadTimeout(apiLoadImportBatches(),15000,'Import History'); IMPORT_BATCHES_LOADED=true; body.innerHTML=importHistoryHtml(); bindImportHistoryCtrls(); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load Import History',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
@@ -16428,6 +16436,11 @@ function b64ToArrayBuffer(b64){ const bin=atob(b64); const bytes=new Uint8Array(
 async function loadPipelineTemplate(){
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(await (await fetch('./pipeline-template.xlsx')).arrayBuffer());
+  // Stamps THIS specific export's own generation moment (the static template
+  // file's own metadata is irrelevant) -- importPipelineExcel() reads this back
+  // to tell a genuinely stale re-import (someone edited the lead in the app
+  // AFTER this file was generated) apart from a normal intentional bulk edit.
+  wb.created=new Date();
   const ws=wb.getWorksheet('💼 Pipeline');
   ws.getColumn(21).width=24; ws.getColumn(21).hidden=true;
   ws.getCell('U7').value='Lead ID (do not edit)';
@@ -16634,6 +16647,15 @@ async function importPipelineExcel(file,opts){
     const ws=wb.getWorksheet('💼 Pipeline')||wb.getWorksheet('Pipeline')||wb.worksheets[0];
     if(!ws){ toast('Could not find the Pipeline sheet in that file'); return; }
     const cols=resolveImportColumns(ws);
+    // Sec 92: "conflicts are flagged" -- a row is a genuine conflict, not just an
+    // intentional bulk edit, when the LIVE record was modified in the app AFTER
+    // this specific file was generated (loadPipelineTemplate() stamps wb.created
+    // at export time) AND the file disagrees with the current values. Blindly
+    // applying such a row would silently clobber a newer edit nobody re-exported
+    // for. A row with no conflict, or where the lead hasn't been touched since
+    // export, applies exactly as before -- this changes nothing about the common case.
+    const exportedAt=wb.created?new Date(wb.created):null;
+    const conflicts=[];
 
     // Always re-fetch the authoritative lead set fresh from the server right before
     // diffing, instead of trusting whatever happened to already be in memory (DB.leads).
@@ -16712,7 +16734,17 @@ async function importPipelineExcel(file,opts){
             existing.plotType!==parsed.plotType||num(existing.noPlots)!==parsed.noPlots||num(existing.discount)!==parsed.discount||
             existing.paymentPlan!==parsed.paymentPlan||existing.siteVisit!==parsed.siteVisit||existing.priority!==parsed.priority||
             num(existing.amtPaid)!==amtPaidForCompare||(existing.nextAction||'')!==parsed.nextAction||(existing.notes||'')!==parsed.notes;
-          if(changed){
+          const isStaleConflict=changed && exportedAt && existing.lastModifiedAt && new Date(existing.lastModifiedAt)>exportedAt;
+          if(isStaleConflict){
+            conflicts.push({leadId:existing.id,name:existing.name,contact:existing.contact,
+              lastModifiedAt:existing.lastModifiedAt,lastModifiedBy:existing.lastModifiedBy||null,exportedAt:exportedAt.toISOString(),
+              current:{stage:existing.stage,plotType:existing.plotType,noPlots:existing.noPlots,discount:existing.discount,
+                paymentPlan:existing.paymentPlan,siteVisit:existing.siteVisit,priority:existing.priority,amtPaid:num(existing.amtPaid),
+                nextAction:existing.nextAction,notes:existing.notes},
+              file:{stage:parsed.stage,plotType:parsed.plotType,noPlots:parsed.noPlots,discount:parsed.discount,
+                paymentPlan:parsed.paymentPlan,siteVisit:parsed.siteVisit,priority:parsed.priority,amtPaid:amtPaidForCompare,
+                nextAction:parsed.nextAction,notes:parsed.notes}});
+          } else if(changed){
             const patch={name:parsed.name,contact:parsed.contact,stage:parsed.stage,plotType:parsed.plotType,noPlots:parsed.noPlots,
               discount:parsed.discount,paymentPlan:parsed.paymentPlan,siteVisit:parsed.siteVisit,priority:parsed.priority,
               amtPaid:amtPaidForCompare,nextAction:parsed.nextAction,notes:parsed.notes,netTotal:cc.net,grandTotal:cc.grand,balance:cc.bal};
@@ -16739,10 +16771,96 @@ async function importPipelineExcel(file,opts){
     if(opts.onDone) await opts.onDone(); else viewPipeline();
     const summary=`Import done — ${added} added, ${updated} updated, ${unchanged} unchanged`+(skipped?`, ${skipped} skipped (blank name)`:'')
       +(paymentChangesIgnored?`, ${paymentChangesIgnored} payment change(s) ignored (ask Elias/Management to log those)`:'')
+      +(conflicts.length?`, ${conflicts.length} conflict(s) held back (see Import History)`:'')
       +(errors.length?`, ${errors.length} failed`:'');
     toast(summary);
     if(errors.length) console.warn('Import row errors:',errors);
+    // Sec 92: "import batch is archived" -- this is the archive half, and it's
+    // also where the row-level conflict/error detail actually lands for a human
+    // to review, instead of the errors array only ever reaching a console.warn
+    // nobody but a developer would see.
+    try{
+      await apiInsertImportBatch({
+        sourceLabel:opts.companyWide?'Company-wide (agent import)':PROFILE.role==='manager'?'Master Pipeline':PROFILE.name+"'s pipeline",
+        addedCount:added,updatedCount:updated,unchangedCount:unchanged,skippedCount:skipped,
+        conflictCount:conflicts.length,errorCount:errors.length,paymentChangesIgnoredCount:paymentChangesIgnored,
+        details:{conflicts,errors}
+      });
+    }catch(e){ console.warn('Could not archive import batch:',e); }
   }catch(e){ toast('Import failed: '+(e.message||e)); }
+}
+async function apiInsertImportBatch(b){
+  if(DEMO_MODE){ const d=await demoLoad(); d.importBatches=d.importBatches||[];
+    d.importBatches.unshift({id:uid(),importedBy:PROFILE.key,importedByName:PROFILE.name,sourceLabel:b.sourceLabel,
+      addedCount:b.addedCount,updatedCount:b.updatedCount,unchangedCount:b.unchangedCount,skippedCount:b.skippedCount,
+      conflictCount:b.conflictCount,errorCount:b.errorCount,paymentChangesIgnoredCount:b.paymentChangesIgnoredCount,
+      details:b.details,createdAt:new Date().toISOString()});
+    await demoSave(); return; }
+  const {error}=await sb.from('import_batches').insert({imported_by:PROFILE.agent_key,imported_by_name:PROFILE.name,
+    source_label:b.sourceLabel,added_count:b.addedCount,updated_count:b.updatedCount,unchanged_count:b.unchangedCount,
+    skipped_count:b.skippedCount,conflict_count:b.conflictCount,error_count:b.errorCount,
+    payment_changes_ignored_count:b.paymentChangesIgnoredCount,details:b.details});
+  if(error) throw error;
+}
+let IMPORT_BATCHES_LOADED=false, IMPORT_BATCHES_LIST=[];
+async function apiLoadImportBatches(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.importBatches||[]).map(b=>({...b,details:undefined})); }
+  const {data,error}=await sb.from('import_batches').select('id,imported_by,imported_by_name,source_label,added_count,updated_count,unchanged_count,skipped_count,conflict_count,error_count,payment_changes_ignored_count,created_at').order('created_at',{ascending:false}).limit(60);
+  if(error) throw error;
+  return (data||[]).map(r=>({id:r.id,importedBy:r.imported_by,importedByName:r.imported_by_name,sourceLabel:r.source_label,
+    addedCount:r.added_count,updatedCount:r.updated_count,unchangedCount:r.unchanged_count,skippedCount:r.skipped_count,
+    conflictCount:r.conflict_count,errorCount:r.error_count,paymentChangesIgnoredCount:r.payment_changes_ignored_count,createdAt:r.created_at}));
+}
+async function apiLoadImportBatchDetail(id){
+  if(DEMO_MODE){ const d=await demoLoad(); const b=(d.importBatches||[]).find(x=>x.id===id); return b?b.details:null; }
+  const {data,error}=await sb.from('import_batches').select('details').eq('id',id).single();
+  if(error) throw error;
+  return data.details;
+}
+// Standalone route usable by both agent and manager (same shape as
+// viewAllocations()/route('allocations')) -- RLS already scopes an agent to
+// their own import_batches rows, so this needs no role branching of its own.
+async function viewImportHistory(){
+  V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'salesdesk')}<div class="skel" style="height:120px;border-radius:16px"></div>`;
+  try{ IMPORT_BATCHES_LIST=await withLoadTimeout(apiLoadImportBatches(),15000,'Import History'); IMPORT_BATCHES_LOADED=true;
+    V.innerHTML=back(PROFILE.role==='manager'?'mgr':'salesdesk')+importHistoryHtml(); bindImportHistoryCtrls(); }
+  catch(e){ V.innerHTML=back(PROFILE.role==='manager'?'mgr':'salesdesk')+emptyState(ic.alertTri||ic.alert,'Could not load Import History',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
+  renderBottomNavNow();
+}
+function importHistoryHtml(){
+  const rows=IMPORT_BATCHES_LIST;
+  const rowOf=b=>{
+    const hasIssues=b.conflictCount>0||b.errorCount>0;
+    return `<div class="rowcard"><div class="top"><div><div class="nm">${esc(b.sourceLabel)}</div>
+      <div class="meta">${esc(b.importedByName||b.importedBy)} · ${esc((b.createdAt||'').slice(0,16).replace('T',' '))}</div></div>
+      <span class="tag ${hasIssues?'warnt':'ok'}">${b.addedCount} added · ${b.updatedCount} updated</span></div>
+      <div class="mini" style="margin-top:6px">${b.unchangedCount} unchanged${b.skippedCount?`, ${b.skippedCount} skipped`:''}${b.paymentChangesIgnoredCount?`, ${b.paymentChangesIgnoredCount} payment change(s) ignored`:''}</div>
+      ${hasIssues?`<div class="foot"><button class="chip" data-viewimportbatch="${b.id}">${b.conflictCount?b.conflictCount+' conflict(s)':''}${b.conflictCount&&b.errorCount?' · ':''}${b.errorCount?b.errorCount+' error(s)':''} — view detail</button></div>`:''}
+      <div id="importBatchDetail_${b.id}"></div></div>`;
+  };
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Sales tools</div><h2>Import History</h2><p>Every Excel pipeline import, kept with row-level conflict/error detail — most recent ${rows.length}.</p></div></div>
+  <div class="list">${rows.length?rows.map(rowOf).join(''):emptyState(ic.doc,'Nothing yet','Fills in automatically the next time a pipeline Excel file is imported.')}</div>`;
+}
+function importConflictDetailHtml(detail){
+  if(!detail) return `<div class="mini">No detail stored for this batch.</div>`;
+  const conflictRows=(detail.conflicts||[]).map(c=>`<div class="rowcard" style="margin-top:8px"><div class="top"><div><div class="nm nm-link" data-custname="${esc(c.name)}" data-custcontact="${esc(c.contact||'')}">${esc(c.name)}</div>
+    <div class="meta">Edited in-app ${esc((c.lastModifiedAt||'').slice(0,16).replace('T',' '))}${c.lastModifiedBy?' by '+esc(c.lastModifiedBy):''} — after this file was generated (${esc((c.exportedAt||'').slice(0,16).replace('T',' '))})</div></div></div>
+    <div class="mini" style="margin-top:6px">Kept the live app version — the file's version was NOT applied. Review and re-export if the file's edits still need to go in.</div>
+    <div class="foot"><button class="chip" onclick="route('updateOne','${esc(c.leadId)}')">Review this lead →</button></div></div>`).join('');
+  const errorRows=(detail.errors||[]).map(e=>`<div class="mini" style="margin-top:6px;color:var(--danger)">${esc(e)}</div>`).join('');
+  return `${conflictRows}${errorRows?`<div style="margin-top:10px"><div class="mini" style="font-weight:700">Row errors</div>${errorRows}</div>`:''}`;
+}
+function bindImportHistoryCtrls(){
+  document.querySelectorAll('[data-viewimportbatch]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.viewimportbatch; const det=document.getElementById('importBatchDetail_'+id);
+    if(!det) return;
+    if(!det.classList.contains('hidden') && det.innerHTML){ det.classList.add('hidden'); return; }
+    det.classList.remove('hidden');
+    det.innerHTML=`<div class="mini" style="padding:8px 0">Loading…</div>`;
+    try{ const detail=await apiLoadImportBatchDetail(id); det.innerHTML=importConflictDetailHtml(detail); }
+    catch(e){ det.innerHTML=`<div class="mini">Could not load detail: ${esc(e.message||e)}</div>`; }
+  });
 }
 async function downloadCompanyExcel(){
   if(typeof ExcelJS==='undefined'){ toast('Report library failed to load — check your connection and try again.'); return; }
