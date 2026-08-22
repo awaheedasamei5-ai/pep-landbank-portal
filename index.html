@@ -4173,6 +4173,17 @@ async function apiLoadTaskEvents(taskId){
     return (data||[]).map(mapTaskEvent); }
   catch(e){ return []; }
 }
+// Company-wide task_events fetch for the Ops Report's analytics (reopen rate
+// specifically needs event-level history -- a task's current status alone
+// can't reveal it was ever bounced back to Open after being Done). Bounded
+// the same way apiLoadFullTasks()'s siblings are -- this is only called
+// on-demand when actually generating a report, never on sign-in.
+async function apiLoadAllTaskEvents(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.taskEvents||[]).slice(); }
+  const {data,error}=await sb.from('task_events').select('*').order('created_at',{ascending:false}).limit(5000);
+  if(error) throw error;
+  return (data||[]).map(mapTaskEvent);
+}
 async function apiLogTaskEvent(taskId,type,extra){
   const rec={taskId,type,actorKey:PROFILE.key,actorName:PROFILE.name,fromKey:null,fromName:null,toKey:null,toName:null,note:null,...(extra||{})};
   if(DEMO_MODE){ const d=await demoLoad(); d.taskEvents=d.taskEvents||[];
@@ -10408,7 +10419,7 @@ async function paintOpsReportsTab(){
   ${isCustom?`<div class="grid2">${fld('From','<input id="opsrpt_from" type="date" value="'+(OPSRPT_FROM||today())+'"/>')}${fld('To','<input id="opsrpt_to" type="date" value="'+(OPSRPT_TO||today())+'"/>')}</div>`:''}
   <label class="mini" style="display:flex;align-items:center;gap:8px;margin:2px 0 14px;cursor:pointer"><input type="checkbox" id="opsrpt_compare"${OPSRPT_COMPARE?' checked':''}/> Compare to the same-length previous period</label>
   <div class="formactions"><button class="btn primary" id="opsRptGoBtn" style="width:100%">Generate PDF report</button></div>
-  <p class="mini" style="margin-top:10px">Per-staff and per-duty (category) assigned/completed/overdue/escalated, average days and hours to close, and company-wide To-Do List activity for the period.</p>
+  <p class="mini" style="margin-top:10px">Per-staff and per-duty (category) assigned/completed/overdue/escalated, average days and hours to close, phase-by-phase timing (open/start/complete), median close time, reopen rate, and company-wide To-Do List activity for the period.</p>
   </div>`;
   body.querySelectorAll('[data-opsrptperiod]').forEach(b=>b.onclick=()=>{ OPSRPT_PERIOD=b.dataset.opsrptperiod; paintOpsReportsTab(); });
   document.getElementById('opsrpt_compare').onchange=e=>{ OPSRPT_COMPARE=e.target.checked; };
@@ -10417,10 +10428,10 @@ async function paintOpsReportsTab(){
     const range=reportPeriodRange(OPSRPT_PERIOD,OPSRPT_FROM,OPSRPT_TO);
     const btn=document.getElementById('opsRptGoBtn'); btn.disabled=true; btn.textContent='Building…';
     try{
-      const [todos,tasksData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks()]);
-      const data=computeOpsReportData(range.from,range.to,todos,tasksData);
+      const [todos,tasksData,taskEventsData]=await Promise.all([apiLoadAllTodosForLeaderboard(range.from,range.to),apiLoadFullTasks(),apiLoadAllTaskEvents()]);
+      const data=computeOpsReportData(range.from,range.to,todos,tasksData,taskEventsData);
       let prior=null, priorData=null;
-      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData); }
+      if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData,taskEventsData); }
       buildOpsReportPDF(range,data,prior,priorData);
     }catch(e){ toast('Could not build report: '+(e.message||e)); }
     btn.disabled=false; btn.textContent='Generate PDF report';
@@ -18548,7 +18559,7 @@ function buildManagementReportPDF(range,d,prior,priorData){
 // are full timestamps already, so hour-level precision falls out of the same
 // data daysBetween uses, just without rounding to a whole day first.
 function hoursBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,(d2-d1)/3600000); }
-function computeOpsReportData(from,to,todos,tasksData){
+function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   const inRange=d=>{ const s=(d||'').slice(0,10); return !!s && s>=from && s<=to; };
   // tasksData: a fresh, uncapped fetch (apiLoadFullTasks()) passed in by the
   // caller -- DB.tasks itself is capped to the most recent tasks for everyday
@@ -18586,9 +18597,29 @@ function computeOpsReportData(from,to,todos,tasksData){
   const byCategory={}; assignedInRange.forEach(t=>{ const c=t.category||'General'; byCategory[c]=(byCategory[c]||0)+1; });
   const todoStats={total:(todos||[]).length,closed:(todos||[]).filter(t=>t.status==='closed').length,rescheduled:(todos||[]).filter(t=>t.status==='rescheduled').length};
   const allCloseHours=completedInRange.map(t=>hoursBetween(t.createdAt,t.completedAt)).filter(h=>h!=null);
+  // ---- Sec 33 task-analytics additions: phase-by-phase timing (not just the
+  // full create->complete span above), median (a few very slow tasks shouldn't
+  // drag the whole picture the way they do to an average), and reopen rate
+  // (needs task_events -- a task's current status alone can't reveal it was
+  // ever bounced back to Open after being marked Done). All scoped to the same
+  // assigned-in-period cohort as everything else in this report, for
+  // consistency with how every other stat here is period-bound. ----
+  const median=arr=>{ if(!arr.length) return null; const s=[...arr].sort((a,b)=>a-b); const mid=Math.floor(s.length/2); return s.length%2?s[mid]:(s[mid-1]+s[mid])/2; };
+  const phaseHours=(fromField,toField)=>assignedInRange.map(t=>(t[fromField]&&t[toField])?hoursBetween(t[fromField],t[toField]):null).filter(h=>h!=null);
+  const avgTimeToOpenHrs=avg(phaseHours('createdAt','openedAt'));
+  const avgOpenToStartHrs=avg(phaseHours('openedAt','startedAt'));
+  const avgStartToCompleteHrs=avg(phaseHours('startedAt','completedAt'));
+  const medianCloseHours=median(assignedInRange.map(t=>(t.createdAt&&t.completedAt)?hoursBetween(t.createdAt,t.completedAt):null).filter(h=>h!=null));
+  const reopenedIds=new Set((taskEventsData||[]).filter(e=>e.type==='reopened').map(e=>e.taskId));
+  const reopenRate=assignedInRange.length?(assignedInRange.filter(t=>reopenedIds.has(t.id)).length/assignedInRange.length*100):0;
   return {perStaffRows,byCategory,byCategoryStats,todoStats,
     totalAssigned:assignedInRange.length,totalCompleted:completedInRange.length,totalOverdue:overdueNow.length,totalEscalated:escalatedInRange.length,
-    avgHoursPerTask:allCloseHours.length?Math.round(avg(allCloseHours)*10)/10:null};
+    avgHoursPerTask:allCloseHours.length?Math.round(avg(allCloseHours)*10)/10:null,
+    avgTimeToOpenHrs:avgTimeToOpenHrs!=null?Math.round(avgTimeToOpenHrs*10)/10:null,
+    avgOpenToStartHrs:avgOpenToStartHrs!=null?Math.round(avgOpenToStartHrs*10)/10:null,
+    avgStartToCompleteHrs:avgStartToCompleteHrs!=null?Math.round(avgStartToCompleteHrs*10)/10:null,
+    medianCloseHours:medianCloseHours!=null?Math.round(medianCloseHours*10)/10:null,
+    reopenRatePct:Math.round(reopenRate*10)/10};
 }
 // prior/priorData are both optional -- only present when "Compare to previous
 // period" was checked. Adds one extra comparison stat bar right under the main
@@ -18616,6 +18647,19 @@ function buildOpsReportPDF(range,d,prior,priorData){
        ['Avg hrs/task',d.avgHoursPerTask!=null?String(d.avgHoursPerTask):'—',priorData.avgHoursPerTask!=null?String(priorData.avgHoursPerTask):'—',pctChangeStr(priorData.avgHoursPerTask,d.avgHoursPerTask)]],
       [0.34,0.22,0.22,0.22]);
   }
+
+  // Task lifecycle timing -- how long each phase actually takes (not just the
+  // full create-to-complete span above), plus reopen rate. Median sits next to
+  // the average deliberately: a handful of very slow tasks shouldn't make the
+  // whole team look slower than they are.
+  y=pdfSectionTitle(doc,y,pageW,'Task lifecycle timing');
+  y=pdfDarkStatBar(doc,y,pageW,[
+    {label:'Avg hrs to open',value:d.avgTimeToOpenHrs!=null?d.avgTimeToOpenHrs:'—'},
+    {label:'Avg open→start',value:d.avgOpenToStartHrs!=null?d.avgOpenToStartHrs:'—'},
+    {label:'Avg start→done',value:d.avgStartToCompleteHrs!=null?d.avgStartToCompleteHrs:'—'},
+    {label:'Median hrs/task',value:d.medianCloseHours!=null?d.medianCloseHours:'—'},
+    {label:'Reopen rate',value:d.reopenRatePct+'%'}
+  ]);
 
   y=pdfSectionTitle(doc,y,pageW,'By staff member');
   if(d.perStaffRows.length) y=pdfSimpleTable(doc,y,pageW,['STAFF','ASSIGNED','COMPLETED','OVERDUE','ESCALATED','AVG DAYS','AVG HRS'],
