@@ -250,22 +250,39 @@ a{color:var(--green2)}
    identical. At/above 1024px, #app becomes a row of [sidebar][.appContent],
    and the existing .bottomnav is hidden since the sidebar replaces it. */
 .appContent{display:flex;flex-direction:column;flex:1;min-width:0}
-.sidebar{display:none;flex-direction:column;flex:0 0 240px;background:var(--ink);color:#fff;
-  padding:20px 14px;gap:4px;overflow-y:auto}
+/* position:sticky+explicit height (not flex-stretch off #app's own height) --
+   #app only has a min-height, so if the main content on a given screen is
+   taller than one viewport, a stretched sidebar would grow to match it (and
+   its inner nav list would never actually need to scroll, since it'd have as
+   much room as the content did). Pinning the sidebar to the viewport itself
+   is what makes it behave like every real dashboard's persistent side nav. */
+.sidebar{display:none;flex-direction:column;flex:0 0 240px;background:var(--ink);color:#fff;padding:20px 14px 0;
+  position:sticky;top:0;height:100vh;height:100dvh}
 @media(min-width:1024px){
   #app{flex-direction:row}
   .sidebar{display:flex}
   #app:not(.chat-fullscreen) .bottomnav{display:none}
   #app.chat-fullscreen .sidebar{display:none}
 }
-.sidebar .sbSection{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);
-  font-weight:700;margin:14px 8px 6px}
-.sidebar .sbSection:first-child{margin-top:0}
-.sidebar .sbItem{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;color:rgba(255,255,255,.78);
-  font-size:13.5px;font-weight:600;transition:background .15s,color .15s;text-align:left;border:none;background:none;cursor:pointer;width:100%}
-.sidebar .sbItem:hover{background:rgba(255,255,255,.08);color:#fff}
-.sidebar .sbItem.on{background:rgba(103,232,249,.16);color:#fff}
-.sidebar .sbItem svg{width:17px;height:17px;flex:0 0 auto}
+.sidebar .sbScroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin:0 -6px;padding:0 6px}
+.sidebar .sbScroll::-webkit-scrollbar{width:5px}
+.sidebar .sbScroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:100px}
+.sidebar .sbFooter{display:flex;align-items:center;gap:9px;padding:12px 6px 16px;margin:8px -6px 0;border-top:1px solid rgba(255,255,255,.1);flex:0 0 auto}
+.sidebar .sbFooterAvatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;background:rgba(255,255,255,.12);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+.sidebar .sbFooterAvatar img{width:100%;height:100%;object-fit:cover;display:block}
+.sidebar .sbSection{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.4);
+  font-weight:700;margin:16px 12px 6px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar .sbSection:first-child{margin-top:0;padding-top:0;border-top:none}
+.sidebar .sbItem{display:flex;align-items:center;gap:10px;padding:9px 12px 9px 15px;border-radius:11px;color:rgba(255,255,255,.72);
+  font-size:13px;font-weight:600;transition:background .15s ease,color .15s ease,transform .15s cubic-bezier(.34,1.56,.64,1);
+  text-align:left;border:none;background:none;cursor:pointer;width:100%;position:relative}
+.sidebar .sbItem:hover{background:rgba(255,255,255,.07);color:#fff;transform:translateX(1px)}
+.sidebar .sbItem.on{background:linear-gradient(90deg,rgba(103,232,249,.18),rgba(103,232,249,.05));color:#fff}
+.sidebar .sbItem.on::before{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:3px;border-radius:3px;
+  background:linear-gradient(180deg,var(--gold2),var(--green2))}
+.sidebar .sbItem svg{width:16px;height:16px;flex:0 0 auto}
+.sidebar .sbItem .fic{width:22px;height:22px;flex:0 0 auto;border-radius:7px}
 .sidebar .bnBadge{position:static;min-width:18px;height:18px;padding:0 5px;border-radius:100px;background:var(--danger);
   color:#fff;font-size:10.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .topbar{position:sticky;top:0;z-index:40;background:var(--hero-bg,linear-gradient(115deg,var(--ink) 0%,#123262 45%,#0F2A52 100%));color:#fff;
@@ -7100,24 +7117,117 @@ function renderBottomNavNow(){
   }).join('');
   nav.querySelectorAll('[data-navtab]').forEach(b=>b.onclick=()=>route(b.dataset.navtab));
 }
-// Premium UI rebuild, Phase 1 -- persistent desktop sidebar. Mirrors the exact
-// same tabDefs/activeTab as the bottom-nav (computeNavTabDefs() above); route()
-// is called identically either way. This is intentionally a plain mirror of
-// today's 5 nav destinations, not the richer multi-section IA the full rebuild
-// spec describes -- that reorganization is Phase 2 (per-screen migration),
-// once real screens are being migrated to consume this shell.
+// Premium UI rebuild, Phase 2 (shell/navigation) -- the real desktop workspace
+// IA from spec Sec 5 (Overview/Sales/Office/Communication/Insights/Management/
+// Settings), built entirely from data the app already computes correctly
+// elsewhere -- salesDeskGroupsForAgent/Mgr(), officeDeskGroups(), MGR_APPS,
+// SETTINGS_APPS -- so this can never drift from what the real Sales/Office/
+// Settings hub pages actually show. Every item still resolves through the
+// exact same route()/mgrAppRoute() the rest of the app already uses; nothing
+// here is a new destination. Client nav is unchanged (simple 5-item mirror).
+function sidebarItemFromMgr(a){ return {mgrKey:a.key,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}; }
+function sidebarItemFromAgent(a){ return {r:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}; }
+function sidebarSectionsForStaff(){
+  const isMgr=PROFILE.role==='manager';
+  const byMgr=k=>MGR_APPS.find(a=>a.key===k);
+  const sales=(isMgr?salesDeskGroupsForMgr():salesDeskGroupsForAgent())
+    .flatMap(g=>g.items).map(a=>isMgr?sidebarItemFromMgr(a):sidebarItemFromAgent(a));
+  // Commission and Management Reports move to Insights in this nav (per spec
+  // Sec 5's own regrouping) -- pulled straight out of officeDeskGroups()'s own
+  // output (NOT re-declared here) since 'Management Reports' only ever existed
+  // as a literal inline inside that function, never in the MGR_APPS registry --
+  // sourcing it from anywhere else risked silently losing the item. Filtered out
+  // of the flattened Office list so it doesn't also duplicate there; the Office
+  // hub page itself is untouched and still shows all of these under its own
+  // Money/Insights groups.
+  const officeAll=officeDeskGroups().flatMap(g=>g.items);
+  const pullOffice=k=>officeAll.find(a=>a.key===k);
+  const managementReportsItem=pullOffice('Management Reports');
+  const office=officeAll.filter(a=>!['Notes','Leaderboard','Commission','Management Reports'].includes(a.key)).map(sidebarItemFromMgr);
+  const communication=[
+    {r:'chat',fic:'chat',label:'Chat'},
+    ...(isMgr&&byMgr('News')?[sidebarItemFromMgr(byMgr('News'))]:[]),
+    sidebarItemFromMgr({key:'Notes',fic:'notes',label:'Notes'})
+  ];
+  // 'Management Reports' keeps its plain "Reports" label on the Office hub page
+  // (where there's no other "Reports" nearby), but here it sits right next to
+  // the *different* 'Reports' key (mgrReports(), a separate real screen) -- so
+  // it gets its own clearer label rather than reading as a duplicate row.
+  const insights=isMgr
+    ?[byMgr('Analytics'),byMgr('Reports'),managementReportsItem?{...managementReportsItem,label:'Management Reports'}:null,byMgr('Report Archive'),byMgr('Insights'),byMgr('Commission')]
+      .filter(Boolean).map(sidebarItemFromMgr)
+    :[{r:'insights',fic:'target',label:'Smart Insights'},{r:'portfolio',fic:'leaderboard',label:'Portfolio'}];
+  const management=isMgr?['Data Check','Leaderboard'].map(byMgr).filter(Boolean).map(sidebarItemFromMgr):[];
+  const settings=isMgr?SETTINGS_APPS.map(sidebarItemFromMgr):[{r:'account',fic:'settings',label:'Settings'}];
+  return [
+    {title:'Overview',items:[{r:isMgr?'mgr':'home',fic:'home',label:'Overview'}]},
+    {title:'Sales',items:sales},
+    {title:'Office',items:office},
+    {title:'Communication',items:communication},
+    {title:'Insights',items:insights},
+    ...(isMgr?[{title:'Management',items:management}]:[]),
+    {title:'Settings',items:settings}
+  ].filter(s=>s.items.length);
+}
+// Whether a section item is the one currently on screen -- direct-route items
+// compare CURRENT_ROUTE_NAME directly; MGR_APPS/SETTINGS_APPS items resolve
+// through the exact same MGR_APP_ROUTE_NAMES map mgrAppRoute() itself uses, or
+// (for the generic mgrTabView fallback) the current mgrTab value, so this can
+// never disagree with what actually navigated.
+function sidebarItemActive(item){
+  if(item.r) return item.r===CURRENT_ROUTE_NAME;
+  if(item.mgrKey){
+    const rn=MGR_APP_ROUTE_NAMES[item.mgrKey];
+    return rn?rn===CURRENT_ROUTE_NAME:(CURRENT_ROUTE_NAME==='mgrTabView'&&mgrTab===item.mgrKey);
+  }
+  return false;
+}
+function sidebarItemRowHtml(item){
+  const badgeN=item.badgeKind?unreadByKind(item.badgeKind):(item.badgeCountKey&&DB.badgeCounts?(DB.badgeCounts[item.badgeCountKey]||0):0);
+  const attr=item.r?`data-sbnav="${esc(item.r)}"`:`data-sbmgr="${esc(item.mgrKey)}"`;
+  return `<button class="sbItem${sidebarItemActive(item)?' on':''}" ${attr}>${fic(item.fic)}<span style="flex:1;text-align:left">${esc(item.label)}</span>${badgeN>0?`<span class="bnBadge">${badgeN>9?'9+':badgeN}</span>`:''}</button>`;
+}
 function renderSidebarNow(){
   const sb=document.getElementById('sidebar'); if(!sb||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
-  const {activeTab,tabDefs}=computeNavTabDefs();
-  sb.innerHTML=`<div style="display:flex;align-items:center;gap:9px;padding:0 8px 18px;color:#fff">
+  const brand=`<div style="display:flex;align-items:center;gap:9px;padding:0 8px 18px;color:#fff">
       <span style="width:30px;height:30px;border-radius:9px;overflow:hidden;flex:0 0 auto"><img alt="" src="./logo.png" style="width:100%;height:100%;display:block"/></span>
       <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em">PALMSTEAD</span>
-    </div>`+
-    tabDefs.map(t=>{
+    </div>`;
+  if(IS_CLIENT){
+    const {activeTab,tabDefs}=computeNavTabDefs();
+    const cp=CLIENT_PROFILE||{};
+    const footer=`<div class="sbFooter">
+        <span class="sbFooterAvatar">${cp.avatar?`<img src="${esc(cp.avatar)}"/>`:esc((cp.name||'?').charAt(0).toUpperCase())}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((cp.name||'').split(' ')[0])}</span>
+        <button id="sbSignOutBtn" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;padding:4px;display:flex;flex:0 0 auto">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 12H4m0 0l4-4m-4 4l4 4M14 5h4a2 2 0 012 2v10a2 2 0 01-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>`;
+    sb.innerHTML=brand+`<div class="sbScroll">`+tabDefs.map(t=>{
       const show=t.badge>0;
       return `<button class="sbItem${t.key===activeTab?' on':''}" data-sbnav="${t.r}">${t.icon}<span style="flex:1;text-align:left">${esc(t.label)}</span>${show?`<span class="bnBadge">${t.badge>9?'9+':t.badge}</span>`:''}</button>`;
-    }).join('');
+    }).join('')+`</div>`+footer;
+    sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
+    const signOutBtn=document.getElementById('sbSignOutBtn');
+    if(signOutBtn) signOutBtn.onclick=()=>{ const real=document.getElementById('logoutBtn'); if(real) real.click(); };
+    return;
+  }
+  const sections=sidebarSectionsForStaff();
+  const p=PROFILE||{};
+  const displayName=p.role==='manager'?'Management':(p.name||'').split(' ')[0];
+  const footer=`<div class="sbFooter">
+      <span class="sbFooterAvatar">${p.avatar?`<img src="${esc(p.avatar)}"/>`:esc((p.name||'?').charAt(0).toUpperCase())}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(displayName)}</span>
+      <button id="sbSignOutBtn" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;padding:4px;display:flex;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 12H4m0 0l4-4m-4 4l4 4M14 5h4a2 2 0 012 2v10a2 2 0 01-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>`;
+  sb.innerHTML=brand+`<div class="sbScroll">`+sections.map(s=>`<div class="sbSection">${esc(s.title)}</div>`+s.items.map(sidebarItemRowHtml).join('')).join('')+`</div>`+footer;
   sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
+  sb.querySelectorAll('[data-sbmgr]').forEach(b=>b.onclick=()=>mgrAppRoute(b.dataset.sbmgr));
+  const signOutBtn=document.getElementById('sbSignOutBtn');
+  if(signOutBtn) signOutBtn.onclick=()=>{ const real=document.getElementById('logoutBtn'); if(real) real.click(); };
+  const activeItem=sb.querySelector('.sbItem.on'); if(activeItem) activeItem.scrollIntoView({block:'nearest'});
 }
 window.addEventListener('popstate',e=>{
   if(!PROFILE && !IS_CLIENT) return; // still on login screen — nothing app-side to navigate
@@ -7377,8 +7487,10 @@ function viewSmartInsights(){
 // personal pipeline tools (AGENT_HUBS.salesdesk) plus the client-touchpoint and
 // plot-inventory items that used to live in a separate CRM Tools tab, so agents and
 // managers share the same nav shape (Home / Sales Desk / Office Desk / Chat / More).
-function viewSalesDesk(){
-  const groups=[
+// Extracted so the desktop sidebar (renderSidebarNow) can mirror this hub's
+// exact items instead of re-typing a second, driftable copy of the same list.
+function salesDeskGroupsForAgent(){
+  return [
     {title:'My pipeline',items:AGENT_HUBS.salesdesk.items},
     {title:'Client touchpoints',items:[
       {r:'sitevisit',fic:'location',label:'Site visit'},
@@ -7395,6 +7507,9 @@ function viewSalesDesk(){
       {r:'referralsapp',fic:'gift',label:'Referrals'}
     ]}
   ].filter(g=>g.items.length);
+}
+function viewSalesDesk(){
+  const groups=salesDeskGroupsForAgent();
   const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Sales</h2><p>Leads, pipeline, plots &amp; client touchpoints — everything for your book of clients</p></div></div>
   <div id="salesDeskGrid">${vaultGridHtml(groups.map(g=>({...g,items:g.items.map(a=>({key:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}))})),{openFirst:true,hubId:'salesDesk'})}</div>`;
@@ -7406,24 +7521,18 @@ function viewSalesDesk(){
 }
 // Shared by More (manager's leftover apps), the new CRM Tools tab, and the new Plot
 // Inventory tab -- one click-routing table instead of three copies drifting apart.
+// Pure resolver, no navigation -- lets the desktop sidebar know (for active-
+// item highlighting) which real route name a MGR_APPS/SETTINGS_APPS key ends
+// up on, using the exact same map mgrAppRoute() dispatches through below, so
+// the two can never disagree. Returns null for a key that opens a modal
+// (Quotation) or falls through to the generic mgrTabView route.
+const MGR_APP_ROUTE_NAMES={'Feedback':'feedback','Duties':'duties','Leave Schedules':'leaveapp','Memorandum':'memoapp',
+  'Banner Tracking':'bannerapp','Insights':'insights','Downloads':'downloads','Plot Requests':'plotrequests',
+  'Company Leads':'companyleads','Log Payment':'logpayment','Expenses':'expenses','Management Reports':'mgmtreports',
+  'Site Visit Auth':'sitevisitauth','Contract of Sale':'contractapp','Notes':'notes','Attendance':'attendanceapp','SMS':'sms'};
 function mgrAppRoute(key){
-  if(key==='Feedback') route('feedback');
-  else if(key==='Duties') route('duties');
-  else if(key==='Leave Schedules') route('leaveapp');
-  else if(key==='Memorandum') route('memoapp');
-  else if(key==='Banner Tracking') route('bannerapp');
-  else if(key==='Insights') route('insights');
-  else if(key==='Downloads') route('downloads');
-  else if(key==='Plot Requests') route('plotrequests');
-  else if(key==='Company Leads') route('companyleads');
-  else if(key==='Log Payment') route('logpayment');
-  else if(key==='Expenses') route('expenses');
-  else if(key==='Management Reports') route('mgmtreports');
-  else if(key==='Site Visit Auth') route('sitevisitauth');
-  else if(key==='Contract of Sale') route('contractapp');
-  else if(key==='Notes') route('notes');
-  else if(key==='Attendance') route('attendanceapp');
-  else if(key==='SMS') route('sms');
+  const rn=MGR_APP_ROUTE_NAMES[key];
+  if(rn) route(rn);
   else if(key==='Quotation') openQuotationRequest();
   else route('mgrTabView',key);
 }
@@ -7490,24 +7599,27 @@ function bindMgrAppGrid(grid,items){
 }
 // Replaces the old separate CRM Tools / Plot Inventory tabs with one Sales Desk hub,
 // mirroring the agent-side consolidation -- same nav shape for both roles.
-function viewMgrSalesDesk(){
+function salesDeskGroupsForMgr(){
   const all=MGR_APPS.filter(a=>a.section==='salesdesk');
   const byKey=k=>all.find(a=>a.key===k);
-  const groups=[
+  return [
     {title:'Client touchpoints',items:['Plot Requests','Enquiries','Complaints','Site visits'].map(byKey).filter(Boolean)},
     {title:'Inventory & records',items:['Plots','Allocations','Client Database'].map(byKey).filter(Boolean)},
     {title:'Leads & referrals',items:['Company Leads','Referrals'].map(byKey).filter(Boolean)}
   ];
+}
+function viewMgrSalesDesk(){
+  const groups=salesDeskGroupsForMgr();
   const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Sales</h2><p>Client database, plots, allocations, site visits, enquiries &amp; plot requests</p></div></div>
   <div id="mgrSalesGrid">${vaultGridHtml(groups,{openFirst:true,hubId:'mgrSalesDesk'})}</div>`;
   bindMgrAppGrid(document.getElementById('mgrSalesGrid'),items);
   bindVaultAccordion(document.getElementById('mgrSalesGrid'),'mgrSalesDesk');
 }
-function viewOfficeDesk(){
+function officeDeskGroups(){
   const isMgr=PROFILE.role==='manager';
   const showCompanyLeads=isMgr||canViewClientDatabase();
-  const groups=[
+  return [
     {title:'Documents',items:[
       {key:'Memorandum',fic:'memo',label:'Memorandum',badgeCountKey:'memo'},
       {key:'Quotation',fic:'quote',label:'Quotation'},
@@ -7533,6 +7645,10 @@ function viewOfficeDesk(){
       ...(isMgr?[{key:'Leaderboard',fic:'leaderboard',label:'Leaderboard'}]:[])
     ]}
   ];
+}
+function viewOfficeDesk(){
+  const isMgr=PROFILE.role==='manager';
+  const groups=officeDeskGroups();
   const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Office</h2><p>Documents, operations &amp; feedback${isMgr?', plus the leaderboard':''} — everything off to the side of your daily pipeline</p></div></div>
   <div id="officeDeskGrid">${vaultGridHtml(groups,{openFirst:true,hubId:'officeDesk'})}</div>`;
