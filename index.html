@@ -257,34 +257,54 @@ a{color:var(--green2)}
    much room as the content did). Pinning the sidebar to the viewport itself
    is what makes it behave like every real dashboard's persistent side nav. */
 .sidebar{display:none;flex-direction:column;flex:0 0 240px;background:var(--ink);color:#fff;padding:20px 14px 0;
-  position:sticky;top:0;height:100vh;height:100dvh}
+  position:sticky;top:0;height:100vh;height:100dvh;transition:flex-basis .2s ease}
+.sidebar.collapsed{flex-basis:72px}
 @media(min-width:1024px){
   #app{flex-direction:row}
   .sidebar{display:flex}
   #app:not(.chat-fullscreen) .bottomnav{display:none}
   #app.chat-fullscreen .sidebar{display:none}
+  /* The sidebar carries the one brand mark at this width -- the topbar's own
+     copy (still needed below 1024px, where there's no sidebar at all) would
+     otherwise show the logo/wordmark twice on the same screen. */
+  .topbar .topbarBrandBit{display:none}
 }
-.sidebar .sbScroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin:0 -6px;padding:0 6px}
+.sidebar .sbBrand{display:flex;align-items:center;gap:10px;padding:0 4px 18px;color:#fff}
+.sidebar .sbBrand #sbCollapseBtn{background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;padding:4px;
+  display:flex;flex:0 0 auto;border-radius:8px;transition:background .15s}
+.sidebar .sbBrand #sbCollapseBtn:hover{background:rgba(255,255,255,.08);color:#fff}
+.sidebar .sbBrandLogo{width:28px;height:28px;border-radius:8px;overflow:hidden;flex:0 0 auto}
+.sidebar .sbBrandLogo img{width:100%;height:100%;display:block}
+.sidebar .sbBrandWord{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em;white-space:nowrap;overflow:hidden}
+.sidebar .sbScroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:3px;margin:0 -6px;padding:0 6px}
 .sidebar .sbScroll::-webkit-scrollbar{width:5px}
 .sidebar .sbScroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:100px}
 .sidebar .sbFooter{display:flex;align-items:center;gap:9px;padding:12px 6px 16px;margin:8px -6px 0;border-top:1px solid rgba(255,255,255,.1);flex:0 0 auto}
 .sidebar .sbFooterAvatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;background:rgba(255,255,255,.12);
   display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
 .sidebar .sbFooterAvatar img{width:100%;height:100%;object-fit:cover;display:block}
-.sidebar .sbSection{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.4);
-  font-weight:700;margin:16px 12px 6px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}
-.sidebar .sbSection:first-child{margin-top:0;padding-top:0;border-top:none}
-.sidebar .sbItem{display:flex;align-items:center;gap:10px;padding:9px 12px 9px 15px;border-radius:11px;color:rgba(255,255,255,.72);
-  font-size:13px;font-weight:600;transition:background .15s ease,color .15s ease,transform .15s cubic-bezier(.34,1.56,.64,1);
+.sidebar .sbFooterName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}
+.sidebar .sbItem{display:flex;align-items:center;gap:11px;padding:10px 12px 10px 15px;border-radius:11px;color:rgba(255,255,255,.72);
+  font-size:13.5px;font-weight:600;transition:background .15s ease,color .15s ease,transform .15s cubic-bezier(.34,1.56,.64,1);
   text-align:left;border:none;background:none;cursor:pointer;width:100%;position:relative}
 .sidebar .sbItem:hover{background:rgba(255,255,255,.07);color:#fff;transform:translateX(1px)}
 .sidebar .sbItem.on{background:linear-gradient(90deg,rgba(103,232,249,.18),rgba(103,232,249,.05));color:#fff}
 .sidebar .sbItem.on::before{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:3px;border-radius:3px;
   background:linear-gradient(180deg,var(--gold2),var(--green2))}
-.sidebar .sbItem svg{width:16px;height:16px;flex:0 0 auto}
-.sidebar .sbItem .fic{width:22px;height:22px;flex:0 0 auto;border-radius:7px}
+.sidebar .sbItem svg{width:18px;height:18px;flex:0 0 auto}
+.sidebar .sbItem .fic{width:24px;height:24px;flex:0 0 auto;border-radius:7px}
+.sidebar .sbItemLabel{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sidebar .bnBadge{position:static;min-width:18px;height:18px;padding:0 5px;border-radius:100px;background:var(--danger);
   color:#fff;font-size:10.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+/* Collapsed: icon-only rail (Ref 2/3's default state) -- labels/wordmark/name
+   hide, everything centers, tooltips (native title=) pick up the slack. */
+.sidebar.collapsed{padding-left:10px;padding-right:10px}
+.sidebar.collapsed .sbBrand{justify-content:center;padding:0 0 18px}
+.sidebar.collapsed .sbBrandWord{display:none}
+.sidebar.collapsed .sbItem{justify-content:center;padding:10px;gap:0}
+.sidebar.collapsed .sbItemLabel,.sidebar.collapsed .bnBadge{display:none}
+.sidebar.collapsed .sbFooter{justify-content:center;padding-left:0;padding-right:0}
+.sidebar.collapsed .sbFooterName,.sidebar.collapsed #sbSignOutBtn{display:none}
 .topbar{position:sticky;top:0;z-index:40;background:var(--hero-bg,linear-gradient(115deg,var(--ink) 0%,#123262 45%,#0F2A52 100%));color:#fff;
   padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 24px rgba(0,0,0,.28);
   overflow:hidden}
@@ -420,6 +440,17 @@ a{color:var(--green2)}
 .kpi-ic.teal{background:linear-gradient(150deg,#4FBFA6,#1E7A6E)}
 .kpi-ic.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 .kpi-ic.grey{background:linear-gradient(150deg,#94A3B8,#64748B)}
+/* Premium UI rebuild -- one "hero" KPI card per dashboard (Ref 2's solid-fill
+   Total revenue card standing out among plain white ones). Just a `cls`
+   value kpi() already accepts -- no signature change. The icon badge drops
+   its own gradient chip since the whole card is already colored. */
+.kpi.hero{background:linear-gradient(150deg,var(--green2),var(--green));border-color:transparent;color:#fff}
+.kpi.hero .k{color:rgba(255,255,255,.75)}
+.kpi.hero .v{color:#fff}
+.kpi.hero .kpi-ic{background:rgba(255,255,255,.2);box-shadow:none}
+.kpi.hero::after{border-color:rgba(255,255,255,.25)}
+.kpi.hero .kpi-delta.up{background:rgba(255,255,255,.22);color:#fff}
+.kpi.hero .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
 /* Premium UI rebuild, Phase 2 (Home dashboards) -- compact period-over-period
    trend badge, additive/optional (kpi()'s existing 4-arg call sites are
    unaffected; only sites that explicitly pass a 5th `delta` argument show
@@ -600,6 +631,16 @@ a{color:var(--green2)}
 .appGridGlyph .fic{width:100%;height:100%;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
 body.dark .appGridIcon:hover{background:#182541}
 .appGridLabel{font-size:11.5px;font-weight:700;color:var(--ink);text-align:center;line-height:1.25}
+/* Premium UI rebuild -- the large colorful tile grid (Ref: school-admin
+   dashboard's big rounded-square tiles / mobile "Quick Access"). Reuses the
+   existing chip-style .fic glyph (already a colored rounded-square + white
+   icon) at a much bigger size instead of inventing a new tile visual -- the
+   chip already *is* the reference's tile, just drawn small elsewhere. */
+.appGrid.appGrid-lg{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:16px}
+.appGridIcon.lg{padding:6px 4px;gap:10px}
+.appGridGlyph.lg{width:84px;height:84px}
+@media(min-width:640px){.appGridGlyph.lg{width:96px;height:96px}}
+.appGridSub{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.3;margin-top:-4px}
 .newsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
 .newsCard{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);transition:transform .2s ease,box-shadow .2s ease}
 .newsCard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
@@ -1288,8 +1329,8 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   <nav id="sidebar" class="sidebar"></nav>
   <div class="appContent">
   <header class="topbar">
-    <span class="glyph"><img alt="" id="topbarLogo"/></span>
-    <div><div class="tt">PALMSTEAD</div><div class="ts" id="topbarSub">by PEP Landbank</div></div>
+    <span class="glyph topbarBrandBit"><img alt="" id="topbarLogo"/></span>
+    <div class="topbarBrandBit"><div class="tt">PALMSTEAD</div><div class="ts" id="topbarSub">by PEP Landbank</div></div>
     <div class="spacer"></div>
     <div class="whoami"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span>
       <button class="iconbtn hidden" id="clientBellBtn" title="Notifications" style="position:relative">
@@ -7071,7 +7112,7 @@ function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
     agentDetail:agentDetailView,stageList:viewStageList,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
     clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
-    clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
+    clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory,insightsHub:viewInsightsHub,managementHub:viewManagementHub}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
   if(!skipPush && !ROUTE_NAV_LOCK && typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
     try{ history.pushState({routeName:name,routeArg:arg}, '', '#'+name); }catch(e){}
   }
@@ -7138,63 +7179,33 @@ function renderBottomNavNow(){
   }).join('');
   nav.querySelectorAll('[data-navtab]').forEach(b=>b.onclick=()=>route(b.dataset.navtab));
 }
-// Premium UI rebuild, Phase 2 (shell/navigation) -- the real desktop workspace
-// IA from spec Sec 5 (Overview/Sales/Office/Communication/Insights/Management/
-// Settings), built entirely from data the app already computes correctly
-// elsewhere -- salesDeskGroupsForAgent/Mgr(), officeDeskGroups(), MGR_APPS,
-// SETTINGS_APPS -- so this can never drift from what the real Sales/Office/
-// Settings hub pages actually show. Every item still resolves through the
-// exact same route()/mgrAppRoute() the rest of the app already uses; nothing
-// here is a new destination. Client nav is unchanged (simple 5-item mirror).
-function sidebarItemFromMgr(a){ return {mgrKey:a.key,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}; }
-function sidebarItemFromAgent(a){ return {r:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}; }
-function sidebarSectionsForStaff(){
+// Redesign correction: the previous round flattened every leaf item (45 of
+// them) into the sidebar -- that's what caused the endless-scroll complaint.
+// Reference designs (school-admin/SaaS dashboards) all use a SHORT, FLAT,
+// top-level-only sidebar; the many sub-items already live on the real
+// Sales/Office/Settings hub pages this now routes straight to, shown there
+// as flat colorful tile sections instead of a collapsed accordion (below).
+// Nothing here is a new destination -- same route()/mgrAppRoute() calls the
+// rest of the app already uses.
+function sidebarTopLevelItems(){
   const isMgr=PROFILE.role==='manager';
-  const byMgr=k=>MGR_APPS.find(a=>a.key===k);
-  const sales=(isMgr?salesDeskGroupsForMgr():salesDeskGroupsForAgent())
-    .flatMap(g=>g.items).map(a=>isMgr?sidebarItemFromMgr(a):sidebarItemFromAgent(a));
-  // Commission and Management Reports move to Insights in this nav (per spec
-  // Sec 5's own regrouping) -- pulled straight out of officeDeskGroups()'s own
-  // output (NOT re-declared here) since 'Management Reports' only ever existed
-  // as a literal inline inside that function, never in the MGR_APPS registry --
-  // sourcing it from anywhere else risked silently losing the item. Filtered out
-  // of the flattened Office list so it doesn't also duplicate there; the Office
-  // hub page itself is untouched and still shows all of these under its own
-  // Money/Insights groups.
-  const officeAll=officeDeskGroups().flatMap(g=>g.items);
-  const pullOffice=k=>officeAll.find(a=>a.key===k);
-  const managementReportsItem=pullOffice('Management Reports');
-  const office=officeAll.filter(a=>!['Notes','Leaderboard','Commission','Management Reports'].includes(a.key)).map(sidebarItemFromMgr);
-  const communication=[
-    {r:'chat',fic:'chat',label:'Chat'},
-    ...(isMgr&&byMgr('News')?[sidebarItemFromMgr(byMgr('News'))]:[]),
-    sidebarItemFromMgr({key:'Notes',fic:'notes',label:'Notes'})
+  const openTasks=computeDutiesSummary((DB.tasks||[]).filter(t=>isMgr||t.assignedTo===PROFILE.key)).openCount;
+  const salesDeskBadge=unreadByKind('sitevisit')+unreadByKind('enquiry')+unreadByKind('complaint')+unreadByKind('plotrequest');
+  const items=[
+    {r:isMgr?'mgr':'home',fic:'home',label:'Overview'},
+    {r:isMgr?'mgrSalesDesk':'salesdesk',fic:'pipeline',label:'Sales',badge:salesDeskBadge},
+    {r:'officedesk',fic:'clipboard',label:'Office',badge:openTasks},
+    {r:'chat',fic:'chat',label:'Chat',badge:totalUnread()},
+    {r:isMgr?'insightsHub':'insights',fic:'target',label:'Insights'}
   ];
-  // 'Management Reports' keeps its plain "Reports" label on the Office hub page
-  // (where there's no other "Reports" nearby), but here it sits right next to
-  // the *different* 'Reports' key (mgrReports(), a separate real screen) -- so
-  // it gets its own clearer label rather than reading as a duplicate row.
-  const insights=isMgr
-    ?[byMgr('Analytics'),byMgr('Reports'),managementReportsItem?{...managementReportsItem,label:'Management Reports'}:null,byMgr('Report Archive'),byMgr('Insights'),byMgr('Commission')]
-      .filter(Boolean).map(sidebarItemFromMgr)
-    :[{r:'insights',fic:'target',label:'Smart Insights'},{r:'portfolio',fic:'leaderboard',label:'Portfolio'}];
-  const management=isMgr?['Data Check','Leaderboard'].map(byMgr).filter(Boolean).map(sidebarItemFromMgr):[];
-  const settings=isMgr?SETTINGS_APPS.map(sidebarItemFromMgr):[{r:'account',fic:'settings',label:'Settings'}];
-  return [
-    {title:'Overview',items:[{r:isMgr?'mgr':'home',fic:'home',label:'Overview'}]},
-    {title:'Sales',items:sales},
-    {title:'Office',items:office},
-    {title:'Communication',items:communication},
-    {title:'Insights',items:insights},
-    ...(isMgr?[{title:'Management',items:management}]:[]),
-    {title:'Settings',items:settings}
-  ].filter(s=>s.items.length);
+  if(isMgr) items.push({r:'managementHub',fic:'leaderboard',label:'Management'});
+  items.push(isMgr?{mgrKey:'Settings',fic:'settings',label:'Settings'}:{r:'account',fic:'settings',label:'Settings'});
+  return items;
 }
-// Whether a section item is the one currently on screen -- direct-route items
-// compare CURRENT_ROUTE_NAME directly; MGR_APPS/SETTINGS_APPS items resolve
-// through the exact same MGR_APP_ROUTE_NAMES map mgrAppRoute() itself uses, or
-// (for the generic mgrTabView fallback) the current mgrTab value, so this can
-// never disagree with what actually navigated.
+// Direct-route items compare CURRENT_ROUTE_NAME directly; the one mgrKey item
+// (Settings) resolves through the exact same MGR_APP_ROUTE_NAMES map
+// mgrAppRoute() itself dispatches through, so this can never disagree with
+// what actually navigated.
 function sidebarItemActive(item){
   if(item.r) return item.r===CURRENT_ROUTE_NAME;
   if(item.mgrKey){
@@ -7204,51 +7215,46 @@ function sidebarItemActive(item){
   return false;
 }
 function sidebarItemRowHtml(item){
-  const badgeN=item.badgeKind?unreadByKind(item.badgeKind):(item.badgeCountKey&&DB.badgeCounts?(DB.badgeCounts[item.badgeCountKey]||0):0);
   const attr=item.r?`data-sbnav="${esc(item.r)}"`:`data-sbmgr="${esc(item.mgrKey)}"`;
-  return `<button class="sbItem${sidebarItemActive(item)?' on':''}" ${attr}>${fic(item.fic)}<span style="flex:1;text-align:left">${esc(item.label)}</span>${badgeN>0?`<span class="bnBadge">${badgeN>9?'9+':badgeN}</span>`:''}</button>`;
+  const icon=item.icon||fic(item.fic);
+  return `<button class="sbItem${sidebarItemActive(item)?' on':''}" ${attr} title="${esc(item.label)}">${icon}<span class="sbItemLabel">${esc(item.label)}</span>${item.badge>0?`<span class="bnBadge">${item.badge>9?'9+':item.badge}</span>`:''}</button>`;
 }
+// Collapse state persists across reloads (localStorage) but isn't re-read
+// mid-session -- one toggle click flips both the in-memory flag and the DOM
+// class together, so they can't drift.
+let SIDEBAR_COLLAPSED=localStorage.getItem('pep_sidebar_collapsed')==='1';
 function renderSidebarNow(){
   const sb=document.getElementById('sidebar'); if(!sb||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
-  const brand=`<div style="display:flex;align-items:center;gap:9px;padding:0 8px 18px;color:#fff">
-      <span style="width:30px;height:30px;border-radius:9px;overflow:hidden;flex:0 0 auto"><img alt="" src="./logo.png" style="width:100%;height:100%;display:block"/></span>
-      <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em">PALMSTEAD</span>
+  sb.classList.toggle('collapsed',SIDEBAR_COLLAPSED);
+  const brand=`<div class="sbBrand">
+      <button id="sbCollapseBtn" title="${SIDEBAR_COLLAPSED?'Expand':'Collapse'} sidebar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+      </button>
+      <span class="sbBrandLogo"><img alt="" src="./logo.png"/></span>
+      <span class="sbBrandWord">PALMSTEAD</span>
     </div>`;
-  if(IS_CLIENT){
-    const {activeTab,tabDefs}=computeNavTabDefs();
-    const cp=CLIENT_PROFILE||{};
-    const footer=`<div class="sbFooter">
-        <span class="sbFooterAvatar">${cp.avatar?`<img src="${esc(cp.avatar)}"/>`:esc((cp.name||'?').charAt(0).toUpperCase())}</span>
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((cp.name||'').split(' ')[0])}</span>
-        <button id="sbSignOutBtn" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;padding:4px;display:flex;flex:0 0 auto">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 12H4m0 0l4-4m-4 4l4 4M14 5h4a2 2 0 012 2v10a2 2 0 01-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>`;
-    sb.innerHTML=brand+`<div class="sbScroll">`+tabDefs.map(t=>{
-      const show=t.badge>0;
-      return `<button class="sbItem${t.key===activeTab?' on':''}" data-sbnav="${t.r}">${t.icon}<span style="flex:1;text-align:left">${esc(t.label)}</span>${show?`<span class="bnBadge">${t.badge>9?'9+':t.badge}</span>`:''}</button>`;
-    }).join('')+`</div>`+footer;
-    sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
-    const signOutBtn=document.getElementById('sbSignOutBtn');
-    if(signOutBtn) signOutBtn.onclick=()=>{ const real=document.getElementById('logoutBtn'); if(real) real.click(); };
-    return;
-  }
-  const sections=sidebarSectionsForStaff();
-  const p=PROFILE||{};
-  const displayName=p.role==='manager'?'Management':(p.name||'').split(' ')[0];
+  const p=IS_CLIENT?(CLIENT_PROFILE||{}):(PROFILE||{});
+  const displayName=IS_CLIENT?(p.name||'').split(' ')[0]:(p.role==='manager'?'Management':(p.name||'').split(' ')[0]);
   const footer=`<div class="sbFooter">
       <span class="sbFooterAvatar">${p.avatar?`<img src="${esc(p.avatar)}"/>`:esc((p.name||'?').charAt(0).toUpperCase())}</span>
-      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(displayName)}</span>
+      <span class="sbFooterName">${esc(displayName)}</span>
       <button id="sbSignOutBtn" title="Sign out" style="background:none;border:none;color:rgba(255,255,255,.55);cursor:pointer;padding:4px;display:flex;flex:0 0 auto">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M15 12H4m0 0l4-4m-4 4l4 4M14 5h4a2 2 0 012 2v10a2 2 0 01-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>`;
-  sb.innerHTML=brand+`<div class="sbScroll">`+sections.map(s=>`<div class="sbSection">${esc(s.title)}</div>`+s.items.map(sidebarItemRowHtml).join('')).join('')+`</div>`+footer;
+  const items=IS_CLIENT
+    ? (()=>{ const {activeTab,tabDefs}=computeNavTabDefs(); return tabDefs.map(t=>({r:t.r,icon:t.icon,label:t.label,badge:t.badge,active:t.key===activeTab})); })()
+    : sidebarTopLevelItems();
+  sb.innerHTML=brand+`<div class="sbScroll">`+items.map(sidebarItemRowHtml).join('')+`</div>`+footer;
   sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
   sb.querySelectorAll('[data-sbmgr]').forEach(b=>b.onclick=()=>mgrAppRoute(b.dataset.sbmgr));
   const signOutBtn=document.getElementById('sbSignOutBtn');
   if(signOutBtn) signOutBtn.onclick=()=>{ const real=document.getElementById('logoutBtn'); if(real) real.click(); };
-  const activeItem=sb.querySelector('.sbItem.on'); if(activeItem) activeItem.scrollIntoView({block:'nearest'});
+  document.getElementById('sbCollapseBtn').onclick=()=>{
+    SIDEBAR_COLLAPSED=!SIDEBAR_COLLAPSED;
+    localStorage.setItem('pep_sidebar_collapsed',SIDEBAR_COLLAPSED?'1':'0');
+    renderSidebarNow();
+  };
 }
 window.addEventListener('popstate',e=>{
   if(!PROFILE && !IS_CLIENT) return; // still on login screen — nothing app-side to navigate
@@ -7339,6 +7345,14 @@ const FIC_DEFS='<svg width="0" height="0" style="position:absolute" aria-hidden=
  +'<linearGradient id="fic-gLime" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#0F766E"/></linearGradient>'
  +'<linearGradient id="fic-gGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0D998"/><stop offset="1" stop-color="#B8860B"/></linearGradient>'
  +'<linearGradient id="fic-gSlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6B7C93"/><stop offset="1" stop-color="#3A4A63"/></linearGradient>'
+ // Premium UI rebuild -- real hue variety for the tile grids the reference
+ // designs use (quick-access, hub landing pages), added alongside the
+ // existing 5 rather than replacing them so every current fic() call site's
+ // color is untouched unless it explicitly opts into one of these.
+ +'<linearGradient id="fic-gPurple" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C4B5FD"/><stop offset="1" stop-color="#6D28D9"/></linearGradient>'
+ +'<linearGradient id="fic-gRose" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FDA4AF"/><stop offset="1" stop-color="#BE123C"/></linearGradient>'
+ +'<linearGradient id="fic-gOrange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FDBA74"/><stop offset="1" stop-color="#C2410C"/></linearGradient>'
+ +'<linearGradient id="fic-gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#0E7490"/></linearGradient>'
  +'<radialGradient id="fic-hi" cx="0.5" cy="0.05" r="0.9"><stop offset="0" stop-color="#fff" stop-opacity="0.38"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/></radialGradient>'
  +'</defs></svg>';
 if(document.body) document.body.insertAdjacentHTML('afterbegin',FIC_DEFS);
@@ -7395,7 +7409,36 @@ const FIC_GLYPHS={
  reportdoc:{g:'gBlue',p:'<path d="M20 16h10l6 6v16a1.5 1.5 0 01-1.5 1.5h-14.5A1.5 1.5 0 0118.5 38V17.5A1.5 1.5 0 0120 16z" fill="#fff"/><rect x="22" y="28" width="3" height="6" fill="var(--green)"/><rect x="26.5" y="24" width="3" height="10" fill="var(--green)"/><rect x="31" y="30" width="3" height="4" fill="var(--green)"/>'},
  pricetag:{g:'gGold',p:'<path d="M18 18h10l12 12-10 10-12-12V18z" fill="#fff"/><circle cx="23" cy="23" r="2.2" fill="#B8860B"/><path d="M25 30.5l6-6" stroke="#B8860B" stroke-width="1.6" stroke-linecap="round"/>'}
 };
-function fic(name,size){size=size||44;var G=FIC_GLYPHS[name];if(!G)return '';return '<svg class="fic" width="'+size+'" height="'+size+'" viewBox="0 0 56 56" style="vertical-align:middle;flex:0 0 auto">'+ficChip(G.g)+G.p+'</svg>';}
+function fic(name,size,color){size=size||44;var G=FIC_GLYPHS[name];if(!G)return '';return '<svg class="fic" width="'+size+'" height="'+size+'" viewBox="0 0 56 56" style="vertical-align:middle;flex:0 0 auto">'+ficChip(color||G.g)+G.p+'</svg>';}
+// Premium UI rebuild -- deterministic per-position color rotation across the
+// full hue palette (see FIC_DEFS above), used only by the new tile grids
+// (quick access, Insights/Management hub landings, and the flat Sales/Office/
+// Settings sections replacing their old accordions) so those specifically get
+// real color variety like the reference designs, without silently recoloring
+// every other existing fic() call site's current appearance.
+const TILE_PALETTE=['gTeal','gPurple','gBlue','gOrange','gLime','gRose','gNavy','gGold'];
+function withTileColors(items){ return items.map((it,i)=>({...it,color:TILE_PALETTE[i%TILE_PALETTE.length]})); }
+// One shared "big colorful tile" grid, used by the home quick-access section
+// and the new Insights/Management hub landing pages. `items`: {r|mgrKey, fic,
+// label, sub?, color?}. Same route()/mgrAppRoute() dispatch as every other
+// nav surface -- see bindTileGrid().
+function tileGridHtml(items){
+  return `<div class="appGrid appGrid-lg">`+items.map(it=>{
+    const attr=it.mgrKey?`data-tilemgr="${esc(it.mgrKey)}"`:`data-tilenav="${esc(it.r)}"`;
+    return `<button class="appGridIcon lg" ${attr}>
+      <span class="appGridGlyph lg">${fic(it.fic,null,it.color)}</span>
+      <span class="appGridLabel">${esc(it.label)}</span>
+      ${it.sub?`<span class="appGridSub">${esc(it.sub)}</span>`:''}
+    </button>`;
+  }).join('')+`</div>`;
+}
+function bindTileGrid(container,items){
+  if(!container) return;
+  const findItem=(key,byMgr)=>(items||[]).find(a=>byMgr?a.mgrKey===key:a.r===key);
+  const clearBadge=item=>{ if(!item) return; if(item.badgeKind) apiMarkKindRead(item.badgeKind).then(refreshAllBadges); if(item.badgeCountKey&&DB.badgeCounts){ DB.badgeCounts[item.badgeCountKey]=0; refreshAllBadges(); } };
+  container.querySelectorAll('[data-tilenav]').forEach(b=>b.onclick=()=>{ clearBadge(findItem(b.dataset.tilenav,false)); route(b.dataset.tilenav); });
+  container.querySelectorAll('[data-tilemgr]').forEach(b=>b.onclick=()=>{ clearBadge(findItem(b.dataset.tilemgr,true)); mgrAppRoute(b.dataset.tilemgr); });
+}
 // Premium UI rebuild, Phase 1 -- one call surface over the two existing icon
 // registries (`ic` = small inline-SVG glyphs, `fic()`/FIC_GLYPHS = larger
 // chip-wrapped app-grid glyphs). Purely additive: every existing ic.xxx/fic()
@@ -7532,14 +7575,9 @@ function salesDeskGroupsForAgent(){
 }
 function viewSalesDesk(){
   const groups=salesDeskGroupsForAgent();
-  const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Sales</h2><p>Leads, pipeline, plots &amp; client touchpoints — everything for your book of clients</p></div></div>
-  <div id="salesDeskGrid">${vaultGridHtml(groups.map(g=>({...g,items:g.items.map(a=>({key:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}))})),{openFirst:true,hubId:'salesDesk'})}</div>`;
-  document.getElementById('salesDeskGrid').querySelectorAll('[data-moreapp]').forEach(b=>{
-    const item=items.find(a=>a.r===b.dataset.moreapp);
-    b.onclick=()=>{ if(item&&item.badgeKind) apiMarkKindRead(item.badgeKind).then(refreshAllBadges); if(item&&item.badgeCountKey&&DB.badgeCounts){ DB.badgeCounts[item.badgeCountKey]=0; refreshAllBadges(); } route(b.dataset.moreapp); };
-  });
-  bindVaultAccordion(document.getElementById('salesDeskGrid'),'salesDesk');
+  <div id="salesDeskGrid">${flatTileSectionsHtml(groups,true)}</div>`;
+  bindTileGrid(document.getElementById('salesDeskGrid'),groups.flatMap(g=>g.items));
 }
 // Shared by More (manager's leftover apps), the new CRM Tools tab, and the new Plot
 // Inventory tab -- one click-routing table instead of three copies drifting apart.
@@ -7632,11 +7670,9 @@ function salesDeskGroupsForMgr(){
 }
 function viewMgrSalesDesk(){
   const groups=salesDeskGroupsForMgr();
-  const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Sales</h2><p>Client database, plots, allocations, site visits, enquiries &amp; plot requests</p></div></div>
-  <div id="mgrSalesGrid">${vaultGridHtml(groups,{openFirst:true,hubId:'mgrSalesDesk'})}</div>`;
-  bindMgrAppGrid(document.getElementById('mgrSalesGrid'),items);
-  bindVaultAccordion(document.getElementById('mgrSalesGrid'),'mgrSalesDesk');
+  <div id="mgrSalesGrid">${flatTileSectionsHtml(groups,false)}</div>`;
+  bindTileGrid(document.getElementById('mgrSalesGrid'),groups.flatMap(g=>g.items).map(a=>({mgrKey:a.key,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey})));
 }
 function officeDeskGroups(){
   const isMgr=PROFILE.role==='manager';
@@ -7668,14 +7704,49 @@ function officeDeskGroups(){
     ]}
   ];
 }
+// Premium UI rebuild -- flat colorful tile sections replacing the old
+// collapsed-accordion vault (Ref designs never hide a hub's own items behind
+// a click-to-expand; there are few enough top-level groups to show all of
+// them at once). Same group/item data as before (officeDeskGroups() etc,
+// unchanged), same mgrAppRoute() dispatch -- purely a different HTML shell.
+function flatTileSectionsHtml(groups,agentShaped){
+  return groups.filter(g=>g.items.length).map((g,i)=>{
+    const items=withTileColors(g.items.map(a=>agentShaped
+      ?{r:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}
+      :{mgrKey:a.key,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}));
+    return `<div class="sectitle"${i===0?' style="margin-top:0"':''}><h3>${esc(g.title)}</h3></div>${tileGridHtml(items)}`;
+  }).join('');
+}
 function viewOfficeDesk(){
   const isMgr=PROFILE.role==='manager';
   const groups=officeDeskGroups();
-  const items=groups.flatMap(g=>g.items);
   V.innerHTML=`<div class="pagehead"><div><h2>Office</h2><p>Documents, operations &amp; feedback${isMgr?', plus the leaderboard':''} — everything off to the side of your daily pipeline</p></div></div>
-  <div id="officeDeskGrid">${vaultGridHtml(groups,{openFirst:true,hubId:'officeDesk'})}</div>`;
-  bindMgrAppGrid(document.getElementById('officeDeskGrid'),items);
-  bindVaultAccordion(document.getElementById('officeDeskGrid'),'officeDesk');
+  <div id="officeDeskGrid">${flatTileSectionsHtml(groups)}</div>`;
+  bindTileGrid(document.getElementById('officeDeskGrid'));
+}
+// Premium UI rebuild -- the sidebar's Insights/Management top-level items
+// land here (manager only; agents route straight to Smart Insights, their
+// only real Insights destination). Same MGR_APPS items/routes previously
+// reachable via More's "Insights & data" group -- just their own dedicated
+// landing instead of buried in a generic leftover-apps screen.
+function viewInsightsHub(){
+  if(PROFILE.role!=='manager'){ route('insights'); return; }
+  const byKey=k=>MGR_APPS.find(a=>a.key===k);
+  const items=withTileColors(['Analytics','Reports','Management Reports','Report Archive','Insights','Commission']
+    .map(k=>{ const a=k==='Management Reports'?officeDeskGroups().flatMap(g=>g.items).find(x=>x.key===k):byKey(k); return a; })
+    .filter(Boolean).map(a=>({mgrKey:a.key,fic:a.fic,label:a.key==='Management Reports'?'Management Reports':a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey})));
+  V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'home')}<div class="pagehead"><div><h2>Insights</h2><p>Analytics, reports and company-wide performance</p></div></div>
+  <div id="insightsHubGrid">${tileGridHtml(items)}</div>`;
+  bindTileGrid(document.getElementById('insightsHubGrid'),items);
+}
+function viewManagementHub(){
+  if(PROFILE.role!=='manager'){ route('mgr'); return; }
+  const byKey=k=>MGR_APPS.find(a=>a.key===k);
+  const items=withTileColors(['Data Check','Leaderboard'].map(byKey).filter(Boolean)
+    .map(a=>({mgrKey:a.key,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey})));
+  V.innerHTML=`${back('mgr')}<div class="pagehead"><div><h2>Management</h2><p>Data governance and team performance</p></div></div>
+  <div id="managementHubGrid">${tileGridHtml(items)}</div>`;
+  bindTileGrid(document.getElementById('managementHubGrid'),items);
 }
 function viewMore(){
   V.innerHTML=`<div class="pagehead"><div><h2>More</h2><p>Additional tools and settings</p></div></div>
@@ -8684,6 +8755,23 @@ function homeHeroGreeting(){
   const h=new Date().getHours();
   return h>=5&&h<12?'Good morning':h>=12&&h<17?'Good afternoon':h>=17&&h<21?'Good evening':'Working late';
 }
+// Premium UI rebuild -- the home screen's "quick access" tile grid (Ref:
+// school-admin's big tile grid / mobile "Quick Access"). Reuses items that
+// already exist in the flat Sales/Office sidebar destinations -- not a new
+// list of features, just the most-reached-for ones surfaced one tap from
+// home instead of requiring a trip through Sales/Office first.
+function agentQuickAccessItems(){
+  return [
+    {r:'addlead',fic:'addlead',label:'New lead'},
+    {r:'update',fic:'editpipeline',label:'Update pipeline'},
+    {r:'sitevisit',fic:'location',label:'Site visit'},
+    {r:'enquiry',fic:'enquiry',label:'Client enquiry'},
+    {mgrKey:'Quotation',fic:'quote',label:'Quotation'},
+    {mgrKey:'Leave Schedules',fic:'calendar',label:'Leave Schedules'},
+    {r:'referralsapp',fic:'gift',label:'Referrals'},
+    {r:'chat',fic:'chat',label:'Chat'}
+  ];
+}
 function agentHome(){ const k=kpisOf(DB.leads);
   const thisMonth=today().slice(0,7);
   const wonAll=DB.leads.filter(l=>isFullyPaid(l));
@@ -8718,7 +8806,10 @@ function agentHome(){ const k=kpisOf(DB.leads);
       ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
     </div>
     <div class="dashMain">
-      <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'gold','monthlyclosed',monthCollectedDelta)}</div>
+      <div class="sectitle" style="margin-top:0"><h3>Quick access</h3></div>
+      <div id="homeQuickAccess">${tileGridHtml(withTileColors(agentQuickAccessItems()))}</div>
+      <div class="sectitle"><h3>Today at a glance</h3></div>
+      <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}</div>
       <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
     </div>
   </div>
@@ -8726,6 +8817,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
   <div class="footer-note" style="padding-top:2px">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
   bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); bindCompanionWidget(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
+  bindTileGrid(document.getElementById('homeQuickAccess'),agentQuickAccessItems());
   document.getElementById('heroCommissionChip').onclick=()=>route('myCommission');
   document.getElementById('heroQuoteChip').onclick=openQuotationRequest;
   document.getElementById('dashRefreshBtn').onclick=async(e)=>{
@@ -16364,7 +16456,7 @@ async function managerView(){
   else if(mgrTab==='Site visits'){ body.innerHTML=mgrVisits(); bindVisitCtrls(); }
   else if(mgrTab==='News'){ body.innerHTML=mgrNews(); bindNewsCtrls(); }
   else if(mgrTab==='Commission'){ body.innerHTML=mgrCommission(); bindCommissionCtrls(); }
-  else if(mgrTab==='Settings'){ body.innerHTML=mgrSettingsHubHtml(); bindMgrAppGrid(document.getElementById('mgrSettingsGrid'),SETTINGS_APPS); bindVaultAccordion(document.getElementById('mgrSettingsGrid'),'settingsHub'); }
+  else if(mgrTab==='Settings'){ body.innerHTML=mgrSettingsHubHtml(); bindTileGrid(document.getElementById('mgrSettingsGrid'),SETTINGS_APPS.map(a=>({mgrKey:a.key}))); }
   else if(mgrTab==='Quotation Settings'){ body.innerHTML=mgrQuotationSettingsHtml(); bindQuotationSettingsCtrls(); }
   else if(mgrTab==='Commission Settings'){ body.innerHTML=mgrCommissionSettingsHtml(); bindCommissionSettingsCtrls(); }
   else if(mgrTab==='Pricing & Targets'){ if(!PRICING_HISTORY_LOADED){ try{ PRICING_HISTORY_LIST=await withLoadTimeout(apiLoadPricingHistory(),15000,'Pricing history'); PRICING_HISTORY_LOADED=true; }catch(e){} } body.innerHTML=mgrPricingTargetsHtml(); bindPricingTargetsCtrls(); }
@@ -16525,6 +16617,18 @@ function viewMyDataCheck(){
   bindDataCheckCtrls(DB.leads, viewMyDataCheck);
 }
 
+function mgrQuickAccessItems(){
+  return [
+    {mgrKey:'Plot Requests',fic:'plotrequest',label:'Plot Requests'},
+    {mgrKey:'Enquiries',fic:'enquiry',label:'Enquiries'},
+    {mgrKey:'Leave Schedules',fic:'calendar',label:'Leave Schedules'},
+    {mgrKey:'Log Payment',fic:'payment',label:'Log Payment'},
+    {mgrKey:'Quotation',fic:'quote',label:'Quotation'},
+    {mgrKey:'Management Reports',fic:'reportdoc',label:'Reports'},
+    {r:'chat',fic:'chat',label:'Chat'},
+    {mgrKey:'Settings',fic:'settings',label:'Settings'}
+  ];
+}
 function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
   const agents=allAgentLists();
   const rows=agents.map(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi;
@@ -16566,7 +16670,10 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
     </div>
     <div class="dashMain">
-      <div class="kpis">${kpi('Total leads',tot.leads,'','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
+      <div class="sectitle" style="margin-top:0"><h3>Quick access</h3></div>
+      <div id="homeQuickAccessMgr">${tileGridHtml(withTileColors(mgrQuickAccessItems()))}</div>
+      <div class="sectitle"><h3>Today at a glance</h3></div>
+      <div class="kpis">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
       <div class="insightCarousel">${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
 
       <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
@@ -16584,6 +16691,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
   V.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>route('stageList',b.dataset.stage));
+  bindTileGrid(document.getElementById('homeQuickAccessMgr'),mgrQuickAccessItems());
   bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
@@ -17797,7 +17905,7 @@ function mgrSettingsHubHtml(){
     {title:'Referrals',items:['Referral Settings'].map(byKey)},
     {title:'System',items:['Backup & Restore','System Health','System','Audit Log','Support Diagnostics'].map(byKey)}
   ];
-  return `<div id="mgrSettingsGrid">${vaultGridHtml(groups,{hubId:'settingsHub'})}</div>`;
+  return `<div id="mgrSettingsGrid">${flatTileSectionsHtml(groups,false)}</div>`;
 }
 function mgrQuotationSettingsHtml(){
   return `${settingsSectionHead('doc','Quotation & receipt text','everything printed on client-facing PDFs')}
