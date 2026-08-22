@@ -1292,6 +1292,8 @@ urlToDataUri(TRULANDER_LOGO_SRC).then(u=>TRULANDER_LOGO_DATA_URI=u).catch(()=>{}
 
 /* ================= client / mode state ================= */
 let sb=null, LIVE_MODE=false, DEMO_MODE=true, USER=null, PROFILE=null, pickStaff=null, ddOpen=false;
+let LAST_LOAD_ALL_AT=null; // last time apiLoadAll() finished -- feeds the Support Diagnostics panel's "last sync" field
+const APP_BOOT_AT=new Date().toISOString();
 let DB={leads:[],enquiries:[],complaints:[],sitevisits:[],activity:[],profiles:[],plots:[],myPlots:[],payments:[],pendingPayments:[],announcements:[],allocations:[],messages:[],targetSelections:[],agentMonthStats:[],tasks:[],feedback:[],downloads:[],leaveRequests:[],memos:[],banners:[],contracts:[],contractRequests:[],badgeCounts:{memo:0,contractRequest:0,approvals:0,sitevisit:0,complaint:0,plotrequest:0}};
 
 /* ================= audit / observability =================
@@ -2516,6 +2518,7 @@ async function apiLoadAll(){
     DB.feedback=await apiLoadFeedback();
     DB.downloads=await apiLoadDownloads();
     DB.badgeCounts=await apiLoadBadgeCounts();
+    LAST_LOAD_ALL_AT=new Date().toISOString();
     return;
   }
   // site_visits/activity_log get capped here -- both are effectively append-only
@@ -2576,6 +2579,7 @@ async function apiLoadAll(){
   DB.feedback=results[15];
   DB.downloads=results[16];
   DB.badgeCounts=results[17];
+  LAST_LOAD_ALL_AT=new Date().toISOString();
 }
 // Cheap COUNT-only queries (no row data) so the "this app needs you" dots on Memo,
 // Contract of Sale and Expenses/Fund Requests can show up on the dashboard itself,
@@ -15333,6 +15337,11 @@ async function managerView(){
     try{ AUDIT_LOG_LIST=await withLoadTimeout(apiLoadAuditEvents(),15000,'Audit Log'); AUDIT_LOG_LOADED=true; body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); }
     catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Audit Log',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
   }
+  else if(mgrTab==='Support Diagnostics'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ const d=await withLoadTimeout(computeDiagnostics(),15000,'Diagnostics'); body.innerHTML=diagnosticsHtml(d); bindDiagnosticsCtrls(d); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load diagnostics',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }
   else if(mgrTab==='Referrals'){ if(!REFERRALS_LOADED){ try{ REFERRALS_LIST=await withLoadTimeout(apiLoadReferrals(),15000,'Referrals'); REFERRALS_LOADED=true; }catch(e){} } body.innerHTML=mgrReferralsHtml(); bindReferralsCtrls(); }
   else if(mgrTab==='Referral Settings'){ body.innerHTML=mgrReferralSettingsHtml(); bindReferralSettingsCtrls(); }
   else if(mgrTab==='Achievement Settings'){
@@ -16598,7 +16607,8 @@ const SETTINGS_APPS=[
   {key:'Backup & Restore',fic:'backup',label:'Backup & Restore',section:'settingshub'},
   {key:'System Health',fic:'pulse',label:'System Health',section:'settingshub'},
   {key:'System',fic:'serverconfig',label:'System',section:'settingshub'},
-  {key:'Audit Log',fic:'clipboard',label:'Audit Log',section:'settingshub'}
+  {key:'Audit Log',fic:'clipboard',label:'Audit Log',section:'settingshub'},
+  {key:'Support Diagnostics',fic:'pulse',label:'Support Diagnostics',section:'settingshub'}
 ];
 function mgrSettingsHubHtml(){
   const byKey=k=>SETTINGS_APPS.find(a=>a.key===k);
@@ -16606,7 +16616,7 @@ function mgrSettingsHubHtml(){
     {title:'Pricing & money',items:['Quotation Settings','Commission Settings','Pricing & Targets'].map(byKey)},
     {title:'Team & company',items:['Staff Settings','Company Settings','Achievement Settings'].map(byKey)},
     {title:'Referrals',items:['Referral Settings'].map(byKey)},
-    {title:'System',items:['Backup & Restore','System Health','System','Audit Log'].map(byKey)}
+    {title:'System',items:['Backup & Restore','System Health','System','Audit Log','Support Diagnostics'].map(byKey)}
   ];
   return `<div id="mgrSettingsGrid">${vaultGridHtml(groups,{hubId:'settingsHub'})}</div>`;
 }
@@ -17600,6 +17610,54 @@ function bindReportArchiveCtrls(){
     }catch(e){ toast('Could not load report: '+(e.message||e)); }
     b.disabled=false; b.textContent=orig;
   });
+}
+/* Support Diagnostics -- enough state to diagnose a staff complaint without
+   asking them to open developer tools (Sec 86). Reuses infrastructure
+   already built this phase rather than adding new tracking: the offline
+   mutation queue's own store, the realtime teardown registry, and the
+   audit_events 'error' category fed by the global window.onerror handler
+   near the top of the file. Degrades gracefully in DEMO_MODE (connection/
+   browser/session fields still work; sync-dependent fields just read 0/empty
+   rather than the screen being blocked outright, since none of this needs
+   Supabase to be meaningful). */
+async function computeDiagnostics(){
+  const pending=DEMO_MODE?[]:await offlineDbAll();
+  let recentErrors=[];
+  if(!DEMO_MODE && sb){
+    try{ const {data}=await sb.from('audit_events').select('summary,created_at,severity,actor_name').eq('category','error').order('created_at',{ascending:false}).limit(10); recentErrors=data||[]; }catch(e){}
+  }
+  return {
+    appBootAt:APP_BOOT_AT,
+    userAgent:navigator.userAgent,
+    online:navigator.onLine,
+    connectionMode:DEMO_MODE?'Demo mode':'Live',
+    realtimeChannels:REALTIME_CHANNELS.length,
+    lastSyncAt:LAST_LOAD_ALL_AT,
+    pendingSyncCount:pending.length,
+    recentErrors,
+  };
+}
+function diagnosticsHtml(d){
+  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">System</div><h2>Support Diagnostics</h2><p>Everything support needs to diagnose a complaint, without asking anyone to open developer tools.</p></div></div>
+  <div class="formwrap" style="padding:6px 15px">
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Connection</div><div class="mini">${esc(d.connectionMode)} · ${d.online?'Online':'Offline'}</div></div></div>${healthTag(d.online,'Offline')}</div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Last full sync</div><div class="mini">${d.lastSyncAt?esc(new Date(d.lastSyncAt).toLocaleString('en-GB')):'Not yet this session'}</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Realtime channels</div><div class="mini">${d.realtimeChannels} subscribed</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Pending sync</div><div class="mini">${d.pendingSyncCount} change${d.pendingSyncCount===1?'':'s'} waiting to sync</div></div></div>${healthTag(d.pendingSyncCount===0,'Waiting')}</div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">App session started</div><div class="mini">${esc(new Date(d.appBootAt).toLocaleString('en-GB'))}</div></div></div></div>
+    <div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">Browser/device</div><div class="mini" style="word-break:break-all">${esc(d.userAgent)}</div></div></div></div>
+  </div>
+  <div class="sectitle"><h3>Recent client errors</h3><span class="cnt">${d.recentErrors.length}</span></div>
+  <div class="list">${d.recentErrors.length?d.recentErrors.map(e=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(e.summary)}</div><div class="meta">${esc(e.actor_name||'Unknown')} · ${esc((e.created_at||'').slice(0,16).replace('T',' '))}</div></div><span class="tag ${e.severity==='critical'?'dgr':'warnt'}">${esc(e.severity)}</span></div></div>`).join(''):emptyState(ic.check||ic.spark,'No recent errors','Nothing reported in the client error log.')}</div>
+  <div class="formactions" style="margin-top:10px"><button class="btn primary" id="exportDiagBtn" style="width:100%">Export diagnostics (.json)</button></div>`;
+}
+function bindDiagnosticsCtrls(d){
+  const btn=document.getElementById('exportDiagBtn');
+  if(btn) btn.onclick=()=>{
+    const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    triggerDownload(url,'Palmstead_Diagnostics_'+today()+'.json','diagnostics',blob);
+  };
 }
 /* Notes app -- simple private jot-down/save/send/download tool. Each agent/manager only
    ever sees their own notes (RLS-enforced live; client-side filtered in demo). */
