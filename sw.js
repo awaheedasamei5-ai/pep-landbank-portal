@@ -3,7 +3,7 @@
    Your data (leads, enquiries, etc.) always comes live from Supabase when online —
    this only caches the app shell so the portal still opens with no signal. */
 
-const CACHE_NAME = 'pep-portal-v7';
+const CACHE_NAME = 'pep-portal-v8';
 const APP_SHELL = [
   './index.html',
   './manifest.webmanifest',
@@ -44,13 +44,20 @@ self.addEventListener('fetch', (event) => {
 
   // App shell: network-first so staff always get the newest build when online,
   // falling back to the cached copy the moment the connection drops. cache:
-  // 'no-store' matters here -- without it, the browser's own HTTP cache (not
-  // just this service worker's cache) can silently satisfy this fetch with a
-  // stale response, which defeats "network-first" entirely and is exactly
-  // what let a stale build linger during testing.
+  // 'no-store' alone turned out not to be enough -- it stops the BROWSER's own
+  // HTTP cache from serving a stale response, but GitHub Pages' own CDN
+  // (Fastly) serves index.html/sw.js with cache-control:max-age=600 regardless
+  // of that request option, meaning every deploy could take up to ~10 minutes
+  // to actually reach staff, and any tab already open would keep silently
+  // running whatever old (possibly buggy) code it started with -- confirmed
+  // directly against the live production headers, not assumed. Appending a
+  // changing query string to the OUTGOING request (never touching the cache
+  // KEY, which stays the clean original URL) makes Fastly treat every fetch as
+  // a fresh, uncacheable URL, so this now always reaches the true origin.
   if (req.mode === 'navigate' || APP_SHELL.some((p) => req.url.endsWith(p.replace('./', '')))) {
+    const bustedUrl = req.url + (req.url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
     event.respondWith(
-      fetch(req, { cache: 'no-store' })
+      fetch(bustedUrl, { cache: 'no-store' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
