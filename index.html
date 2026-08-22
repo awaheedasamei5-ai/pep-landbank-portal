@@ -456,9 +456,9 @@ a{color:var(--green2)}
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);z-index:2}
 @keyframes pulseRing{0%{transform:scale(.9);opacity:.9}80%{transform:scale(1.35);opacity:0}100%{opacity:0}}
 @keyframes bubbleIn{0%{transform:scale(0) rotate(-30deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
-#announceOverlay{position:fixed;inset:0;background:rgba(5,14,31,.55);backdrop-filter:blur(3px);z-index:300;
+#announceOverlay,.overlay{position:fixed;inset:0;background:rgba(5,14,31,.55);backdrop-filter:blur(3px);z-index:300;
   display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease both}
-@media(min-width:640px){#announceOverlay{align-items:center}}
+@media(min-width:640px){#announceOverlay,.overlay{align-items:center}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 #announceModal{background:var(--card);width:100%;max-width:460px;max-height:88vh;overflow-y:auto;border-radius:22px 22px 0 0;
   padding:24px 20px 26px;animation:modalUp .32s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 -10px 40px rgba(0,0,0,.3);
@@ -20274,17 +20274,76 @@ function paintLeaveApp(){
   const tabs=`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${leaveAppTab==='mine'?'on':''}" data-leavetab="mine">My Leave</button>
     ${isMgr?`<button class="chip ${leaveAppTab==='requests'?'on':''}" data-leavetab="requests">Leave Requests${pendingCount?' ('+pendingCount+')':''}</button>`:''}
+    ${isMgr?`<button class="chip ${leaveAppTab==='plans'?'on':''}" data-leavetab="plans">Leave Plans</button>`:''}
     ${isMgr?`<button class="chip ${leaveAppTab==='settings'?'on':''}" data-leavetab="settings">Leave Settings</button>`:''}
   </div>`;
   let content;
   if(leaveAppTab==='requests'&&isMgr) content=leaveRequestsHtml();
+  else if(leaveAppTab==='plans'&&isMgr) content=leavePlansHtml();
   else if(leaveAppTab==='settings'&&isMgr) content=leaveSettingsHtml();
   else content=leaveMineHtml();
   body.innerHTML=(LEAVE_REQUESTS_LOAD_FAILED?loadFailBannerHtml('leave data','viewLeaveApp()'):'')+tabs+content;
   body.querySelectorAll('[data-leavetab]').forEach(b=>b.onclick=()=>{ leaveAppTab=b.dataset.leavetab; paintLeaveApp(); });
   if(leaveAppTab==='requests'&&isMgr) bindLeaveRequestsCtrls();
+  else if(leaveAppTab==='plans'&&isMgr) bindLeavePlansCtrls();
   else if(leaveAppTab==='settings'&&isMgr) bindLeaveSettingsCtrls();
   else bindLeaveMineCtrls();
+}
+// Management browse-by-staff view: unlike "Leave Requests" (which only ever
+// shows requests once a staff member has actually sent them), this surfaces a
+// staff member's WHOLE yearly plan -- including 'planned' entries they've
+// saved privately but not sent yet -- since RLS already lets Management read
+// every leave_requests row (needed for the calendar's own conflict checking),
+// this is a read/decide surface over the same data, not a new table.
+let leavePlansStaffKey=null, leavePlansYear=new Date().getFullYear();
+function leavePlansHtml(){
+  const agentStaff=STAFF_LIST.filter(s=>s.role==='agent').slice().sort((a,b)=>a.name.localeCompare(b.name));
+  if(!agentStaff.length) return emptyState(ic.people||ic.calendar,'No staff yet','');
+  if(!leavePlansStaffKey||!agentStaff.some(s=>s.key===leavePlansStaffKey)) leavePlansStaffKey=agentStaff[0].key;
+  const staff=agentStaff.find(s=>s.key===leavePlansStaffKey);
+  const picker=`<div class="formwrap" style="margin-bottom:16px">
+    <div class="field"><label>Staff member</label>
+      <select id="lvPlansStaffSel">${agentStaff.map(s=>`<option value="${esc(s.key)}" ${s.key===leavePlansStaffKey?' selected':''}>${esc(s.name)}</option>`).join('')}</select>
+    </div>
+  </div>`;
+  const year=leavePlansYear;
+  const used=leaveDaysUsed(staff.key,year);
+  const total=num(CONFIG.leaveTotalDays)||20;
+  const remaining=Math.max(0,total-used);
+  const rows=DB.leaveRequests.filter(r=>r.agentKey===staff.key&&r.year===year)
+    .sort((a,b)=>((a.dates&&a.dates[0])||'').localeCompare((b.dates&&b.dates[0])||''));
+  return picker+`
+  <div class="lvCalNav">
+    <button class="lvCalNavBtn" id="lvPlansPrevYear" aria-label="Previous year">‹</button>
+    <div class="lvCalNavLabel">${year}</div>
+    <button class="lvCalNavBtn" id="lvPlansNextYear" aria-label="Next year">›</button>
+  </div>
+  <div class="kpis" style="margin-top:10px">${kpi('Total days/yr',total)}${kpi('Used in '+year,used)}${kpi('Remaining',remaining)}</div>
+  <div class="sectitle"><h3>${esc(staff.name)}'s leave plan</h3><span class="cnt">${rows.length}</span></div>
+  <div class="list">${rows.length?rows.map(leavePlansRowHtml).join(''):emptyState(ic.calendar,'Nothing planned yet','Nothing on file for '+year+'.')}</div>`;
+}
+function leavePlansRowHtml(r){
+  const badge=r.status==='approved'?'<span class="tag ok">Approved</span>'
+    :r.status==='declined'?'<span class="tag dgr">Declined</span>'
+    :r.status==='rescheduled'?'<span class="tag dgr">Asked to reschedule</span>'
+    :r.status==='planned'?'<span class="tag ghost">Planned — not sent yet</span>'
+    :'<span class="tag warnt">Pending approval</span>';
+  const emTag=r.isEmergency?`<span class="tag warnt" style="margin-left:6px">🚨 Emergency${r.deductQuota===false?' · not deducted':''}</span>`:'';
+  return `<div class="rowcard"><div class="top"><div><div class="nm">${r.daysCount} day${r.daysCount===1?'':'s'}${emTag}</div><div class="meta">${(r.dates||[]).slice().sort().map(fmtLongDate).join(', ')}</div></div>${badge}</div>
+  ${(r.status==='rescheduled'||r.status==='declined')&&r.rescheduleNote?`<div class="note"><b>${r.status==='declined'?'Reason':"Management's note"}:</b> ${esc(r.rescheduleNote)}</div>`:''}
+  <div class="foot" style="display:flex;gap:7px;flex-wrap:wrap">
+    ${r.status==='pending'?`<button class="chip" data-leavereview="${r.id}">Preview &amp; decide</button>`:r.letterText?`<button class="chip" data-leavepreview="${r.id}">Preview letter</button>`:''}
+    ${r.status==='approved'?`<button class="chip" data-leavedownload="${r.id}">⬇ Download</button>`:''}
+  </div></div>`;
+}
+function bindLeavePlansCtrls(){
+  const sel=document.getElementById('lvPlansStaffSel');
+  if(sel) sel.onchange=()=>{ leavePlansStaffKey=sel.value; paintLeaveApp(); };
+  const prevBtn=document.getElementById('lvPlansPrevYear'); if(prevBtn) prevBtn.onclick=()=>{ leavePlansYear--; paintLeaveApp(); };
+  const nextBtn=document.getElementById('lvPlansNextYear'); if(nextBtn) nextBtn.onclick=()=>{ leavePlansYear++; paintLeaveApp(); };
+  document.querySelectorAll('[data-leavereview]').forEach(b=>b.onclick=()=>openLeaveReviewModal(b.dataset.leavereview));
+  document.querySelectorAll('[data-leavepreview]').forEach(b=>b.onclick=()=>previewLeaveLetter(b.dataset.leavepreview));
+  document.querySelectorAll('[data-leavedownload]').forEach(b=>b.onclick=()=>downloadLeaveLetter(b.dataset.leavedownload));
 }
 function leaveMineHtml(){
   const year=leaveCalYear;
