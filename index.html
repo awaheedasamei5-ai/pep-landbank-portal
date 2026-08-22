@@ -3533,6 +3533,32 @@ async function checkBirthdaysToday(){
 const REMINDER_LEAD_DAYS=5, DEFAULT_GRACE_DAYS=5;
 function ordinalLabel(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; switch(n%10){ case 1:return n+'st'; case 2:return n+'nd'; case 3:return n+'rd'; default:return n+'th'; } }
 function sameCalendarDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+// Sec 60: Client Payment-Risk Engine. A pure classifier -- never mutates
+// anything, never touches contract terms -- reusing the exact same schedule
+// math and day-of-month anchoring as the reminder system above so the risk
+// label a client sees always agrees with what actually triggers their SMS.
+// Six states: On track, Due soon, Partial (deposit not yet cleared but paying),
+// Overdue, Severely overdue (missed a prior month, i.e. real arrears), Paid in full.
+function computePaymentRiskState(lead,payments){
+  if(isFullyPaid(lead)) return 'Paid in full';
+  const sched=computeMonthlySchedule(lead,payments||[]);
+  if(!sched) return num(lead.amtPaid)>0 ? 'Partial' : 'On track';
+  if(sched.arrears>0.5) return 'Severely overdue';
+  if(sched.expectedThisMonth<=0.5) return 'On track';
+  const anchorDay=new Date(sched.nextDueDate+'T00:00:00').getDate();
+  const now=new Date(today()+'T00:00:00');
+  const y=now.getFullYear(), m=now.getMonth();
+  const daysInThisMonth=new Date(y,m+1,0).getDate();
+  const thisMonthDueDay=Math.min(anchorDay,daysInThisMonth);
+  const dueDateThisCycle=new Date(y,m,thisMonthDueDay);
+  const reminderDate=new Date(dueDateThisCycle); reminderDate.setDate(dueDateThisCycle.getDate()-REMINDER_LEAD_DAYS);
+  const defaultDate=new Date(dueDateThisCycle); defaultDate.setDate(dueDateThisCycle.getDate()+DEFAULT_GRACE_DAYS);
+  if(now>=defaultDate) return 'Severely overdue';
+  if(now>=dueDateThisCycle) return 'Overdue';
+  if(now>=reminderDate) return 'Due soon';
+  return 'On track';
+}
+const PAYMENT_RISK_TAG_CLS={'Paid in full':'ok','On track':'ok','Due soon':'warnt','Partial':'warnt','Overdue':'dgr','Severely overdue':'dgr'};
 async function checkPaymentDueReminders(){
   if(PROFILE.role!=='manager' || DEMO_MODE) return;
   try{
@@ -8295,10 +8321,13 @@ function paintPipe(){ const wrap=document.getElementById('plist'); const q=pf.q.
   if(!list.length){ wrap.innerHTML=emptyState(ic.grid,'No matching leads','Adjust your search or add a new lead.'); return; }
   wrap.innerHTML=list.map((l,i)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; const bal=Math.max(g-num(l.amtPaid),0); const paidFull=isFullyPaid(l);
     const initials=(l.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    // Payment-risk badge (Sec 60) -- only shown for states actually worth a
+    // glance; "On track"/"Paid in full" would just repeat the existing tags.
+    const risk=paidFull?null:computePaymentRiskState(l,(DB.payments||[]).filter(p=>p.leadId===l.id));
     return `<div class="rowcard pipeCard stage-${esc(l.stage||'')}" style="animation-delay:${Math.min(i*30,300)}ms">
       <div class="top"><div class="pipeAvatar">${esc(initials)}</div><div style="flex:1;min-width:0"><div class="nm nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}">${esc(l.name)}</div><div class="meta">${esc(l.contact||'—')}${contactLinks(l.contact)} · ${esc(l.plotType||'')}${l.noPlots?' ×'+esc(l.noPlots):''}</div></div>
       <div style="text-align:right"><div class="amt">${ghs(g)}</div><div class="meta">${bal>0?('Bal '+ghs(bal)):'Paid in full'}</div></div></div>
-      <div class="foot">${paidFull?'<span class="tag ok">✓ Paid in full</span>':''}<span class="tag stage-${esc(l.stage||'')}">${esc(l.stage||'—')}</span><span class="tag pri-${esc(l.priority||'Low')}">${esc(l.priority||'Low')} priority</span>${l.siteVisit==='Yes'?'<span class="tag ok">Site visited</span>':''}${l.paymentPlan?`<span class="tag ghost">${esc(l.paymentPlan)}</span>`:''}${(l.tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tagchip">🏷 ${esc(t)}</span>`).join('')}</div>
+      <div class="foot">${paidFull?'<span class="tag ok">✓ Paid in full</span>':''}${risk&&risk!=='On track'?`<span class="tag ${PAYMENT_RISK_TAG_CLS[risk]}">${esc(risk)}</span>`:''}<span class="tag stage-${esc(l.stage||'')}">${esc(l.stage||'—')}</span><span class="tag pri-${esc(l.priority||'Low')}">${esc(l.priority||'Low')} priority</span>${l.siteVisit==='Yes'?'<span class="tag ok">Site visited</span>':''}${l.paymentPlan?`<span class="tag ghost">${esc(l.paymentPlan)}</span>`:''}${(l.tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tagchip">🏷 ${esc(t)}</span>`).join('')}</div>
       ${l.nextAction?`<div class="note"><b>Next:</b> ${esc(l.nextAction)}</div>`:''}
       <div class="foot"><button class="chip" onclick="route('updateOne','${l.id}')">Update this lead →</button></div></div>`; }).join('');
 }
