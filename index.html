@@ -11072,10 +11072,20 @@ async function formCustomer(arg){
   // DB.sitevisits/DB.activity are capped for everyday screens (see apiLoadAll) --
   // a customer's own full history shouldn't silently truncate on their 360 profile,
   // so this fetches fresh, uncapped copies specifically for the two capped tables.
-  const [fullSiteVisitsForCust,fullActivityForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity()]);
+  const [fullSiteVisitsForCust,fullActivityForCust,contractReqsForCust,plotReqsForCust]=await Promise.all([apiLoadFullSiteVisits(),apiLoadFullActivity(),apiLoadContractRequests().catch(()=>[]),apiLoadPlotRequests().catch(()=>[])]);
   const mVis=fullSiteVisitsForCust.filter(v=>custMatches(v.name,v.contact,name,contact));
   const mAct=fullActivityForCust.filter(a=>custMatches(a.client,'',name,contact));
   const mPay=(DB.payments||[]).filter(p=>custMatches(p.clientName,'',name,contact)).sort((x,y)=>(y.date||'').localeCompare(x.date||''));
+  // Contracts, contract requests, plot requests and allocations all already
+  // exist elsewhere in the app -- Sec 55 just asks that a client's full journey
+  // merge them into ONE chronological timeline instead of making Management
+  // visit each app separately, so these fold straight into the same `events`
+  // array the rest of this screen already builds.
+  const nameLowerForTimeline=name.trim().toLowerCase();
+  const mContracts=(DB.contracts||[]).filter(c=>(c.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mContractReqs=contractReqsForCust.filter(r=>(r.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mPlotReqs=plotReqsForCust.filter(r=>(r.clientName||'').trim().toLowerCase()===nameLowerForTimeline);
+  const mAllocs=(DB.allocations||[]).filter(a=>custMatches(a.clientName,'',name,contact));
 
   const events=[];
   mLeads.forEach(l=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand;
@@ -11091,6 +11101,16 @@ async function formCustomer(arg){
       detail:a.detail||a.note||''}); });
   mPay.forEach(p=>{ events.push({date:p.date||'',type:'Payment',label:ghs(num(p.amount))+' received',icon:kpiIc.check,cls:'green',
       detail:''}); });
+  mContracts.forEach(c=>{ events.push({date:(c.createdAt||'').slice(0,10),type:'Contract',label:'Contract of Sale generated',icon:ic.contract||ic.doc,cls:'gold',
+      detail:c.createdByName||c.createdBy?('By '+(c.createdByName||c.createdBy)):''}); });
+  mContractReqs.forEach(r=>{ events.push({date:(r.createdAt||'').slice(0,10),type:'Contract request',label:'Contract requested'+(r.status==='fulfilled'?' · fulfilled':' · pending'),icon:ic.contract||ic.doc,cls:r.status==='fulfilled'?'green':'gold',
+      detail:r.requestedByName||r.requestedBy?('By '+(r.requestedByName||r.requestedBy)):''}); });
+  mPlotReqs.forEach(r=>{ events.push({date:(r.createdAt||'').slice(0,10),type:'Plot request',label:'Additional plot requested'+(r.status==='pending'?' · pending':' · '+(r.status||'')),icon:ic.plotrequest||ic.doc,cls:'lime',
+      detail:(r.plotType||'')+(r.noPlots?' ×'+r.noPlots:'')}); });
+  mAllocs.forEach(a=>{
+    events.push({date:(a.createdAt||'').slice(0,10),type:'Allocation',label:'Allocation requested ('+(a.percent!=null?a.percent+'% paid':'')+')',icon:ic.allocation||ic.doc,cls:'gold',detail:a.note||''});
+    if(a.status==='Allocated' && a.resolvedAt) events.push({date:(a.resolvedAt||'').slice(0,10),type:'Allocation',label:'Plot allocated'+(a.plotNumber?' · '+a.plotNumber:''),icon:ic.allocation||ic.doc,cls:'green',detail:''});
+  });
   events.sort((x,y)=>(y.date||'').localeCompare(x.date||''));
 
   const totalValue=mLeads.reduce((s,l)=>s+num(l.grandTotal!=null?l.grandTotal:computeLead(l).grand),0);
