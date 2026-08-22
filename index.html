@@ -291,8 +291,7 @@ a{color:var(--green2)}
 .sidebar .sbItem.on{background:linear-gradient(90deg,rgba(103,232,249,.18),rgba(103,232,249,.05));color:#fff}
 .sidebar .sbItem.on::before{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:3px;border-radius:3px;
   background:linear-gradient(180deg,var(--gold2),var(--green2))}
-.sidebar .sbItem svg{width:18px;height:18px;flex:0 0 auto}
-.sidebar .sbItem .fic{width:24px;height:24px;flex:0 0 auto;border-radius:7px}
+.sidebar .sbItem .tileBadge.sm{width:28px;height:28px;flex:0 0 auto}
 .sidebar .sbItemLabel{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sidebar .bnBadge{position:static;min-width:18px;height:18px;padding:0 5px;border-radius:100px;background:var(--danger);
   color:#fff;font-size:10.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
@@ -631,16 +630,26 @@ a{color:var(--green2)}
 .appGridGlyph .fic{width:100%;height:100%;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
 body.dark .appGridIcon:hover{background:#182541}
 .appGridLabel{font-size:11.5px;font-weight:700;color:var(--ink);text-align:center;line-height:1.25}
-/* Premium UI rebuild -- the large colorful tile grid (Ref: school-admin
-   dashboard's big rounded-square tiles / mobile "Quick Access"). Reuses the
-   existing chip-style .fic glyph (already a colored rounded-square + white
-   icon) at a much bigger size instead of inventing a new tile visual -- the
-   chip already *is* the reference's tile, just drawn small elsewhere. */
+/* Premium UI rebuild -- the large colorful tile grid (Ref: mobile "Quick
+   Access"): a flat single-color icon centered on a solid rounded-square
+   badge, sized big for tiles (.lg) or small for the sidebar (.sm) --
+   see tileBadgeHtml()/TILE_ICON_MAP/TILE_COLORS. */
 .appGrid.appGrid-lg{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:16px}
 .appGridIcon.lg{padding:6px 4px;gap:10px}
-.appGridGlyph.lg{width:84px;height:84px}
-@media(min-width:640px){.appGridGlyph.lg{width:96px;height:96px}}
 .appGridSub{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.3;margin-top:-4px}
+.tileBadge{display:flex;align-items:center;justify-content:center;border-radius:22%;color:#fff;flex:0 0 auto}
+.tileBadge svg{width:46%;height:46%}
+.tileBadge.lg{width:84px;height:84px}
+@media(min-width:640px){.tileBadge.lg{width:96px;height:96px}}
+.tileBadge.sm{border-radius:8px}
+.tileBadge.purple{background:linear-gradient(150deg,#C4B5FD,#7C3AED)}
+.tileBadge.teal{background:linear-gradient(150deg,#5EEAD4,#0F766E)}
+.tileBadge.blue{background:linear-gradient(150deg,#93C5FD,#2563EB)}
+.tileBadge.orange{background:linear-gradient(150deg,#FDBA74,#EA580C)}
+.tileBadge.lime{background:linear-gradient(150deg,#BEF264,#4D7C0F)}
+.tileBadge.rose{background:linear-gradient(150deg,#FDA4AF,#E11D48)}
+.tileBadge.navy{background:linear-gradient(150deg,#60A5FA,#1E3A8A)}
+.tileBadge.gold{background:linear-gradient(150deg,#FCD34D,#B45309)}
 .newsGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
 .newsCard{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);transition:transform .2s ease,box-shadow .2s ease}
 .newsCard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
@@ -7200,7 +7209,7 @@ function sidebarTopLevelItems(){
   ];
   if(isMgr) items.push({r:'managementHub',fic:'leaderboard',label:'Management'});
   items.push(isMgr?{mgrKey:'Settings',fic:'settings',label:'Settings'}:{r:'account',fic:'settings',label:'Settings'});
-  return items;
+  return withTileColors(items);
 }
 // Direct-route items compare CURRENT_ROUTE_NAME directly; the one mgrKey item
 // (Settings) resolves through the exact same MGR_APP_ROUTE_NAMES map
@@ -7216,8 +7225,7 @@ function sidebarItemActive(item){
 }
 function sidebarItemRowHtml(item){
   const attr=item.r?`data-sbnav="${esc(item.r)}"`:`data-sbmgr="${esc(item.mgrKey)}"`;
-  const icon=item.icon||fic(item.fic);
-  return `<button class="sbItem${sidebarItemActive(item)?' on':''}" ${attr} title="${esc(item.label)}">${icon}<span class="sbItemLabel">${esc(item.label)}</span>${item.badge>0?`<span class="bnBadge">${item.badge>9?'9+':item.badge}</span>`:''}</button>`;
+  return `<button class="sbItem${sidebarItemActive(item)?' on':''}" ${attr} title="${esc(item.label)}">${tileBadgeHtml(item,'sm')}<span class="sbItemLabel">${esc(item.label)}</span>${item.badge>0?`<span class="bnBadge">${item.badge>9?'9+':item.badge}</span>`:''}</button>`;
 }
 // Collapse state persists across reloads (localStorage) but isn't re-read
 // mid-session -- one toggle click flips both the in-memory flag and the DOM
@@ -7243,7 +7251,7 @@ function renderSidebarNow(){
       </button>
     </div>`;
   const items=IS_CLIENT
-    ? (()=>{ const {activeTab,tabDefs}=computeNavTabDefs(); return tabDefs.map(t=>({r:t.r,icon:t.icon,label:t.label,badge:t.badge,active:t.key===activeTab})); })()
+    ? (()=>{ const {activeTab,tabDefs}=computeNavTabDefs(); return withTileColors(tabDefs.map(t=>({r:t.r,icon:t.icon,label:t.label,badge:t.badge,active:t.key===activeTab}))); })()
     : sidebarTopLevelItems();
   sb.innerHTML=brand+`<div class="sbScroll">`+items.map(sidebarItemRowHtml).join('')+`</div>`+footer;
   sb.querySelectorAll('[data-sbnav]').forEach(b=>b.onclick=()=>route(b.dataset.sbnav));
@@ -7410,14 +7418,31 @@ const FIC_GLYPHS={
  pricetag:{g:'gGold',p:'<path d="M18 18h10l12 12-10 10-12-12V18z" fill="#fff"/><circle cx="23" cy="23" r="2.2" fill="#B8860B"/><path d="M25 30.5l6-6" stroke="#B8860B" stroke-width="1.6" stroke-linecap="round"/>'}
 };
 function fic(name,size,color){size=size||44;var G=FIC_GLYPHS[name];if(!G)return '';return '<svg class="fic" width="'+size+'" height="'+size+'" viewBox="0 0 56 56" style="vertical-align:middle;flex:0 0 auto">'+ficChip(color||G.g)+G.p+'</svg>';}
-// Premium UI rebuild -- deterministic per-position color rotation across the
-// full hue palette (see FIC_DEFS above), used only by the new tile grids
-// (quick access, Insights/Management hub landings, and the flat Sales/Office/
-// Settings sections replacing their old accordions) so those specifically get
-// real color variety like the reference designs, without silently recoloring
-// every other existing fic() call site's current appearance.
-const TILE_PALETTE=['gTeal','gPurple','gBlue','gOrange','gLime','gRose','gNavy','gGold'];
-function withTileColors(items){ return items.map((it,i)=>({...it,color:TILE_PALETTE[i%TILE_PALETTE.length]})); }
+// Redesign correction: flat, single-color glyphs on a solid color badge (Ref:
+// mobile "Quick Access" grid), NOT the more detailed multi-shape fic() chip
+// glyphs -- those read as generic-dashboard clutter next to the reference's
+// crisp simple icons. Reuses the existing `ic`/`kpiIc` line-icon sets
+// directly (no new SVG artwork) rather than hand-drawing ~40 new glyphs.
+const TILE_ICON_MAP={
+  home:'home',addlead:'lead',editpipeline:'update',pipeline:'trendup',
+  location:'visit',sitevisitauth:'check2',enquiry:'enquiry',alert:'complaint',feedback:'complaint',
+  plotrequest:'pin',clientdb:'people',companyleads:'people',gift:'gift',
+  memo:'doc',quote:'doc',contract:'doc',calendar:'calendar',notes:'edit',
+  clipboard:'grid',billboard:'image',attendance:'check2',sms:'phone',
+  payment:'coins',expense:'coins',commission:'trendup',map:'pin',allocation:'building',
+  analytics:'trendup',reportdoc:'doc',target:'target',datacheck:'eye',
+  leaderboard:'trophy',announce:'mail',settings:'gear',chat:'chat',
+  staffteam:'people',building:'building',backup:'backup',serverconfig:'gear',
+  pulse:'eye',pricetag:'tag'
+};
+function tileIconSvg(ficName){ const key=TILE_ICON_MAP[ficName]||'grid'; return ic[key]||kpiIc[key]||ic.grid; }
+// Deterministic per-position color rotation, used only by the new tile grids
+// (quick access, Insights/Management hub landings, the flat Sales/Office/
+// Settings sections, and the sidebar's own 7 top-level items) so those
+// specifically get real color variety like the reference designs.
+const TILE_COLORS=['purple','teal','blue','orange','lime','rose','navy','gold'];
+function withTileColors(items){ return items.map((it,i)=>({...it,color:TILE_COLORS[i%TILE_COLORS.length]})); }
+function tileBadgeHtml(item,size){ return `<span class="tileBadge ${size||'lg'} ${item.color||'blue'}">${item.icon||tileIconSvg(item.fic)}</span>`; }
 // One shared "big colorful tile" grid, used by the home quick-access section
 // and the new Insights/Management hub landing pages. `items`: {r|mgrKey, fic,
 // label, sub?, color?}. Same route()/mgrAppRoute() dispatch as every other
@@ -7426,7 +7451,7 @@ function tileGridHtml(items){
   return `<div class="appGrid appGrid-lg">`+items.map(it=>{
     const attr=it.mgrKey?`data-tilemgr="${esc(it.mgrKey)}"`:`data-tilenav="${esc(it.r)}"`;
     return `<button class="appGridIcon lg" ${attr}>
-      <span class="appGridGlyph lg">${fic(it.fic,null,it.color)}</span>
+      ${tileBadgeHtml(it,'lg')}
       <span class="appGridLabel">${esc(it.label)}</span>
       ${it.sub?`<span class="appGridSub">${esc(it.sub)}</span>`:''}
     </button>`;
