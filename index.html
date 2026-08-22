@@ -1892,14 +1892,13 @@ function monthsElapsedSince(dateStr){
 // individual payment record ever needs to be split or tagged.
 function computeDepositStatus(lead,paymentsForLead){
   const c=computeLead(lead); const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand;
-  // Default deposit target is 30% of the PRINCIPAL (net, pre-interest) -- not
-  // 30% of grand, which would silently bake a slice of interest into the
-  // "deposit" itself instead of the interest landing 100% on the remaining
-  // installment balance where it belongs (Sec fix, urgent). Only ever engages
-  // when no explicit depositTarget is on file -- a real, already-set deposit
-  // target is used exactly as stored, unaffected by this.
-  const net=lead.netTotal!=null?num(lead.netTotal):c.net;
-  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(net*0.3);
+  // Default deposit target is 30% of the TOTAL (grand, interest included) --
+  // confirmed against live quotation tests (30% of a GHS 237,610 total must
+  // read as GHS 71,283, not 68,091) after an earlier "net-only" attempt turned
+  // out not to match what "Deposit (30%)" is expected to mean next to the
+  // Total line on screen. Only ever engages when no explicit depositTarget is
+  // on file -- a real, already-set deposit target is used exactly as stored.
+  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(grand*0.3);
   const sorted=(paymentsForLead||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   let cum=0,clearedDate=null,overshoot=0;
   for(const p of sorted){
@@ -2696,14 +2695,14 @@ async function apiLoadBadgeCounts(){
 // so as soon as a lead row exists, that PIN genuinely already works.
 async function apiInsertLead(l,c,agentKeyOverride,opts){
   if(DEMO_MODE){ const key=agentKeyOverride||PROFILE.key; const d=await demoLoad(); const row={id:uid(),agent:key,...l,netTotal:c.net,grandTotal:c.grand,balance:c.bal,
-      depositTarget:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.net*0.3)};
+      depositTarget:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.grand*0.3)};
     d.leads[key]=d.leads[key]||[]; d.leads[key].unshift(row); await demoSave(); return row; }
   const row={agent_key:agentKeyOverride||PROFILE.agent_key,name:l.name,contact:l.contact,date_added:l.date||today(),stage:l.stage,
     plot_type:l.plotType,no_plots:num(l.noPlots),unit_price:l.unitPrice?num(l.unitPrice):PRICING()[l.plotType].list,
     discount:l.discount==null?PRICING()[l.plotType].disc*num(l.noPlots):num(l.discount),net_total:c.net,
     payment_plan:l.paymentPlan,grand_total:c.grand,site_visit:l.siteVisit,priority:l.priority,
     amt_paid:num(l.amtPaid),balance:c.bal,next_action:l.nextAction,notes:l.notes,
-    deposit_target:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.net*0.3)};
+    deposit_target:l.depositTarget!=null&&l.depositTarget!==''?num(l.depositTarget):Math.round(c.grand*0.3)};
   if(l.leadSource) row.lead_source=l.leadSource;
   if(l.bannerId) row.banner_id=l.bannerId;
   const {data,error}=await sb.from('leads').insert(row).select().single(); if(error) throw error;
@@ -11520,7 +11519,7 @@ function readLeadForm(){return {name:val('f_name').trim(),contact:val('f_contact
   depositTarget:val('f_deptarget')||null,
   amtPaid:val('f_paid')||0,nextAction:val('f_next').trim(),notes:val('f_notes').trim()};}
 function paintCalc(){ const c=computeLead(readLeadForm());
-  const depTarget=num(val('f_deptarget'))||Math.round(c.net*0.3);
+  const depTarget=num(val('f_deptarget'))||Math.round(c.grand*0.3);
   document.getElementById('calc').innerHTML=`<div><div class="cl">Net total</div><div class="cv">${ghs(c.net)}</div></div><div><div class="cl">+ Interest</div><div class="cv">${ghs(c.interest)}</div></div><div><div class="cl">Grand total</div><div class="cv">${ghs(c.grand)}</div></div><div><div class="cl">Balance</div><div class="cv">${ghs(c.bal)}</div></div><div><div class="cl">Deposit target</div><div class="cv">${ghs(depTarget)}</div></div>`;
 }
 async function saveNewLead(){ const l=readLeadForm();
@@ -13504,15 +13503,17 @@ async function saveAccountAboutMe(){
 }
 /* ================= QUOTATION REQUEST (available on every dashboard) ================= */
 const QUOTE_DEPOSIT_PCT=0.3;
-// Shared by every quotation flavor (Standard + Technical): deposit is always
-// pure principal (net*depositPct) -- 100% of interest loads onto the balance,
-// spread evenly across the plan's months. See computeQuotationTotals/
+// Shared by every quotation flavor (Standard + Technical): deposit is a % of
+// the TOTAL (grand, interest included) -- confirmed against live quotation
+// tests (30% of a GHS 237,610 total must read as GHS 71,283) after an earlier
+// net-only attempt didn't match what "Deposit (X%)" is expected to mean next
+// to the Total line on screen. See computeQuotationTotals/
 // computeTechnicalQuotationTotals for the two ways `net`/`interestTotal` get built.
 function computeInstallmentPlan(net,interestTotal,planMonths,depositPct){
   const grand=net+interestTotal;
   let deposit=0,balance=grand,monthlyDue=0,schedule=[];
   if(planMonths && grand>0){
-    deposit=Math.round(net*depositPct);
+    deposit=Math.round(grand*depositPct);
     balance=grand-deposit;
     monthlyDue=Math.round(balance/planMonths);
     let opening=balance;
@@ -13612,18 +13613,18 @@ function openStandardQuotationRequest(){
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeQuoteReq').onclick=()=>ov.remove();
   // Deposit % and Deposit Amount are two views of the same number -- editing
-  // either one recalculates the other from the quote's net (pre-interest)
-  // total, since the deposit is pure principal -- all interest is loaded
-  // onto the remaining balance, never split proportionally into the deposit.
-  const currentNet=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).net;
+  // either one recalculates the other from the quote's grand (Total-line) figure,
+  // since deposit is a share of the Total, matching what "Deposit (X%)" reads as
+  // right next to it on screen.
+  const currentGrand=()=>computeQuotationTotals(val('q_plottype'),num(val('q_noplots'))||1,val('q_period'),val('q_discount'),0).grand;
   document.getElementById('q_depositpct').addEventListener('input',()=>{
-    const net=currentNet(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
-    document.getElementById('q_depositamt').value=net>0?Math.round(net*pct/100):'';
+    const grand=currentGrand(); const pct=Math.max(0,Math.min(100,num(val('q_depositpct'))));
+    document.getElementById('q_depositamt').value=grand>0?Math.round(grand*pct/100):'';
     paintPreview();
   });
   document.getElementById('q_depositamt').addEventListener('input',()=>{
-    const net=currentNet(); const amt=Math.max(0,Math.min(net,num(val('q_depositamt'))));
-    document.getElementById('q_depositpct').value=net>0?Math.round((amt/net)*1000)/10:0;
+    const grand=currentGrand(); const amt=Math.max(0,Math.min(grand,num(val('q_depositamt'))));
+    document.getElementById('q_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
     paintPreview();
   });
   const paintPreview=()=>{
@@ -13719,13 +13720,13 @@ function openTechnicalQuotationRequest(){
   renderLots();
 
   document.getElementById('tq_depositpct').addEventListener('input',()=>{
-    const net=currentTotals().net; const pct=Math.max(0,Math.min(100,num(val('tq_depositpct'))));
-    document.getElementById('tq_depositamt').value=net>0?Math.round(net*pct/100):'';
+    const grand=currentTotals().grand; const pct=Math.max(0,Math.min(100,num(val('tq_depositpct'))));
+    document.getElementById('tq_depositamt').value=grand>0?Math.round(grand*pct/100):'';
     paintTechPreview();
   });
   document.getElementById('tq_depositamt').addEventListener('input',()=>{
-    const net=currentTotals().net; const amt=Math.max(0,Math.min(net,num(val('tq_depositamt'))));
-    document.getElementById('tq_depositpct').value=net>0?Math.round((amt/net)*1000)/10:0;
+    const grand=currentTotals().grand; const amt=Math.max(0,Math.min(grand,num(val('tq_depositamt'))));
+    document.getElementById('tq_depositpct').value=grand>0?Math.round((amt/grand)*1000)/10:0;
     paintTechPreview();
   });
   function paintTechPreview(){
@@ -13790,7 +13791,7 @@ function buildQuotationPDF(q){
   // measures each label itself and subtracts that from these full-column
   // widths, rather than assuming every label fits a fixed 40mm gutter.
   const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
-  const depositPct=q.planMonths&&q.net>0?Math.round((q.deposit||0)/q.net*100):null;
+  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
   const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
     ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
     ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
@@ -13889,7 +13890,7 @@ function buildTechnicalQuotationPDF(q){
   let y=48;
   const leftX=14, rightX=110;
   const leftColWidth=rightX-leftX-4, rightColWidth=pageW-12-rightX;
-  const depositPct=q.planMonths&&q.net>0?Math.round((q.deposit||0)/q.net*100):null;
+  const depositPct=q.planMonths&&q.grand>0?Math.round((q.deposit||0)/q.grand*100):null;
   const leftRows=[['Customer Name',q.clientName],['Address',q.address||'—'],
     ['Contact / Phone',q.contact||'—'],['Email',q.email||'—'],
     ['Payment Plan',q.planMonths?(q.planMonths+' Months'):'Outright'],
@@ -13981,7 +13982,7 @@ function computeLeadQuotationTotals(lead){
   const c=computeLead(lead);
   const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand;
   const planMonths=PLAN_MONTHS[lead.paymentPlan]||0;
-  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(c.net*QUOTE_DEPOSIT_PCT);
+  const target=lead.depositTarget!=null?num(lead.depositTarget):Math.round(grand*QUOTE_DEPOSIT_PCT);
   let deposit=0,balance=grand,monthlyDue=0,schedule=[];
   if(planMonths && grand>0){
     deposit=Math.min(Math.max(target,0),grand);
