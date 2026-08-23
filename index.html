@@ -8461,20 +8461,26 @@ function openSingleAnnounceModal(id){
   loadAndRenderComments(a.id);
   bindAnnounceCardCtrls();
 }
+// Premium UI rebuild -- same chartCardHtml() header pattern (title+subtitle+
+// expand-arrow) as the Revenue bar-chart card, donut + legend arranged
+// beside each other (a CSS flex row) instead of stacked, matching the
+// reference's "Sales by Category" card layout.
 function renderPipelineHealthCard(leads,routeArg){
   const h=computePipelineComposition(leads);
-  return `<div class="rowcard" style="margin-bottom:18px;padding:16px;cursor:pointer" data-gopipelinehealth="${esc(routeArg||'')}">
+  const legend=`<div style="display:flex;flex-direction:column;gap:11px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#84CC16;flex:0 0 auto"></span><b>${h.committedCount}</b> committed <span class="mini">${ghs(h.committedVal)} · ${h.committedPct}%</span></div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#CBD5E1;flex:0 0 auto"></span><b>${h.prospectCount}</b> prospects <span class="mini">${ghs(h.prospectVal)} · ${h.prospectPct}%</span></div>
+  </div>`;
+  const body=`<div style="display:flex;align-items:center;gap:20px">
+      <div style="position:relative;width:88px;height:88px;flex:0 0 auto">${svgDonut([{value:h.committedCount,color:'#84CC16'},{value:h.prospectCount,color:'#CBD5E1'}],{size:88,stroke:15})}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;font-family:'IBM Plex Mono',monospace">${h.committedPct}%</div></div>
+      <div style="flex:1;min-width:0">${legend}</div>
+    </div>`;
+  return `<div class="rowcard chartCard" style="margin-bottom:18px;padding:17px;cursor:pointer" data-gopipelinehealth="${esc(routeArg||'')}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-      <div><div style="font-weight:700;font-size:13.5px">Pipeline health</div><div class="mini">how much of your pipeline is real vs speculative</div></div>
-      <span class="tag ${h.healthCls}">${h.healthLabel}</span>
+      <div><div style="font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:8px">Pipeline health<span class="tag ${h.healthCls}" style="font-size:10.5px;padding:2px 8px">${h.healthLabel}</span></div><div class="mini">how much of your pipeline is real vs speculative</div></div>
+      <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </div>
-    <div style="display:flex;align-items:center;gap:16px">
-      <div style="position:relative;width:78px;height:78px;flex:0 0 auto">${svgDonut([{value:h.committedCount,color:'#84CC16'},{value:h.prospectCount,color:'#CBD5E1'}],{size:78,stroke:13})}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;font-family:'IBM Plex Mono',monospace">${h.committedPct}%</div></div>
-      <div style="flex:1;display:flex;flex-direction:column;gap:9px">
-        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#84CC16;flex:0 0 auto"></span><b>${h.committedCount}</b> committed <span class="mini">${ghs(h.committedVal)} · ${h.committedPct}%</span></div>
-        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#CBD5E1;flex:0 0 auto"></span><b>${h.prospectCount}</b> prospects <span class="mini">${ghs(h.prospectVal)} · ${h.prospectPct}%</span></div>
-      </div>
-    </div>
+    ${body}
   </div>`;
 }
 function bindPipelineHealthCard(){ const el=document.querySelector('[data-gopipelinehealth]'); if(el) el.onclick=()=>route('pipelineHealth',el.dataset.gopipelinehealth||undefined); }
@@ -16805,19 +16811,31 @@ function mgrQuickAccessItems(){
 }
 function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
   const agents=allAgentLists();
-  const rows=agents.map(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi;
-    return `<button class="agentrow" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);cursor:pointer" data-agentkey="${esc(a.key)}"><div class="ai"><div><div class="nm" style="font-weight:700">${esc(a.name)}</div><div class="mini">${k.leads} leads · ${k.sv} visits · ${k.hi} high-priority</div></div></div><div style="text-align:right"><div class="amt mono" style="font-weight:700">${ghs(k.val)}</div><div class="mini">out ${ghs(k.out)}</div></div></button>`; }).join('');
   const escalated=DB.complaints.filter(c=>c.status==='Escalated').length;
 
   const STAGE_COLORS={'1':'#94A3B8','2A':'#64748B','2B':'#3B82F6','3':'#F59E0B','4':'var(--ok)','Lost':'#EF4444'};
   const stages=STAGES;
   const allLeads=agents.flatMap(a=>a.list);
+  // Premium UI rebuild -- "Pipeline by stage" and "By agent" as real
+  // horizontal bar charts (rounded pill bars, human labels, value at the
+  // bar's end) instead of a plain progress-bar list / plain row list --
+  // same underlying data (allLeads/kpisOf(a.list)), presentation only.
   const stageMax=Math.max(1,...stages.map(s=>allLeads.filter(l=>l.stage===s).length));
   const funnel=stages.map(s=>{ const n=allLeads.filter(l=>l.stage===s).length;
-    return `<button class="blockrow" data-stage="${s}" style="display:flex;align-items:center;gap:10px;margin-bottom:9px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
-      <div style="width:82px;font-size:11.5px;color:var(--muted);flex:0 0 auto">${s}</div>
-      <div style="flex:1;height:18px;background:#EEF1F6;border-radius:7px;overflow:hidden"><div style="height:100%;width:${n?Math.max(4,Math.round(n/stageMax*100)):0}%;background:${STAGE_COLORS[s]};border-radius:7px"></div></div>
-      <div style="width:26px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto">${n}</div>
+    const pct=n?Math.max(4,Math.round(n/stageMax*100)):0;
+    return `<button class="blockrow" data-stage="${s}" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
+      <div style="width:132px;font-size:12px;color:var(--text);font-weight:600;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(clientStageLabel(s))}</div>
+      <div style="flex:1;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${STAGE_COLORS[s]};border-radius:100px"></div></div>
+      <div style="width:28px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto">${n}</div>
+    </button>`; }).join('');
+  const agentVals=agents.map(a=>kpisOf(a.list).val);
+  const agentMax=Math.max(1,...agentVals);
+  const rows=agents.map(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi;
+    const pct=k.val?Math.max(4,Math.round(k.val/agentMax*100)):0;
+    return `<button class="blockrow" data-agentkey="${esc(a.key)}" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
+      <div style="width:104px;font-size:12px;color:var(--text);font-weight:600;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>
+      <div style="flex:1;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--leaf),var(--green));border-radius:100px"></div></div>
+      <div style="width:76px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto">${ghs(k.val)}</div>
     </button>`; }).join('');
 
   const SRC_COLORS={Facebook:'#3B82F6',Instagram:'#EC4899','Walk In':'#84CC16',Referral:'#F59E0B',Website:'#1D4ED8',TikTok:'#111827',Google:'#EF4444'};
@@ -16851,10 +16869,9 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
     <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
 
-    <div class="sectitle"><h3>By agent</h3><span class="cnt">tap an agent for their full client breakdown</span></div><div class="formwrap" style="padding:6px 15px">${rows||'<div class="empty">No agent profiles yet</div>'}</div>
+    ${chartCardHtml('By agent','Tap an agent for their full client breakdown',rows||'<div class="empty">No agent profiles yet</div>')}
 
-    <div class="sectitle"><h3>Pipeline by stage</h3><span class="cnt">${allLeads.length} leads company-wide · tap a stage</span></div>
-    <div class="formwrap">${allLeads.length?funnel:emptyState(ic.grid,'No leads yet','')}</div>
+    ${chartCardHtml('Pipeline by stage',allLeads.length+' leads company-wide · tap a stage',allLeads.length?funnel:emptyState(ic.grid,'No leads yet',''))}
 
     <p class="mini" style="margin:8px 2px 0">Enquiry sources moved to the Enquiries app · outstanding balances now live inside Monthly Plan clients, next to what's actually expected.</p>
   </div>`;
