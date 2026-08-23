@@ -642,13 +642,29 @@ a{color:var(--green2)}
 .appGridGlyph .fic{width:100%;height:100%;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
 body.dark .appGridIcon:hover{background:#182541}
 .appGridLabel{font-size:11.5px;font-weight:700;color:var(--ink);text-align:center;line-height:1.25}
-/* Premium UI rebuild -- the large colorful tile grid (Ref: mobile "Quick
-   Access"): a flat single-color icon centered on a solid rounded-square
-   badge, sized big for tiles (.lg) or small for the sidebar (.sm) --
-   see tileBadgeHtml()/TILE_ICON_MAP/TILE_COLORS. */
-.appGrid.appGrid-lg{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:16px}
-.appGridIcon.lg{padding:6px 4px;gap:10px}
-.appGridSub{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.3;margin-top:-4px}
+/* Premium UI rebuild -- the large colorful tile grid (Ref A: icon-on-
+   colorful-badge, bold title, 2-3 line description, "Open app" pill,
+   scoped to .appGrid-lg/.appGridIcon.lg only -- the older compact
+   icon+label-only tile system (mgrAppGridHtml/groupedAppGridHtml/
+   vaultGridHtml, plain .appGridIcon with no .lg) is untouched.
+   auto-fit + a bounded card width (was auto-fill + unbounded 1fr, which
+   left empty uncollapsed trailing tracks pinning small groups to the left
+   on wide desktop instead of centering them) + justify-content:center so
+   a handful of real cards cluster in the middle instead of stretching
+   across the full row. */
+.appGrid.appGrid-lg{grid-template-columns:repeat(auto-fit,minmax(200px,240px));gap:16px;justify-content:center}
+.appGridIcon.lg{flex-direction:column;align-items:flex-start;text-align:left;background:var(--card);
+  border:1px solid var(--line);border-radius:20px;padding:20px 18px 18px;gap:0;box-shadow:var(--shadow)}
+.appGridIcon.lg:hover{background:var(--card);box-shadow:var(--shadow-lg)}
+.appGridIcon.lg .tileBadge.lg{margin-bottom:14px}
+.appGridIcon.lg .appGridLabel{font-size:14.5px;font-weight:800;color:var(--text);text-align:left;line-height:1.3;margin-bottom:4px}
+.appGridSub{font-size:12px;color:var(--muted);text-align:left;line-height:1.45;margin-top:0;margin-bottom:14px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.appGridOpen{margin-top:auto;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+  color:var(--green);background:var(--paper);border-radius:100px;padding:6px 12px 6px 14px;transition:.15s}
+.appGridIcon.lg:hover .appGridOpen{background:var(--green);color:#fff}
+.appGridOpen svg{width:10px;height:10px;transition:transform .15s}
+.appGridIcon.lg:hover .appGridOpen svg{transform:translateX(2px)}
 .tileBadge{display:flex;align-items:center;justify-content:center;border-radius:22%;color:#fff;flex:0 0 auto}
 .tileBadge svg{width:46%;height:46%}
 .tileBadge.lg{width:84px;height:84px}
@@ -7452,6 +7468,7 @@ function tileGridHtml(items){
       ${tileBadgeHtml(it,'lg')}
       <span class="appGridLabel">${esc(it.label)}</span>
       ${it.sub?`<span class="appGridSub">${esc(it.sub)}</span>`:''}
+      <span class="appGridOpen">Open app<svg viewBox="0 0 24 24" width="10" height="10" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     </button>`;
   }).join('')+`</div>`;
 }
@@ -7800,11 +7817,50 @@ function officeDeskGroups(){
 // a click-to-expand; there are few enough top-level groups to show all of
 // them at once). Same group/item data as before (officeDeskGroups() etc,
 // unchanged), same mgrAppRoute() dispatch -- purely a different HTML shell.
+// Premium UI rebuild -- one-line "what this app does" copy for the Reference-A
+// tile card anatomy, keyed by label so it drops into every hub grid (Sales
+// desk, Office desk, both roles) without editing the ~30 scattered item
+// literals in salesDeskGroupsForAgent/Mgr()/officeDeskGroups()/AGENT_HUBS.
+const TILE_DESC={
+  'New lead':'Log a new prospect into your pipeline',
+  'Update pipeline':'Record a payment or move a client to their next stage',
+  'Data check':'Spot leads missing a next action, contact, or plot details',
+  'Plot availability':'See which plots are open, reserved, or sold',
+  'My pipeline':'Every client you own, from first contact to paid in full',
+  'Site visit':'Log a client site visit and how it went',
+  'Site Visits':'Every site visit logged across the company',
+  'Client enquiry':'Record a new enquiry and where it came from',
+  'Enquiries':'Every enquiry logged across the company',
+  'Client feedback':'Log or follow up on a client complaint',
+  'Client Feedback':'Every client complaint, open or resolved',
+  'Plot Requests':'Requests from clients asking about specific plots',
+  'Allocations':'Assign a specific plot to a client who has qualified',
+  'Client Database':'Search every client the company has ever worked with',
+  'Company Leads':'Leads shared company-wide, not tied to one agent',
+  'Referrals':'Track referral bonuses owed and paid',
+  'Plot Inventory':'The full list of plots and their current status',
+  'Memorandum':'Write and send an internal memo',
+  'Quotation':'Request a formal price quotation for a client',
+  'Contract of Sale':'Generate and track a client’s contract of sale',
+  'Leave Schedules':'Request, approve, or browse staff leave',
+  'Site Visit Auth':'Authorize a client’s site visit before it happens',
+  'Notes':'Your own private notes, saved to this account',
+  'Operations Tracker':'Tasks, to-dos, and the team’s daily schedule',
+  'Team Feedback':'Feedback shared between staff and management',
+  'Banner Tracking':'Track every banner placement, condition, and location',
+  'Attendance':'Sign in for the day and view attendance history',
+  'SMS':'Send a text message to a client or staff member',
+  'Log Payment':'Record a payment received from a client',
+  'Expenses':'Submit or approve a company expense',
+  'Commission':'Review commission earned across the team',
+  'Reports':'Company-wide performance reports and exports',
+  'Leaderboard':'See how every agent is ranking this month'
+};
 function flatTileSectionsHtml(groups,agentShaped){
   return groups.filter(g=>g.items.length).map((g,i)=>{
     const items=withTileColors(g.items.map(a=>agentShaped
-      ?{r:a.r,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}
-      :{mgrKey:a.key,fic:a.fic,label:a.label,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}));
+      ?{r:a.r,fic:a.fic,label:a.label,sub:TILE_DESC[a.label],badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}
+      :{mgrKey:a.key,fic:a.fic,label:a.label,sub:TILE_DESC[a.label],badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey}));
     return `<div class="sectitle"${i===0?' style="margin-top:0"':''}><h3>${esc(g.title)}</h3></div>${tileGridHtml(items)}`;
   }).join('');
 }
