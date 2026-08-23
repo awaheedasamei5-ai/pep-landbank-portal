@@ -535,6 +535,43 @@ a{color:var(--green2)}
 .statIcon svg{width:16px;height:16px}
 .statValue{font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text)}
 .statCaption{font-size:11.5px;color:var(--muted);line-height:1.4}
+/* Premium UI rebuild -- Banner Tracking dashboard (Reference C): big
+   colored health panel + gauge, two stat cards beneath, a grid of small
+   icon stat cards, and a dark bottom panel with a trend chart + bold
+   status cards. */
+.bannerHealthPanel{background:linear-gradient(150deg,#84CC16,#4D7C0F);border-radius:24px;padding:22px;color:#fff;margin-bottom:16px;position:relative;overflow:hidden}
+.bannerHealthPanel::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 90% -10%,rgba(255,255,255,.25),transparent 55%);pointer-events:none}
+.bannerHealthPanel-top{display:flex;align-items:center;justify-content:space-between;gap:20px;position:relative;z-index:1;flex-wrap:wrap}
+.bannerHealthPanel-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;opacity:.85}
+.bannerHealthPanel-big{font-size:42px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:6px;line-height:1}
+.bannerHealthPanel-caption{font-size:12px;opacity:.85;margin-top:8px;max-width:220px;line-height:1.4}
+.bannerHealthPanel-stats{display:flex;gap:12px;margin-top:20px;position:relative;z-index:1}
+.bhStat{flex:1;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:12px 14px;min-width:0}
+.bhStat .v{font-size:18px;font-weight:800;font-family:'IBM Plex Mono',monospace}
+.bhStat .l{font-size:10.5px;opacity:.85;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.bannerStatGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
+@media(min-width:640px){.bannerStatGrid{grid-template-columns:repeat(3,1fr)}}
+.bsCard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.bsCard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.bsCard-icon{width:32px;height:32px;border-radius:100px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.bsCard-icon svg{width:15px;height:15px}
+.bsCard .v{font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text)}
+.bsCard .l{font-size:11px;color:var(--muted);margin-top:2px}
+.bannerDarkPanel{background:linear-gradient(160deg,var(--ink) 0%,#312E81 100%);border-radius:24px;padding:20px;color:#fff;margin-bottom:18px}
+.bannerDarkPanel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.bannerDarkPanel-head .t{font-weight:700;font-size:14px}
+.bannerDarkPanel-head .s{font-size:11px;opacity:.65;margin-top:2px}
+.bannerDarkPanel-body{display:flex;gap:20px;flex-wrap:wrap}
+.bannerLineChart{flex:1 1 220px;min-width:0}
+.bannerOfferCards{flex:1 1 220px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.boCard{border-radius:14px;padding:12px 14px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.boCard .nm{font-size:11.5px;opacity:.9}
+.boCard .v{font-size:20px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.boCard .ic{width:30px;height:30px;border-radius:100px;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.boCard .ic svg{width:15px;height:15px}
+.boCard.red{background:linear-gradient(150deg,#F87171,#DC2626)}
+.boCard.blue{background:linear-gradient(150deg,#60A5FA,#2563EB)}
+.boCard.lemon{background:linear-gradient(150deg,#BEF264,#65A30D)}
 .plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px}
 /* Team chat */
 .convList{display:flex;flex-direction:column;gap:4px}
@@ -22174,6 +22211,12 @@ function bannerRowHtml(b){
     <span class="tag" style="background:${st.bg};color:${st.color};border-color:transparent">${st.label}</span>
   </div></button>`;
 }
+// Premium UI rebuild -- rebuilt to actually mirror Reference C's card
+// layout (big colored health panel + gauge, two stat cards beneath it, a
+// grid of small icon stat cards, a dark bottom panel with a trend chart +
+// bold status cards) instead of just borrowing its color palette. Every
+// number is real (BANNER_STATUS counts, BANNER_LEAD_COUNTS, createdAt
+// dates) -- no invented score/net-worth/debt/bank-offer equivalents.
 function bannerDashboardHtml(){
   const all=DB.banners;
   const placed=all.filter(b=>b.status==='placed').length;
@@ -22183,15 +22226,54 @@ function bannerDashboardHtml(){
   const areas=new Set(all.map(b=>b.area).filter(Boolean));
   const totalLeadsFromBanners=Object.values(BANNER_LEAD_COUNTS).reduce((s,n)=>s+n,0);
   const recent=all.slice().sort((a,b)=>(b.updatedAt||b.createdAt||'').localeCompare(a.updatedAt||a.createdAt||'')).slice(0,8);
-  // Reference C's circular gauge, but a real computed ratio instead of a
-  // fabricated score: % of tracked banners currently in perfect condition.
   const trackedTotal=placed+maint+replacing;
   const healthPct=trackedTotal?Math.round(placed/trackedTotal*100):0;
+  const bMonths=last6MonthKeys();
+  const bVals=bMonths.map(mk=>all.filter(b=>(b.createdAt||'').slice(0,7)===mk).length);
+  const bLbls=bMonths.map(mk=>monthLabel2(mk).split(' ')[0]);
+  const statCard=(icon,color,bg,value,label)=>`<div class="bsCard">
+    <div class="bsCard-top"><span class="bsCard-icon" style="background:${bg};color:${color}">${icon}</span></div>
+    <div class="v">${value}</div><div class="l">${esc(label)}</div>
+  </div>`;
   return `
-  <div class="kpis">${kpi('Total banners',placed+maint)}${kpi('Perfect condition',placed)}${kpi('Needs maintenance',maint)}${kpi('Being replaced',replacing)}${kpi('New locations',newLoc)}${kpi('Total areas',areas.size)}${kpi('Leads from banners',totalLeadsFromBanners)}</div>
-  <div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
-    ${progressRing(healthPct,healthPct>=70?'#65A30D':healthPct>=40?'#7C3AED':'#DC2626',80)}
-    <div><div style="font-weight:700;font-size:13.5px">Banner health</div><div class="mini" style="margin-top:3px">${placed} of ${trackedTotal} placed banner${trackedTotal===1?'':'s'} in perfect condition${maint?' · '+maint+' need maintenance':''}${replacing?' · '+replacing+' being replaced':''}</div></div>
+  <div class="bannerHealthPanel">
+    <div class="bannerHealthPanel-top">
+      <div>
+        <div class="bannerHealthPanel-title">Banner Health</div>
+        <div class="bannerHealthPanel-big">${healthPct}%</div>
+        <div class="bannerHealthPanel-caption">${placed} of ${trackedTotal} placed banner${trackedTotal===1?'':'s'} in perfect condition</div>
+      </div>
+      <div style="position:relative;width:84px;height:84px;flex:0 0 auto">
+        ${svgDonut([{value:healthPct,color:'#fff'},{value:100-healthPct,color:'rgba(255,255,255,.25)'}],{size:84,stroke:12})}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;font-family:'IBM Plex Mono',monospace;color:#fff">${healthPct}%</div>
+      </div>
+    </div>
+    <div class="bannerHealthPanel-stats">
+      <div class="bhStat"><div class="v">${areas.size}</div><div class="l">Areas covered</div></div>
+      <div class="bhStat"><div class="v">${totalLeadsFromBanners}</div><div class="l">Leads generated</div></div>
+    </div>
+  </div>
+  <div class="bannerStatGrid">
+    ${statCard(kpiIc.check,'#65A30D','#ECFCCB',placed,'Perfect condition')}
+    ${statCard(kpiIc.alert,'#7C3AED','#EDE9FE',maint,'Needs maintenance')}
+    ${statCard(kpiIc.flag,'#DC2626','#FEE2E2',replacing,'Being replaced')}
+    ${statCard(kpiIc.pin,'#2563EB','#DBEAFE',newLoc,'New locations')}
+    ${statCard(kpiIc.pin,'#2563EB','#DBEAFE',areas.size,'Total areas')}
+    ${statCard(kpiIc.trophy,'#65A30D','#ECFCCB',totalLeadsFromBanners,'Leads from banners')}
+  </div>
+  <div class="bannerDarkPanel" style="--muted:rgba(255,255,255,.6);--line:rgba(255,255,255,.15)">
+    <div class="bannerDarkPanel-head">
+      <div><div class="t">Placements over time</div><div class="s">Last 6 months</div></div>
+      <div style="text-align:right"><div class="t">By status</div><div class="s">${trackedTotal} tracked</div></div>
+    </div>
+    <div class="bannerDarkPanel-body">
+      <div class="bannerLineChart">${svgLineChart(bVals,bLbls,{height:140})}</div>
+      <div class="bannerOfferCards">
+        <div class="boCard lemon"><div><div class="nm">Perfect condition</div><div class="v">${placed}</div></div><span class="ic">${kpiIc.check}</span></div>
+        <div class="boCard blue"><div><div class="nm">Scouted locations</div><div class="v">${newLoc}</div></div><span class="ic">${kpiIc.pin}</span></div>
+        <div class="boCard red"><div><div class="nm">Being replaced</div><div class="v">${replacing}</div></div><span class="ic">${kpiIc.flag}</span></div>
+      </div>
+    </div>
   </div>
   <div class="formactions" style="margin:4px 0 16px"><button class="btn primary" id="bnQuickAdd" style="width:100%">+ Add banner / location</button></div>
   <div class="sectitle" style="margin-top:0"><h3>Recent activity</h3><span class="cnt">${recent.length}</span></div>
