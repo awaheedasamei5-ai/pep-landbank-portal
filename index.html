@@ -556,26 +556,27 @@ a{color:var(--green2)}
 
 /* Floating announcement bubble */
 #announceBubble{position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:200;width:58px;height:58px;border-radius:100px;touch-action:none;
-  background:linear-gradient(150deg,var(--ink),#1D4ED8);box-shadow:0 10px 30px rgba(11,30,61,.45);
+  background:linear-gradient(150deg,var(--ink),#4F46E5);box-shadow:0 10px 30px rgba(30,27,75,.45);
   display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;
   animation:bubbleIn .5s cubic-bezier(.34,1.56,.64,1) both}
-#announceBubble::before{content:"";position:absolute;inset:-6px;border-radius:100px;border:2px solid rgba(132,204,22,.55);animation:pulseRing 2.2s ease-out infinite}
+#announceBubble::before{content:"";position:absolute;inset:-6px;border-radius:100px;border:2px solid rgba(129,140,248,.55);animation:pulseRing 2.2s ease-out infinite}
 #announceBubble svg{position:relative;z-index:1;color:#fff}
 #announceBubble .badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:100px;
   background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:11px;font-weight:800;
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);z-index:2}
 @keyframes pulseRing{0%{transform:scale(.9);opacity:.9}80%{transform:scale(1.35);opacity:0}100%{opacity:0}}
 @keyframes bubbleIn{0%{transform:scale(0) rotate(-30deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
-#announceOverlay,.overlay{position:fixed;inset:0;background:rgba(5,14,31,.55);backdrop-filter:blur(3px);z-index:300;
+#announceOverlay,.overlay{position:fixed;inset:0;background:rgba(11,10,31,.55);backdrop-filter:blur(3px);z-index:300;
   display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease both}
 @media(min-width:640px){#announceOverlay,.overlay{align-items:center}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-#announceModal{background:var(--card);width:100%;max-width:460px;max-height:88vh;overflow-y:auto;border-radius:22px 22px 0 0;
+/* Premium UI rebuild -- Reference D's plain white rounded card (no
+   decorative border-gradient stripe), pill-shaped fields/buttons below.
+   Still the one shared shell every modal in the app goes through. */
+#announceModal{background:var(--card);width:100%;max-width:460px;max-height:88vh;overflow-y:auto;border-radius:24px 24px 0 0;
   padding:24px 20px 26px;animation:modalUp .32s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 -10px 40px rgba(0,0,0,.3);
-  position:relative;border-top:3px solid transparent;
-  background-image:linear-gradient(var(--card),var(--card)),linear-gradient(100deg,var(--green),var(--leaf) 60%,var(--premium));
-  background-origin:border-box;background-clip:padding-box,border-box}
-@media(min-width:640px){#announceModal{border-radius:22px;margin-bottom:0;border-top-width:3px}}
+  position:relative;border:1px solid var(--line)}
+@media(min-width:640px){#announceModal{border-radius:24px;margin-bottom:0}}
 @keyframes modalUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
 /* Premium UI rebuild, Phase 1 -- Drawer/Sheet as modifiers on the SAME
    #announceOverlay/#announceModal shell (still goes through makeModalAccessible)
@@ -960,11 +961,14 @@ body.dark .achEarned{color:#E8C158}
 .field{margin-bottom:15px}
 .field label{display:block;font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:7px;letter-spacing:.01em;overflow-wrap:break-word;word-break:break-word}
 .field .hint{font-weight:400;color:var(--muted);font-size:11.5px;overflow-wrap:break-word;word-break:break-word}
-.field input,.field select,.field textarea{width:100%;padding:12.5px 13px;border:1.5px solid var(--line);border-radius:12px;
-  background:var(--card);color:var(--text);outline:none;transition:border-color .16s,box-shadow .16s,transform .16s}
-.field textarea{min-height:84px;resize:vertical;line-height:1.5}
-.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--leaf);box-shadow:var(--glow-blue);transform:translateY(-1px)}
-.field input:hover:not(:focus),.field select:hover:not(:focus){border-color:#C7D0DC}
+/* Premium UI rebuild -- Reference D's pill-shaped inputs. Textareas keep a
+   moderate rounded-rect radius instead (a multi-line box with fully pill
+   ends reads oddly), everything else goes full pill. */
+.field input,.field select,.field textarea{width:100%;padding:12.5px 17px;border:1.5px solid var(--line);border-radius:var(--r-pill);
+  background:var(--paper);color:var(--text);outline:none;transition:border-color .16s,box-shadow .16s,transform .16s}
+.field textarea{min-height:84px;resize:vertical;line-height:1.5;border-radius:var(--r-sm)}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--leaf);box-shadow:var(--glow-blue);background:var(--card);transform:translateY(-1px)}
+.field input:hover:not(:focus),.field select:hover:not(:focus){border-color:var(--leaf)}
 /* Premium UI rebuild, Phase 1 -- invalid-field state, additive only. Existing
    .field/.field label/.field input rules above are untouched. */
 .field.invalid input,.field.invalid select,.field.invalid textarea{border-color:var(--danger)}
@@ -1043,13 +1047,21 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .calcbox .cl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .calcbox .cv{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:16.5px;color:var(--ink)}
 .formactions{display:flex;gap:10px;margin-top:8px}
+/* Premium UI rebuild -- optional tinted-footer variant (Reference D's price
+   line + pill CTA bar) for modals with a clear total/action. Additive only:
+   plain .formactions (no modifier) is the default for everything else. */
+.formactions.priced{background:var(--paper);border-radius:var(--r-pill);padding:8px 8px 8px 18px;align-items:center;gap:12px;margin-top:14px}
+.formactions.priced .pricedLabel{flex:1;min-width:0}
+.formactions.priced .pricedLabel .l{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.formactions.priced .pricedLabel .v{font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text)}
+.formactions.priced .btn{flex:0 0 auto}
 .btn{padding:14.5px;border-radius:100px;border:none;font-weight:700;font-size:15px;flex:1;letter-spacing:.01em;transition:transform .16s cubic-bezier(.22,1,.36,1),box-shadow .16s;position:relative;overflow:hidden}
 .btn::before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 40%,rgba(255,255,255,.35) 50%,transparent 60%);
   background-size:250% 100%;background-position:150% 0;transition:background-position .55s ease}
 .btn:hover:not(:disabled)::before{background-position:-50% 0}
-.btn.primary{background:linear-gradient(180deg,var(--leaf),var(--green));color:#fff;box-shadow:0 10px 24px -8px rgba(37,99,235,.5)}
-.btn.gold{background:linear-gradient(180deg,var(--gold),var(--accent-dark,#4D7C0F));color:#fff;box-shadow:0 10px 24px -8px rgba(132,204,22,.5)}
-.btn.ghost{background:#EEF1F6;color:#3c433c;flex:0 0 auto;padding-left:22px;padding-right:22px}
+.btn.primary{background:linear-gradient(180deg,var(--leaf),var(--green));color:#fff;box-shadow:0 10px 24px -8px rgba(79,70,229,.5)}
+.btn.gold{background:linear-gradient(180deg,var(--gold),var(--accent-dark,#4D7C0F));color:#fff;box-shadow:0 10px 24px -8px rgba(124,58,237,.5)}
+.btn.ghost{background:var(--paper);color:var(--text);flex:0 0 auto;padding-left:22px;padding-right:22px}
 .btn:hover:not(:disabled){transform:translateY(-1.5px)}
 .btn:active:not(:disabled){transform:translateY(0) scale(.98)}
 .btn:disabled{opacity:.55}
