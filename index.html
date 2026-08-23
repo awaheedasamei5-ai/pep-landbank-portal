@@ -642,33 +642,44 @@ a{color:var(--green2)}
 .appGridGlyph .fic{width:100%;height:100%;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
 body.dark .appGridIcon:hover{background:#182541}
 .appGridLabel{font-size:11.5px;font-weight:700;color:var(--ink);text-align:center;line-height:1.25}
-/* Premium UI rebuild -- the large colorful tile grid (Ref A: icon-on-
-   colorful-badge, bold title, 2-3 line description, "Open app" pill,
-   scoped to .appGrid-lg/.appGridIcon.lg only -- the older compact
-   icon+label-only tile system (mgrAppGridHtml/groupedAppGridHtml/
-   vaultGridHtml, plain .appGridIcon with no .lg) is untouched.
+/* Premium UI rebuild -- Reference A's colorful card (icon badge, bold
+   title, description, "Open app" pill) is WEB-ONLY -- the user explicitly
+   called this out after an earlier pass wrongly used the same big desktop
+   card on mobile too. Mobile default here is a compact icon-left row
+   (small badge, label only, no description/pill); the full Reference A
+   card only applies from 768px up. Scoped to .appGrid-lg/.appGridIcon.lg
+   only -- the older compact icon+label-only tile system
+   (mgrAppGridHtml/groupedAppGridHtml/vaultGridHtml, plain .appGridIcon
+   with no .lg) is untouched either way.
    auto-fit + a bounded card width (was auto-fill + unbounded 1fr, which
    left empty uncollapsed trailing tracks pinning small groups to the left
    on wide desktop instead of centering them) + justify-content:center so
    a handful of real cards cluster in the middle instead of stretching
-   across the full row. */
-.appGrid.appGrid-lg{grid-template-columns:repeat(auto-fit,minmax(200px,240px));gap:16px;justify-content:center}
-.appGridIcon.lg{flex-direction:column;align-items:flex-start;text-align:left;background:var(--card);
-  border:1px solid var(--line);border-radius:20px;padding:20px 18px 18px;gap:0;box-shadow:var(--shadow)}
+   across the full row -- this part only matters once the grid is >1
+   column, i.e. already effectively desktop-only in practice. */
+.appGrid.appGrid-lg{grid-template-columns:1fr;gap:10px}
+.appGridIcon.lg{flex-direction:row;align-items:center;text-align:left;background:var(--card);
+  border:1px solid var(--line);border-radius:14px;padding:10px 14px;gap:12px;box-shadow:var(--shadow)}
 .appGridIcon.lg:hover{background:var(--card);box-shadow:var(--shadow-lg)}
-.appGridIcon.lg .tileBadge.lg{margin-bottom:14px}
-.appGridIcon.lg .appGridLabel{font-size:14.5px;font-weight:800;color:var(--text);text-align:left;line-height:1.3;margin-bottom:4px}
-.appGridSub{font-size:12px;color:var(--muted);text-align:left;line-height:1.45;margin-top:0;margin-bottom:14px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.appGridOpen{margin-top:auto;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
-  color:var(--green);background:var(--paper);border-radius:100px;padding:6px 12px 6px 14px;transition:.15s}
-.appGridIcon.lg:hover .appGridOpen{background:var(--green);color:#fff}
-.appGridOpen svg{width:10px;height:10px;transition:transform .15s}
-.appGridIcon.lg:hover .appGridOpen svg{transform:translateX(2px)}
+.appGridIcon.lg .tileBadge.lg{margin-bottom:0}
+.appGridIcon.lg .appGridLabel{font-size:13.5px;font-weight:800;color:var(--text);text-align:left;line-height:1.3;margin-bottom:0}
+.appGridSub{display:none}
+.appGridOpen{display:none}
 .tileBadge{display:flex;align-items:center;justify-content:center;border-radius:22%;color:#fff;flex:0 0 auto}
 .tileBadge svg{width:46%;height:46%}
-.tileBadge.lg{width:84px;height:84px}
-@media(min-width:640px){.tileBadge.lg{width:96px;height:96px}}
+.tileBadge.lg{width:44px;height:44px}
+@media(min-width:768px){
+  .appGrid.appGrid-lg{grid-template-columns:repeat(auto-fit,minmax(200px,240px));gap:16px;justify-content:center}
+  .appGridIcon.lg{flex-direction:column;align-items:flex-start;border-radius:20px;padding:20px 18px 18px;gap:0}
+  .appGridIcon.lg .tileBadge.lg{width:84px;height:84px;margin-bottom:14px}
+  .appGridIcon.lg .appGridLabel{font-size:14.5px;margin-bottom:4px}
+  .appGridSub{display:-webkit-box;color:var(--muted);font-size:12px;line-height:1.45;margin-bottom:14px;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .appGridOpen{margin-top:auto;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+    color:var(--green);background:var(--paper);border-radius:100px;padding:6px 12px 6px 14px;transition:.15s}
+  .appGridIcon.lg:hover .appGridOpen{background:var(--green);color:#fff}
+  .appGridOpen svg{width:10px;height:10px;transition:transform .15s}
+  .appGridIcon.lg:hover .appGridOpen svg{transform:translateX(2px)}
+}
 .tileBadge.sm{border-radius:8px}
 .tileBadge.purple{background:linear-gradient(150deg,#C4B5FD,#7C3AED)}
 .tileBadge.teal{background:linear-gradient(150deg,#5EEAD4,#0F766E)}
