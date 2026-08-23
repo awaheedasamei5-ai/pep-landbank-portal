@@ -344,10 +344,16 @@ a{color:var(--green2)}
   padding:5px 7px 5px 13px;border-radius:100px;
   min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
 .whoami::-webkit-scrollbar{display:none}
-.tbProfileBtn{background:none;border:none;padding:0;font:inherit;cursor:pointer;display:flex;align-items:center;border-radius:100px;transition:background .15s}
+/* Fix: the avatar and name text had zero gap between them (only .whoami's
+   own 4px cluster-level gap applied, meant for spacing between icon
+   buttons) -- collided visually, worse with a real photo than the old
+   colored-letter placeholder. Also .tb-name's divider was left over from
+   when the profile button used to sit first in the cluster; now it sits
+   last (before logout) so that divider is redundant with the .tbDivider
+   already placed before it -- dropped in favor of its own right padding. */
+.tbProfileBtn{background:none;border:none;padding:2px 8px 2px 2px;font:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;border-radius:100px;transition:background .15s}
 .tbProfileBtn:hover{background:var(--paper)}
-.tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;padding-right:11px;margin-right:3px;
-  border-right:1px solid var(--line);white-space:nowrap;flex:0 0 auto}
+.tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;white-space:nowrap;flex:0 0 auto}
 .tb-avatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;display:inline-block;box-shadow:0 0 0 1.5px rgba(79,70,229,.45)}
 .tb-avatar img{width:100%;height:100%;object-fit:cover}
 .tbDivider{width:1px;height:20px;background:var(--line);flex:0 0 auto;margin:0 3px}
@@ -390,7 +396,11 @@ a{color:var(--green2)}
   background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:9.5px;font-weight:800;
   display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--ink);animation:badgePop .3s ease both}
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
-.main{flex:1;padding:20px 16px 100px;max-width:1080px;width:100%;margin:0 auto}
+/* Premium UI rebuild -- 1080px left huge dead margins on a wide desktop
+   once the sidebar collapsed to a 72px rail; widened so real content
+   (dashboard grids, tile grids, tables) actually uses the screen instead
+   of floating in a narrow column with empty space on both sides. */
+.main{flex:1;padding:20px 24px 100px;max-width:1440px;width:100%;margin:0 auto}
 /* WhatsApp-style full-screen chat thread: the brand topbar and bottom tab bar
    are hidden entirely (not just visually covered) while a thread is open, so
    the composer can sit flush at the very bottom of the viewport -- toggled by
@@ -899,10 +909,15 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .pipeCard.stage-Lost{--stagecolor:var(--danger)}
 .pipeAvatar{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:0 0 auto;letter-spacing:-.02em}
-.pipeStatStrip{display:flex;gap:10px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px}
-.pipeStat{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 16px;min-width:108px;box-shadow:var(--shadow)}
-.pipeStat .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:16px}
-.pipeStat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+/* Premium UI rebuild -- these small plain-white stat cards read as
+   "generic placeholders" at their old cramped size (10px padding, 16px
+   numbers) -- bumped to the same card language as .statCard (18px
+   padding, var(--r) radius, 20px bold numbers) and made them stretch to
+   fill the row on wide screens instead of staying tiny and left-packed. */
+.pipeStatStrip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.pipeStat{flex:1 1 160px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow)}
+.pipeStat .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:20px;color:var(--text)}
+.pipeStat .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 /* Premium UI rebuild -- Order List reference's 4 solid-colored stat pills,
    replacing the 3 plain-white .pipeStat cards above (kept for other
    screens that still use it). */
@@ -991,10 +1006,13 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .homeHero .heroStatLabel{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700}
 .homeHero .heroStatValue{font-size:32px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:-.01em}
 .homeHero .heroSecondary{display:flex;gap:10px;margin-top:18px;position:relative;z-index:1}
-.homeHero .heroChip{flex:1;min-width:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:10px 13px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
-.homeHero .heroChip:hover{background:rgba(255,255,255,.17);transform:translateY(-1px)}
-.homeHero .heroChip .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.6);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.homeHero .heroChip .v{font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Premium UI rebuild -- these read as barely-there ghost chips at 10%
+   background opacity; bumped to a proper "glass card" that's clearly
+   readable against the purple gradient instead of washed out. */
+.homeHero .heroChip{flex:1;min-width:0;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:12px 14px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
+.homeHero .heroChip:hover{background:rgba(255,255,255,.24);transform:translateY(-1px)}
+.homeHero .heroChip .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.85);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.homeHero .heroChip .v{font-size:17px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:4px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Settings screens: a profile identity card up top instead of a misleading plain
    "Change password" header, and a small colored icon per section instead of bare
    text -- same premium-anchor idea as the home hero, scaled down for forms. */
