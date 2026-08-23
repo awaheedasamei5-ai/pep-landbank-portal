@@ -329,6 +329,8 @@ a{color:var(--green2)}
   padding:5px 7px 5px 13px;border-radius:100px;
   min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
 .whoami::-webkit-scrollbar{display:none}
+.tbProfileBtn{background:none;border:none;padding:0;font:inherit;cursor:pointer;display:flex;align-items:center;border-radius:100px;transition:background .15s}
+.tbProfileBtn:hover{background:var(--paper)}
 .tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;padding-right:11px;margin-right:3px;
   border-right:1px solid var(--line);white-space:nowrap;flex:0 0 auto}
 .tb-avatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;display:inline-block;box-shadow:0 0 0 1.5px rgba(79,70,229,.45)}
@@ -1401,7 +1403,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
     <span class="glyph topbarBrandBit"><img alt="" id="topbarLogo"/></span>
     <div class="topbarBrandBit"><div class="tt">PALMSTEAD</div><div class="ts" id="topbarSub">by PEP Landbank</div></div>
     <div class="spacer"></div>
-    <div class="whoami"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span>
+    <div class="whoami"><button class="tbProfileBtn" id="profileBtn" title="Profile"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span></button>
       <button class="iconbtn hidden" id="clientBellBtn" title="Notifications" style="position:relative">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <span id="clientBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
@@ -6891,6 +6893,7 @@ document.getElementById('darkModeBtn').onclick=()=>{
   repaintCurrentRouteForTheme();
 };
 document.getElementById('accountBtn').onclick=()=>route(IS_CLIENT?'clientsettings':'account');
+document.getElementById('profileBtn').onclick=()=>route(IS_CLIENT?'clientprofile':'profile');
 
 /* config screen */
 document.getElementById('cfgLink').onclick=()=>{ document.getElementById('authCard').classList.add('hidden');
@@ -7139,12 +7142,12 @@ let ROUTE_NAV_LOCK=false;
 function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
   const appEl=document.getElementById('app'); if(appEl) appEl.classList.toggle('chat-fullscreen',name==='chatThread');
   ({home:agentHome,pipeline:viewPipeline,addlead:formAddLead,update:pickForUpdate,updateOne:formUpdate,
-    enquiry:formEnquiry,complaint:formComplaint,sitevisit:formSiteVisit,mgr:()=>{ mgrTab='overview'; managerView(); },account:formAccount,
+    enquiry:formEnquiry,complaint:formComplaint,sitevisit:formSiteVisit,mgr:()=>{ mgrTab='overview'; managerView(); },account:formAccount,profile:formProfile,
     customer:formCustomer,plots:viewPlots,
     paid:()=>kpiDrilldown('paid'),owed:()=>kpiDrilldown('owed'),visits:()=>kpiDrilldown('visits'),donepaying:()=>kpiDrilldown('donepaying'),
     monthlyclosed:()=>{ monthlyClosedCursor=today().slice(0,7); viewMonthlyClosed(); },
     agentDetail:agentDetailView,stageList:viewStageList,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
-    clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,
+    clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,clientprofile:formClientProfile,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
     clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory,insightsHub:viewInsightsHub,managementHub:viewManagementHub}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
   if(!skipPush && !ROUTE_NAV_LOCK && typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
@@ -7162,7 +7165,7 @@ function tabForRoute(name){
   if(IS_CLIENT){
     if(name==='clientvisit') return 'clientvisit';
     if(name==='clientfeedback') return 'clientfeedback';
-    if(name==='clientsettings') return 'clientsettings';
+    if(name==='clientsettings'||name==='clientprofile') return 'clientsettings';
     if(name==='clientmore'||name==='clientcontact'||name==='clientreferrals'||name==='clientcontractsale'||name==='clientvisitexperience') return 'clientmore';
     if(name==='clientallocation') return 'clienthome';
     return 'clienthome';
@@ -13816,14 +13819,19 @@ function profileHeroHtml(p,roleLabel){
     <div class="info"><div class="name">${esc(p.name||'')}</div><div class="role">${esc(roleLabel||'')}</div><div class="email">${esc(p.email||'')}</div></div>
   </div>`;
 }
-function formAccount(){
+// Premium UI rebuild -- split the old combined Settings screen in two,
+// Barbara-reference style: Profile (identity -- photo, signature, contact,
+// personal details) reached by tapping the topbar avatar/name, vs Settings
+// (app-level -- display prefs, password, PIN) reached by the gear icon.
+// Same DB.profiles/apiUpdateSignature/saveAccount* calls as before, just
+// regrouped into two screens instead of one long one.
+function formProfile(){
   const homeRoute = PROFILE.role==='manager' ? 'mgr' : 'home';
   if(DEMO_MODE){
-    V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Settings</h2></div></div>
-    ${emptyState(ic.update,'Not available in demo mode','Passwords and PIN sign-in only apply once the portal is connected to Supabase — in demo mode there is no real account to change. This screen works fully once you go live.')}`;
+    V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Profile</h2></div></div>
+    ${emptyState(ic.update,'Not available in demo mode','Profile edits only save once the portal is connected to Supabase — in demo mode there is no real account to change. This screen works fully once you go live.')}`;
     return;
   }
-  const hasPin = pinLockExists(PROFILE.key);
   V.innerHTML=`${back(homeRoute)}
   ${profileHeroHtml(PROFILE,PROFILE.role==='manager'?'Management':'Agent')}
   ${settingsSectionHead('image','Profile picture')}
@@ -13854,7 +13862,44 @@ function formAccount(){
     ${fld('Address','<input id="ad_address" placeholder="Street, city" value="'+esc(mp.address||'')+'"/>')}
     ${fld('ID number','<input id="ad_idnumber" placeholder="Ghana Card / Voter ID / Passport no." value="'+esc(mp.id_number||'')+'"/>')}
     <div class="formactions"><button class="btn primary" id="saveAboutMeBtn">Save my details</button></div>
-  </div>`; })()}
+  </div>`; })()}`;
+  const avInput=document.getElementById('avatarInput');
+  avInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
+    const b64=await openAvatarCropper(file);
+    if(!b64) return;
+    try{
+      const {error}=await sb.from('profiles').update({avatar:b64}).eq('id',USER.id);
+      if(error) throw error;
+      PROFILE.avatar=b64; document.getElementById('avatarPreview').innerHTML=`<img src="${b64}" style="width:100%;height:100%;object-fit:cover"/>`;
+      paintTopbarAvatar(); toast('Profile picture updated');
+    }catch(err){ toast('Could not save photo: '+(err.message||err)); }
+  };
+  const sigInput=document.getElementById('signatureInput');
+  sigInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
+    try{
+      const b64=await readSignatureFile(file);
+      await apiUpdateSignature(b64);
+      toast('Signature saved'); formProfile();
+    }catch(err){ toast('Could not save signature: '+(err.message||err)); }
+  };
+  const removeSigBtn=document.getElementById('removeSigBtn');
+  if(removeSigBtn) removeSigBtn.onclick=async()=>{
+    if(!confirm('Remove your saved signature?')) return;
+    try{ await apiUpdateSignature(null); toast('Signature removed'); formProfile(); }
+    catch(err){ toast('Could not remove signature'); }
+  };
+  document.getElementById('saveContactBtn').onclick=saveAccountContact;
+  document.getElementById('saveAboutMeBtn').onclick=saveAccountAboutMe;
+}
+function formAccount(){
+  const homeRoute = PROFILE.role==='manager' ? 'mgr' : 'home';
+  if(DEMO_MODE){
+    V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Settings</h2></div></div>
+    ${emptyState(ic.update,'Not available in demo mode','Passwords and PIN sign-in only apply once the portal is connected to Supabase — in demo mode there is no real account to change. This screen works fully once you go live.')}`;
+    return;
+  }
+  const hasPin = pinLockExists(PROFILE.key);
+  V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Settings</h2></div></div>
   ${settingsSectionHead('gear','Display settings','this device only')}
   <div class="formwrap">
     ${fld('Font',`<select id="dispFontFamily">
@@ -13883,39 +13928,12 @@ function formAccount(){
       <div class="formactions"><button class="btn primary" id="savePinBtn">Turn on PIN sign-in</button></div>
     `}
   </div>`;
-  const avInput=document.getElementById('avatarInput');
-  avInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
-    const b64=await openAvatarCropper(file);
-    if(!b64) return;
-    try{
-      const {error}=await sb.from('profiles').update({avatar:b64}).eq('id',USER.id);
-      if(error) throw error;
-      PROFILE.avatar=b64; document.getElementById('avatarPreview').innerHTML=`<img src="${b64}" style="width:100%;height:100%;object-fit:cover"/>`;
-      paintTopbarAvatar(); toast('Profile picture updated');
-    }catch(err){ toast('Could not save photo: '+(err.message||err)); }
-  };
-  const sigInput=document.getElementById('signatureInput');
-  sigInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
-    try{
-      const b64=await readSignatureFile(file);
-      await apiUpdateSignature(b64);
-      toast('Signature saved'); formAccount();
-    }catch(err){ toast('Could not save signature: '+(err.message||err)); }
-  };
-  const removeSigBtn=document.getElementById('removeSigBtn');
-  if(removeSigBtn) removeSigBtn.onclick=async()=>{
-    if(!confirm('Remove your saved signature?')) return;
-    try{ await apiUpdateSignature(null); toast('Signature removed'); formAccount(); }
-    catch(err){ toast('Could not remove signature'); }
-  };
   { const cur=applyDisplayPrefs();
     const ffSel=document.getElementById('dispFontFamily');
     ffSel.value=cur.fam;
     ffSel.onchange=()=>{ try{ localStorage.setItem('pep_font_family',ffSel.value); }catch(e){} applyDisplayPrefs(); };
   }
   document.getElementById('saveAcct').onclick=saveAccountPw;
-  document.getElementById('saveContactBtn').onclick=saveAccountContact;
-  document.getElementById('saveAboutMeBtn').onclick=saveAccountAboutMe;
   if(hasPin){ document.getElementById('removePinBtn').onclick=()=>{ if(!confirm('Remove PIN sign-in from this device?')) return; removePinLock(PROFILE.key); toast('PIN removed from this device'); formAccount(); }; }
   else{ document.getElementById('savePinBtn').onclick=saveAccountPin; }
 }
@@ -16419,8 +16437,11 @@ async function saveClientFeedback(sentiment){
     await showClientSuccessModal('Message sent!',"Thanks for reaching out — we've received your message and will follow up soon.");
   }catch(e){ toast('Could not send: '+(e.message||e)); btn.disabled=false; btn.textContent='Send'; }
 }
-function formClientSettings(){
-  V.innerHTML=`<div class="pagehead"><div><div class="eyebrow">Settings</div><h2>Your account</h2></div></div>
+// Premium UI rebuild -- same Profile/Settings split as the staff side
+// (formProfile()/formAccount()): identity fields reached via the topbar
+// avatar/name, app-level prefs+PIN reached via the gear icon.
+function formClientProfile(){
+  V.innerHTML=`<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Profile</h2></div></div>
   <div class="sectitle" style="margin-top:0"><h3>Profile picture</h3></div>
   <div class="formwrap" style="display:flex;align-items:center;gap:16px">
     <div id="clientAvatarPreview" style="width:64px;height:64px;border-radius:100px;overflow:hidden;flex:0 0 auto;background:#EEF1F6;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);font-size:22px">${CLIENT_PROFILE.avatar?`<img src="${CLIENT_PROFILE.avatar}" style="width:100%;height:100%;object-fit:cover"/>`:esc((CLIENT_PROFILE.name||'?')[0])}</div>
@@ -16441,26 +16462,12 @@ function formClientSettings(){
     ${fld('WhatsApp country',countrySelectHtml('cs_wacountry',splitIntlPhone(CLIENT_PROFILE.whatsapp).dialCode))}
     ${fld('WhatsApp number','<input id="cs_whatsapp" value="'+esc(splitIntlPhone(CLIENT_PROFILE.whatsapp).local)+'" placeholder="leave blank to use your phone number above"/>')}
     <div class="formactions"><button class="btn primary" id="saveClientChannels">Save</button></div>
-  </div>
-  <div class="sectitle"><h3>Display settings <span class="mini">— this device only</span></h3></div>
-  <div class="formwrap">
-    ${fld('Font',`<select id="dispFontFamily">
-      <option value="inter">Inter (default)</option><option value="system">System default</option><option value="georgia">Georgia (serif)</option><option value="verdana">Verdana (wide)</option>
-    </select>`)}
-    <div class="mini" style="margin-top:2px">Changes apply immediately and are saved to this device.</div>
-  </div>
-  <div class="sectitle"><h3>Change your PIN</h3></div>
-  <div class="formwrap">
-    <div class="mini" style="margin-bottom:14px">${CLIENT_PROFILE.isDefaultPin?"You're currently using the default PIN (1122) — set your own below.":'Choose a new 4–6 digit PIN.'}</div>
-    ${fld('New PIN','<input id="cs_pin1" type="password" inputmode="numeric" maxlength="6" placeholder="4–6 digits"/>')}
-    ${fld('Confirm new PIN','<input id="cs_pin2" type="password" inputmode="numeric" maxlength="6" placeholder="Re-enter PIN"/>')}
-    <div class="formactions"><button class="btn primary" id="saveClientPin">Update PIN</button></div>
   </div>`;
   document.getElementById('saveClientContact').onclick=async()=>{
     const name=val('cs_name').trim(); const contact=composeIntlPhone(val('cs_country'),val('cs_contact'));
     if(!name||!contact){ toast('Name and phone number are required'); return; }
     const btn=document.getElementById('saveClientContact'); btn.disabled=true; btn.textContent='Saving…';
-    try{ await apiClientUpdateContact(name,contact); document.getElementById('tbName').textContent=name.split(' ')[0]; toast('Details updated — your agent has been notified'); formClientSettings(); }
+    try{ await apiClientUpdateContact(name,contact); document.getElementById('tbName').textContent=name.split(' ')[0]; toast('Details updated — your agent has been notified'); formClientProfile(); }
     catch(e){ toast(e.message||'Could not update your details'); btn.disabled=false; btn.textContent='Save details'; }
   };
   document.getElementById('saveClientChannels').onclick=async()=>{
@@ -16475,6 +16482,23 @@ function formClientSettings(){
     try{ await apiClientUpdateAvatar(b64); document.getElementById('clientAvatarPreview').innerHTML=`<img src="${b64}" style="width:100%;height:100%;object-fit:cover"/>`; paintTopbarAvatar(); toast('Profile picture updated'); }
     catch(err){ toast('Could not save photo: '+(err.message||err)); }
   };
+}
+function formClientSettings(){
+  V.innerHTML=`<div class="pagehead"><div><div class="eyebrow">Settings</div><h2>Your account</h2></div></div>
+  <div class="sectitle" style="margin-top:0"><h3>Display settings <span class="mini">— this device only</span></h3></div>
+  <div class="formwrap">
+    ${fld('Font',`<select id="dispFontFamily">
+      <option value="inter">Inter (default)</option><option value="system">System default</option><option value="georgia">Georgia (serif)</option><option value="verdana">Verdana (wide)</option>
+    </select>`)}
+    <div class="mini" style="margin-top:2px">Changes apply immediately and are saved to this device.</div>
+  </div>
+  <div class="sectitle"><h3>Change your PIN</h3></div>
+  <div class="formwrap">
+    <div class="mini" style="margin-bottom:14px">${CLIENT_PROFILE.isDefaultPin?"You're currently using the default PIN (1122) — set your own below.":'Choose a new 4–6 digit PIN.'}</div>
+    ${fld('New PIN','<input id="cs_pin1" type="password" inputmode="numeric" maxlength="6" placeholder="4–6 digits"/>')}
+    ${fld('Confirm new PIN','<input id="cs_pin2" type="password" inputmode="numeric" maxlength="6" placeholder="Re-enter PIN"/>')}
+    <div class="formactions"><button class="btn primary" id="saveClientPin">Update PIN</button></div>
+  </div>`;
   document.getElementById('saveClientPin').onclick=async()=>{
     const p1=val('cs_pin1'),p2=val('cs_pin2');
     if(!/^\d{4,6}$/.test(p1)){ toast('PIN must be 4–6 digits'); return; }
