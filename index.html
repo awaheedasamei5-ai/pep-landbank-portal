@@ -13250,7 +13250,10 @@ function logPayDetailHtml(lead){
     ${fld('Mode of payment',sel('lp_method',PAYMENT_METHODS))}
     ${fld('Amount paid (GHS)','<input id="lp_amount" type="number" placeholder="0"/>')}
     ${fld('Date of payment','<input id="lp_date" type="date" value="'+today()+'" max="'+today()+'"/>')}
-    <div class="formactions"><button class="btn primary" id="saveLP" style="width:100%">Log payment</button></div>
+    <div class="formactions priced">
+      <div class="pricedLabel"><div class="l">Balance after this payment</div><div class="v" id="lp_previewBal">${bal>0?ghs(bal):'Paid in full'}</div></div>
+      <button class="btn primary" id="saveLP">Log payment</button>
+    </div>
   </div>
   <div class="sectitle"><h3>Payment history</h3><span class="cnt">${entries.length}</span></div>
   <div class="list" id="lpHistoryList">${entries.length?entries.map(p=>`<div class="rowcard" style="padding:12px 14px"><div class="top"><div><div class="nm" style="font-size:13.5px">${ghs(num(p.amount))}${p.status==='pending'?' <span class="tag warnt">Pending approval</span>':p.status==='declined'?' <span class="tag dgr">Declined</span>':''}</div><div class="meta">${esc(p.date||'')}${p.method?(' · '+esc(p.method)):''}</div></div>
@@ -13259,6 +13262,12 @@ function logPayDetailHtml(lead){
 }
 function bindLogPayDetailCtrls(lead){
   document.getElementById('lpBackToSearch').onclick=()=>{ LOGPAY_SELECTED_LEAD=null; paintLogPayBody(); };
+  const c=computeLead(lead); const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand; const bal=Math.max(grand-num(lead.amtPaid),0);
+  const amtInput=document.getElementById('lp_amount'), previewEl=document.getElementById('lp_previewBal');
+  if(amtInput&&previewEl) amtInput.oninput=()=>{
+    const remaining=Math.max(bal-num(amtInput.value),0);
+    previewEl.textContent=remaining>0?ghs(remaining):'Paid in full';
+  };
   document.getElementById('saveLP').onclick=async()=>{
     const amount=num(val('lp_amount')); const date=val('lp_date'); const method=val('lp_method');
     if(amount<=0){ toast('Enter an amount'); return; }
