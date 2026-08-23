@@ -1125,9 +1125,19 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .monthGridCell:hover{background:var(--paper);transform:translateY(-1px)}
 .monthGridCell.empty{border:none;background:none;cursor:default}
 .monthGridCell.empty:hover{transform:none}
-.monthGridCell.today{border-color:var(--green);border-width:2px}
+/* Premium UI rebuild -- Reference B's "Your Active Days" heatmap: cells
+   with activity get a solid/tinted indigo fill by real task count (not a
+   fabricated intensity -- 1, 2, or 3+ items), today keeps a distinct ring
+   that reads clearly against any fill. */
+.monthGridCell.today{box-shadow:0 0 0 2px var(--premium) inset}
+.monthGridCell.has1{background:rgba(79,70,229,.16);border-color:transparent}
+.monthGridCell.has2{background:rgba(79,70,229,.4);border-color:transparent}
+.monthGridCell.has2 .monthGridDate{color:#fff}
+.monthGridCell.has3{background:linear-gradient(150deg,#818CF8,#4F46E5);border-color:transparent}
+.monthGridCell.has3 .monthGridDate{color:#fff}
 .monthGridDate{font-size:12.5px;font-weight:700;color:var(--text)}
 .monthGridCount{font-size:9px;font-weight:800;color:#fff;background:var(--green);border-radius:100px;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.monthGridCell.has2 .monthGridCount,.monthGridCell.has3 .monthGridCount{background:rgba(255,255,255,.3)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip2{border:1.5px solid var(--line);background:var(--card);border-radius:100px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);transition:.15s}
 .lvCalNav{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
@@ -7663,7 +7673,9 @@ const KPI_STYLE={
  'Open complaints':{icon:'flag',color:'amber'},
  'Escalated':{icon:'alert',color:'red'},
  'Available':{icon:'check',color:'green'}, 'Reserved':{icon:'clock',color:'amber'}, 'Sold':{icon:'coins',color:'lime'},
- 'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'}
+ 'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'},
+ 'Open':{icon:'clock',color:'blue'}, 'Overdue':{icon:'alert',color:'red'}, 'Completed':{icon:'check',color:'green'},
+ 'Avg days to close':{icon:'clock',color:'teal'}
 };
 // Redesign correction: matches the reference KPI card's exact anatomy --
 // label (+small icon) and a plain expand-arrow affordance share the top row;
@@ -11283,7 +11295,8 @@ function monthGridHtml(yearMonth,counts){
       if(d===null) return `<div class="monthGridCell empty"></div>`;
       const iso=yearMonth+'-'+String(d).padStart(2,'0');
       const count=counts[iso]||0;
-      return `<div class="monthGridCell${iso===todayIso?' today':''}" data-monthcellopen="${iso}">
+      const heat=count>=3?' has3':count===2?' has2':count===1?' has1':'';
+      return `<div class="monthGridCell${heat}${iso===todayIso?' today':''}" data-monthcellopen="${iso}">
         <div class="monthGridDate">${d}</div>
         ${count?`<div class="monthGridCount">${count}</div>`:''}
       </div>`;
@@ -11331,6 +11344,11 @@ async function viewDuties(){
   <div id="dutiesMonthBody" class="${DUTIES_TAB==='month'?'':'hidden'}"><div class="skel" style="height:280px;border-radius:16px"></div></div>
   <div id="dutiesTasksBody" class="${DUTIES_TAB==='tasks'?'':'hidden'}">
   <div class="kpis">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}${kpi('Avg days to close',teamSummary.avgDaysToClose!=null?teamSummary.avgDaysToClose:'—')}</div>
+  ${(()=>{ const totalTasks=teamSummary.openCount+teamSummary.doneCount; const donePct=totalTasks?Math.round(teamSummary.doneCount/totalTasks*100):0;
+    return `<div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
+      ${progressRing(donePct,donePct>=70?'#4F46E5':'#F59E0B',80)}
+      <div><div style="font-weight:700;font-size:13.5px">Completion rate</div><div class="mini" style="margin-top:3px">${teamSummary.doneCount} of ${totalTasks} task${totalTasks===1?'':'s'} done${teamSummary.overdueCount?' · '+teamSummary.overdueCount+' overdue':''}</div></div>
+    </div>`; })()}
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button class="chip ${dutiesFilter==='mine'?'on':''}" data-dutiesfilter="mine">Mine (${mine.length})</button><button class="chip ${dutiesFilter==='byme'?'on':''}" data-dutiesfilter="byme">Assigned by me (${byMe.length})</button>${isMgr?`<button class="chip ${dutiesFilter==='all'?'on':''}" data-dutiesfilter="all">Team (${all.length})</button>`:''}</div>
   <div class="searchbar" style="margin-bottom:10px"><input id="dutiesSearchInput" placeholder="Filter by name or title…" value="${esc(dutiesSearch)}"/>
   <select id="dutiesCatSelect"><option value="">All categories</option>${TASK_CATEGORIES.map(c=>`<option value="${esc(c)}" ${c===dutiesCatFilter?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
