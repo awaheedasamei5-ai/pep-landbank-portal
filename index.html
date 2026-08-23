@@ -903,11 +903,59 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .pipeStat{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 16px;min-width:108px;box-shadow:var(--shadow)}
 .pipeStat .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:16px}
 .pipeStat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+/* Premium UI rebuild -- Order List reference's 4 solid-colored stat pills,
+   replacing the 3 plain-white .pipeStat cards above (kept for other
+   screens that still use it). */
+.pipePillStrip{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+@media(min-width:640px){.pipePillStrip{grid-template-columns:repeat(4,1fr)}}
+.pipePill{border-radius:16px;padding:14px 16px;color:#fff;box-shadow:var(--shadow)}
+.pipePill .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:24px}
+.pipePill .l{font-size:11px;font-weight:700;opacity:.9;margin-top:2px}
+.pipePill.blue{background:linear-gradient(150deg,#60A5FA,#2563EB)}
+.pipePill.orange{background:linear-gradient(150deg,#FDBA74,#EA580C)}
+.pipePill.gold{background:linear-gradient(150deg,#FCD34D,#B45309)}
+.pipePill.green{background:linear-gradient(150deg,#6EE7B7,#059669)}
 .pipeToolsBar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .pipeToolsBar button{flex:1;min-width:130px;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
   border:1px solid var(--line);background:var(--card);font-size:12.5px;font-weight:700;color:var(--text);transition:.15s}
 .pipeToolsBar button:hover{border-color:var(--green2);color:var(--green)}
 .pipeToolsBar button svg{width:16px;height:16px;flex:0 0 auto;color:var(--green)}
+/* Order List reference's toolbar row: search+count left, Export/+Add pill
+   right -- Export stays an outline pill, +Add is solid dark like the
+   reference's "+ Add order" button. */
+.pipeToolbar2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pipeToolbar2 .searchbar{flex:1;min-width:180px;margin-bottom:0}
+.pipeToolbar2 .cnt{font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+.pipeAddBtn{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:#fff;border:none;border-radius:100px;
+  padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap}
+.pipeAddBtn:hover{background:var(--green)}
+.pipeExportBtn{display:inline-flex;align-items:center;gap:6px;background:var(--card);color:var(--text);border:1px solid var(--line);
+  border-radius:100px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;transition:.15s;white-space:nowrap}
+.pipeExportBtn:hover{border-color:var(--leaf);color:var(--green)}
+.pipeFilterChips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.pipeFilterChip{display:inline-flex;align-items:center;gap:6px;background:var(--paper);border:1px solid var(--line);
+  border-radius:100px;padding:6px 8px 6px 13px;font-size:12px;font-weight:600;color:var(--text)}
+.pipeFilterChip button{background:none;border:none;color:var(--muted);cursor:pointer;padding:2px;display:flex;border-radius:50%}
+.pipeFilterChip button:hover{background:var(--line);color:var(--text)}
+.pipeClearAll{background:none;border:none;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;padding:0}
+/* Desktop-only data table -- mobile keeps the existing .rowcard.pipeCard
+   list completely unchanged below 1024px. */
+.pipeTableWrap{display:none}
+@media(min-width:1024px){
+  .pipeTableWrap{display:block;overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-bottom:16px}
+  .pipeTable{width:100%;border-collapse:collapse;font-size:12.5px}
+  .pipeTable th{text-align:left;padding:12px 14px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line);white-space:nowrap}
+  .pipeTable td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+  .pipeTable tr:last-child td{border-bottom:none}
+  .pipeTable tbody tr{cursor:pointer;transition:background .12s}
+  .pipeTable tbody tr:hover{background:var(--paper)}
+  .pipeTableName{font-weight:700;color:var(--text)}
+  .pipeTablePhone{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .pipeStatusPill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:100px;font-size:11.5px;font-weight:700}
+  .pipeRowMenu{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px}
+  .pipeRowMenu:hover{background:var(--line)}
+  #plist{display:none}
+}
 /* Target/monthly-plan/pipeline-health used to stack as three full-width blocks,
    each 150-200px tall, before anything else on the dashboard was visible -- exactly
    the "long banner" stacking the redesign brief called out. Same cards, same
@@ -9049,6 +9097,23 @@ function agentHome(){ const k=kpisOf(DB.leads);
 
 /* ================= PIPELINE ================= */
 let pf={q:'',stage:'',paidOnly:false};
+// Premium UI rebuild -- Order List reference's 4 solid stat pills, mapped to
+// Palmstead's own real funnel (reservation -> in progress -> site visited ->
+// fully paid) instead of copying the reference's e-commerce statuses
+// verbatim. Real counts only, no invented deltas (no meaningful prior-period
+// comparison exists for these yet).
+function pipeStatPillsHtml(list){
+  const reserved=list.filter(l=>l.stage==='1').length;
+  const inProgress=list.filter(l=>['2A','2B','3'].includes(l.stage)).length;
+  const visited=list.filter(l=>l.siteVisit==='Yes').length;
+  const paid=list.filter(l=>isFullyPaid(l)).length;
+  return `<div class="pipePillStrip">
+    <div class="pipePill blue"><div class="v">${reserved}</div><div class="l">Reservations</div></div>
+    <div class="pipePill orange"><div class="v">${inProgress}</div><div class="l">In progress</div></div>
+    <div class="pipePill gold"><div class="v">${visited}</div><div class="l">Site visited</div></div>
+    <div class="pipePill green"><div class="v">${paid}</div><div class="l">Fully paid</div></div>
+  </div>`;
+}
 function viewPipeline(){
   const paidCount=DB.leads.filter(l=>isFullyPaid(l)).length;
   const totalValue=DB.leads.reduce((s,l)=>{ const c=computeLead(l); return s+(l.grandTotal!=null?num(l.grandTotal):c.grand); },0);
@@ -9058,11 +9123,10 @@ function viewPipeline(){
   <div class="pipeStatStrip">
     <div class="pipeStat"><div class="v">${ghs(totalValue)}</div><div class="l">Pipeline value</div></div>
     <div class="pipeStat"><div class="v">${ghs(totalCollected)}</div><div class="l">Collected</div></div>
-    <div class="pipeStat"><div class="v">${paidCount}/${DB.leads.length}</div><div class="l">Paid in full</div></div>
   </div>
+  ${pipeStatPillsHtml(DB.leads)}
   ${recent.length?`<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px">${recent.map(r=>`<button class="chip" style="flex:0 0 auto" data-recentcust="${esc(r.name)}" data-recentcontact="${esc(r.contact||'')}">🕓 ${esc(r.name)}</button>`).join('')}</div>`:''}
   <div class="pipeToolsBar">
-    <button id="xlMyPipelineBtn">${ic.download}Download Excel</button>
     <button id="xlImportBtn">${ic.upload}Import edited file</button>
     <button id="importHistoryBtn">${ic.doc}Import history</button>
     ${PROFILE.role==='manager'?`<button id="pipeBackupBtn">${ic.update}Back up clients</button><button id="pipeRestoreBtn">${ic.update}Restore backup</button>`
@@ -9070,14 +9134,23 @@ function viewPipeline(){
     <input type="file" id="xlImportFile" accept=".xlsx" class="hidden"/>
     ${PROFILE.role==='manager'?'<input type="file" id="pipeRestoreFile" accept=".json" class="hidden"/>':''}
   </div>
-  <div class="searchbar"><input id="pq" placeholder="Search name or contact…" value="${esc(pf.q)}"/>
-  <select id="ps"><option value="">All stages</option>${STAGES.map(s=>`<option value="${s}" ${s===pf.stage?'selected':''}>${STAGE_LABELS[s]}</option>`).join('')}</select></div>
-  <div style="margin-bottom:14px"><button class="chip ${pf.paidOnly?'on':''}" id="paidOnlyBtn">✓ Fully paid only${pf.paidOnly?' ✕':''}</button></div>
+  <div class="pipeToolbar2">
+    <div class="searchbar" style="margin-bottom:0"><input id="pq" placeholder="Search name or contact…" value="${esc(pf.q)}"/>
+    <select id="ps"><option value="">All stages</option>${STAGES.map(s=>`<option value="${s}" ${s===pf.stage?'selected':''}>${clientStageLabel(s)}</option>`).join('')}</select></div>
+    <span class="cnt" id="pipeCount"></span>
+    <button class="pipeExportBtn" id="xlMyPipelineBtn">${ic.download}Export</button>
+    <button class="pipeAddBtn" id="pipeAddLeadBtn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Add lead</button>
+  </div>
+  <div class="pipeFilterChips" id="pipeFilterChips"></div>
+  <div class="pipeTableWrap"><table class="pipeTable">
+    <thead><tr><th style="width:24px"><input type="checkbox" disabled/></th><th>Client</th><th>Plot</th><th>Price</th><th>Date</th><th>Payment</th><th>Status</th><th></th></tr></thead>
+    <tbody id="ptbody"></tbody>
+  </table></div>
   <div class="list" id="plist"></div>
   <div class="footer-note">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   document.getElementById('pq').oninput=debounce(e=>{pf.q=e.target.value;paintPipe();});
   document.getElementById('ps').onchange=e=>{pf.stage=e.target.value;paintPipe();};
-  document.getElementById('paidOnlyBtn').onclick=()=>{pf.paidOnly=!pf.paidOnly;viewPipeline();};
+  document.getElementById('pipeAddLeadBtn').onclick=()=>route('addlead');
   V.querySelectorAll('[data-recentcust]').forEach(b=>b.onclick=()=>route('customer',{name:b.dataset.recentcust,contact:b.dataset.recentcontact}));
   document.getElementById('xlMyPipelineBtn').onclick=downloadAgentPipelineExcel;
   document.getElementById('xlImportBtn').onclick=()=>document.getElementById('xlImportFile').click();
@@ -9101,9 +9174,58 @@ async function requestPipelineOp(kind){
     toast('Request sent to Management');
   }catch(e){ toast('Could not send request: '+(e.message||e)); }
 }
-function paintPipe(){ const wrap=document.getElementById('plist'); const q=pf.q.toLowerCase();
+// Order List reference's filter-chip row -- stage filter (from the <select>
+// above) and the paid-only toggle both render as removable pill chips here
+// instead of a separate toggle button, with a "Clear all" when more than
+// one is active. Re-painted on every paintPipe() call so it always matches
+// current `pf` state.
+function renderPipeFilterChips(){
+  const wrap=document.getElementById('pipeFilterChips'); if(!wrap) return;
+  const parts=[];
+  if(pf.stage) parts.push(`<span class="pipeFilterChip">${esc(clientStageLabel(pf.stage))}<button data-clearstage aria-label="Clear stage filter">${ic.close}</button></span>`);
+  parts.push(`<button class="pipeFilterChip" id="paidOnlyBtn" style="cursor:pointer${pf.paidOnly?';background:var(--ink);color:#fff;border-color:var(--ink)':''}">✓ Fully paid only${pf.paidOnly?' ✕':''}</button>`);
+  if(pf.stage||pf.paidOnly) parts.push(`<button class="pipeClearAll" id="pipeClearAllBtn">Clear all</button>`);
+  wrap.innerHTML=parts.join('');
+  const clearStage=wrap.querySelector('[data-clearstage]'); if(clearStage) clearStage.onclick=()=>{ pf.stage=''; document.getElementById('ps').value=''; paintPipe(); };
+  document.getElementById('paidOnlyBtn').onclick=()=>{ pf.paidOnly=!pf.paidOnly; paintPipe(); };
+  const clearAll=document.getElementById('pipeClearAllBtn'); if(clearAll) clearAll.onclick=()=>{ pf.stage=''; pf.paidOnly=false; document.getElementById('ps').value=''; paintPipe(); };
+}
+// Order List reference's data table -- desktop-only (>=1024px, .pipeTableWrap
+// CSS), fed by the exact same filtered `list` the mobile card view uses
+// below. Checkbox is visual only this round (bulk actions are a separate,
+// larger feature, not invented here); row-open and the "…" menu both go to
+// the same "Update this lead" screen the card's own button already used.
+function pipelineTableHtml(list){
+  return list.map(l=>{
+    const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; const paidFull=isFullyPaid(l);
+    return `<tr data-rowlead="${esc(l.id)}">
+      <td><input type="checkbox"/></td>
+      <td><div class="pipeTableName nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}">${esc(l.name)}</div><div class="pipeTablePhone">${esc(l.contact||'—')}</div></td>
+      <td>${esc(l.plotType||'—')}${l.noPlots?' ×'+esc(l.noPlots):''}</td>
+      <td>${ghs(g)}</td>
+      <td>${esc((l.date||'').slice(0,10)||'—')}</td>
+      <td>${esc(l.paymentPlan||'—')}</td>
+      <td><span class="pipeStatusPill tag stage-${esc(l.stage||'')}">${esc(clientStageLabel(l.stage))}${paidFull?' ✓':''}</span></td>
+      <td><button class="pipeRowMenu" data-rowmenu="${esc(l.id)}" aria-label="Row actions">${ic.more}</button></td>
+    </tr>`;
+  }).join('');
+}
+function bindPipelineTableRows(){
+  const tbody=document.getElementById('ptbody'); if(!tbody) return;
+  tbody.querySelectorAll('tr[data-rowlead]').forEach(tr=>{
+    tr.onclick=(e)=>{ if(e.target.closest('input,button,.nm-link')) return; route('updateOne',tr.dataset.rowlead); };
+  });
+  tbody.querySelectorAll('[data-rowmenu]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); route('updateOne',b.dataset.rowmenu); });
+}
+function paintPipe(){ const wrap=document.getElementById('plist'); const tbody=document.getElementById('ptbody'); const q=pf.q.toLowerCase();
   const list=DB.leads.filter(l=>(!q||(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q))&&(!pf.stage||l.stage===pf.stage)&&(!pf.paidOnly||isFullyPaid(l)));
-  if(!list.length){ wrap.innerHTML=emptyState(ic.grid,'No matching leads','Adjust your search or add a new lead.'); return; }
+  renderPipeFilterChips();
+  const cntEl=document.getElementById('pipeCount'); if(cntEl) cntEl.textContent=list.length+' lead'+(list.length===1?'':'s');
+  if(!list.length){
+    wrap.innerHTML=emptyState(ic.grid,'No matching leads','Adjust your search or add a new lead.');
+    if(tbody) tbody.innerHTML='';
+    return;
+  }
   wrap.innerHTML=list.map((l,i)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; const bal=Math.max(g-num(l.amtPaid),0); const paidFull=isFullyPaid(l);
     const initials=(l.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
     // Payment-risk badge (Sec 60) -- only shown for states actually worth a
@@ -9115,6 +9237,7 @@ function paintPipe(){ const wrap=document.getElementById('plist'); const q=pf.q.
       <div class="foot">${paidFull?'<span class="tag ok">✓ Paid in full</span>':''}${risk&&risk!=='On track'?`<span class="tag ${PAYMENT_RISK_TAG_CLS[risk]}">${esc(risk)}</span>`:''}<span class="tag stage-${esc(l.stage||'')}">${esc(l.stage||'—')}</span><span class="tag pri-${esc(l.priority||'Low')}">${esc(l.priority||'Low')} priority</span>${l.siteVisit==='Yes'?'<span class="tag ok">Site visited</span>':''}${l.paymentPlan?`<span class="tag ghost">${esc(l.paymentPlan)}</span>`:''}${(l.tags||'').split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag tagchip">🏷 ${esc(t)}</span>`).join('')}</div>
       ${l.nextAction?`<div class="note"><b>Next:</b> ${esc(l.nextAction)}</div>`:''}
       <div class="foot"><button class="chip" onclick="route('updateOne','${l.id}')">Update this lead →</button></div></div>`; }).join('');
+  if(tbody){ tbody.innerHTML=pipelineTableHtml(list); bindPipelineTableRows(); }
 }
 
 /* ================= PIPELINE BACKUP & RESTORE ================= */
