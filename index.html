@@ -308,42 +308,43 @@ a{color:var(--green2)}
 .sidebar.collapsed .sbItemLabel,.sidebar.collapsed .bnBadge{display:none}
 .sidebar.collapsed .sbFooter{justify-content:center;padding-left:0;padding-right:0}
 .sidebar.collapsed .sbFooterName,.sidebar.collapsed #sbSignOutBtn{display:none}
-.topbar{position:sticky;top:0;z-index:40;background:var(--hero-bg,linear-gradient(115deg,var(--ink) 0%,#123262 45%,#0F2A52 100%));color:#fff;
-  padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 24px rgba(0,0,0,.28);
-  overflow:hidden}
-.topbar::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(100deg,transparent 30%,rgba(190,242,100,.08) 48%,transparent 65%);
-  background-size:220% 100%;animation:sheenSlide 7s ease-in-out infinite}
-@keyframes sheenSlide{0%{background-position:130% 0}100%{background-position:-30% 0}}
+/* Premium UI rebuild -- light, minimal SaaS topbar (Ref) replacing the old
+   dark ink-gradient hero-style bar. Decoupled from --hero-bg entirely (that
+   token stays scoped to .homeHero/.profileHero/.attClockCard); built from
+   the same var(--card)/var(--text)/var(--muted)/var(--line) tokens every
+   other surface uses, so it now follows light/dark mode automatically
+   instead of always rendering dark. */
+.topbar{position:sticky;top:0;z-index:40;background:var(--card);color:var(--text);
+  padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:11px;
+  border-bottom:1px solid var(--line);overflow:hidden}
 .topbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;pointer-events:none;
-  background:linear-gradient(90deg,transparent,var(--green) 20%,var(--gold2,var(--premium)) 50%,var(--green) 80%,transparent);opacity:.5}
-.topbar .glyph{width:34px;height:34px;border-radius:10px;overflow:hidden;flex:0 0 auto;box-shadow:0 4px 12px rgba(0,0,0,.3),0 0 0 1px rgba(190,242,100,.25)}
+  background:linear-gradient(90deg,transparent,var(--green) 20%,var(--gold) 50%,var(--leaf) 80%,transparent);opacity:.5}
+.topbar .glyph{width:34px;height:34px;border-radius:10px;overflow:hidden;flex:0 0 auto;box-shadow:0 4px 12px rgba(30,27,75,.15),0 0 0 1px rgba(79,70,229,.18)}
 .topbar .glyph img{width:100%;height:100%;display:block}
-.topbar .tt{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.09em;line-height:1}
-.topbar .ts{font-size:10.5px;color:#9DB2CC;letter-spacing:.05em;margin-top:3px;display:flex;align-items:center;gap:6px}
+.topbar .tt{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.09em;line-height:1;color:var(--text)}
+.topbar .ts{font-size:10.5px;color:var(--muted);letter-spacing:.05em;margin-top:3px;display:flex;align-items:center;gap:6px}
 .demodot{width:6px;height:6px;border-radius:50%;background:var(--gold2);animation:ringPulse 1.8s infinite}
 .topbar .spacer{flex:1}
-.whoami{display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
-  padding:5px 7px 5px 13px;border-radius:100px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  box-shadow:0 6px 18px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.08);
+.whoami{display:flex;align-items:center;gap:4px;background:var(--paper);border:1px solid var(--line);
+  padding:5px 7px 5px 13px;border-radius:100px;
   min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
 .whoami::-webkit-scrollbar{display:none}
-.tb-name{color:#EAF0EB;font-size:13px;font-weight:600;letter-spacing:.01em;padding-right:11px;margin-right:3px;
-  border-right:1px solid rgba(255,255,255,.16);white-space:nowrap;flex:0 0 auto}
-.tb-avatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;display:inline-block;box-shadow:0 0 0 1.5px rgba(190,242,100,.55)}
+.tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;padding-right:11px;margin-right:3px;
+  border-right:1px solid var(--line);white-space:nowrap;flex:0 0 auto}
+.tb-avatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;display:inline-block;box-shadow:0 0 0 1.5px rgba(79,70,229,.45)}
 .tb-avatar img{width:100%;height:100%;object-fit:cover}
-.tbDivider{width:1px;height:20px;background:rgba(255,255,255,.16);flex:0 0 auto;margin:0 3px}
-.iconbtn{background:transparent;border:1px solid transparent;color:#C6D3E8;border-radius:50%;
+.tbDivider{width:1px;height:20px;background:var(--line);flex:0 0 auto;margin:0 3px}
+.iconbtn{background:transparent;border:1px solid transparent;color:var(--muted);border-radius:50%;
   width:35px;height:35px;flex:0 0 auto;display:grid;place-items:center;cursor:pointer;
   transition:background .18s ease,color .18s ease,transform .2s cubic-bezier(.34,1.56,.64,1)}
 .iconbtn svg{transition:transform .18s ease}
-.iconbtn:hover{background:rgba(255,255,255,.14);color:#fff;transform:translateY(-1px)}
+.iconbtn:hover{background:var(--paper);color:var(--text);transform:translateY(-1px)}
 .iconbtn:hover svg{transform:scale(1.12)}
 .iconbtn:active{transform:scale(.9)}
-.iconbtn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ink),0 0 0 4px rgba(190,242,100,.6)}
-#logoutBtn:hover{background:rgba(180,71,47,.34);color:#fff}
-.chatnavbtn{border-radius:50%;position:relative;color:#fff;background:linear-gradient(150deg,rgba(132,204,22,.32),rgba(59,130,246,.32))}
-.chatnavbtn:hover{transform:translateY(-1px) scale(1.06);background:linear-gradient(150deg,rgba(132,204,22,.5),rgba(59,130,246,.5))}
+.iconbtn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--card),0 0 0 4px rgba(79,70,229,.5)}
+#logoutBtn:hover{background:rgba(180,71,47,.16);color:var(--danger)}
+.chatnavbtn{border-radius:50%;position:relative;color:var(--green);background:linear-gradient(150deg,rgba(79,70,229,.14),rgba(124,58,237,.14))}
+.chatnavbtn:hover{transform:translateY(-1px) scale(1.06);background:linear-gradient(150deg,rgba(79,70,229,.24),rgba(124,58,237,.24))}
 /* On narrow phones the full whoami pill (name + 5 icon buttons) can exceed the
    viewport width -- shrink it so everything stays reachable without needing to
    scroll sideways, which used to clip chat/settings/logout off-screen entirely. */
@@ -474,6 +475,13 @@ a{color:var(--green2)}
   .dashGrid>.dashMain{order:1;margin-bottom:0}
   .dashGrid>.dashSide{order:2;margin-bottom:0;position:sticky;top:20px}
 }
+/* Premium UI rebuild -- the home dashboards no longer confine Action Center/
+   Company news to a narrow side rail (a cramped .dashSide column left mostly
+   empty once that content moved out reads as broken, not redesigned) --
+   everything flows full-width top to bottom instead. .dashGrid stays for any
+   screen that still wants a genuine two-column split. */
+.dashFlow>*{margin-bottom:var(--sp-5)}
+.dashFlow>*:last-child{margin-bottom:0}
 .plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px}
 /* Team chat */
 .convList{display:flex;flex-direction:column;gap:4px}
@@ -678,20 +686,27 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 /* ---- Companion widget: proactive nudges + guided checklist ---- */
 @keyframes companionBorderSpin{to{--cangle:360deg}}
 @property --cangle{syntax:'<angle>';inherits:false;initial-value:0deg}
-.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#22D3EE,#67E8F9,var(--premium),#22D3EE);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(34,211,238,.45)}
-.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink,var(--ink)) 0%,#0F2A52 60%,var(--ink) 100%);overflow:hidden;padding:16px 16px 14px}
-body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,#0F2A52 60%,var(--ink) 100%)}
-.companionInner::before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(34,211,238,.22),transparent 55%),radial-gradient(circle at 85% 75%,rgba(201,162,39,.18),transparent 55%);animation:orbDrift 9s ease-in-out infinite alternate;pointer-events:none}
-.companionHead{position:relative;z-index:1;display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
-.companionOrb{flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#67E8F9,#22D3EE 60%,#0C7A93);box-shadow:0 0 0 0 rgba(103,232,249,.55);animation:ringPulse 2.2s ease-out infinite;color:#04202b}
+.companionWrap{position:relative;border-radius:22px;padding:1.5px;margin:0 0 18px;background:conic-gradient(from var(--cangle,0deg),#818CF8,#A78BFA,var(--premium),#818CF8);animation:companionBorderSpin 6s linear infinite;box-shadow:0 10px 34px -14px rgba(129,140,248,.45)}
+.companionInner{position:relative;border-radius:20.5px;background:linear-gradient(160deg,var(--ink) 0%,#312E81 60%,var(--ink) 100%);overflow:hidden;padding:16px 16px 14px}
+.companionInner::before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(129,140,248,.22),transparent 55%),radial-gradient(circle at 85% 75%,rgba(201,162,39,.18),transparent 55%);animation:orbDrift 9s ease-in-out infinite alternate;pointer-events:none}
+.companionHead{position:relative;z-index:1;display:flex;align-items:center;gap:11px;user-select:none}
+.companionOrb{flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#A78BFA,#818CF8 60%,#4F46E5);box-shadow:0 0 0 0 rgba(129,140,248,.55);animation:ringPulse 2.2s ease-out infinite;color:#1B1A33}
 .companionOrb svg{width:18px;height:18px}
 .companionTitle{flex:1;min-width:0}
 .companionTitle .t{font-weight:800;font-size:13.5px;color:#fff;display:flex;align-items:center;gap:6px}
 .companionTitle .s{font-size:11px;color:rgba(255,255,255,.62);margin-top:2px}
-.companionCaret{flex:0 0 auto;width:22px;height:22px;color:rgba(255,255,255,.75);transition:transform .25s ease}
+/* Redesign correction: only the caret toggles collapse now -- the title/
+   subtitle text used to share the click target, so an incidental tap on the
+   header text (not asking to collapse anything) silently closed the widget,
+   which read as "auto-collapsing" even though it never collapsed on its own. */
+.companionCaret{flex:0 0 auto;width:34px;height:34px;border-radius:50%;color:rgba(255,255,255,.75);
+  background:none;border:none;padding:0;font:inherit;
+  display:grid;place-items:center;cursor:pointer;transition:transform .25s ease,background .15s ease}
+.companionCaret:hover{background:rgba(255,255,255,.1)}
+.companionCaret svg{width:16px;height:16px}
 .companionWrap.open .companionCaret{transform:rotate(180deg)}
 .companionBody{position:relative;z-index:1;max-height:0;overflow:hidden;transition:max-height .35s ease}
-.companionWrap.open .companionBody{max-height:900px}
+.companionWrap.open .companionBody{max-height:3000px}
 .companionBodyIn{padding-top:14px}
 .companionNudges{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .companionNudge{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);cursor:pointer;text-align:left;width:100%;animation:fadeUp .4s ease both;transition:background .15s ease,transform .15s ease}
@@ -700,7 +715,7 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,
 .companionNudge .ic svg{width:15px;height:15px}
 .companionNudge.dgr .ic{color:#F87171;background:rgba(248,113,113,.16)}
 .companionNudge.warnt .ic{color:#FBBF4E;background:rgba(251,191,78,.16)}
-.companionNudge.ok .ic{color:#67E8F9;background:rgba(103,232,249,.16)}
+.companionNudge.ok .ic{color:#A78BFA;background:rgba(167,139,250,.16)}
 .companionNudge .txt{flex:1;min-width:0;color:#fff;font-size:12px;font-weight:650;line-height:1.4}
 .companionNudge .det{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:1px;font-weight:500}
 .companionChecklist{display:flex;flex-direction:column;gap:6px}
@@ -708,8 +723,8 @@ body:not(.dark) .companionInner{background:linear-gradient(160deg,var(--ink) 0%,
 .companionCheckItem{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);transition:background .15s ease}
 .companionCheckItem:hover{background:rgba(255,255,255,.09)}
 .companionCheckItem.done{opacity:.5}
-.companionCheckDot{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.6px solid rgba(255,255,255,.4);display:grid;place-items:center;color:#04202b;transition:background .18s ease,border-color .18s ease}
-.companionCheckItem.done .companionCheckDot{background:linear-gradient(135deg,#67E8F9,#22D3EE);border-color:transparent;animation:badgePop .3s ease}
+.companionCheckDot{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.6px solid rgba(255,255,255,.4);display:grid;place-items:center;color:#1B1A33;transition:background .18s ease,border-color .18s ease}
+.companionCheckItem.done .companionCheckDot{background:linear-gradient(135deg,#A78BFA,#818CF8);border-color:transparent;animation:badgePop .3s ease}
 .companionCheckDot svg{width:11px;height:11px}
 .companionCheckItem .txt{flex:1;color:#fff;font-size:12px;font-weight:600}
 .companionCheckItem.done .txt{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.4)}
@@ -839,12 +854,16 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 /* Home screen hero: replaces a plain black-on-white <h2> + a separate pale-blue
    commission rowcard with one cohesive premium header, in the same navy->teal
    family as sign-in rather than a plain white card like every other screen. */
+/* Premium UI rebuild -- recolored to the same indigo/violet gradient as
+   .kpi.hero (the already-approved reference-style hero treatment), for
+   visual consistency between the two "hero" surfaces on the dashboard.
+   Content/layout unchanged -- this is a recolor, not a rebuild. */
 .homeHero{position:relative;overflow:hidden;border-radius:24px;padding:24px 20px 22px;margin-bottom:20px;color:#fff;
-  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#0F3A52 45%,var(--green) 100%));
+  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#4F46E5 55%,#818CF8 100%));
   background-size:220% 220%;
-  box-shadow:0 20px 44px -14px rgba(11,30,61,.5);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
-.homeHero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(103,232,249,.4),transparent 55%);pointer-events:none}
-.homeHero::after{content:'';position:absolute;left:-10%;bottom:-30%;width:60%;padding-bottom:60%;border-radius:50%;background:radial-gradient(circle,rgba(201,162,39,.22),transparent 70%);pointer-events:none}
+  box-shadow:0 20px 44px -14px rgba(30,27,75,.5);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
+.homeHero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(129,140,248,.4),transparent 55%);pointer-events:none}
+.homeHero::after{content:'';position:absolute;left:-10%;bottom:-30%;width:60%;padding-bottom:60%;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.22),transparent 70%);pointer-events:none}
 .homeHero .heroTop{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1;gap:10px}
 .homeHero .heroGreet{font-size:19px;font-weight:800;font-family:'Space Grotesk',sans-serif}
 .homeHero .heroDate{font-size:11.5px;color:rgba(255,255,255,.65);margin-top:3px}
@@ -864,9 +883,9 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
    "Change password" header, and a small colored icon per section instead of bare
    text -- same premium-anchor idea as the home hero, scaled down for forms. */
 .profileHero{display:flex;align-items:center;gap:15px;padding:18px;border-radius:20px;margin-bottom:22px;color:#fff;position:relative;overflow:hidden;
-  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#0F3A52 55%,var(--green) 100%));background-size:220% 220%;
-  box-shadow:0 16px 36px -14px rgba(11,30,61,.45);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
-.profileHero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(103,232,249,.35),transparent 55%);pointer-events:none}
+  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#4F46E5 55%,#818CF8 100%));background-size:220% 220%;
+  box-shadow:0 16px 36px -14px rgba(30,27,75,.45);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
+.profileHero::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(129,140,248,.35),transparent 55%);pointer-events:none}
 .profileHero .avatar{width:60px;height:60px;border-radius:100px;flex:0 0 auto;overflow:hidden;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;position:relative;z-index:1}
 .profileHero .avatar img{width:100%;height:100%;object-fit:cover}
@@ -875,9 +894,9 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .profileHero .role{font-size:11.5px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .profileHero .email{font-size:11.5px;color:rgba(255,255,255,.55);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attClockCard{position:relative;overflow:hidden;border-radius:24px;padding:26px 20px 22px;margin-bottom:18px;color:#fff;text-align:center;
-  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#0F3A52 45%,var(--green) 100%));background-size:220% 220%;
-  box-shadow:0 20px 44px -14px rgba(11,30,61,.5);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
-.attClockCard::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(103,232,249,.4),transparent 55%);pointer-events:none}
+  background:var(--hero-bg,linear-gradient(135deg,var(--ink) 0%,#4F46E5 55%,#818CF8 100%));background-size:220% 220%;
+  box-shadow:0 20px 44px -14px rgba(30,27,75,.5);animation:fadeUp .4s ease both,waveShift 24s ease-in-out infinite}
+.attClockCard::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% -15%,rgba(129,140,248,.4),transparent 55%);pointer-events:none}
 .attClockTime{font-size:32px;font-weight:800;font-family:'IBM Plex Mono',monospace;letter-spacing:-.01em;position:relative;z-index:1}
 .attClockDate{font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;position:relative;z-index:1}
 .attClockBtn{width:132px;height:132px;border-radius:100%;margin:20px auto 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
@@ -896,14 +915,6 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .attMonthStat .v{font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;color:var(--ink)}
 .attClockStat .l{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.6);font-weight:700}
 .attClockStat .v{font-size:14px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;color:#fff}
-.themeSwatchRow{display:flex;flex-wrap:wrap;gap:8px}
-.themeSwatch{width:34px;height:34px;border-radius:10px;border:2px solid transparent;cursor:pointer;padding:0;transition:.15s}
-.themeSwatch:hover{transform:translateY(-1px)}
-.themeSwatch.on{border-color:var(--ink);box-shadow:0 0 0 2px rgba(11,30,61,.15)}
-.themeSwatchAuto{background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:15px;border:2px dashed var(--muted)}
-.themeSwatchAuto.on{border-style:solid;border-color:var(--ink)}
-body.dark .themeSwatch.on{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.2)}
-body.dark .themeSwatchAuto.on{border-color:#fff}
 .starRating{display:flex;gap:4px}
 .starBtn{background:none;border:none;cursor:pointer;padding:0;font-size:26px;line-height:1;color:#E1E4E8;transition:transform .1s}
 .starBtn.on{color:var(--premium)}
@@ -1375,40 +1386,18 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 <div id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
 
 <script>
-/* ====================== WAVE BACKGROUND VARIANTS ======================
-   Six gradient treatments, all within the same navy -> teal -> white premium
-   family (matching the wave-gradient reference), so every sign-in feels a
-   little different without ever leaving the palette. Picked once per full
-   page load and applied via CSS custom properties, set here (before the
+/* ====================== WAVE BACKGROUND ======================
+   Premium UI rebuild -- one fixed indigo/violet identity (matching the
+   reference dashboards), replacing the old 8-option shuffleable theme
+   picker. Still applied via CSS custom properties, set here (before the
    boot screen's first paint) rather than after, to avoid a flash of the
-   fallback colors. */
-/* All linear (never radial-with-percentage-sizing) -- a radial gradient's ellipse
-   shape depends on box width:height ratio, so the same variant looked fine tall
-   and narrow (mobile) but produced a visible hard edge wide and short (desktop).
-   Linear gradients only vary along their angle axis, so they blend smoothly at
-   any aspect ratio. */
+   fallback colors -- and still callable on every return to the sign-in
+   screen (see the call at sign-out below), it just no longer varies. */
 const WAVE_VARIANTS=[
-  {name:'Classic Navy',bg:'linear-gradient(165deg,#050B14 0%,#0A2A3A 30%,#0C7A93 55%,#22D3EE 74%,#BAE6E8 90%,#F2F6F7 100%)',orb1:'rgba(14,165,183,.55)',orb2:'rgba(34,211,238,.5)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,var(--ink) 0%,#0F3A52 45%,var(--green) 100%)',accent:'#22D3EE',accentDark:'#0C7A93'},
-  {name:'Emerald Forest',bg:'linear-gradient(165deg,#051710 0%,#0F3D2E 30%,#1B7A5B 55%,#3FA66B 74%,#C9E8D2 90%,#F2F7F4 100%)',orb1:'rgba(27,122,91,.55)',orb2:'rgba(63,166,107,.45)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,#051710 0%,#123D2C 45%,#1B7A5B 100%)',accent:'#3FA66B',accentDark:'#1B7A5B'},
-  {name:'Charcoal & Gold',bg:'linear-gradient(170deg,#0A0A0C 0%,#1C1C22 35%,#4A3B1E 65%,var(--premium) 85%,#F2EBD8 100%)',orb1:'rgba(201,162,39,.5)',orb2:'rgba(232,199,102,.4)',orb3:'rgba(74,59,30,.35)',heroBg:'linear-gradient(135deg,#0A0A0C 0%,#2A2118 50%,var(--premium) 100%)',accent:'#E8C766',accentDark:'var(--premium)'},
-  {name:'Wine & Rose Gold',bg:'linear-gradient(160deg,#1A050C 0%,#3D0F22 32%,#7A2645 58%,#C97A8C 80%,#F4E3DE 100%)',orb1:'rgba(201,122,140,.5)',orb2:'rgba(122,38,69,.5)',orb3:'rgba(201,162,39,.25)',heroBg:'linear-gradient(135deg,#1A050C 0%,#3D0F22 50%,#7A2645 100%)',accent:'#C97A8C',accentDark:'#7A2645'},
-  {name:'Indigo & Amethyst',bg:'linear-gradient(155deg,#0A0821 0%,#1E1650 32%,#4A2F8C 60%,#8F6FCC 82%,#EDE7F9 100%)',orb1:'rgba(143,111,204,.5)',orb2:'rgba(74,47,140,.5)',orb3:'rgba(201,162,39,.22)',heroBg:'linear-gradient(135deg,#0A0821 0%,#241B5E 50%,#4A2F8C 100%)',accent:'#8F6FCC',accentDark:'#4A2F8C'},
-  {name:'Espresso & Copper',bg:'linear-gradient(160deg,#140B06 0%,#331D10 32%,#7A4620 58%,#C97D3E 80%,#F5E6D3 100%)',orb1:'rgba(201,125,62,.5)',orb2:'rgba(122,70,32,.45)',orb3:'rgba(201,162,39,.3)',heroBg:'linear-gradient(135deg,#140B06 0%,#331D10 50%,#7A4620 100%)',accent:'#C97D3E',accentDark:'#7A4620'},
-  {name:'Ocean Blue',bg:'linear-gradient(165deg,#050B18 0%,#0B2A5C 30%,#1D4ED8 55%,#3B82F6 74%,#93C5FD 90%,#EFF6FF 100%)',orb1:'rgba(59,130,246,.55)',orb2:'rgba(29,78,216,.5)',orb3:'rgba(147,197,253,.3)',heroBg:'linear-gradient(135deg,#050B18 0%,#0B2A5C 45%,#1D4ED8 100%)',accent:'#3B82F6',accentDark:'#1D4ED8'},
-  {name:'Lime & Charcoal',bg:'linear-gradient(165deg,#0A0A0C 0%,#1C1C22 30%,#4D7C0F 55%,#A3E635 78%,#E5F9C0 92%,#F7FDF0 100%)',orb1:'rgba(163,230,53,.5)',orb2:'rgba(77,124,15,.5)',orb3:'rgba(229,249,192,.3)',heroBg:'linear-gradient(135deg,#0A0A0C 0%,#2B3A0F 45%,#4D7C0F 100%)',accent:'#A3E635',accentDark:'#4D7C0F'}
+  {name:'Indigo',bg:'linear-gradient(165deg,#0B0A1F 0%,#1E1B4B 30%,#4F46E5 55%,#818CF8 74%,#C7D2FE 90%,#F5F5FB 100%)',orb1:'rgba(79,70,229,.55)',orb2:'rgba(129,140,248,.5)',orb3:'rgba(124,58,237,.3)',heroBg:'linear-gradient(135deg,var(--ink) 0%,#4F46E5 55%,#818CF8 100%)',accent:'#818CF8',accentDark:'#4F46E5'}
 ];
-// Was an IIFE that only ever ran once at script load -- so within one browser tab,
-// signing out and back in (no real page reload happens) kept showing the exact same
-// background every time. Now callable again on every return to the sign-in screen.
-// A staff/client can also pin a specific variant from Settings (pep_theme_variant in
-// localStorage) instead of the default random-each-time behaviour -- when pinned, the
-// same gradient family also drives --hero-bg, so the signed-in home/profile hero cards
-// match the sign-in screen instead of only theming the pre-auth wave background.
 function applyWaveVariant(){
-  let saved=null; try{ saved=localStorage.getItem('pep_theme_variant'); }catch(e){}
-  const pinned=(saved!=null && saved!=='auto' && WAVE_VARIANTS[+saved]) ? +saved : null;
-  const idx=pinned!==null ? pinned : Math.floor(Math.random()*WAVE_VARIANTS.length);
-  const v=WAVE_VARIANTS[idx];
+  const v=WAVE_VARIANTS[0];
   const root=document.documentElement.style;
   root.setProperty('--wave-bg',v.bg);
   root.setProperty('--wave-orb1',v.orb1);
@@ -1419,19 +1408,6 @@ function applyWaveVariant(){
   root.setProperty('--accent-dark',v.accentDark);
 }
 applyWaveVariant();
-function themeSwatchesHtml(){
-  let cur='auto'; try{ cur=localStorage.getItem('pep_theme_variant')||'auto'; }catch(e){}
-  const swatches=WAVE_VARIANTS.map((v,i)=>`<button type="button" class="themeSwatch ${cur===String(i)?'on':''}" data-themevariant="${i}" style="background:${v.heroBg}" title="${esc(v.name||('Theme '+(i+1)))}"></button>`).join('');
-  return swatches+`<button type="button" class="themeSwatch themeSwatchAuto ${cur==='auto'?'on':''}" data-themevariant="auto" title="Shuffle a new look each time you sign in">🎲</button>`;
-}
-function bindThemeSwatches(){
-  document.querySelectorAll('[data-themevariant]').forEach(b=>b.onclick=()=>{
-    const v=b.dataset.themevariant;
-    try{ localStorage.setItem('pep_theme_variant',v); }catch(e){}
-    applyWaveVariant();
-    document.querySelectorAll('[data-themevariant]').forEach(x=>x.classList.toggle('on',x.dataset.themevariant===v));
-  });
-}
 /* ====================== EMBEDDED LOGO ====================== */
 const LOGO_SRC = "./logo.png";
 const TRULANDER_LOGO_SRC = "./trulander-logo.png";
@@ -7240,7 +7216,7 @@ function sidebarItemRowHtml(item){
 // Collapse state persists across reloads (localStorage) but isn't re-read
 // mid-session -- one toggle click flips both the in-memory flag and the DOM
 // class together, so they can't drift.
-let SIDEBAR_COLLAPSED=localStorage.getItem('pep_sidebar_collapsed')==='1';
+let SIDEBAR_COLLAPSED=localStorage.getItem('pep_sidebar_collapsed')!=='0';
 function renderSidebarNow(){
   const sb=document.getElementById('sidebar'); if(!sb||typeof PROFILE==='undefined'||!(PROFILE||IS_CLIENT)) return;
   sb.classList.toggle('collapsed',SIDEBAR_COLLAPSED);
@@ -8308,7 +8284,7 @@ function buildBannerSlides(){
     // decoration -- same reasoning as leaving amber/red/green KPI badges fixed).
     // Plain company news reuses the theme's own hero gradient so it visibly
     // shifts with whichever palette is picked, instead of a hardcoded blue.
-    slides.push({grad:isTarget?'linear-gradient(120deg,#4D7C0F,#84CC16 70%,#BEF264)':'var(--hero-bg,linear-gradient(120deg,#173D7A,#2563EB 70%,#3B82F6))',kind:'announcement',arg:a.id,
+    slides.push({grad:isTarget?'linear-gradient(120deg,#4D7C0F,#84CC16 70%,#BEF264)':'var(--hero-bg,linear-gradient(120deg,var(--ink),#4F46E5 70%,#818CF8))',kind:'announcement',arg:a.id,
       html:`<div style="position:relative;z-index:1"><div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;font-weight:700;display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;display:inline-flex">${isTarget?ic.trophy:ic.mail}</span>${isTarget?'Achievement':'Company news'}</div>
       <div style="font-size:15.5px;font-weight:800;margin-top:2px">${esc(a.title)}</div>
       ${a.body?`<div style="font-size:12.5px;opacity:.9;margin-top:3px">${esc(a.body.slice(0,90))}${a.body.length>90?'…':''}</div>`:''}</div>`});
@@ -8787,10 +8763,10 @@ function renderCompanionWidget(nudges,checklist,opts){
   </div>`).join('');
   return `<div class="companionWrap open" id="companionWidget">
     <div class="companionInner">
-      <div class="companionHead" id="companionToggle">
+      <div class="companionHead">
         <span class="companionOrb">${ic.spark}</span>
         <div class="companionTitle"><div class="t">✨ ${esc(opts.title||'Companion')}</div><div class="s">${esc(opts.subtitle||'Proactive nudges, tailored to you')}</div></div>
-        <span class="companionCaret"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <button type="button" class="companionCaret" id="companionToggle" aria-label="Toggle Action Center"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
       <div class="companionBody"><div class="companionBodyIn">
         ${nudgeHtml?`<div class="companionNudges">${nudgeHtml}</div>`:`<div class="companionEmpty">Nothing to flag right now.</div>`}
@@ -8904,26 +8880,19 @@ function agentHome(){ const k=kpisOf(DB.leads);
       <div class="heroChip" id="heroQuoteChip"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
     </div>
   </div>
-  <div class="dashGrid">
-    <div class="dashSide">
-      ${renderBannerSlideshow()}
-      ${renderAllocationBanners()}
-      ${renderComplaintAssignBanners()}
-      ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
-    </div>
-    <div class="dashMain">
-      <div class="sectitle" style="margin-top:0"><h3>Quick access</h3></div>
-      <div id="homeQuickAccess">${tileGridHtml(withTileColors(agentQuickAccessItems()))}</div>
-      <div class="sectitle"><h3>Today at a glance</h3></div>
-      <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}</div>
-      <div class="insightCarousel">${renderRevenueCard(revVals,revLbls)}${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
-    </div>
+  <div class="dashFlow">
+    ${renderBannerSlideshow()}
+    ${renderAllocationBanners()}
+    ${renderComplaintAssignBanners()}
+    <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
+    <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}</div>
+    <div class="insightCarousel">${renderRevenueCard(revVals,revLbls)}${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
+    ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
   </div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
   <div class="footer-note" style="padding-top:2px">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
   bindTasks(); bindAllocationBanners(); bindComplaintAssignBanners(); bindCompanionWidget(); animateKpiCounts(); bindTargetCard(); bindMonthlyPlanCard(); bindPipelineHealthCard(); bindBannerSlideshow();
-  bindTileGrid(document.getElementById('homeQuickAccess'),agentQuickAccessItems());
   document.getElementById('heroCommissionChip').onclick=()=>route('myCommission');
   document.getElementById('heroQuoteChip').onclick=openQuotationRequest;
   document.getElementById('dashRefreshBtn').onclick=async(e)=>{
@@ -13809,7 +13778,6 @@ function formAccount(){
   </div>`; })()}
   ${settingsSectionHead('gear','Display settings','this device only')}
   <div class="formwrap">
-    ${fld('Theme',`<div class="themeSwatchRow">${themeSwatchesHtml()}</div>`,'colors the sign-in screen and the home/profile header cards')}
     ${fld('Font',`<select id="dispFontFamily">
       <option value="inter">Inter (default)</option><option value="system">System default</option><option value="georgia">Georgia (serif)</option><option value="verdana">Verdana (wide)</option>
     </select>`)}
@@ -13866,7 +13834,6 @@ function formAccount(){
     ffSel.value=cur.fam;
     ffSel.onchange=()=>{ try{ localStorage.setItem('pep_font_family',ffSel.value); }catch(e){} applyDisplayPrefs(); };
   }
-  bindThemeSwatches();
   document.getElementById('saveAcct').onclick=saveAccountPw;
   document.getElementById('saveContactBtn').onclick=saveAccountContact;
   document.getElementById('saveAboutMeBtn').onclick=saveAccountAboutMe;
@@ -16398,7 +16365,6 @@ function formClientSettings(){
   </div>
   <div class="sectitle"><h3>Display settings <span class="mini">— this device only</span></h3></div>
   <div class="formwrap">
-    ${fld('Theme',`<div class="themeSwatchRow">${themeSwatchesHtml()}</div>`,'colors the sign-in screen and your home header card')}
     ${fld('Font',`<select id="dispFontFamily">
       <option value="inter">Inter (default)</option><option value="system">System default</option><option value="georgia">Georgia (serif)</option><option value="verdana">Verdana (wide)</option>
     </select>`)}
@@ -16443,7 +16409,6 @@ function formClientSettings(){
     ffSel.value=cur.fam;
     ffSel.onchange=()=>{ try{ localStorage.setItem('pep_font_family',ffSel.value); }catch(e){} applyDisplayPrefs(); };
   }
-  bindThemeSwatches();
 }
 
 /* ================= MANAGER ================= */
@@ -16773,34 +16738,27 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       <div class="heroChip" id="heroQuoteChipMgr"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
     </div>
   </div>
-  <div class="dashGrid">
-    <div class="dashSide">
-      ${renderBannerSlideshow()}
-      ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
-    </div>
-    <div class="dashMain">
-      <div class="sectitle" style="margin-top:0"><h3>Quick access</h3></div>
-      <div id="homeQuickAccessMgr">${tileGridHtml(withTileColors(mgrQuickAccessItems()))}</div>
-      <div class="sectitle"><h3>Today at a glance</h3></div>
-      <div class="kpis">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
-      <div class="insightCarousel">${renderRevenueCard(revValsMgr,revLblsMgr)}${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
+  <div class="dashFlow">
+    ${renderBannerSlideshow()}
+    <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
+    <div class="kpis">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
+    <div class="insightCarousel">${renderRevenueCard(revValsMgr,revLblsMgr)}${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
+    ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
 
-      <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
-      <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
+    <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
+    <div id="mgrOpsToday"><div class="skel" style="height:120px;border-radius:16px;margin-bottom:16px"></div></div>
 
-      <div class="sectitle"><h3>By agent</h3><span class="cnt">tap an agent for their full client breakdown</span></div><div class="formwrap" style="padding:6px 15px">${rows||'<div class="empty">No agent profiles yet</div>'}</div>
+    <div class="sectitle"><h3>By agent</h3><span class="cnt">tap an agent for their full client breakdown</span></div><div class="formwrap" style="padding:6px 15px">${rows||'<div class="empty">No agent profiles yet</div>'}</div>
 
-      <div class="sectitle"><h3>Pipeline by stage</h3><span class="cnt">${allLeads.length} leads company-wide · tap a stage</span></div>
-      <div class="formwrap">${allLeads.length?funnel:emptyState(ic.grid,'No leads yet','')}</div>
+    <div class="sectitle"><h3>Pipeline by stage</h3><span class="cnt">${allLeads.length} leads company-wide · tap a stage</span></div>
+    <div class="formwrap">${allLeads.length?funnel:emptyState(ic.grid,'No leads yet','')}</div>
 
-      <p class="mini" style="margin:8px 2px 0">Enquiry sources moved to the Enquiries app · outstanding balances now live inside Monthly Plan clients, next to what's actually expected.</p>
-    </div>
+    <p class="mini" style="margin:8px 2px 0">Enquiry sources moved to the Enquiries app · outstanding balances now live inside Monthly Plan clients, next to what's actually expected.</p>
   </div>`;
 }
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
   V.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>route('stageList',b.dataset.stage));
-  bindTileGrid(document.getElementById('homeQuickAccessMgr'),mgrQuickAccessItems());
   bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
