@@ -1222,10 +1222,14 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .lvCalCell{height:34px;border:1.5px solid var(--line);background:var(--card);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--text);transition:.12s}
 .lvCalCell.empty{border:none;background:transparent;cursor:default}
 .lvCalCell.past:not(.taken){opacity:.35;cursor:not-allowed}
-.lvCalCell.taken{background:var(--paper);color:var(--muted);cursor:not-allowed;text-decoration:line-through}
+/* Premium UI rebuild -- same bold-tint heatmap language as the Operations
+   Tracker calendar (taken days get a real indigo tint instead of plain
+   gray, today gets the same gold ring treatment) so both calendars in the
+   app read consistently. */
+.lvCalCell.taken{background:rgba(79,70,229,.14);color:var(--green);cursor:not-allowed;text-decoration:line-through;border-color:transparent}
 .lvCalCell.weekend:not(.taken):not(.holiday){background:var(--paper);color:var(--muted);opacity:.55;cursor:not-allowed}
 .lvCalCell.holiday{background:#F6EBD3;color:#8A6E12;cursor:not-allowed;border-color:#F0DDAA}
-.lvCalCell.today{border-color:var(--gold)}
+.lvCalCell.today{box-shadow:0 0 0 2px var(--premium) inset;border-color:transparent}
 .lvCalCell.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
 .lvCalLegend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
 .lvCalLegend span{display:inline-flex;align-items:center;gap:5px}
@@ -21256,7 +21260,7 @@ function leaveMineHtml(){
     <div class="top"><div><div class="nm">Your planned leave is coming up</div><div class="mini">${(r.dates||[]).slice().sort().map(fmtLongDate).join(', ')} — tap to send this request to Management now.</div></div><span class="tag warnt">Tap to send →</span></div>
   </button>`).join('')}</div>`:''}
   ${upcoming.length?`<div class="rowcard" style="border-color:var(--danger);background:#FBEDEA;margin-bottom:14px"><div class="top"><div><div class="nm" style="color:var(--danger)">🔴 Leave coming up</div><div class="mini">${upcoming.map(fmtLongDate).join(', ')} — make sure any handovers are sorted.</div></div></div></div>`:''}
-  <div class="kpis">${kpi('Total days/yr',total)}${kpi('Used in '+year,used)}${kpi('Remaining',remaining)}</div>
+  <div class="kpis">${kpi('Total days/yr',total)}${kpi('Used in '+year,used)}${kpi('Remaining',remaining,'hero')}</div>
   <div class="sectitle" style="margin-top:4px"><h3>Plan your leave for the year</h3><span class="cnt">saved privately until it's due</span></div>
   <div class="formwrap">
   <div class="lvCalNav">
