@@ -344,10 +344,16 @@ a{color:var(--green2)}
   padding:5px 7px 5px 13px;border-radius:100px;
   min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
 .whoami::-webkit-scrollbar{display:none}
-.tbProfileBtn{background:none;border:none;padding:0;font:inherit;cursor:pointer;display:flex;align-items:center;border-radius:100px;transition:background .15s}
+/* Fix: the avatar and name text had zero gap between them (only .whoami's
+   own 4px cluster-level gap applied, meant for spacing between icon
+   buttons) -- collided visually, worse with a real photo than the old
+   colored-letter placeholder. Also .tb-name's divider was left over from
+   when the profile button used to sit first in the cluster; now it sits
+   last (before logout) so that divider is redundant with the .tbDivider
+   already placed before it -- dropped in favor of its own right padding. */
+.tbProfileBtn{background:none;border:none;padding:2px 8px 2px 2px;font:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;border-radius:100px;transition:background .15s}
 .tbProfileBtn:hover{background:var(--paper)}
-.tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;padding-right:11px;margin-right:3px;
-  border-right:1px solid var(--line);white-space:nowrap;flex:0 0 auto}
+.tb-name{color:var(--text);font-size:13px;font-weight:600;letter-spacing:.01em;white-space:nowrap;flex:0 0 auto}
 .tb-avatar{width:26px;height:26px;border-radius:100px;overflow:hidden;flex:0 0 auto;display:inline-block;box-shadow:0 0 0 1.5px rgba(79,70,229,.45)}
 .tb-avatar img{width:100%;height:100%;object-fit:cover}
 .tbDivider{width:1px;height:20px;background:var(--line);flex:0 0 auto;margin:0 3px}
@@ -390,7 +396,11 @@ a{color:var(--green2)}
   background:linear-gradient(150deg,#84CC16,#4D7C0F);color:var(--ink);font-size:9.5px;font-weight:800;
   display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--ink);animation:badgePop .3s ease both}
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
-.main{flex:1;padding:20px 16px 100px;max-width:1080px;width:100%;margin:0 auto}
+/* Premium UI rebuild -- 1080px left huge dead margins on a wide desktop
+   once the sidebar collapsed to a 72px rail; widened so real content
+   (dashboard grids, tile grids, tables) actually uses the screen instead
+   of floating in a narrow column with empty space on both sides. */
+.main{flex:1;padding:20px 24px 100px;max-width:1440px;width:100%;margin:0 auto}
 /* WhatsApp-style full-screen chat thread: the brand topbar and bottom tab bar
    are hidden entirely (not just visually covered) while a thread is open, so
    the composer can sit flush at the very bottom of the viewport -- toggled by
@@ -899,10 +909,15 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .pipeCard.stage-Lost{--stagecolor:var(--danger)}
 .pipeAvatar{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--green),var(--green2));color:#fff;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:0 0 auto;letter-spacing:-.02em}
-.pipeStatStrip{display:flex;gap:10px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px}
-.pipeStat{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 16px;min-width:108px;box-shadow:var(--shadow)}
-.pipeStat .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:16px}
-.pipeStat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+/* Premium UI rebuild -- these small plain-white stat cards read as
+   "generic placeholders" at their old cramped size (10px padding, 16px
+   numbers) -- bumped to the same card language as .statCard (18px
+   padding, var(--r) radius, 20px bold numbers) and made them stretch to
+   fill the row on wide screens instead of staying tiny and left-packed. */
+.pipeStatStrip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.pipeStat{flex:1 1 160px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow)}
+.pipeStat .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:20px;color:var(--text)}
+.pipeStat .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 /* Premium UI rebuild -- Order List reference's 4 solid-colored stat pills,
    replacing the 3 plain-white .pipeStat cards above (kept for other
    screens that still use it). */
@@ -910,6 +925,7 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 @media(min-width:640px){.pipePillStrip{grid-template-columns:repeat(4,1fr)}}
 .pipePill{border-radius:16px;padding:14px 16px;color:#fff;box-shadow:var(--shadow)}
 .pipePill .v{font-family:'IBM Plex Mono',monospace;font-weight:800;font-size:24px}
+.pipePill .v.money{font-size:18px;line-height:1.2}
 .pipePill .l{font-size:11px;font-weight:700;opacity:.9;margin-top:2px}
 .pipePill.blue{background:linear-gradient(150deg,#60A5FA,#2563EB)}
 .pipePill.orange{background:linear-gradient(150deg,#FDBA74,#EA580C)}
@@ -990,10 +1006,13 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .homeHero .heroStatLabel{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700}
 .homeHero .heroStatValue{font-size:32px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:-.01em}
 .homeHero .heroSecondary{display:flex;gap:10px;margin-top:18px;position:relative;z-index:1}
-.homeHero .heroChip{flex:1;min-width:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:10px 13px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
-.homeHero .heroChip:hover{background:rgba(255,255,255,.17);transform:translateY(-1px)}
-.homeHero .heroChip .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.6);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.homeHero .heroChip .v{font-size:16px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Premium UI rebuild -- these read as barely-there ghost chips at 10%
+   background opacity; bumped to a proper "glass card" that's clearly
+   readable against the purple gradient instead of washed out. */
+.homeHero .heroChip{flex:1;min-width:0;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:12px 14px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
+.homeHero .heroChip:hover{background:rgba(255,255,255,.24);transform:translateY(-1px)}
+.homeHero .heroChip .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.85);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.homeHero .heroChip .v{font-size:17px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:4px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Settings screens: a profile identity card up top instead of a misleading plain
    "Change password" header, and a small colored icon per section instead of bare
    text -- same premium-anchor idea as the home hero, scaled down for forms. */
@@ -1124,9 +1143,19 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .monthGridCell:hover{background:var(--paper);transform:translateY(-1px)}
 .monthGridCell.empty{border:none;background:none;cursor:default}
 .monthGridCell.empty:hover{transform:none}
-.monthGridCell.today{border-color:var(--green);border-width:2px}
+/* Premium UI rebuild -- Reference B's "Your Active Days" heatmap: cells
+   with activity get a solid/tinted indigo fill by real task count (not a
+   fabricated intensity -- 1, 2, or 3+ items), today keeps a distinct ring
+   that reads clearly against any fill. */
+.monthGridCell.today{box-shadow:0 0 0 2px var(--premium) inset}
+.monthGridCell.has1{background:rgba(79,70,229,.16);border-color:transparent}
+.monthGridCell.has2{background:rgba(79,70,229,.4);border-color:transparent}
+.monthGridCell.has2 .monthGridDate{color:#fff}
+.monthGridCell.has3{background:linear-gradient(150deg,#818CF8,#4F46E5);border-color:transparent}
+.monthGridCell.has3 .monthGridDate{color:#fff}
 .monthGridDate{font-size:12.5px;font-weight:700;color:var(--text)}
 .monthGridCount{font-size:9px;font-weight:800;color:#fff;background:var(--green);border-radius:100px;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.monthGridCell.has2 .monthGridCount,.monthGridCell.has3 .monthGridCount{background:rgba(255,255,255,.3)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip2{border:1.5px solid var(--line);background:var(--card);border-radius:100px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);transition:.15s}
 .lvCalNav{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
@@ -5346,11 +5375,51 @@ function clientDatabaseListHtml(){
     return `<button class="rowcard pipeCard stage-${esc(l.stage||'')}" style="text-align:left;width:100%;animation-delay:${Math.min(i*25,250)}ms" data-cdbopen="${esc(l.id)}"><div class="top"><div class="pipeAvatar">${esc(initials)}</div><div style="flex:1;min-width:0"><div class="nm">${esc(l.name)}</div><div class="meta">${esc(l.contact||'')} · agent ${esc(soldByLabel(l.agent)||l.agent||'—')} · stage ${esc(l.stage||'')}</div></div><div style="text-align:right"><div class="amt">${bal>0?ghs(bal):'Paid'}</div><div class="meta">${bal>0?'balance':'in full'}</div></div></div></button>`;
   }).join('');
 }
+// Premium UI rebuild -- Order List table for the company-wide client
+// database, same pattern as pipelineTableHtml() but with an Agent column
+// instead of Plot/Payment (the one extra fact this screen's card view
+// already surfaces that the per-agent Pipeline screen doesn't need).
+function clientDbTableHtml(list){
+  return list.map(l=>{
+    const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; const paidFull=isFullyPaid(l);
+    return `<tr data-rowlead="${esc(l.id)}">
+      <td><input type="checkbox"/></td>
+      <td><div class="pipeTableName nm-link" data-custname="${esc(l.name)}" data-custcontact="${esc(l.contact||'')}">${esc(l.name)}</div><div class="pipeTablePhone">${esc(l.contact||'—')}</div></td>
+      <td>${esc(soldByLabel(l.agent)||l.agent||'—')}</td>
+      <td>${ghs(g)}</td>
+      <td>${esc((l.date||'').slice(0,10)||'—')}</td>
+      <td><span class="pipeStatusPill tag stage-${esc(l.stage||'')}">${esc(clientStageLabel(l.stage))}${paidFull?' ✓':''}</span></td>
+      <td><button class="pipeRowMenu" data-rowmenu="${esc(l.id)}" aria-label="Row actions">${ic.more}</button></td>
+    </tr>`;
+  }).join('');
+}
+function bindClientDbTableRows(){
+  const tbody=document.getElementById('cdbtbody'); if(!tbody) return;
+  tbody.querySelectorAll('tr[data-rowlead]').forEach(tr=>{
+    tr.onclick=(e)=>{ if(e.target.closest('input,button,.nm-link')) return; route('updateOne',tr.dataset.rowlead); };
+  });
+  tbody.querySelectorAll('[data-rowmenu]').forEach(b=>b.onclick=(e)=>{ e.stopPropagation(); route('updateOne',b.dataset.rowmenu); });
+}
 function bindClientDatabaseCtrls(container){
+  bindClientDbTableRows();
   const inp=container.querySelector('#cdbq');
-  if(inp) inp.oninput=debounce(e=>{ CLIENTDB_QUERY=e.target.value; container.querySelector('#cdbList').innerHTML=clientDatabaseListHtml(); bindClientDbRows(container); });
+  const refresh=e=>{
+    CLIENTDB_QUERY=e.target.value;
+    container.querySelector('#cdbList').innerHTML=clientDatabaseListHtml();
+    const q=CLIENTDB_QUERY.toLowerCase();
+    const filtered=CLIENTDB_LIST.filter(l=>!q||(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q));
+    const cntEl=container.querySelector('#cdbCount'); if(cntEl) cntEl.textContent=filtered.length+' client'+(filtered.length===1?'':'s');
+    const tbody=container.querySelector('#cdbtbody'); if(tbody){ tbody.innerHTML=clientDbTableHtml(filtered); bindClientDbTableRows(); }
+    bindClientDbRows(container);
+  };
+  if(inp) inp.oninput=debounce(refresh);
   const addBtn=container.querySelector('#cdbAddBtn');
   if(addBtn) addBtn.onclick=openAddClientDbLead;
+  const exportBtn=container.querySelector('#cdbExportBtn');
+  if(exportBtn) exportBtn.onclick=()=>exportCSV(CLIENTDB_LIST,[
+    ['Client','name'],['Contact','contact'],['Agent',l=>soldByLabel(l.agent)||l.agent||''],['Stage',l=>clientStageLabel(l.stage)],
+    ['Grand total',l=>{ const c=computeLead(l); return l.grandTotal!=null?num(l.grandTotal):c.grand; }],['Paid',l=>num(l.amtPaid)]
+  ],'Client_Database_'+today()+'.csv');
   const templateBtn=container.querySelector('#cdbTemplateBtn');
   if(templateBtn) templateBtn.onclick=downloadClientDbTemplate;
   const importBtn=container.querySelector('#cdbImportBtn');
@@ -5372,8 +5441,9 @@ function bindClientDbRows(container){
   container.querySelectorAll('[data-cdbopen]').forEach(b=>b.onclick=()=>route('updateOne',b.dataset.cdbopen));
 }
 function clientDatabaseBodyHtml(){
+  const q=CLIENTDB_QUERY.toLowerCase();
+  const filteredCount=CLIENTDB_LIST.filter(l=>!q||(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q)).length;
   return `${clientDatabaseStatStripHtml()}
-  <div style="margin-bottom:14px"><button class="btn primary" id="cdbAddBtn" style="width:100%">+ Add new client</button></div>
   <details class="rowcard" style="margin-bottom:14px;padding:14px 16px">
     <summary style="font-weight:700;font-size:13.5px;cursor:pointer">Bulk-import historical clients</summary>
     <p class="mini" style="margin:10px 0">Download the blank template, fill in one row per client (same columns as your pipeline export), then upload it here. Matches by name + contact, so re-uploading the same file only updates what changed — nothing gets duplicated. To attribute rows to a specific agent, prefix that row's Notes with "[Agent Name] " (exactly as Master Pipeline exports do); unmarked rows are attributed to you.</p>
@@ -5383,7 +5453,16 @@ function clientDatabaseBodyHtml(){
     </div>
     <input type="file" id="cdbImportFile" accept=".xlsx" style="display:none"/>
   </details>
-  <div class="searchbar"><input id="cdbq" placeholder="Search name or contact…" value="${esc(CLIENTDB_QUERY)}"/></div>
+  <div class="pipeToolbar2">
+    <div class="searchbar" style="margin-bottom:0"><input id="cdbq" placeholder="Search name or contact…" value="${esc(CLIENTDB_QUERY)}"/></div>
+    <span class="cnt" id="cdbCount">${filteredCount} client${filteredCount===1?'':'s'}</span>
+    <button class="pipeExportBtn" id="cdbExportBtn">${ic.download}Export</button>
+    <button class="pipeAddBtn" id="cdbAddBtn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Add client</button>
+  </div>
+  <div class="pipeTableWrap"><table class="pipeTable">
+    <thead><tr><th style="width:24px"><input type="checkbox" disabled/></th><th>Client</th><th>Agent</th><th>Price</th><th>Date</th><th>Status</th><th></th></tr></thead>
+    <tbody id="cdbtbody">${clientDbTableHtml(CLIENTDB_LIST.filter(l=>!q||(l.name||'').toLowerCase().includes(q)||String(l.contact||'').includes(q)))}</tbody>
+  </table></div>
   <div class="list" id="cdbList">${clientDatabaseListHtml()}</div>`;
 }
 async function downloadClientDbTemplate(){
@@ -5443,10 +5522,18 @@ async function viewClientDatabase(){
   body.innerHTML=clientDatabaseBodyHtml();
   bindClientDatabaseCtrls(body);
 }
+// Premium UI rebuild -- same solid-pill treatment as the Pipeline screen's
+// Order List redesign (real counts, no invented deltas).
 function clientDatabaseStatStripHtml(){
   const totalBal=CLIENTDB_LIST.reduce((s,l)=>{ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return s+Math.max(g-num(l.amtPaid),0); },0);
   const paidCount=CLIENTDB_LIST.filter(l=>isFullyPaid(l)).length;
-  return `<div class="pipeStatStrip"><div class="pipeStat"><div class="v">${CLIENTDB_LIST.length}</div><div class="l">Clients</div></div><div class="pipeStat"><div class="v">${paidCount}</div><div class="l">Paid in full</div></div><div class="pipeStat"><div class="v">${ghs(totalBal)}</div><div class="l">Outstanding</div></div></div>`;
+  const inProgress=CLIENTDB_LIST.filter(l=>['2A','2B','3'].includes(l.stage)).length;
+  return `<div class="pipePillStrip">
+    <div class="pipePill blue"><div class="v">${CLIENTDB_LIST.length}</div><div class="l">Total clients</div></div>
+    <div class="pipePill orange"><div class="v">${inProgress}</div><div class="l">In progress</div></div>
+    <div class="pipePill gold"><div class="v money">${ghs(totalBal)}</div><div class="l">Outstanding</div></div>
+    <div class="pipePill green"><div class="v">${paidCount}</div><div class="l">Paid in full</div></div>
+  </div>`;
 }
 const LEAD_SOURCES=['Banner','Referral','Facebook','Instagram','TikTok','Google','Website','Radio','TV','Other'];
 // Shared inline source-capture block, reused by every "add a lead" entry point (the
@@ -7604,7 +7691,12 @@ const KPI_STYLE={
  'Open complaints':{icon:'flag',color:'amber'},
  'Escalated':{icon:'alert',color:'red'},
  'Available':{icon:'check',color:'green'}, 'Reserved':{icon:'clock',color:'amber'}, 'Sold':{icon:'coins',color:'lime'},
- 'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'}
+ 'Fully paid':{icon:'check',color:'green'}, 'Monthly collected':{icon:'trophy',color:'lime'},
+ 'Open':{icon:'clock',color:'blue'}, 'Overdue':{icon:'alert',color:'red'}, 'Completed':{icon:'check',color:'green'},
+ 'Avg days to close':{icon:'clock',color:'teal'},
+ 'Total banners':{icon:'grid',color:'blue'}, 'Perfect condition':{icon:'check',color:'lime'},
+ 'Needs maintenance':{icon:'alert',color:'grey'}, 'Being replaced':{icon:'flag',color:'red'},
+ 'New locations':{icon:'pin',color:'teal'}, 'Total areas':{icon:'pin',color:'blue'}, 'Leads from banners':{icon:'trophy',color:'lime'}
 };
 // Redesign correction: matches the reference KPI card's exact anatomy --
 // label (+small icon) and a plain expand-arrow affordance share the top row;
@@ -11224,7 +11316,8 @@ function monthGridHtml(yearMonth,counts){
       if(d===null) return `<div class="monthGridCell empty"></div>`;
       const iso=yearMonth+'-'+String(d).padStart(2,'0');
       const count=counts[iso]||0;
-      return `<div class="monthGridCell${iso===todayIso?' today':''}" data-monthcellopen="${iso}">
+      const heat=count>=3?' has3':count===2?' has2':count===1?' has1':'';
+      return `<div class="monthGridCell${heat}${iso===todayIso?' today':''}" data-monthcellopen="${iso}">
         <div class="monthGridDate">${d}</div>
         ${count?`<div class="monthGridCount">${count}</div>`:''}
       </div>`;
@@ -11272,6 +11365,11 @@ async function viewDuties(){
   <div id="dutiesMonthBody" class="${DUTIES_TAB==='month'?'':'hidden'}"><div class="skel" style="height:280px;border-radius:16px"></div></div>
   <div id="dutiesTasksBody" class="${DUTIES_TAB==='tasks'?'':'hidden'}">
   <div class="kpis">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}${kpi('Avg days to close',teamSummary.avgDaysToClose!=null?teamSummary.avgDaysToClose:'—')}</div>
+  ${(()=>{ const totalTasks=teamSummary.openCount+teamSummary.doneCount; const donePct=totalTasks?Math.round(teamSummary.doneCount/totalTasks*100):0;
+    return `<div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
+      ${progressRing(donePct,donePct>=70?'#4F46E5':'#F59E0B',80)}
+      <div><div style="font-weight:700;font-size:13.5px">Completion rate</div><div class="mini" style="margin-top:3px">${teamSummary.doneCount} of ${totalTasks} task${totalTasks===1?'':'s'} done${teamSummary.overdueCount?' · '+teamSummary.overdueCount+' overdue':''}</div></div>
+    </div>`; })()}
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button class="chip ${dutiesFilter==='mine'?'on':''}" data-dutiesfilter="mine">Mine (${mine.length})</button><button class="chip ${dutiesFilter==='byme'?'on':''}" data-dutiesfilter="byme">Assigned by me (${byMe.length})</button>${isMgr?`<button class="chip ${dutiesFilter==='all'?'on':''}" data-dutiesfilter="all">Team (${all.length})</button>`:''}</div>
   <div class="searchbar" style="margin-bottom:10px"><input id="dutiesSearchInput" placeholder="Filter by name or title…" value="${esc(dutiesSearch)}"/>
   <select id="dutiesCatSelect"><option value="">All categories</option>${TASK_CATEGORIES.map(c=>`<option value="${esc(c)}" ${c===dutiesCatFilter?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
@@ -21984,11 +22082,15 @@ let bannerAreaFilter='';
 let bannerStatusFilter='';
 let bannerMapInstance=null;
 let LEAFLET_LOADING=null;
+// Premium UI rebuild -- bold flat status colors (Reference C: red/blue/
+// lemon-green offer cards), replacing the old muted teal/amber/olive set.
+// Cascades everywhere BANNER_STATUS is read: list-row left rail, status
+// tag, pin-avatar gradient, and the Leaflet map marker fill.
 const BANNER_STATUS={
-  placed:{label:'Perfect condition',color:'#1E7A56',bg:'#DCEEE4'},
-  needs_maintenance:{label:'Needs maintenance',color:'#8A6E12',bg:'#F6EBD3'},
-  location_only:{label:'Scouted location',color:'#2E6E8E',bg:'#DCEAF0'},
-  being_replaced:{label:'Being replaced',color:'var(--danger)',bg:'#F5DCD5'}
+  placed:{label:'Perfect condition',color:'#65A30D',bg:'#ECFCCB'},
+  needs_maintenance:{label:'Needs maintenance',color:'#7C3AED',bg:'#EDE9FE'},
+  location_only:{label:'Scouted location',color:'#2563EB',bg:'#DBEAFE'},
+  being_replaced:{label:'Being replaced',color:'#DC2626',bg:'#FEE2E2'}
 };
 function ensureLeafletLoaded(){
   if(window.L) return Promise.resolve();
@@ -22064,8 +22166,16 @@ function bannerDashboardHtml(){
   const areas=new Set(all.map(b=>b.area).filter(Boolean));
   const totalLeadsFromBanners=Object.values(BANNER_LEAD_COUNTS).reduce((s,n)=>s+n,0);
   const recent=all.slice().sort((a,b)=>(b.updatedAt||b.createdAt||'').localeCompare(a.updatedAt||a.createdAt||'')).slice(0,8);
+  // Reference C's circular gauge, but a real computed ratio instead of a
+  // fabricated score: % of tracked banners currently in perfect condition.
+  const trackedTotal=placed+maint+replacing;
+  const healthPct=trackedTotal?Math.round(placed/trackedTotal*100):0;
   return `
   <div class="kpis">${kpi('Total banners',placed+maint)}${kpi('Perfect condition',placed)}${kpi('Needs maintenance',maint)}${kpi('Being replaced',replacing)}${kpi('New locations',newLoc)}${kpi('Total areas',areas.size)}${kpi('Leads from banners',totalLeadsFromBanners)}</div>
+  <div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
+    ${progressRing(healthPct,healthPct>=70?'#65A30D':healthPct>=40?'#7C3AED':'#DC2626',80)}
+    <div><div style="font-weight:700;font-size:13.5px">Banner health</div><div class="mini" style="margin-top:3px">${placed} of ${trackedTotal} placed banner${trackedTotal===1?'':'s'} in perfect condition${maint?' · '+maint+' need maintenance':''}${replacing?' · '+replacing+' being replaced':''}</div></div>
+  </div>
   <div class="formactions" style="margin:4px 0 16px"><button class="btn primary" id="bnQuickAdd" style="width:100%">+ Add banner / location</button></div>
   <div class="sectitle" style="margin-top:0"><h3>Recent activity</h3><span class="cnt">${recent.length}</span></div>
   <div class="list">${recent.length?recent.map(bannerRowHtml).join(''):emptyState(ic.grid,'Nothing logged yet','Add your first banner or scouted location.')}</div>`;
