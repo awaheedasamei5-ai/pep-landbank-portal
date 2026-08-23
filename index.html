@@ -325,6 +325,21 @@ a{color:var(--green2)}
 .topbar .ts{font-size:10.5px;color:var(--muted);letter-spacing:.05em;margin-top:3px;display:flex;align-items:center;gap:6px}
 .demodot{width:6px;height:6px;border-radius:50%;background:var(--gold2);animation:ringPulse 1.8s infinite}
 .topbar .spacer{flex:1}
+/* Premium UI rebuild -- reference's search box + date sit top-left, icon
+   cluster top-right. Mobile keeps the plain icon-only search button
+   (matches the "web only" scoping already applied to the tile cards);
+   the full pill-with-text + date only appear at desktop widths. */
+.topbarSearchPill{background:none;border:1px solid transparent;color:var(--muted);border-radius:100px;
+  width:35px;height:35px;padding:0;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:.15s;flex:0 0 auto}
+.topbarSearchPill:hover{background:var(--paper);color:var(--text)}
+.topbarSearchPill .tsp-text{display:none}
+.topbarDate{display:none}
+@media(min-width:1024px){
+  .topbarSearchPill{width:auto;padding:8px 16px 8px 14px;background:var(--paper);border-color:var(--line);justify-content:flex-start}
+  .topbarSearchPill:hover{background:var(--card);border-color:var(--leaf)}
+  .topbarSearchPill .tsp-text{display:inline;font-size:13px;font-weight:600;color:var(--muted)}
+  .topbarDate{display:inline-flex;align-items:center;font-size:12.5px;color:var(--muted);font-weight:600;margin-left:14px;white-space:nowrap;flex:0 0 auto}
+}
 .whoami{display:flex;align-items:center;gap:4px;background:var(--paper);border:1px solid var(--line);
   padding:5px 7px 5px 13px;border-radius:100px;
   min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
@@ -1402,8 +1417,13 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   <header class="topbar">
     <span class="glyph topbarBrandBit"><img alt="" id="topbarLogo"/></span>
     <div class="topbarBrandBit"><div class="tt">PALMSTEAD</div><div class="ts" id="topbarSub">by PEP Landbank</div></div>
+    <button class="topbarSearchPill" id="globalSearchBtn" title="Search">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="tsp-text">Search</span>
+    </button>
+    <span class="topbarDate" id="topbarDate"></span>
     <div class="spacer"></div>
-    <div class="whoami"><button class="tbProfileBtn" id="profileBtn" title="Profile"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span></button>
+    <div class="whoami">
       <button class="iconbtn hidden" id="clientBellBtn" title="Notifications" style="position:relative">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <span id="clientBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
@@ -1412,10 +1432,10 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         <span id="staffBellBadge" class="hidden" style="position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:100px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;box-shadow:0 0 0 2px rgba(11,30,61,.55)">0</span>
       </button>
-      <span class="tbDivider"></span>
       <button class="iconbtn" id="darkModeBtn" title="Toggle dark mode"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
-      <button class="iconbtn" id="globalSearchBtn" title="Search"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       <button class="iconbtn" id="accountBtn" title="Settings"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="tbDivider"></span>
+      <button class="tbProfileBtn" id="profileBtn" title="Profile"><span id="tbAvatar" class="tb-avatar hidden"></span><span class="tb-name" id="tbName"></span></button>
       <button class="iconbtn" id="logoutBtn" title="Sign out"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M15 12H4m0 0l4-4m-4 4l4 4M14 5h4a2 2 0 012 2v10a2 2 0 01-2 2h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
   </header>
@@ -1474,6 +1494,7 @@ const SITE_PLAN_IMG = "./site-plan.jpg";
 const BOOT_ICON_SRC = "./splash-icon.mp4";
 { const bv=document.getElementById('bootIconVideo'); bv.src=BOOT_ICON_SRC; bv.play().catch(()=>{}); }
 document.getElementById('topbarLogo').src = LOGO_SRC;
+document.getElementById('topbarDate').textContent='Today, '+new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
 const favicon = document.querySelector('link[rel="icon"]'); if(favicon) favicon.href = LOGO_SRC;
 // Preloaded <img> elements (not data URIs) so jsPDF's addImage still has pixel data
 // to read synchronously even though LOGO_SRC/TRULANDER_LOGO_SRC are now external files.
