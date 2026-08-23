@@ -499,6 +499,28 @@ a{color:var(--green2)}
    screen that still wants a genuine two-column split. */
 .dashFlow>*{margin-bottom:var(--sp-5)}
 .dashFlow>*:last-child{margin-bottom:0}
+/* Premium UI rebuild -- Barbara reference's dashboard arrangement: a 2x2
+   KPI block on the left with one wide chart card beside it at the same
+   height (row 1), then two small stat cards + a donut card (row 2).
+   Single column on mobile/narrow, real 2-up layout from 900px. */
+.dashKpiRow{display:grid;grid-template-columns:1fr;gap:14px}
+.dashKpiGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(min-width:900px){
+  .dashKpiRow{grid-template-columns:1fr 1.35fr;align-items:stretch}
+  .dashChartSlot .chartCard{height:100%;margin-bottom:0;display:flex;flex-direction:column}
+  .dashChartSlot .chartCard svg{flex:1;min-height:0}
+}
+.dashStatRow{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:900px){
+  .dashStatRow{grid-template-columns:1fr 1fr 1.6fr;align-items:stretch}
+  .dashDonutSlot .chartCard{height:100%;margin-bottom:0}
+}
+.statCard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);
+  display:flex;flex-direction:column;gap:10px;animation:fadeUp .4s ease both}
+.statIcon{width:34px;height:34px;border-radius:100px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--green);flex:0 0 auto}
+.statIcon svg{width:16px;height:16px}
+.statValue{font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text)}
+.statCaption{font-size:11.5px;color:var(--muted);line-height:1.4}
 .plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:18px}
 /* Team chat */
 .convList{display:flex;flex-direction:column;gap:4px}
@@ -7662,6 +7684,12 @@ function renderRevenueCard(monthVals,monthLbls){
   const hi=monthVals.length-1;
   return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi])}));
 }
+// Reference's small "98 orders / 12 orders are awaiting confirmation" style
+// card -- icon, big number, one-line caption. Sits next to the donut card
+// in the dashboard's second row.
+function statCardHtml(icon,value,caption){
+  return `<div class="statCard"><span class="statIcon">${icon}</span><div class="statValue">${value}</div><div class="statCaption">${esc(caption)}</div></div>`;
+}
 function bindTasks(){ V.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>route(b.dataset.r)); }
 const AGENT_HUBS={
   salesdesk:{title:'Sales',items:[
@@ -8994,8 +9022,16 @@ function agentHome(){ const k=kpisOf(DB.leads);
     ${renderAllocationBanners()}
     ${renderComplaintAssignBanners()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
-    <div class="kpis">${kpi('Active leads',k.leads,'','pipeline')}${kpi('Collected',ghs(k.coll),'','paid')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Site visits',k.sv,'','visits')}${kpi('Fully paid',wonAll.length,'','donepaying')}${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}</div>
-    <div class="insightCarousel">${renderRevenueCard(revVals,revLbls)}${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}${renderPipelineHealthCard(DB.leads)}</div>
+    <div class="dashKpiRow">
+      <div class="dashKpiGrid">${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}${kpi('Active leads',k.leads,'','pipeline')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Collected',ghs(k.coll),'','paid')}</div>
+      <div class="dashChartSlot">${renderRevenueCard(revVals,revLbls)}</div>
+    </div>
+    <div class="dashStatRow">
+      ${statCardHtml(kpiIc.pin,k.sv,'Site visits logged this month')}
+      ${statCardHtml(kpiIc.check,wonAll.length,'Clients paid in full')}
+      <div class="dashDonutSlot">${renderPipelineHealthCard(DB.leads)}</div>
+    </div>
+    <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}</div>
     ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
   </div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
@@ -16883,8 +16919,16 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
   <div class="dashFlow">
     ${renderBannerSlideshow()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
-    <div class="kpis">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}${kpi('Escalated',escalated,escalated?'gold':'')}</div>
-    <div class="insightCarousel">${renderRevenueCard(revValsMgr,revLblsMgr)}${renderExpectedRevenueCard()}${renderPipelineHealthCard(allLeads)}</div>
+    <div class="dashKpiRow">
+      <div class="dashKpiGrid">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}</div>
+      <div class="dashChartSlot">${renderRevenueCard(revValsMgr,revLblsMgr)}</div>
+    </div>
+    <div class="dashStatRow">
+      ${statCardHtml(kpiIc.pin,tot.sv,'Site visits logged company-wide')}
+      ${statCardHtml(kpiIc.alert,escalated,'Escalated complaints needing attention')}
+      <div class="dashDonutSlot">${renderPipelineHealthCard(allLeads)}</div>
+    </div>
+    <div class="insightCarousel">${renderExpectedRevenueCard()}</div>
     ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
 
     <div class="sectitle" style="margin-top:0"><h3>Ops today</h3><span class="cnt">who's free, who's busy · tap to open Operations Tracker</span></div>
