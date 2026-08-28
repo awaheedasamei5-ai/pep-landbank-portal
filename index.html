@@ -515,7 +515,8 @@ a{color:var(--green2)}
   .dashDonutSlot .chartCard{height:100%;margin-bottom:0}
 }
 .statCard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);
-  display:flex;flex-direction:column;gap:10px;animation:fadeUp .4s ease both}
+  display:flex;flex-direction:column;gap:10px;animation:fadeUp .4s ease both;transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s}
+.statCard.kpi-click:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
 .statIcon{width:34px;height:34px;border-radius:100px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--green);flex:0 0 auto}
 .statIcon svg{width:16px;height:16px}
 .statValue{font-size:22px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--text)}
@@ -8001,11 +8002,11 @@ function chartLegend(segments){
 // Every reference chart card shares one header: title + subtitle on the
 // left, a plain circular expand-arrow affordance (visual only, matching
 // kpi()'s) on the right. One wrapper keeps every chart card in sync.
-function chartCardHtml(title,subtitle,bodyHtml){
-  return `<div class="rowcard chartCard" style="margin-bottom:18px;padding:17px">
+function chartCardHtml(title,subtitle,bodyHtml,routeTo){
+  return `<div class="rowcard chartCard${routeTo?' kpi-click':''}" style="margin-bottom:18px;padding:17px" ${routeTo?`data-r="${routeTo}"`:''}>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
       <div><div style="font-weight:700;font-size:13.5px">${esc(title)}</div>${subtitle?`<div class="mini">${esc(subtitle)}</div>`:''}</div>
-      <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      ${routeTo?`<span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`:''}
     </div>
     ${bodyHtml}
   </div>`;
@@ -8015,13 +8016,32 @@ function chartCardHtml(title,subtitle,bodyHtml){
 // recent month highlighted with its value as a floating tooltip.
 function renderRevenueCard(monthVals,monthLbls){
   const hi=monthVals.length-1;
-  return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi])}));
+  return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi])}),'monthlyclosed');
 }
 // Reference's small "98 orders / 12 orders are awaiting confirmation" style
 // card -- icon, big number, one-line caption. Sits next to the donut card
 // in the dashboard's second row.
-function statCardHtml(icon,value,caption){
-  return `<div class="statCard"><span class="statIcon">${icon}</span><div class="statValue">${value}</div><div class="statCaption">${esc(caption)}</div></div>`;
+function statCardHtml(icon,value,caption,routeTo){
+  return `<div class="statCard${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <span class="statIcon">${icon}</span>
+      ${routeTo?`<span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`:''}
+    </div>
+    <div class="statValue">${value}</div><div class="statCaption">${esc(caption)}</div>
+  </div>`;
+}
+// Same card as statCardHtml() but routes through mgrAppRoute(mgrKey) (sets
+// mgrTab + repaints) instead of route() -- the manager tab dispatch used by
+// mgrOverview's own tile grid takes a key, not a plain route name, so it
+// can't reuse statCardHtml()'s single-arg data-r/route() wiring.
+function statCardMgrHtml(icon,value,caption,mgrKey){
+  return `<div class="statCard kpi-click" data-statmgr="${esc(mgrKey)}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <span class="statIcon">${icon}</span>
+      <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+    <div class="statValue">${value}</div><div class="statCaption">${esc(caption)}</div>
+  </div>`;
 }
 function bindTasks(){ V.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>route(b.dataset.r)); }
 const AGENT_HUBS={
@@ -9379,8 +9399,8 @@ function agentHome(){ const k=kpisOf(DB.leads);
       <div class="dashChartSlot">${renderRevenueCard(revVals,revLbls)}</div>
     </div>
     <div class="dashStatRow">
-      ${statCardHtml(kpiIc.pin,k.sv,'Site visits logged this month')}
-      ${statCardHtml(kpiIc.check,wonAll.length,'Clients paid in full')}
+      ${statCardHtml(kpiIc.pin,k.sv,'Site visits logged this month','sitevisit')}
+      ${statCardHtml(kpiIc.check,wonAll.length,'Clients paid in full','paid')}
       <div class="dashDonutSlot">${renderPipelineHealthCard(DB.leads)}</div>
     </div>
     <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}</div>
@@ -17370,8 +17390,8 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       <div class="dashChartSlot">${renderRevenueCard(revValsMgr,revLblsMgr)}</div>
     </div>
     <div class="dashStatRow">
-      ${statCardHtml(kpiIc.pin,tot.sv,'Site visits logged company-wide')}
-      ${statCardHtml(kpiIc.alert,escalated,'Escalated complaints needing attention')}
+      ${statCardMgrHtml(kpiIc.pin,tot.sv,'Site visits logged company-wide','Site visits')}
+      ${statCardMgrHtml(kpiIc.alert,escalated,'Escalated complaints needing attention','Complaints')}
       <div class="dashDonutSlot">${renderPipelineHealthCard(allLeads)}</div>
     </div>
     <div class="insightCarousel">${renderExpectedRevenueCard()}</div>
@@ -17390,6 +17410,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
 function bindOverviewCtrls(){
   V.querySelectorAll('[data-agentkey]').forEach(b=>b.onclick=()=>route('agentDetail',b.dataset.agentkey));
   V.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>route('stageList',b.dataset.stage));
+  V.querySelectorAll('[data-statmgr]').forEach(b=>b.onclick=()=>mgrAppRoute(b.dataset.statmgr));
   bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
