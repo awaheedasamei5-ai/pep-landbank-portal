@@ -22197,7 +22197,14 @@ function memoRowHtml(m){
   const myCc=myMemoCcRow(m);
   const isUnreadToMe=(m.toKey===PROFILE.key&&!m.read)||(myCc&&!myCc.read);
   const ccNote=(m.cc&&m.cc.length)?' <span class="mini">+cc '+m.cc.map(c=>esc(c.staffName)).join(', ')+'</span>':'';
-  return `<button class="rowcard" style="text-align:left;width:100%" data-memoopen="${m.id}"><div class="top"><div class="pipeAvatar" style="background:linear-gradient(135deg,var(--premium,var(--premium)),var(--premium2,#E8C766))">${ic.doc}</div><div style="flex:1;min-width:0"><div class="nm">${esc(m.subject)}${isUnreadToMe?' <span class="tag gold">New</span>':''}</div><div class="meta">${m.fromKey===PROFILE.key?'To '+esc(m.toName)+ccNote:(myCc?'Cc’d from '+esc(m.fromName):'From '+esc(m.fromName))} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></div>${kindTag}</div></button>`;
+  return `<div class="rowcard"><div class="top">
+    <button data-memoopen="${m.id}" style="text-align:left;background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+      <div class="pipeAvatar" style="background:linear-gradient(135deg,var(--premium,var(--premium)),var(--premium2,#E8C766))">${ic.doc}</div>
+      <div style="flex:1;min-width:0"><div class="nm">${esc(m.subject)}${isUnreadToMe?' <span class="tag gold">New</span>':''}</div><div class="meta">${m.fromKey===PROFILE.key?'To '+esc(m.toName)+ccNote:(myCc?'Cc’d from '+esc(m.fromName):'From '+esc(m.fromName))} · ${esc((m.createdAt||'').slice(0,16).replace('T',' '))}</div></div>
+    </button>
+    ${kindTag}
+    <button class="trashbtn" data-memodel="${m.id}" title="Delete memo">${ic.trash}</button>
+  </div></div>`;
 }
 function memoInboxHtml(){
   const inbox=DB.memos.filter(m=>m.toKey===PROFILE.key||myMemoCcRow(m)).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
@@ -22234,6 +22241,13 @@ function bindMemoDraftCtrls(){
 }
 function bindMemoListCtrls(){
   document.querySelectorAll('[data-memoopen]').forEach(b=>b.onclick=()=>openMemoView(b.dataset.memoopen));
+  document.querySelectorAll('[data-memodel]').forEach(b=>b.onclick=async(e)=>{
+    e.stopPropagation();
+    const id=b.dataset.memodel; const m=DB.memos.find(x=>x.id===id); if(!m) return;
+    if(!confirm(`Delete this memo ("${m.subject||'(no subject)'}")? This removes it for both sender and recipient and can't be undone.`)) return;
+    try{ await apiDeleteMemo(id); DB.memos=DB.memos.filter(x=>x.id!==id); toast('Memo deleted'); paintMemoApp(); }
+    catch(err){ toast('Failed: '+(err.message||err)); }
+  });
 }
 function openMemoView(id){
   const m=DB.memos.find(x=>x.id===id); if(!m) return;
