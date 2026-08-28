@@ -478,6 +478,24 @@ a{color:var(--green2)}
 .kpi.hero .kpi-ic{background:rgba(255,255,255,.25)}
 .kpi.hero .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
 .kpi.hero .kpi-delta.up,.kpi.hero .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
+/* Two more full-colour KPI treatments, same recipe as .kpi.hero, so a dashboard
+   row reads as a deliberate mix of colour instead of one accent card next to a
+   wall of plain white ones. Reused for whichever KPI is already semantically
+   that colour (Outstanding=amber, Collected/Fully paid=green) via KPI_STYLE. */
+.kpi.gold{background:linear-gradient(150deg,#F5B94F,var(--warn));border-color:transparent;color:#fff}
+.kpi.gold .kpi-label{color:rgba(255,255,255,.75)}
+.kpi.gold .v{color:#fff}
+.kpi.gold .kpi-caption{color:rgba(255,255,255,.65)}
+.kpi.gold .kpi-ic{background:rgba(255,255,255,.25)}
+.kpi.gold .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
+.kpi.gold .kpi-delta.up,.kpi.gold .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
+.kpi.green{background:linear-gradient(150deg,#34D399,var(--ok));border-color:transparent;color:#fff}
+.kpi.green .kpi-label{color:rgba(255,255,255,.75)}
+.kpi.green .v{color:#fff}
+.kpi.green .kpi-caption{color:rgba(255,255,255,.65)}
+.kpi.green .kpi-ic{background:rgba(255,255,255,.25)}
+.kpi.green .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
+.kpi.green .kpi-delta.up,.kpi.green .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
 /* Compact period-over-period trend pill, inline next to the number now
    (reference shows it right beside the figure, not floating in a corner). */
 .kpi-delta{display:inline-flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;
@@ -966,7 +984,6 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 .kpi-click:hover .kpi-expand{background:var(--ink);color:#fff;transform:translate(1px,-1px)}
 .kpi-mainrow{display:flex;align-items:baseline;gap:8px;margin-top:9px;flex-wrap:wrap}
 .kpi .v{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:22px;color:var(--ink)}
-.kpi.gold .v{color:#8A6E12}
 .kpi-caption{font-size:11px;color:var(--muted);margin-top:8px}
 .kpi-click{cursor:pointer}
 
@@ -9125,9 +9142,11 @@ function buildBannerSlides(){
     const isTarget=(a.title||'').includes('Target surpassed');
     // Target-surpassed stays a fixed celebratory lime (a status colour, not brand
     // decoration -- same reasoning as leaving amber/red/green KPI badges fixed).
-    // Plain company news reuses the theme's own hero gradient so it visibly
-    // shifts with whichever palette is picked, instead of a hardcoded blue.
-    slides.push({grad:isTarget?'linear-gradient(120deg,#4D7C0F,#84CC16 70%,#BEF264)':'var(--hero-bg,linear-gradient(120deg,var(--ink),#4F46E5 70%,#818CF8))',kind:'announcement',arg:a.id,
+    // Plain company news gets its own warm gold/amber identity (the same
+    // --premium/--premium2 tokens used for achievements/wins elsewhere) so it
+    // reads as distinct from the cool indigo/violet hero card right above it,
+    // instead of sharing --hero-bg and looking like the same surface twice.
+    slides.push({grad:isTarget?'linear-gradient(120deg,#4D7C0F,#84CC16 70%,#BEF264)':'linear-gradient(120deg,#8A6E12,var(--premium) 55%,var(--premium2))',kind:'announcement',arg:a.id,
       html:`<span class="bsIconBubble">${isTarget?ic.trophy:ic.mail}</span>
       <div class="bsBody"><span class="bsChip">${isTarget?'Achievement':'Company news'}</span>
       <div class="bsTitle">${esc(a.title)}</div>
@@ -9900,7 +9919,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
     ${renderComplaintAssignBanners()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
     <div class="dashKpiRow">
-      <div class="dashKpiGrid">${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}${kpi('Active leads',k.leads,'','pipeline')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Collected',ghs(k.coll),'','paid')}</div>
+      <div class="dashKpiGrid">${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}${kpi('Active leads',k.leads,'','pipeline')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Collected',ghs(k.coll),'green','paid')}</div>
       <div class="dashChartSlot">${renderRevenueCard(revVals,revLbls)}</div>
     </div>
     <div class="dashStatRow">
@@ -18433,7 +18452,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     ${renderBannerSlideshow()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
     <div class="dashKpiRow">
-      <div class="dashKpiGrid">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}</div>
+      <div class="dashKpiGrid">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'green','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}</div>
       <div class="dashChartSlot">${renderRevenueCard(revValsMgr,revLblsMgr)}</div>
     </div>
     <div class="dashStatRow">
