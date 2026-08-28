@@ -382,6 +382,12 @@ a{color:var(--green2)}
    an ultra-wide screen -- content should hug the left (right after the
    sidebar) and only leave extra space on the right. */
 .main{flex:1;padding:20px 24px 100px;max-width:1440px;width:100%;margin:0}
+/* On a genuinely wide monitor (1600px+), 1440px still hugs the sidebar and
+   leaves a growing dead gap on the right as the screen gets wider -- give
+   real content (grids, tables) more room instead of stranding it in a
+   fixed-width column. Still not centered, same reasoning as above -- just
+   a bigger cap so wide screens actually get used. */
+@media(min-width:1600px){ .main{max-width:1800px} }
 /* WhatsApp-style full-screen chat thread: the brand topbar and bottom tab bar
    are hidden entirely (not just visually covered) while a thread is open, so
    the composer can sit flush at the very bottom of the viewport -- toggled by
@@ -752,10 +758,13 @@ body.dark .appGridIcon:hover{background:#182541}
    with no .lg) is untouched either way.
    auto-fit + a bounded card width (was auto-fill + unbounded 1fr, which
    left empty uncollapsed trailing tracks pinning small groups to the left
-   on wide desktop instead of centering them) + justify-content:center so
-   a handful of real cards cluster in the middle instead of stretching
-   across the full row -- this part only matters once the grid is >1
-   column, i.e. already effectively desktop-only in practice. */
+   on wide desktop) -- auto-fit alone already collapses those empty tracks,
+   so justify-content:center was redundant and, per explicit user feedback,
+   was making groups with fewer tiles visually drift to the center while
+   fuller groups looked left-aligned by coincidence; every group now starts
+   at the same left edge (justify-content:flex-start) regardless of count,
+   this part only matters once the grid is >1 column, i.e. already
+   effectively desktop-only in practice. */
 .appGrid.appGrid-lg{grid-template-columns:1fr;gap:10px}
 .appGridIcon.lg{flex-direction:row;align-items:center;text-align:left;background:var(--card);
   border:1px solid var(--line);border-radius:14px;padding:10px 14px;gap:12px;box-shadow:var(--shadow)}
@@ -768,7 +777,7 @@ body.dark .appGridIcon:hover{background:#182541}
 .tileBadge svg{width:46%;height:46%}
 .tileBadge.lg{width:44px;height:44px}
 @media(min-width:768px){
-  .appGrid.appGrid-lg{grid-template-columns:repeat(auto-fit,minmax(200px,240px));gap:16px;justify-content:center}
+  .appGrid.appGrid-lg{grid-template-columns:repeat(auto-fit,minmax(200px,240px));gap:16px;justify-content:flex-start}
   .appGridIcon.lg{flex-direction:column;align-items:flex-start;border-radius:20px;padding:20px 18px 18px;gap:0}
   .appGridIcon.lg .tileBadge.lg{width:84px;height:84px;margin-bottom:14px}
   .appGridIcon.lg .appGridLabel{font-size:14.5px;margin-bottom:4px}
@@ -1102,8 +1111,12 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .homeHero .heroSecondary{display:flex;gap:10px;margin-top:18px;position:relative;z-index:1}
 /* Premium UI rebuild -- these read as barely-there ghost chips at 10%
    background opacity; bumped to a proper "glass card" that's clearly
-   readable against the purple gradient instead of washed out. */
-.homeHero .heroChip{flex:1;min-width:0;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:12px 14px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
+   readable against the purple gradient instead of washed out. Per explicit
+   user feedback, no longer flex:1 equal-width stretch (that made two small
+   labels look like they were awkwardly filling the whole row width) --
+   sized to content and left-aligned, starting flush under "Pipeline value"
+   above, same as the row's own left edge. */
+.homeHero .heroChip{flex:0 0 auto;min-width:0;max-width:150px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:9px 12px;cursor:pointer;transition:.15s;backdrop-filter:blur(6px)}
 .homeHero .heroChip:hover{background:rgba(255,255,255,.24);transform:translateY(-1px)}
 .homeHero .heroChip .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.85);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .homeHero .heroChip .v{font-size:17px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:4px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -8036,7 +8049,8 @@ const KPI_STYLE={
  'Avg days to close':{icon:'clock',color:'teal'},
  'Total banners':{icon:'grid',color:'blue'}, 'Perfect condition':{icon:'check',color:'lime'},
  'Needs maintenance':{icon:'alert',color:'grey'}, 'Being replaced':{icon:'flag',color:'red'},
- 'New locations':{icon:'pin',color:'teal'}, 'Total areas':{icon:'pin',color:'blue'}, 'Leads from banners':{icon:'trophy',color:'lime'}
+ 'New locations':{icon:'pin',color:'teal'}, 'Total areas':{icon:'pin',color:'blue'}, 'Leads from banners':{icon:'trophy',color:'lime'},
+ 'Hygiene score':{icon:'trophy',color:'lime'}, 'Clean leads':{icon:'check',color:'green'}
 };
 // Redesign correction: matches the reference KPI card's exact anatomy --
 // label (+small icon) and a plain expand-arrow affordance share the top row;
@@ -13041,7 +13055,6 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
   <button class="btn primary" id="saveDocStage" style="width:100%">Update stage</button>`;
 
   const paymentHistoryHtml=`<div class="rowcard" style="padding:6px 15px;margin:0">${myPayments.length?myPayments.map(p=>`<div class="agentrow"><div class="ai"><div><div class="nm" style="font-weight:700">${esc(p.date||'')}</div></div></div><div class="amt mono" style="font-weight:700;color:#1E7A56">+${ghs(num(p.amount))}</div></div>`).join(''):'<div class="empty">No individual payments logged yet — only a starting total.</div>'}</div>
-  <button class="chip" id="viewLedgerBtn" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:7px"><span style="width:15px;height:15px;display:inline-flex">${ic.calendar}</span>Log payment for a specific month →</button>
   <button class="btn primary" id="dlUpdPdf" style="width:100%">⬇ Download this client's pipeline (PDF)</button>
   <button class="btn ghost" id="dlUpdQuote" style="width:100%">⬇ Download quotation</button>`;
 
@@ -13095,7 +13108,6 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
   document.getElementById('dlUpdQuote').onclick=()=>buildClientQuotationPDF(l);
   bindContractSectionCtrls(l);
   const viewSchedBtn=document.getElementById('viewSchedBtn'); if(viewSchedBtn) viewSchedBtn.onclick=()=>route('paymentSchedule',id);
-  document.getElementById('viewLedgerBtn').onclick=()=>route('paymentSchedule',id);
   const saveDocStageBtn=document.getElementById('saveDocStage');
   if(saveDocStageBtn) saveDocStageBtn.onclick=async()=>{
     const stage=val('u_docstage');
