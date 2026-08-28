@@ -22396,7 +22396,7 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   const escalatedInRange=all.filter(t=>t.escalatedTo&&inRange(t.escalatedAt));
   const overdueNow=all.filter(t=>t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled');
   const perStaff={};
-  const ensure=(key,name)=>{ if(!key) return null; perStaff[key]=perStaff[key]||{name:name||key,assigned:0,completed:0,overdue:0,escalated:0,closeDays:[],closeHours:[]}; return perStaff[key]; };
+  const ensure=(key,name)=>{ if(!key) return null; perStaff[key]=perStaff[key]||{key,name:name||key,assigned:0,completed:0,overdue:0,escalated:0,closeDays:[],closeHours:[]}; return perStaff[key]; };
   assignedInRange.forEach(t=>{ const s=ensure(t.assignedTo,t.assignedToName); if(s) s.assigned++; });
   completedInRange.forEach(t=>{ const s=ensure(t.assignedTo,t.assignedToName); if(s){ s.completed++;
     const dd=daysBetween(t.createdAt,t.completedAt); if(dd!=null) s.closeDays.push(dd);
@@ -22404,7 +22404,7 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   overdueNow.forEach(t=>{ const s=ensure(t.assignedTo,t.assignedToName); if(s) s.overdue++; });
   escalatedInRange.forEach(t=>{ const s=ensure(t.escalatedTo,t.escalatedToName); if(s) s.escalated++; });
   const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
-  const perStaffRows=Object.values(perStaff).map(s=>({name:s.name,assigned:s.assigned,completed:s.completed,overdue:s.overdue,escalated:s.escalated,
+  const perStaffRows=Object.values(perStaff).map(s=>({key:s.key,name:s.name,assigned:s.assigned,completed:s.completed,overdue:s.overdue,escalated:s.escalated,
     avgCloseDays:s.closeDays.length?Math.round(avg(s.closeDays)):null,
     avgCloseHours:s.closeHours.length?Math.round(avg(s.closeHours)*10)/10:null})).sort((a,b)=>b.assigned-a.assigned);
   // "Duty-by-duty" breakdown -- per category, not just an assigned-count like
@@ -22477,6 +22477,36 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
     avgApprovalWaitHrs:avgApprovalWaitHrs!=null?Math.round(avgApprovalWaitHrs*10)/10:null,
     currentlyBlocked,currentlyAwaitingApproval};
 }
+// One profile card per staff member with real activity this period -- photo
+// (only if a real data-URI avatar is on file; never a fetched/invented image)
+// or an initials circle, their designation, and their own compact stat line.
+// Deliberately not a full page-per-staff -- that level of "pick one staff and
+// see everything" depth is what the new Staff Report app (Office > Operations)
+// is for; this stays a scannable directory, not a duplicate of that report.
+function pdfStaffCard(doc,y,pageW,staffRow,profile){
+  const h=26;
+  if(y+h>270){ doc.addPage(); y=16; }
+  doc.setFillColor(244,246,248); doc.roundedRect(12,y,pageW-24,h,2.5,2.5,'F');
+  const cx=12+15, cy=y+h/2, r=9;
+  let drewPhoto=false;
+  if(profile&&profile.avatar&&/^data:image\//.test(profile.avatar)){
+    try{ doc.addImage(profile.avatar,'PNG',cx-r,cy-r,r*2,r*2); drewPhoto=true; }catch(e){}
+  }
+  if(!drewPhoto){
+    doc.setFillColor(79,70,229); doc.circle(cx,cy,r,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+    const initials=(staffRow.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    doc.text(initials,cx,cy+1.2,{align:'center'});
+  }
+  const tx=12+30;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(PDF_INK[0],PDF_INK[1],PDF_INK[2]);
+  doc.text(staffRow.name,tx,y+9);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(PDF_MUTED[0],PDF_MUTED[1],PDF_MUTED[2]);
+  doc.text((profile&&profile.position)||'Staff',tx,y+14.5);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.3); doc.setTextColor(20,20,20);
+  doc.text(`${staffRow.assigned} assigned  ·  ${staffRow.completed} completed  ·  ${staffRow.overdue} overdue  ·  ${staffRow.escalated} escalated`,tx,y+21);
+  return y+h+4;
+}
 // prior/priorData are both optional -- only present when "Compare to previous
 // period" was checked. Adds one extra comparison stat bar right under the main
 // one; everything else about the report is unchanged either way.
@@ -22532,6 +22562,16 @@ function buildOpsReportPDF(range,d,prior,priorData){
       d.perStaffRows.map(s=>[s.name,String(s.assigned),String(s.completed),String(s.overdue),String(s.escalated),s.avgCloseDays!=null?String(s.avgCloseDays):'—',s.avgCloseHours!=null?String(s.avgCloseHours):'—']),[0.24,0.12,0.13,0.12,0.13,0.13,0.13]);
   }
   else{ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(120,120,120); doc.text('No task activity in this period.',12,y); doc.setTextColor(20,20,20); y+=10; }
+
+  if(d.perStaffRows.length){
+    if(y>230){ doc.addPage(); y=16; }
+    y=pdfSectionTitle(doc,y,pageW,'Staff directory');
+    d.perStaffRows.forEach(s=>{
+      const profile=(DB.profiles||[]).find(p=>(p.agent_key||p.agentKey)===s.key);
+      y=pdfStaffCard(doc,y,pageW,s,profile);
+    });
+    y+=2;
+  }
 
   if(y>220){ doc.addPage(); y=16; }
   y=pdfSectionTitle(doc,y,pageW,'By duty / category');
