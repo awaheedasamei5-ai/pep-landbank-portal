@@ -887,6 +887,17 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 .plottile.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
 .plottile.amber{background:linear-gradient(150deg,#F5B94F,var(--warn))}
 .plottile.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
+/* A plot split into two Half Plot units renders as one square divided into
+   two independently-colored/tappable rectangles instead of a uniform tile. */
+.plottile.split{padding:0;display:flex;overflow:hidden;box-shadow:0 3px 8px -3px rgba(11,30,61,.4)}
+.plottile-half{flex:1;min-height:52px;min-width:0;padding:6px 3px;border:none;color:#fff;font-weight:700;font-size:10.5px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s}
+.plottile-half:first-child{border-radius:10px 0 0 10px}
+.plottile-half:last-child{border-radius:0 10px 10px 0;border-left:1.5px solid rgba(255,255,255,.55)}
+.plottile-half.sel{outline:3px solid var(--ink);outline-offset:-3px;z-index:1;position:relative}
+.plottile-half.lime{background:linear-gradient(150deg,#A3E635,#4D7C0F)}
+.plottile-half.amber{background:linear-gradient(150deg,#F5B94F,var(--warn))}
+.plottile-half.red{background:linear-gradient(150deg,#E0836A,var(--danger))}
 /* Redesign correction: matches the reference KPI card's row structure --
    label+expand-arrow on top, number+delta together, caption below. */
 .kpi-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
@@ -2514,7 +2525,8 @@ const mapSV=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,name:r.name
 const mapAct=r=>({id:r.id,agentKey:r.agent_key,agentName:r.agent_name,client:r.client,action:r.action,detail:r.detail,
   note:r.note,method:r.method,follow:r.follow,at:(r.created_at||'').slice(0,16).replace('T',' ')});
 const mapPlot=r=>({id:r.id,site:r.site,plotNumber:r.plot_number,plotType:r.plot_type,status:r.status,price:r.price,
-  clientName:r.client_name,clientContact:r.client_contact,agentKey:r.agent_key,notes:r.notes,updatedAt:r.updated_at});
+  clientName:r.client_name,clientContact:r.client_contact,agentKey:r.agent_key,notes:r.notes,updatedAt:r.updated_at,
+  unitKind:r.unit_kind||'whole',parentPlotId:r.parent_plot_id||null});
 
 /* ---- Weekly Site Visit Authorization Form: Mon-Fri week helpers ---- */
 function mondayOfDate(dt){ const d=new Date(dt); d.setHours(0,0,0,0); const day=d.getDay(); const diff=day===0?-6:1-day; d.setDate(d.getDate()+diff); return d; }
@@ -6220,6 +6232,34 @@ async function apiDeletePlot(id){
   if(DEMO_MODE){ const d=await demoLoad(); d.plots=(d.plots||[]).filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('plots').delete().eq('id',id); if(error) throw error;
 }
+// Splits an Available whole Full Plot into two Half Plot children (mirrors
+// the split_plot_for_half_sale RPC's logic client-side for DEMO_MODE, since
+// demo mode never touches real Postgres functions). Idempotent: re-calling
+// on an already-Subdivided plot just returns its existing two children.
+async function apiSplitPlot(plotId){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.plots=d.plots||[];
+    const p=d.plots.find(x=>x.id===plotId); if(!p) throw new Error('Plot not found');
+    if(p.status==='Subdivided'){
+      const kids=d.plots.filter(x=>x.parentPlotId===plotId);
+      const a=kids.find(k=>k.plotNumber===p.plotNumber+'a'), b=kids.find(k=>k.plotNumber===p.plotNumber+'b');
+      if(a&&b) return {alreadySplit:true,plotA:a,plotB:b};
+      throw new Error('Plot is marked Subdivided but its children could not be found');
+    }
+    if(p.plotType!=='Full Plot') throw new Error('Only a Full Plot can be split into halves');
+    if(p.status!=='Available') throw new Error('Only an Available plot can be split (current status: '+p.status+')');
+    if(p.unitKind==='half'||p.parentPlotId) throw new Error('This plot is already a half-unit and cannot be split further');
+    const half=p.price!=null?p.price/2:null;
+    const a={id:uid(),site:p.site,plotNumber:p.plotNumber+'a',plotType:'Half Plot',status:'Available',price:half,unitKind:'half',parentPlotId:p.id,clientName:'',clientContact:'',agentKey:'',notes:''};
+    const b={id:uid(),site:p.site,plotNumber:p.plotNumber+'b',plotType:'Half Plot',status:'Available',price:half,unitKind:'half',parentPlotId:p.id,clientName:'',clientContact:'',agentKey:'',notes:''};
+    d.plots.unshift(a); d.plots.unshift(b); p.status='Subdivided';
+    await demoSave();
+    return {alreadySplit:false,plotA:a,plotB:b};
+  }
+  const {data,error}=await sb.rpc('split_plot_for_half_sale',{p_plot_id:plotId}); if(error) throw error;
+  const norm=x=>x?{id:x.id,plotNumber:x.plotNumber,status:x.status,plotType:x.plotType,price:x.price}:null;
+  return {alreadySplit:!!data.alreadySplit,plotA:norm(data.plotA),plotB:norm(data.plotB)};
+}
 
 /* ---- bulk price adjustment (manager) ---- */
 async function apiAllLeadsFlat(){
@@ -9813,7 +9853,7 @@ function renderPlotDetail(p,isManager){
     <span class="tag ${plotStatusTagCls(p.status)}">${esc(p.status)}</span></div>
     ${p.price?`<div class="meta" style="margin-top:6px">Price: ${ghs(p.price)}</div>`:''}</div>`;
   }
-  const canSplit=p.status==='Available' && p.plotType==='Full Plot' && !/[ab]$/i.test(p.plotNumber);
+  const canSplit=p.status==='Available' && p.plotType==='Full Plot' && p.unitKind!=='half' && !p.parentPlotId;
   return `<div class="formwrap" style="margin-top:6px">
     <div class="sectitle" style="margin-top:0"><h3>Plot ${esc(p.plotNumber)}</h3><span class="cnt">${esc(p.plotType||'')}</span></div>
     <div class="grid2">${fld('Status',sel('pd_status',PLOT_STATUSES,p.status))}${fld('Plot type',sel('pd_type',['Full Plot','Half Plot'],p.plotType))}</div>
@@ -9825,10 +9865,11 @@ function renderPlotDetail(p,isManager){
     ${fld('Sold / allocated by',soldByOptions(p.agentKey))}
     ${fld('Notes','<textarea id="pd_notes">'+esc(p.notes||'')+'</textarea>')}
     <div class="formactions"><button class="btn ghost" id="closePlotDetail">Close</button><button class="btn primary" id="savePlot">Save changes</button></div>
+    ${p.parentPlotId?(()=>{ const parent=DB.plots.find(x=>x.id===p.parentPlotId); return parent?`<div class="mini" style="margin-top:10px">Half of Plot ${esc(parent.plotNumber)}, split for a half-plot sale.</div>`:''; })():''}
     ${canSplit?`<div class="rowcard" style="margin-top:14px;padding:14px;border-left:4px solid #3B82F6">
       <div style="font-weight:700;font-size:13.5px">Need to sell this as two Half Plots instead?</div>
-      <div class="mini" style="margin:4px 0 10px">Splits ${esc(p.plotNumber)} into ${esc(p.plotNumber)}A and ${esc(p.plotNumber)}B — two separate Half Plot units, both Available. Only works while the plot is still unallocated.</div>
-      <button class="chip" id="splitPlotBtn">Split into ${esc(p.plotNumber)}A / ${esc(p.plotNumber)}B</button>
+      <div class="mini" style="margin:4px 0 10px">Splits ${esc(p.plotNumber)} into ${esc(p.plotNumber)}a and ${esc(p.plotNumber)}b — two separate Half Plot units, both Available. Only works while the plot is still unallocated.</div>
+      <button class="chip" id="splitPlotBtn">Split into ${esc(p.plotNumber)}a / ${esc(p.plotNumber)}b</button>
     </div>`:''}
     <div class="dangerzone" style="margin-top:14px"><div class="dz-text">Remove this plot from inventory entirely.</div>
     <button class="trashbtn" id="deletePlot"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
@@ -9864,12 +9905,36 @@ async function notifyClient(lead,title,body){
   try{ await sb.from('client_notifications').insert({lead_id:lead.id,title,body}); }catch(e){}
   if(lead.contact){ try{ await apiSendSms(lead.contact,`Hi ${lead.name||''}, you have an update on Palmstead — log in to view it. - PEP Landbank`,'client_update'); }catch(e){} }
 }
+// One outer square that's been split into two Half Plot units renders as
+// ONE .plottile.split container holding two independently-colored/tappable
+// halves, instead of the parent's own (inert, 'Subdivided'-status) row --
+// the parent is purely a rendering/grouping anchor once split.
+function renderPlotTile(p,childrenByParent,selectedId){
+  const kids=childrenByParent[p.id];
+  if(kids&&kids.length){
+    const sorted=kids.slice().sort((a,b)=>a.plotNumber.localeCompare(b.plotNumber,undefined,{numeric:true}));
+    return `<div class="plottile split" title="Plot ${esc(p.plotNumber)} — split into ${sorted.map(k=>esc(k.plotNumber)).join(' / ')}">
+      ${sorted.map(k=>`<button class="plottile-half ${plotStatusColor(k.status)} ${k.id===selectedId?'sel':''}" data-plot="${k.id}" title="Plot ${esc(k.plotNumber)} · ${esc(k.status)}">${esc(k.plotNumber)}</button>`).join('')}
+    </div>`;
+  }
+  return `<button class="plottile ${plotStatusColor(p.status)} ${p.id===selectedId?'sel':''}" data-plot="${p.id}" title="Plot ${esc(p.plotNumber)} · ${esc(p.status)}">${esc(p.plotNumber)}</button>`;
+}
 function renderPlotsGrid(){
   const isManager=canManagePlots();
   const q=plotFilter.q.trim().toLowerCase();
+  const childrenByParent={};
+  DB.plots.forEach(p=>{ if(p.parentPlotId){ (childrenByParent[p.parentPlotId]=childrenByParent[p.parentPlotId]||[]).push(p); } });
+  // Half-plot children never appear as their own flat list entry -- they
+  // only ever render as part of their parent's split tile (via
+  // childrenByParent above). A search/status filter still needs to "see
+  // through" to a child, though, since a Subdivided parent's own status is
+  // never Available/Running Search/Allocated.
   const list=DB.plots.filter(p=>{
-    const matchesQ=!q || (p.plotNumber||'').toLowerCase().includes(q) || (isManager && (p.clientName||'').toLowerCase().includes(q));
-    return matchesQ && (!plotFilter.status||p.status===plotFilter.status);
+    if(p.unitKind==='half') return false;
+    const kids=childrenByParent[p.id]||[];
+    const matchesQ=!q || (p.plotNumber||'').toLowerCase().includes(q) || kids.some(k=>k.plotNumber.toLowerCase().includes(q)) || (isManager && (p.clientName||'').toLowerCase().includes(q));
+    const matchesStatus=!plotFilter.status || p.status===plotFilter.status || kids.some(k=>k.status===plotFilter.status);
+    return matchesQ && matchesStatus;
   }).sort((a,b)=>(a.plotNumber||'').localeCompare(b.plotNumber||'',undefined,{numeric:true}));
   const counts={Available:DB.plots.filter(p=>p.status==='Available').length,'Running Search':DB.plots.filter(p=>p.status==='Running Search').length,Allocated:DB.plots.filter(p=>p.status==='Allocated').length};
   const selected=DB.plots.find(p=>p.id===selectedPlotId);
@@ -9879,15 +9944,23 @@ function renderPlotsGrid(){
     body=DB.plots.length? emptyState(ic.grid,'No plots match this search','') : emptyState(ic.grid, isManager?'No plots added yet':'Inventory not set up yet', isManager?'Add your first plot below, or bulk-add a list of plot numbers.':'Ask management to set up the plot list.');
   }else if(q||plotFilter.status){
     // searching/filtering: show matching plots flat, with the detail panel right after the selected tile's row
-    body=`<div class="plotgrid">${list.map(p=>`<button class="plottile ${plotStatusColor(p.status)} ${p.id===selectedPlotId?'sel':''}" data-plot="${p.id}" title="Plot ${esc(p.plotNumber)} · ${esc(p.status)}">${esc(p.plotNumber)}</button>`).join('')}</div>
+    body=`<div class="plotgrid">${list.map(p=>renderPlotTile(p,childrenByParent,selectedPlotId)).join('')}</div>
     ${selected?renderPlotDetail(selected,isManager):''}`;
   }else{
     // live color-coded block map — each block collapses/expands so 403 plots stay manageable
     const byBlock={}; list.forEach(p=>{ const bl=plotBlockOf(p.plotNumber); (byBlock[bl]=byBlock[bl]||[]).push(p); });
     body=Object.keys(byBlock).sort().map(bl=>{
       const items=byBlock[bl];
-      const avail=items.filter(p=>p.status==='Available').length, rs=items.filter(p=>p.status==='Running Search').length, al=items.filter(p=>p.status==='Allocated').length;
-      const tot=items.length; const isOpen=openBlocks.has(bl);
+      // A subdivided parent contributes its two real children's statuses to
+      // the block summary, not its own inert 'Subdivided' status.
+      const statusCounts=items.reduce((acc,p)=>{
+        const kids=childrenByParent[p.id];
+        if(kids&&kids.length){ kids.forEach(k=>{ acc[k.status]=(acc[k.status]||0)+1; acc.tot++; }); }
+        else{ acc[p.status]=(acc[p.status]||0)+1; acc.tot++; }
+        return acc;
+      },{tot:0});
+      const avail=statusCounts.Available||0, rs=statusCounts['Running Search']||0, al=statusCounts.Allocated||0;
+      const tot=statusCounts.tot; const isOpen=openBlocks.has(bl);
       const selectedHere=selected && plotBlockOf(selected.plotNumber)===bl;
       return `<div class="rowcard" style="margin-bottom:10px;padding:14px 16px">
         <button class="blockrow" data-block="${bl}" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;display:flex;align-items:center;gap:12px">
@@ -9900,7 +9973,7 @@ function renderPlotsGrid(){
           <span class="mini" style="flex:0 0 auto;white-space:nowrap">${avail} open · ${tot} total</span>
           <span style="flex:0 0 auto;transform:${isOpen?'rotate(180deg)':'none'};transition:.15s">▾</span>
         </button>
-        ${isOpen?`<div class="plotgrid" style="margin-top:12px">${items.map(p=>`<button class="plottile ${plotStatusColor(p.status)} ${p.id===selectedPlotId?'sel':''}" data-plot="${p.id}" title="Plot ${esc(p.plotNumber)} · ${esc(p.status)}">${esc(p.plotNumber)}</button>`).join('')}</div>`:''}
+        ${isOpen?`<div class="plotgrid" style="margin-top:12px">${items.map(p=>renderPlotTile(p,childrenByParent,selectedPlotId)).join('')}</div>`:''}
         ${selectedHere?renderPlotDetail(selected,isManager):''}
       </div>`;
     }).join('');
@@ -10021,14 +10094,14 @@ function bindPlotsGrid(){
 }
 async function splitSelectedPlot(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
-  const aNum=p.plotNumber+'A', bNum=p.plotNumber+'B';
-  if(!confirm('Split '+p.plotNumber+' into '+aNum+' and '+bNum+' (two Half Plots)? This removes '+p.plotNumber+' as a Full Plot.')) return;
+  const aNum=p.plotNumber+'a', bNum=p.plotNumber+'b';
+  if(!confirm('Split '+p.plotNumber+' into '+aNum+' and '+bNum+' (two Half Plots)? '+p.plotNumber+' itself stops being directly sellable — its two halves take over.')) return;
   const btn=document.getElementById('splitPlotBtn'); btn.disabled=true; btn.textContent='Splitting…';
   try{
-    const rowA=await apiInsertPlot({site:PLOT_SITE,plotNumber:aNum,plotType:'Half Plot',status:'Available',price:null,clientName:'',clientContact:'',agentKey:'',notes:'Split from '+p.plotNumber});
-    const rowB=await apiInsertPlot({site:PLOT_SITE,plotNumber:bNum,plotType:'Half Plot',status:'Available',price:null,clientName:'',clientContact:'',agentKey:'',notes:'Split from '+p.plotNumber});
-    await apiDeletePlot(p.id);
-    DB.plots=DB.plots.filter(x=>x.id!==p.id); DB.plots.unshift(rowA); DB.plots.unshift(rowB);
+    const {plotA,plotB}=await apiSplitPlot(p.id);
+    p.status='Subdivided';
+    DB.plots.push({...plotA,site:p.site,unitKind:'half',parentPlotId:p.id,clientName:plotA.clientName||'',clientContact:plotA.clientContact||'',agentKey:plotA.agentKey||'',notes:plotA.notes||''});
+    DB.plots.push({...plotB,site:p.site,unitKind:'half',parentPlotId:p.id,clientName:plotB.clientName||'',clientContact:plotB.clientContact||'',agentKey:plotB.agentKey||'',notes:plotB.notes||''});
     selectedPlotId=null; toast(p.plotNumber+' split into '+aNum+' and '+bNum); refreshPlotsView();
   }catch(e){ toast('Split failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Split into '+aNum+' / '+bNum; }
 }
