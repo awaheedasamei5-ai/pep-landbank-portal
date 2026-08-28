@@ -646,10 +646,17 @@ a{color:var(--green2)}
 .eventCardBody{padding:8px 12px;background:rgba(0,0,0,.03);font-size:12.5px}
 
 /* Floating announcement bubble */
-#announceBubble{position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:200;width:58px;height:58px;border-radius:100px;touch-action:none;
-  background:linear-gradient(150deg,var(--ink),#4F46E5);box-shadow:0 10px 30px rgba(30,27,75,.45);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;
+/* Sits closer to the bottom nav (was 88px clear, floating well into page
+   content on screens with tall right-column cards/calendars/panels) and
+   fades to a smaller, translucent resting state so it stops visually
+   fighting with whatever's underneath it -- full size/opacity returns on
+   hover/focus/touch, so it's still easy to find and tap. */
+#announceBubble{position:fixed;right:14px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:200;width:50px;height:50px;border-radius:100px;touch-action:none;
+  background:linear-gradient(150deg,var(--ink),#4F46E5);box-shadow:0 8px 22px rgba(30,27,75,.35);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;opacity:.7;
+  transition:opacity .2s ease,transform .2s ease,width .2s ease,height .2s ease;
   animation:bubbleIn .5s cubic-bezier(.34,1.56,.64,1) both}
+#announceBubble:hover,#announceBubble:focus-visible,#announceBubble.active-touch{opacity:1;width:58px;height:58px}
 #announceBubble::before{content:"";position:absolute;inset:-6px;border-radius:100px;border:2px solid rgba(129,140,248,.55);animation:pulseRing 2.2s ease-out infinite}
 #announceBubble svg{position:relative;z-index:1;color:#fff}
 #announceBubble .badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:100px;
@@ -8550,7 +8557,12 @@ function applySavedBubblePos(bub){
   try{
     const pos=JSON.parse(localStorage.getItem('pep_bubble_pos')||'null');
     if(pos && typeof pos.left==='number' && typeof pos.top==='number'){
-      bub.style.left=pos.left+'px'; bub.style.top=pos.top+'px';
+      const w=58,h=58; // full (hover) size, worst case for clamping
+      const navEl=document.querySelector('.bottomnav');
+      const navH=(navEl && getComputedStyle(navEl).display!=='none')?navEl.getBoundingClientRect().height:0;
+      const left=Math.min(Math.max(4,pos.left),window.innerWidth-w-4);
+      const top=Math.min(Math.max(4,pos.top),window.innerHeight-h-navH-8);
+      bub.style.left=left+'px'; bub.style.top=top+'px';
       bub.style.right='auto'; bub.style.bottom='auto';
     }
   }catch(e){}
@@ -8569,8 +8581,12 @@ function bindBubbleDrag(bub){
     if(Math.abs(dx)>6||Math.abs(dy)>6) moved=true;
     if(!moved) return;
     const w=bub.offsetWidth, h=bub.offsetHeight;
+    // Keep clear of the bottom nav specifically (not just the raw viewport
+    // edge) so a dragged position can't land underneath/behind it.
+    const navEl=document.querySelector('.bottomnav');
+    const navH=(navEl && getComputedStyle(navEl).display!=='none')?navEl.getBoundingClientRect().height:0;
     let left=Math.min(Math.max(4,origLeft+dx),window.innerWidth-w-4);
-    let top=Math.min(Math.max(4,origTop+dy),window.innerHeight-h-4);
+    let top=Math.min(Math.max(4,origTop+dy),window.innerHeight-h-navH-8);
     bub.style.left=left+'px'; bub.style.top=top+'px';
     bub.style.right='auto'; bub.style.bottom='auto';
   });
@@ -8601,6 +8617,17 @@ async function openAnnounceModal(){
   makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeAnnounceModal').onclick=()=>ov.remove();
+  // Mark everything shown here as read the moment the modal actually closes
+  // -- however it closes (X button, backdrop click, or Escape, all of which
+  // just remove the overlay) -- so the badge clears once they've genuinely
+  // seen the list, instead of requiring a "Got it" tap on every single card.
+  new MutationObserver((muts,obs)=>{
+    if(!document.body.contains(ov)){
+      active.forEach(a=>dismissAnnouncement(a.id));
+      refreshAnnounceBubble();
+      obs.disconnect();
+    }
+  }).observe(document.body,{childList:true});
   active.forEach(a=>loadAndRenderComments(a.id));
   bindAnnounceCardCtrls();
 }
