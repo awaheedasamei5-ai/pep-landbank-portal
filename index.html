@@ -545,6 +545,10 @@ a{color:var(--green2)}
    restructures it into a side-by-side row instead of just scaling text down,
    per the standing instruction to build each breakpoint on its own terms. */
 .streakCard{border-radius:20px;padding:18px 20px;color:#fff;position:relative;overflow:hidden;box-shadow:0 14px 32px -12px rgba(0,0,0,.35)}
+.clientMoodCard{border-radius:20px;padding:16px 18px;color:#fff;display:flex;align-items:center;gap:14px;margin-bottom:18px;box-shadow:0 14px 32px -12px rgba(0,0,0,.3);animation:fadeUp .4s ease both}
+.clientMoodEmoji{font-size:34px;line-height:1;flex:0 0 auto}
+.clientMoodState{font-weight:800;font-size:15px}
+.clientMoodMsg{font-size:12.5px;opacity:.9;margin-top:2px}
 .streakCardTop{margin-bottom:14px}
 /* Two panes sharing one spot, crossfading forever -- usage/streak mood and
    pipeline-risk mood are genuinely different signals (you can be fine on
@@ -4348,6 +4352,36 @@ function computePaymentRiskState(lead,payments){
   return 'On track';
 }
 const PAYMENT_RISK_TAG_CLS={'Paid in full':'ok','On track':'ok','Due soon':'warnt','Partial':'warnt','Overdue':'dgr','Severely overdue':'dgr'};
+// Client-facing mirror of the staff streak card -- same visual language
+// (colored card, big emoji, headline + one-line message), driven by the
+// exact same computePaymentRiskState() that already generates their real
+// SMS reminders, so the mood on screen can never contradict the text they
+// were sent.
+const CLIENT_MOOD_META={
+  'Paid in full':{emoji:'🥳',bg:'linear-gradient(135deg,#34D399,#16A34A)',msg:'All paid up — congratulations!'},
+  'On track':{emoji:'😊',bg:'linear-gradient(135deg,#34D399,#0D9488)',msg:"You're on track with your payments"},
+  'Due soon':{emoji:'🙂',bg:'linear-gradient(135deg,#F5B94F,#D97706)',msg:'A payment is coming up soon'},
+  'Partial':{emoji:'😐',bg:'linear-gradient(135deg,#F5B94F,#B8791E)',msg:"You've made a partial payment — keep it going"},
+  'Overdue':{emoji:'😟',bg:'linear-gradient(135deg,#E0836A,#B4472F)',msg:'A payment is overdue — please make a payment soon'},
+  'Severely overdue':{emoji:'😢',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',msg:'Your account is significantly overdue — please contact us'}
+};
+// One state for the client's whole account -- their single most-at-risk
+// active lead wins, matching how a multi-plot client would actually think
+// about "am I okay with Palmstead", not one mood per plot.
+const PAYMENT_RISK_ORDER=['Severely overdue','Overdue','Partial','Due soon','On track','Paid in full'];
+function clientPaymentMoodWidgetHtml(leads,payments){
+  if(!leads||!leads.length) return '';
+  let worst=null;
+  leads.forEach(l=>{
+    const state=computePaymentRiskState(l,payments.filter(p=>p.leadId===l.id));
+    if(worst===null||PAYMENT_RISK_ORDER.indexOf(state)<PAYMENT_RISK_ORDER.indexOf(worst)) worst=state;
+  });
+  const m=CLIENT_MOOD_META[worst]; if(!m) return '';
+  return `<div class="clientMoodCard" style="background:${m.bg}">
+    <div class="clientMoodEmoji">${m.emoji}</div>
+    <div><div class="clientMoodState">${esc(worst)}</div><div class="clientMoodMsg">${esc(m.msg)}</div></div>
+  </div>`;
+}
 async function checkPaymentDueReminders(){
   if(PROFILE.role!=='manager' || DEMO_MODE) return;
   try{
@@ -16384,6 +16418,7 @@ async function clientHome(){
         <div style="font-size:12px;font-weight:700;color:#fff;margin-top:6px">${esc(DOC_STAGES[furthestStageIdx].label)}</div>
       </div>`:''}`:`<div class="heroStat"><div class="heroStatLabel">Your account</div><div class="heroStatValue" style="font-size:20px">No purchases yet</div></div>`}
     </div>
+    ${clientPaymentMoodWidgetHtml(leads,payments)}
     ${renderCompanionWidget(computeClientCompanionNudges(leads,payments),computeClientCompanionChecklist(leads),{subtitle:'Tailored to your account'})}
     ${leads.length?`<div class="kpis" style="grid-template-columns:repeat(2,1fr)">
       ${kpi('Total plots',totalPlots)}
