@@ -1055,7 +1055,8 @@ body.dark .insightCard.ok{color:#A3E635}body.dark .insightCard.warnt{color:#FBBF
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md)}
 .card.elevated{box-shadow:var(--shadow-lg);border-color:transparent}
 .card.flat{box-shadow:none}
-.rowcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.rowcard .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.rowcard .top>div:first-child{min-width:0}
 .rowcard .nm{font-weight:700;font-size:14.5px}
 .nm-link{cursor:pointer;transition:.15s}
 .nm-link:hover{color:var(--leaf);text-decoration:underline}
@@ -18803,7 +18804,7 @@ function mgrList(arr,kind){ if(!arr.length) return emptyState(ic.spark,'Nothing 
 }
 function mgrEnquiries(){ if(!DB.enquiries.length) return emptyState(ic.enquiry,'No enquiries logged','Submissions from agents will appear here live.');
   return `<div class="list">`+DB.enquiries.map(x=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(x.name)}" data-custcontact="${esc(x.contact||'')}">${esc(x.name)}</div><div class="meta">${esc(x.agentName)} · ${esc(x.createdAt)}</div></div>
-    <div style="display:flex;gap:6px"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-editenq="${x.id}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="trashbtn" data-pdfenq="${x.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="trashbtn" data-editenq="${x.id}" title="Edit">${ic.edit}</button><button class="trashbtn" data-delenq="${x.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
     <div class="meta" style="margin-top:6px">${esc((x.types&&x.types.length?x.types.join(', '):'')+(x.location?(' · '+x.location):''))}</div>
     <div class="foot">${tg('ghost',x.source)}${x.follow==='Yes'?tg('warnt','Follow-up '+(x.followDate||'')):''}</div>
     ${x.details?`<div class="note">${esc(x.details)}</div>`:''}</div>`).join('')+`</div>`;
@@ -18837,7 +18838,7 @@ function mgrComplaints(){
     const statusTag = c.status==='Resolved'?'ok':c.status==='Escalated'?'dgr':'warnt';
     const sentTag = c.sentiment==='Positive'?'<span class="tag ok">🙂 Positive</span>':c.sentiment==='Negative'?'<span class="tag dgr">🙁 Negative</span>':'';
     return `<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(c.name)}" data-custcontact="${esc(c.contact||'')}">${esc(c.name)}</div><div class="meta">${esc(c.agentName)} · ${esc(c.createdAt)}${c.plot?(' · '+esc(c.plot)):''}</div></div>
-    <div style="display:flex;gap:8px;align-items:center"><span class="tag pri-${esc(c.priority)}">${esc(c.priority)}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="tag pri-${esc(c.priority)}">${esc(c.priority)}</span>
     <button class="trashbtn" data-pdfcmp="${c.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="trashbtn" data-editcmp="${c.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delcmp="${c.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
@@ -18848,7 +18849,7 @@ function mgrComplaints(){
 }
 function mgrVisits(){ if(!DB.sitevisits.length) return emptyState(ic.visit,'No site visit requests','Requests from agents appear here for confirmation.');
   return `<div class="list">`+DB.sitevisits.map(v=>`<div class="rowcard"><div class="top"><div><div class="nm nm-link" data-custname="${esc(v.name)}" data-custcontact="${esc(v.contact||'')}">${esc(v.name)}</div><div class="meta">${esc(v.agentName)} · ${esc(v.site)}</div></div>
-    <div style="display:flex;gap:8px;align-items:center">${tg('gold',v.source==='Client portal'?'Client portal':'')}<span class="tag ${v.status==='Confirmed'?'ok':'warnt'}">${esc(v.status)}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${tg('gold',v.source==='Client portal'?'Client portal':'')}<span class="tag ${v.status==='Confirmed'?'ok':'warnt'}">${esc(v.status)}</span>
     <button class="trashbtn" data-pdfvisit="${v.id}" title="Download PDF"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="trashbtn" data-editvisit="${v.id}" title="Edit">${ic.edit}</button>
     <button class="trashbtn" data-delvisit="${v.id}" title="Delete"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
