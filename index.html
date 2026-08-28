@@ -2326,9 +2326,7 @@ function playChime(kind){
    3 = wants to buy, no funds yet · 4 = won't buy · Lost = dead/unreachable.
    Displayed as bare codes everywhere — no text label. */
 const STAGES=['1','2A','2B','3','4','Lost'];
-const STAGE_LABELS={'1':'1','2A':'2A','2B':'2B','3':'3','4':'4','Lost':'Lost'};
 const STAGE_WON='4', STAGE_LOST='Lost';
-function stageSel(id,cur){ return `<select id="${id}">`+STAGES.map(s=>`<option value="${s}" ${s===cur?'selected':''}>${displayStageCode(s)}</option>`).join('')+`</select>`; }
 function defaultConfig(){ return {
   fullPrice:48000, halfPrice:26500, fullDiscount:8000, halfDiscount:6500,
   int3:750, int6:1500, int9:2250, int12:3000,
@@ -2627,6 +2625,20 @@ function buildGenericMonthLedger(lead,paymentsForLead){
 function INTEREST(){ return {'Full Payment':0,'3 Months':num(CONFIG.int3),'6 Months':num(CONFIG.int6),
   '9 Months':num(CONFIG.int9),'12 Months':num(CONFIG.int12)}; }
 function isFullyPaid(l){ const c=computeLead(l); const g=l.grandTotal!=null?num(l.grandTotal):c.grand; return g>0 && num(l.amtPaid)>=g; }
+// The client's stage now tracks how much of the total they've actually paid,
+// instead of a free staff pick -- thresholds match the existing 30%-paid
+// allocation-trigger convention (checkAllocationTrigger) already in this file.
+// Applies uniformly (even reviving a lead currently marked 'Lost' -- real
+// money coming in is the strongest possible signal it isn't lost anymore).
+function deriveStageFromPayment(paid,grand){
+  if(!grand||grand<=0) return '1';
+  const pct=num(paid)/grand*100;
+  if(pct>=100) return '4';
+  if(pct>=70) return '3';
+  if(pct>=30) return '2B';
+  if(pct>0) return '2A';
+  return '1';
+}
 // A manually-typed discount is ambiguous for a multi-plot lead: "2000" could mean
 // GHS 2000 off the whole deal, or GHS 2000 off each plot. computeLead() always treats
 // an explicit l.discount as the already-resolved TOTAL -- this just resolves a raw
@@ -4001,9 +4013,10 @@ async function applyApprovedPaymentToLead(lead,prec){
   const newPaid=num(lead.amtPaid)+num(prec.amount);
   const c=computeLead(lead); const grand=lead.grandTotal!=null?num(lead.grandTotal):c.grand;
   const bal=Math.max(grand-newPaid,0);
-  await apiUpdateLead(lead.id,{amtPaid:newPaid,balance:bal});
-  Object.assign(lead,{amtPaid:newPaid,balance:bal});
-  const cdbLead=findLeadById(lead.id); if(cdbLead&&cdbLead!==lead) Object.assign(cdbLead,{amtPaid:newPaid,balance:bal});
+  const newStage=deriveStageFromPayment(newPaid,grand);
+  await apiUpdateLead(lead.id,{amtPaid:newPaid,balance:bal,stage:newStage});
+  Object.assign(lead,{amtPaid:newPaid,balance:bal,stage:newStage});
+  const cdbLead=findLeadById(lead.id); if(cdbLead&&cdbLead!==lead) Object.assign(cdbLead,{amtPaid:newPaid,balance:bal,stage:newStage});
   await checkAllocationTrigger(lead);
   await checkTargetExceeded();
   if(lead.contact) apiSendSms(lead.contact,`Hi ${lead.name}, thank you for your payment of ${ghs(prec.amount)} towards your plot at Royal Palm Enclave. - PEP Landbank`,'payment_thanks').catch(()=>{});
@@ -13305,7 +13318,7 @@ function formAddLead(prefill){
   V.innerHTML=`${back('home')}<div class="pagehead"><div><div class="eyebrow">New lead</div><h2>Add to pipeline</h2><p>${prefill?'From a referral — most of this is pre-filled.':'Saved straight into your Royal Palm pipeline.'}</p></div></div>
   <div class="formwrap">${fld('Lead name *','<input id="f_name" placeholder="e.g. Kwame Mensah" value="'+esc((prefill&&prefill.name)||'')+'"/>')}
   <div class="grid2">${fld('Contact *','<input id="f_contact" placeholder="0244…" value="'+esc((prefill&&prefill.contact)||'')+'"/>')}${fld('Date added','<input id="f_date" type="date" value="'+today()+'"/>')}</div>
-  <div class="grid2">${fld('Stage',stageSel('f_stage','1'))}${fld('Priority',sel('f_priority',['High','Medium','Low'],'Low'))}</div>
+  ${fld('Priority',sel('f_priority',['High','Medium','Low'],'Low'))}
   <div class="grid2">${fld('Plot type',sel('f_plot',['Full Plot','Half Plot']))}${fld('No. of plots','<input id="f_plots" type="number" min="0" step="0.5" value="1"/>')}</div>
   <div class="grid2">${fld('Unit price (GHS)','<input id="f_unit" type="number" placeholder="auto"/>','Full '+CONFIG.fullPrice+' · Half '+CONFIG.halfPrice)}${fld('Discount (GHS)','<input id="f_disc" type="number" placeholder="auto"/>')}</div>
   ${discModeToggleHtml('addlead',ADDLEAD_DISC_MODE)}
@@ -13338,11 +13351,17 @@ function applyReferralSourcePrefill(prefill){
   p.innerHTML=`Referred by <b>${esc(prefill.referrerName)}</b> <button type="button" class="chip" id="f_refClear" style="margin-left:8px">Change</button>`;
   document.getElementById('f_refClear').onclick=()=>{ state.referrerLeadId=null; state.referrerName=null; state.referrerContact=null; p.classList.add('hidden'); p.innerHTML=''; };
 }
-function readLeadForm(){return {name:val('f_name').trim(),contact:val('f_contact').trim(),date:val('f_date'),stage:val('f_stage'),
-  priority:val('f_priority'),plotType:val('f_plot'),noPlots:val('f_plots'),unitPrice:val('f_unit')||null,
-  discount:val('f_disc')===''?null:discForMode(val('f_disc'),val('f_plots')||1,ADDLEAD_DISC_MODE),paymentPlan:val('f_plan'),siteVisit:val('f_sv'),
-  depositTarget:val('f_deptarget')||null,
-  amtPaid:val('f_paid')||0,nextAction:val('f_next').trim(),notes:val('f_notes').trim()};}
+function readLeadForm(){
+  const l={name:val('f_name').trim(),contact:val('f_contact').trim(),date:val('f_date'),
+    priority:val('f_priority'),plotType:val('f_plot'),noPlots:val('f_plots'),unitPrice:val('f_unit')||null,
+    discount:val('f_disc')===''?null:discForMode(val('f_disc'),val('f_plots')||1,ADDLEAD_DISC_MODE),paymentPlan:val('f_plan'),siteVisit:val('f_sv'),
+    depositTarget:val('f_deptarget')||null,
+    amtPaid:val('f_paid')||0,nextAction:val('f_next').trim(),notes:val('f_notes').trim()};
+  // Stage is derived from whatever's entered as already-paid, same as everywhere
+  // else in the app -- a brand-new lead never starts life manually mis-staged.
+  l.stage=deriveStageFromPayment(l.amtPaid,computeLead(l).grand);
+  return l;
+}
 function paintCalc(){ const c=computeLead(readLeadForm());
   const depTarget=num(val('f_deptarget'))||Math.round(c.net*0.3);
   document.getElementById('calc').innerHTML=`<div><div class="cl">Net total</div><div class="cv">${ghs(c.net)}</div></div><div><div class="cl">+ Interest</div><div class="cv">${ghs(c.interest)}</div></div><div><div class="cl">Grand total</div><div class="cv">${ghs(c.grand)}</div></div><div><div class="cl">Balance</div><div class="cv">${ghs(c.bal)}</div></div><div><div class="cl">Deposit target</div><div class="cv">${ghs(depTarget)}</div></div>`;
@@ -13490,7 +13509,8 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
   ${fld(mySched?"This month's payment (GHS)":(myDep&&!myDep.complete?'Deposit payment (GHS)':'...or add a new payment now (GHS)'),'<input id="u_pay" type="number" placeholder="0"'+(canEnterPayments?'':' disabled')+'/>'+(mySched?'<div id="u_payCompare" class="mini" style="margin-top:7px;font-weight:700"></div>':''),canEnterPayments?(mySched?('expected '+ghs(mySched.monthlyInstallment)+' this month — enter what they actually paid'):(myDep&&!myDep.complete?(ghs(myDep.remaining)+' left on the deposit'):'adds on top of the total above')):'only Elias or Management can record payments — ask them to log it')}
   ${canEnterPayments?fld('Payment method',sel('u_paymethod',PAYMENT_METHODS)):''}`;
 
-  const stageFollowUpHtml=`<div class="grid2">${fld('Move stage to',stageSel('u_stage',l.stage))}${fld('Contact method',sel('u_method',['Phone Call','WhatsApp','Email','In-person']))}</div>
+  const stageFollowUpHtml=`<div class="grid2">${fld('Stage','<input value="'+esc(displayStageCode(l.stage))+'" disabled/>','moves automatically as payments are recorded — no manual pick')}${fld('Contact method',sel('u_method',['Phone Call','WhatsApp','Email','In-person']))}</div>
+  <label style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-size:13.5px;color:var(--text);cursor:pointer"><input type="checkbox" id="u_markLost" ${l.stage===STAGE_LOST?'checked':''}/> Mark this lead as Lost <span class="mini" style="font-weight:400">(the one stage that's a manual call, not payment-driven)</span></label>
   ${fld('What was discussed / outcome','<textarea id="u_disc" placeholder="Summary of the interaction"></textarea>')}
   ${fld('Next step agreed','<input id="u_next" value="'+esc(l.nextAction||'')+'"/>')}
   ${fld('Notes','<textarea id="u_notes">'+esc(l.notes||'')+'</textarea>')}
@@ -13684,10 +13704,16 @@ function handleSaveUpdateClick(id,myDep){
 async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); if(!l)return;
   const name=val('u_name').trim()||l.name; const contact=val('u_contact').trim();
   const plotType=val('u_plottype'); const noPlots=num(val('u_noplots'))||1; const unitPrice=num(val('u_unitprice'));
-  const discount=discForMode(val('u_discount'),noPlots,UPD_DISC_MODE); const plan=val('u_plan'); const stage=val('u_stage');
+  const discount=discForMode(val('u_discount'),noPlots,UPD_DISC_MODE); const plan=val('u_plan');
+  // Stage now tracks payment automatically (deriveStageFromPayment, computed below
+  // once cc.grand is known) instead of a free staff pick -- 'Lost' is the one
+  // exception: it's a manual terminal call payment math can't infer, so it's
+  // driven by its own explicit checkbox rather than the retired stage dropdown.
+  const markLost=!!document.getElementById('u_markLost')?.checked;
   const oldDiscount=num(l.discount);
   const tmp={...l,plotType,noPlots,unitPrice,discount,paymentPlan:plan}; const cc=computeLead(tmp);
   const pay=num(val('u_pay')); const paidTotalInput=num(val('u_paidtotal'));
+  const stage=markLost?STAGE_LOST:deriveStageFromPayment(paidTotalInput,cc.grand);
   const ledgerSum=(DB.payments||[]).filter(p=>p.leadId===l.id).reduce((s,p)=>s+num(p.amount),0);
   if(paidTotalInput<ledgerSum-0.5){
     toast("Total paid can't be set below "+ghs(ledgerSum)+" — that's already itemized in the payment ledger. Edit or delete the specific entry there instead (Payment schedule, below).");
@@ -13717,7 +13743,7 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
     }
     let paymentResult=null;
     if(pay>0){ const methodEl=document.getElementById('u_paymethod'); paymentResult=await logNewPayment(l,pay,undefined,methodEl?methodEl.value:undefined,'Pipeline update · '+ghs(pay)); }
-    const parts=[]; if(pay>0)parts.push(paymentResult&&paymentResult.status==='pending'?('Payment '+ghs(pay)+' (pending approval)'):('Payment '+ghs(pay))); parts.push('Stage: '+stage); if(discount!==oldDiscount)parts.push('Discount now '+ghs(discount));
+    const parts=[]; if(pay>0)parts.push(paymentResult&&paymentResult.status==='pending'?('Payment '+ghs(pay)+' (pending approval)'):('Payment '+ghs(pay))); parts.push('Stage: '+displayStageCode(l.stage)); if(discount!==oldDiscount)parts.push('Discount now '+ghs(discount));
     if(plotType!==oldPlotType)parts.push('Plot type: '+oldPlotType+' → '+plotType);
     if(unitPrice!==oldUnitPrice)parts.push('Unit price: '+ghs(oldUnitPrice)+' → '+ghs(unitPrice));
     if(noPlots!==oldNoPlots)parts.push('No. plots: '+oldNoPlots+' → '+noPlots);
