@@ -14112,7 +14112,7 @@ function openLogMonthPayment(lead,slotKey,expected){
    every past entry. Reuses the same underlying API calls as Update Pipeline's own payment
    ledger (apiUpdatePayment/apiDeletePayment/syncLeadAfterPaymentDelta) so corrections stay
    consistent everywhere, but re-renders in place instead of navigating away. */
-let LOGPAY_SELECTED_LEAD=null, LOGPAY_QUERY='', logPayTab='search';
+let LOGPAY_SELECTED_LEAD=null, LOGPAY_QUERY='', logPayTab='dashboard';
 async function viewLogPaymentApp(){
   if(!canManagePayments()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Payment entry is restricted to Elias and Management.'); return; }
   LOGPAY_SELECTED_LEAD=null; LOGPAY_QUERY='';
@@ -14120,9 +14120,9 @@ async function viewLogPaymentApp(){
   const pendingCount=(DB.pendingPayments||[]).length;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Payments</div><h2>Log Payment</h2><p>Search a client, log a payment, or review and correct past entries.</p></div></div>
   ${isMgr?`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="chip ${logPayTab==='dashboard'?'on':''}" data-logpaytab="dashboard">Dashboard</button>
     <button class="chip ${logPayTab==='search'?'on':''}" data-logpaytab="search">Log Payment</button>
     <button class="chip ${logPayTab==='pending'?'on':''}" data-logpaytab="pending">Pending Approvals${pendingCount?' ('+pendingCount+')':''}</button>
-    <button class="chip ${logPayTab==='dashboard'?'on':''}" data-logpaytab="dashboard">Dashboard</button>
   </div>`:''}
   <div id="logpayBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client list'); }catch(e){ toast('Could not load clients: '+(e.message||e)); } }
