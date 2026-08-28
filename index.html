@@ -7044,15 +7044,30 @@ function ensureStaffRosterLiveSubscribed(){
 // plots_availability view instead), so this only subscribes for that same
 // audience -- matching the exact gate the initial full-table load already uses.
 let PLOTS_LIVE_CHANNEL=null;
+// Was gated to manager/elias/emmanuel only -- regular agents never got live
+// plot updates at all, so Management allocating a plot elsewhere could sit
+// silently stale in an agent's own Inventory view until they next signed
+// in. Every signed-in staff member now subscribes, matching how Allocation
+// Requests' own realtime already works for everyone. A non-privileged
+// agent's handler doesn't trust the raw payload fields directly, though --
+// Postgres logical-replication payloads aren't filtered by RLS, so the
+// payload could otherwise carry price/client PII an agent can't normally
+// SELECT -- it re-fetches just that one row through the same restricted
+// plots_availability view their initial load already uses.
 function ensurePlotsLiveSubscribed(){
-  if(DEMO_MODE || !sb || PLOTS_LIVE_CHANNEL || IS_CLIENT || !canManagePlots()) return;
+  if(DEMO_MODE || !sb || PLOTS_LIVE_CHANNEL || IS_CLIENT) return;
+  const privileged=canManagePlots();
   try{
     const upsertPlot=row=>{
-      const p=mapPlot(row); DB.plots=DB.plots||[];
-      const i=DB.plots.findIndex(x=>x.id===p.id);
-      if(i>=0) DB.plots[i]=p; else DB.plots.unshift(p);
-      DB.myPlots=DB.plots.filter(x=>x.agentKey===PROFILE.key);
-      refreshPlotsView();
+      if(privileged){
+        const p=mapPlot(row); DB.plots=DB.plots||[];
+        const i=DB.plots.findIndex(x=>x.id===p.id);
+        if(i>=0) DB.plots[i]=p; else DB.plots.unshift(p);
+        DB.myPlots=DB.plots.filter(x=>x.agentKey===PROFILE.key);
+        refreshPlotsView();
+      }else{
+        refetchOnePlotForAgent(row&&row.id);
+      }
     };
     const removePlot=oldRow=>{
       const id=oldRow&&oldRow.id; if(!id) return;
@@ -7065,6 +7080,18 @@ function ensurePlotsLiveSubscribed(){
       {event:'UPDATE',table:'plots',handler:payload=>upsertPlot(payload.new)},
       {event:'DELETE',table:'plots',handler:payload=>removePlot(payload.old)},
     ],()=>{ PLOTS_LIVE_CHANNEL=null; });
+  }catch(e){}
+}
+async function refetchOnePlotForAgent(id){
+  if(!id) return;
+  try{
+    const {data,error}=await sb.from('plots_availability').select('*').eq('id',id).maybeSingle();
+    if(error) return;
+    if(!data){ DB.plots=(DB.plots||[]).filter(x=>x.id!==id); refreshPlotsView(); return; }
+    const p=mapPlot(data); DB.plots=DB.plots||[];
+    const i=DB.plots.findIndex(x=>x.id===p.id);
+    if(i>=0) DB.plots[i]=p; else DB.plots.unshift(p);
+    refreshPlotsView();
   }catch(e){}
 }
 function mapAllocationRow(r){
