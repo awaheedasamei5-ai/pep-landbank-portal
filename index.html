@@ -1459,6 +1459,43 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   .bootscreen .bootIconWrap{width:210px;height:210px;margin-bottom:-22px}
   .bootscreen .boot-word{font-size:34px}
 }
+/* Site Visit Experience -- public, unauthenticated review form (?sve=<token>).
+   Deliberately its own cream/peach Trulander palette, not the app's indigo theme --
+   the person filling this out was never signed in and shouldn't see app chrome. */
+.sveWrap{position:fixed;inset:0;z-index:400;overflow-y:auto;display:flex;justify-content:center;padding:28px 16px 60px;
+  background:linear-gradient(180deg,#FDF6EE 0%,#FBEAD9 100%);}
+.sveCard{width:100%;max-width:560px;background:#FFFDFB;border-radius:20px;padding:32px 26px 28px;box-shadow:0 18px 44px rgba(180,120,70,.14);
+  border:1px solid #F3DEC8;}
+.sveLogo{display:block;height:52px;margin:0 auto 14px}
+.sveTitle{font-size:22px;font-weight:800;color:#7A3E1D;text-align:center;margin:0}
+.sveSub{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C97A3D;text-align:center;margin:4px 0 0}
+.sveIntro{font-size:13.5px;color:#8A6A55;text-align:center;line-height:1.5;margin:14px 0 22px}
+.sveForm{display:flex;flex-direction:column;gap:18px}
+.sveField{display:flex;flex-direction:column;gap:6px}
+.sveLabel{font-size:13px;font-weight:700;color:#5C3D26}
+.sveReq{color:#D9622B}
+.sveField input[type=text],.sveField input[type=tel],.sveField input[type=date],.sveField textarea{
+  border:1.5px solid #EDD9C2;border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;color:#4A2E1A;background:#FFFCFA;outline:none;}
+.sveField input:focus,.sveField textarea:focus{border-color:#D9822F}
+.sveField textarea{resize:vertical}
+.sveRadioRow{display:flex;flex-wrap:wrap;gap:10px}
+.sveRadioOpt{display:flex;align-items:center;gap:6px;font-size:13px;color:#5C3D26;background:#FBF0E4;border:1px solid #EDD9C2;border-radius:999px;padding:7px 13px;cursor:pointer}
+.sveRadioOpt input{accent-color:#D9622B}
+.sveStars{display:flex;gap:6px}
+.sveStar{font-size:26px;color:#E6D2BB;cursor:pointer;line-height:1;user-select:none}
+.sveStar.on{color:#E8A23A}
+.sveNpsRow{display:flex;flex-wrap:wrap;gap:6px}
+.sveNpsBtn{min-width:32px;height:32px;border-radius:8px;border:1.5px solid #EDD9C2;background:#FFFCFA;color:#5C3D26;font-size:13px;font-weight:600;cursor:pointer}
+.sveNpsBtn.on{background:#D9622B;border-color:#D9622B;color:#fff}
+.sveConditional{margin-top:-6px}
+.sveErr{background:#FDECEA;border:1px solid #F3C6C0;color:#B3402F;font-size:13px;border-radius:10px;padding:10px 12px}
+.sveSubmitBtn{background:#D9622B;color:#fff;border:none;border-radius:12px;padding:13px 18px;font-size:15px;font-weight:700;cursor:pointer}
+.sveSubmitBtn:disabled{opacity:.6;cursor:default}
+.sveThanks{text-align:center;padding:30px 8px}
+.sveThanksIcon{width:56px;height:56px;border-radius:50%;background:#E8A23A;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.sveThanks h2{font-size:20px;color:#7A3E1D;margin:0 0 8px}
+.sveThanks p{font-size:14px;color:#8A6A55;line-height:1.5;margin:0}
+@media (max-width:420px){ .sveCard{padding:24px 18px 22px} .sveTitle{font-size:19px} }
 .greetScreen{position:fixed;inset:0;z-index:250;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
   background:
     radial-gradient(85% 55% at 12% -8%,rgba(129,140,248,.26),transparent 60%),
@@ -2991,7 +3028,7 @@ function seedDemoPlots(){
   ];
 }
 function seedDemo(){
-  const m={version:DEMO_VERSION,leads:{},enquiries:[],complaints:[],sitevisits:[],activity:[],config:defaultConfig(),employees:[],overrides:{},invites:[],plots:seedDemoPlots(),payments:[],announcements:[],allocations:[],messages:[],notes:[],todos:[]};
+  const m={version:DEMO_VERSION,leads:{},enquiries:[],complaints:[],sitevisits:[],activity:[],config:defaultConfig(),employees:[],overrides:{},invites:[],plots:seedDemoPlots(),payments:[],announcements:[],allocations:[],messages:[],notes:[],todos:[],sveInvites:[],sveSubmissions:[]};
   Object.keys(DEMO_PIPELINES).forEach(k=>{ m.leads[k]=DEMO_PIPELINES[k].map(l=>({id:uid(),agent:k,...l,
     netTotal:l.netTotal,grandTotal:l.grandTotal,balance:l.balance})); });
   // backfill: one opening payment per lead with money already paid, dated to when it was added
@@ -3016,6 +3053,8 @@ async function demoLoad(){
     if(!demoMem.messages) demoMem.messages=[];
     if(!demoMem.notes) demoMem.notes=[];
     if(!demoMem.todos) demoMem.todos=[];
+    if(!demoMem.sveInvites) demoMem.sveInvites=[];
+    if(!demoMem.sveSubmissions) demoMem.sveSubmissions=[];
     return demoMem; }
   demoMem=seedDemo();
   await demoSave();
@@ -3626,6 +3665,46 @@ async function apiClientSubmitSiteVisitFeedback(siteVisitId,ratings,comments){
     comments:comments||null,updated_at:new Date().toISOString()};
   const {data,error}=await sb.from('site_visit_feedback').upsert(dbrow,{onConflict:'site_visit_id'}).select().single();
   if(error) throw error; return mapSiteVisitFeedback(data);
+}
+/* ---- Site Visit Experience -- the public, unauthenticated review flow (see
+   renderSiteVisitExperienceForm). Separate table/flow from site_visit_feedback
+   above, which is the client-portal (login-gated) rating widget -- this one is
+   reached by an SMS'd link with no sign-in, uses the richer Trulander-style
+   field set, and is staff-activated per visit date rather than always-on. ---- */
+const mapSVEInvite=r=>({id:r.id,siteVisitId:r.site_visit_id,token:r.token,clientName:r.client_name,clientContact:r.client_contact,
+  sentAt:r.sent_at,sentVia:r.sent_via,submittedAt:r.submitted_at,createdAt:r.created_at});
+const mapSVESubmission=r=>({id:r.id,inviteId:r.invite_id,fullName:r.full_name,phone:r.phone,siteVisited:r.site_visited,
+  visitDate:r.visit_date,journeyRating:r.journey_rating,siteManagerName:r.site_manager_name,relationshipRating:r.relationship_rating,
+  handlingFeedback:r.handling_feedback,siteDescriptionRating:r.site_description_rating,belowExpectationReason:r.below_expectation_reason,
+  overallRating:r.overall_rating,npsScore:r.nps_score,improvementSuggestions:r.improvement_suggestions,purchaseIntent:r.purchase_intent,
+  additionalComments:r.additional_comments,managerComment:r.manager_comment,createdAt:r.created_at});
+async function apiLoadSiteVisitExperienceInvites(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sveInvites||[]).map(x=>({...x})); }
+  const {data,error}=await sb.from('site_visit_experience_invites').select('*').order('created_at',{ascending:false});
+  if(error) throw error; return (data||[]).map(mapSVEInvite);
+}
+async function apiCreateSiteVisitExperienceInvite(visit){
+  if(DEMO_MODE){ const d=await demoLoad(); d.sveInvites=d.sveInvites||[];
+    const rec={id:uid(),siteVisitId:visit.id,token:uid()+uid(),clientName:visit.name,clientContact:visit.contact,
+      sentAt:null,sentVia:null,submittedAt:null,createdAt:new Date().toISOString()};
+    d.sveInvites.unshift(rec); await demoSave(); return rec; }
+  const {data,error}=await sb.from('site_visit_experience_invites').insert({site_visit_id:visit.id,client_name:visit.name,client_contact:visit.contact}).select().single();
+  if(error) throw error; return mapSVEInvite(data);
+}
+async function apiMarkSiteVisitExperienceInviteSent(id,via){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.sveInvites||[]).find(x=>x.id===id); if(r){r.sentAt=new Date().toISOString(); r.sentVia=via;} await demoSave(); return; }
+  const {error}=await sb.from('site_visit_experience_invites').update({sent_at:new Date().toISOString(),sent_via:via}).eq('id',id);
+  if(error) throw error;
+}
+async function apiLoadSiteVisitExperienceSubmissions(){
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sveSubmissions||[]).map(x=>({...x})); }
+  const {data,error}=await sb.from('site_visit_experience_submissions').select('*').order('created_at',{ascending:false});
+  if(error) throw error; return (data||[]).map(mapSVESubmission);
+}
+async function apiSaveSiteVisitExperienceManagerComment(id,comment){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.sveSubmissions||[]).find(x=>x.id===id); if(r) r.managerComment=comment; await demoSave(); return; }
+  const {error}=await sb.from('site_visit_experience_submissions').update({manager_comment:comment}).eq('id',id);
+  if(error) throw error;
 }
 async function apiClientInsertEnquiry(row){
   const {key:agentKey,name:agentName}=await apiClientAgentKeyName();
@@ -13679,16 +13758,23 @@ function svaAccompaniedText(v){
 }
 function svaCostTotal(form,suffix){ return SVA_COST_ROWS.reduce((n,r)=>n+num(form[suffix==='Est'?r.estKey:r.actKey]),0); }
 function svaMoney(n){ n=num(n); return n?n.toFixed(2):'-'; }
+let SVA_MAIN_TAB='logistics';
 async function viewSiteVisitAuth(weekStartArg,dayArg){
   if(!canViewClientDatabase()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Restricted','Site Visit Authorization is limited to Management, Elias, Emmanuel and Elizabeth.'); return; }
   SVA_WEEK_START=weekStartArg||currentWeekStartIso();
   SVA_SELECTED_DAY=dayArg||null;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Daily logistics</div><h2>Site Visit Authorization</h2><p>Pick a day, estimate and reconcile that day's site-visit costs, then get Management's approval.</p></div></div>
-  <div id="svaBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
-  await paintSiteVisitAuthBody();
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="chip ${SVA_MAIN_TAB==='logistics'?'on':''}" data-svamaintab="logistics">Logistics</button>
+    <button class="chip ${SVA_MAIN_TAB==='experience'?'on':''}" data-svamaintab="experience">Site Visit Experience</button>
+  </div>
+  <div id="svaMainBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
+  V.querySelectorAll('[data-svamaintab]').forEach(b=>b.onclick=()=>{ SVA_MAIN_TAB=b.dataset.svamaintab; viewSiteVisitAuth(SVA_WEEK_START,SVA_SELECTED_DAY); });
+  if(SVA_MAIN_TAB==='experience') await paintSiteVisitExperienceBody();
+  else await paintSiteVisitAuthBody();
 }
 async function paintSiteVisitAuthBody(){
-  const body=document.getElementById('svaBody'); if(!body) return;
+  const body=document.getElementById('svaMainBody'); if(!body) return;
   try{
     SVA_ALL_WEEK_VISITS=await apiLoadSiteVisitsForWeek(SVA_WEEK_START);
     const workdays=weekWorkdayIsos(SVA_WEEK_START);
@@ -13816,6 +13902,206 @@ function bindSiteVisitAuthCtrls(){
       await paintSiteVisitAuthBody();
     }catch(e){ toast('Could not remove: '+(e.message||e)); b.disabled=false; }
   });
+}
+/* ================= SITE VISIT EXPERIENCE (staff side) =================
+   The public/unauthenticated review form itself is renderSiteVisitExperienceForm
+   (near the boot sequence). This is the staff-facing half: group visits by day
+   and Activate (send the SMS'd review link), browse Submissions, and generate
+   the day's Reports (PDF, emailed + posted to Management's in-app chat). */
+let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_SUB_DATE_FILTER='all', SVE_REPORT_DATE=null;
+async function paintSiteVisitExperienceBody(){
+  const body=document.getElementById('svaMainBody'); if(!body) return;
+  body.innerHTML=`<div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div>`;
+  try{
+    if(SVE_TAB==='invites'){
+      [SVE_VISITS,SVE_INVITES]=await Promise.all([apiLoadFullSiteVisits(),apiLoadSiteVisitExperienceInvites()]);
+    }else{
+      SVE_SUBMISSIONS=await apiLoadSiteVisitExperienceSubmissions();
+      if(!SVE_REPORT_DATE) SVE_REPORT_DATE=(SVE_SUBMISSIONS[0]&&SVE_SUBMISSIONS[0].visitDate)||today();
+    }
+  }catch(e){ body.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
+  body.innerHTML=siteVisitExperienceBodyHtml();
+  bindSiteVisitExperienceCtrls();
+}
+function siteVisitExperienceBodyHtml(){
+  return `
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="chip ${SVE_TAB==='invites'?'on':''}" data-svetab="invites">Invites</button>
+    <button class="chip ${SVE_TAB==='submissions'?'on':''}" data-svetab="submissions">Submissions${SVE_TAB!=='invites'&&SVE_SUBMISSIONS.length?' ('+SVE_SUBMISSIONS.length+')':''}</button>
+    <button class="chip ${SVE_TAB==='reports'?'on':''}" data-svetab="reports">Reports</button>
+  </div>
+  ${SVE_TAB==='invites'?sveInvitesTabHtml():SVE_TAB==='submissions'?sveSubmissionsTabHtml():sveReportsTabHtml()}`;
+}
+function sveInvitesTabHtml(){
+  const dates=[...new Set(SVE_VISITS.map(v=>v.date))].filter(Boolean).sort((a,b)=>b<a?-1:1);
+  if(!dates.length) return emptyState(ic.doc,'No site visits yet','Once visits are logged, they will show up here grouped by date so you can send Site Visit Experience invites.');
+  return `<div style="display:flex;flex-direction:column;gap:14px">${dates.map(date=>{
+    const visits=SVE_VISITS.filter(v=>v.date===date);
+    const rows=visits.map(v=>{
+      const inv=SVE_INVITES.find(i=>i.siteVisitId===v.id);
+      const statusTag=!inv?'<span class="tag">Not invited</span>':inv.submittedAt?'<span class="tag ok">Reviewed</span>':inv.sentAt?'<span class="tag warnt">Invited</span>':'<span class="tag">Pending</span>';
+      const waLink=inv&&v.contact?`https://wa.me/${waNumberFromPhone(v.contact)}?text=${encodeURIComponent('Hi '+(v.name?v.name.split(' ')[0]:'there')+', thank you for honoring our invitation for a site visit to '+(CONFIG.quoteCompanyName||'Trulander JSF Limited')+'! We would love your feedback -- please share your experience here: '+location.origin+location.pathname+'?sve='+inv.token)}`:'';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+        <div><div style="font-weight:700;font-size:13.5px">${esc(v.name||'—')}</div><div class="mini">${esc(v.contact||'No contact on file')} · ${esc(v.status||'')}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">${statusTag}${waLink?`<a href="${esc(waLink)}" target="_blank" rel="noopener" class="mini" style="color:#25D366;font-weight:700">WhatsApp</a>`:''}</div>
+      </div>`;
+    }).join('');
+    const pending=visits.filter(v=>!SVE_INVITES.some(i=>i.siteVisitId===v.id) && v.contact);
+    return `<div class="rowcard">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <div style="font-weight:800">${esc(fmtLongDate(date))}</div>
+        ${pending.length?`<button class="btn primary sm" data-sveactivate="${esc(date)}">Activate (${pending.length})</button>`:`<span class="mini">All invited</span>`}
+      </div>
+      ${rows}
+    </div>`;
+  }).join('')}</div>`;
+}
+function sveSubmissionsTabHtml(){
+  const dates=[...new Set(SVE_SUBMISSIONS.map(s=>s.visitDate))].filter(Boolean).sort((a,b)=>b<a?-1:1);
+  const filtered=SVE_SUB_DATE_FILTER==='all'?SVE_SUBMISSIONS:SVE_SUBMISSIONS.filter(s=>s.visitDate===SVE_SUB_DATE_FILTER);
+  return `
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="chip ${SVE_SUB_DATE_FILTER==='all'?'on':''}" data-svesubdate="all">All (${SVE_SUBMISSIONS.length})</button>
+    ${dates.map(d=>`<button class="chip ${SVE_SUB_DATE_FILTER===d?'on':''}" data-svesubdate="${esc(d)}">${esc(fmtLongDate(d))}</button>`).join('')}
+  </div>
+  ${!filtered.length?emptyState(ic.doc,'No submissions yet','Once clients complete a Site Visit Experience review, it will show up here.'):
+  `<div style="display:flex;flex-direction:column;gap:12px">${filtered.map(s=>`
+    <div class="rowcard">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:800;font-size:14.5px">${esc(s.fullName||'Unnamed')}</div>
+          <div class="mini">${esc(s.phone||'')} · ${esc(s.siteVisited||'—')} · ${esc(s.visitDate?fmtLongDate(s.visitDate):'')}</div>
+        </div>
+        <button class="btn ghost sm" data-svedlsub="${esc(s.id)}">Download PDF</button>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12.5px">
+        <div>${'★'.repeat(s.overallRating||0)}${'☆'.repeat(5-(s.overallRating||0))} <span class="mini">Overall</span></div>
+        <div><b>${s.npsScore??'—'}</b>/10 <span class="mini">Recommend</span></div>
+        <span class="tag">${esc(s.purchaseIntent||'Not stated')}</span>
+      </div>
+      ${s.additionalComments?`<div class="mini" style="margin-top:8px">"${esc(s.additionalComments)}"</div>`:''}
+      ${s.managerComment?`<div class="mini" style="margin-top:6px;color:var(--accent)">Manager: ${esc(s.managerComment)}</div>`:''}
+    </div>`).join('')}</div>`}`;
+}
+function sveReportsTabHtml(){
+  const dates=[...new Set(SVE_SUBMISSIONS.map(s=>s.visitDate))].filter(Boolean).sort((a,b)=>b<a?-1:1);
+  const activeDate=SVE_REPORT_DATE||dates[0]||today();
+  const dayItems=SVE_SUBMISSIONS.filter(s=>s.visitDate===activeDate);
+  return `
+  <div class="rowcard" style="margin-bottom:16px">
+    <div class="mini" style="margin-bottom:8px">Pick a day to preview and generate its report</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="sveReportDate" value="${esc(activeDate)}" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-size:13px"/>
+      <button class="btn primary sm" id="sveGenerateBtn">Generate & send to Management</button>
+    </div>
+  </div>
+  <div class="sectitle" style="margin-top:0"><h3>Preview</h3><span class="cnt">${dayItems.length} submission${dayItems.length===1?'':'s'} · ${esc(fmtLongDate(activeDate))}</span></div>
+  ${!dayItems.length?emptyState(ic.doc,'Nothing for this day','No Site Visit Experience submissions were received on this date.'):
+  `<div style="display:flex;flex-direction:column;gap:12px">${dayItems.map(s=>`
+    <div class="rowcard">
+      <div style="font-weight:800">${esc(s.fullName||'Unnamed')}</div>
+      <div class="mini">Overall ${s.overallRating??'—'}/5 · Recommend ${s.npsScore??'—'}/10 · ${esc(s.purchaseIntent||'—')}</div>
+      ${s.improvementSuggestions?`<div class="mini" style="margin-top:6px">Improve: ${esc(s.improvementSuggestions)}</div>`:''}
+      <div style="margin-top:8px"><textarea data-svemgrcomment="${esc(s.id)}" placeholder="Add a comment for this client (optional)..." rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:12.5px;font-family:inherit">${esc(s.managerComment||'')}</textarea>
+        <button class="btn ghost sm" data-svesavecomment="${esc(s.id)}" style="margin-top:6px">Save comment</button></div>
+    </div>`).join('')}</div>`}`;
+}
+function bindSiteVisitExperienceCtrls(){
+  const body=document.getElementById('svaMainBody'); if(!body) return;
+  body.querySelectorAll('[data-svetab]').forEach(b=>b.onclick=()=>{ SVE_TAB=b.dataset.svetab; paintSiteVisitExperienceBody(); });
+  body.querySelectorAll('[data-sveactivate]').forEach(b=>b.onclick=async()=>{
+    const date=b.dataset.sveactivate;
+    const visits=SVE_VISITS.filter(v=>v.date===date && v.contact && !SVE_INVITES.some(i=>i.siteVisitId===v.id));
+    if(!visits.length) return;
+    b.disabled=true; b.textContent='Sending…';
+    let sent=0;
+    for(const v of visits){
+      try{
+        const inv=await apiCreateSiteVisitExperienceInvite(v);
+        SVE_INVITES.unshift(inv);
+        const link=location.origin+location.pathname+'?sve='+inv.token;
+        const firstName=v.name?v.name.split(' ')[0]:'there';
+        const msg=`Hi ${firstName}, thank you for honoring our invitation for a site visit to ${(CONFIG.quoteCompanyName||'Trulander JSF Limited')}! We'd love your feedback -- please share your experience here: ${link}`;
+        const ok=await apiSendSms(v.contact,msg,'site_visit_experience_invite');
+        await apiMarkSiteVisitExperienceInviteSent(inv.id, ok?'sms':'sms_failed');
+        inv.sentAt=new Date().toISOString(); inv.sentVia=ok?'sms':'sms_failed';
+        sent++;
+      }catch(e){}
+    }
+    toast(sent+' invite'+(sent===1?'':'s')+' sent');
+    await paintSiteVisitExperienceBody();
+  });
+  body.querySelectorAll('[data-svesubdate]').forEach(b=>b.onclick=()=>{ SVE_SUB_DATE_FILTER=b.dataset.svesubdate; body.innerHTML=siteVisitExperienceBodyHtml(); bindSiteVisitExperienceCtrls(); });
+  body.querySelectorAll('[data-svedlsub]').forEach(b=>b.onclick=()=>{
+    const s=SVE_SUBMISSIONS.find(x=>x.id===b.dataset.svedlsub); if(s) buildSiteVisitExperiencePDF(s);
+  });
+  const dateInput=document.getElementById('sveReportDate');
+  if(dateInput) dateInput.onchange=()=>{ SVE_REPORT_DATE=dateInput.value; paintSiteVisitExperienceBody(); };
+  body.querySelectorAll('[data-svesavecomment]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.svesavecomment;
+    const ta=body.querySelector(`[data-svemgrcomment="${id}"]`); if(!ta) return;
+    b.disabled=true; b.textContent='Saving…';
+    try{
+      await apiSaveSiteVisitExperienceManagerComment(id,ta.value.trim());
+      const s=SVE_SUBMISSIONS.find(x=>x.id===id); if(s) s.managerComment=ta.value.trim();
+      toast('Comment saved'); b.textContent='Save comment'; b.disabled=false;
+    }catch(e){ toast('Could not save: '+(e.message||e)); b.disabled=false; b.textContent='Save comment'; }
+  });
+  const genBtn=document.getElementById('sveGenerateBtn');
+  if(genBtn) genBtn.onclick=async()=>{
+    const date=(document.getElementById('sveReportDate')||{}).value||SVE_REPORT_DATE;
+    genBtn.disabled=true; genBtn.textContent='Generating…';
+    try{
+      const res=await apiGenerateSiteVisitExperienceReport(date);
+      if(res.pdfBase64){
+        const dataUri='data:application/pdf;base64,'+res.pdfBase64;
+        const managers=STAFF_LIST.filter(s=>s.role==='manager');
+        for(const m of managers){
+          try{
+            const rec=await apiSendMessage(m.key,`Site Visit Experience report for ${fmtLongDate(date)} is attached.`,{data:dataUri,type:'file',name:'Site_Visit_Experience_Report_'+date+'.pdf'});
+            DB.messages.push(rec);
+          }catch(e){}
+        }
+      }
+      toast('Report generated'+(res.pdfBase64?' and sent to Management':''));
+    }catch(e){ toast('Could not generate: '+(e.message||e)); }
+    genBtn.disabled=false; genBtn.textContent='Generate & send to Management';
+  };
+}
+async function apiGenerateSiteVisitExperienceReport(date){
+  if(DEMO_MODE) return {ok:true, pdfBase64:null, emailResult:{skipped:'demo mode'}};
+  const {data,error}=await sb.functions.invoke('site-visit-experience-report',{body:{date}});
+  if(error){
+    let reason=null;
+    if(error.context && typeof error.context.json==='function'){ try{ const j=await error.context.json(); reason=j&&j.reason; }catch(e2){} }
+    throw new Error(reason==='forbidden'?"You don't have permission to generate this report":reason==='unauthorized'?'Please sign in again':(reason||error.message||'Could not generate report'));
+  }
+  if(!data||!data.ok) throw new Error((data&&data.reason)||'Could not generate report');
+  return data;
+}
+function buildSiteVisitExperiencePDF(s){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return; }
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pageW=doc.internal.pageSize.getWidth();
+  let y=pdfHeader(doc,'SITE VISIT EXPERIENCE REVIEW'); y+=6;
+  y=pdfSectionBar(doc,y,pageW,'CLIENT');
+  y=pdfFields(doc,y,[['Full name',s.fullName],['Phone',s.phone],['Site visited',s.siteVisited],['Date of visit',s.visitDate?fmtLongDate(s.visitDate):'']]);
+  y+=4; y=pdfSectionBar(doc,y,pageW,'EXPERIENCE');
+  y=pdfFields(doc,y,[
+    ['Journey to the site',s.journeyRating],
+    ['Site manager / agent',s.siteManagerName],
+    ['Relationship rating',s.relationshipRating?s.relationshipRating+'/5':'—'],
+    ['Handling feedback',s.handlingFeedback],
+    ['Site matched description',s.siteDescriptionRating],
+    ['Below-expectation reason',s.belowExpectationReason],
+    ['Overall rating',s.overallRating?s.overallRating+'/5':'—'],
+    ['Recommend score',s.npsScore!=null?s.npsScore+'/10':'—'],
+    ['Improvement suggestions',s.improvementSuggestions],
+    ['Purchase intent',s.purchaseIntent],
+    ['Additional comments',s.additionalComments],
+  ]);
+  if(s.managerComment){ y+=4; y=pdfSectionBar(doc,y,pageW,"MANAGER'S NOTE"); y=pdfFields(doc,y,[['Comment',s.managerComment]]); }
+  doc.save('Site_Visit_Experience_'+(s.fullName||'client').replace(/\s+/g,'_')+'.pdf');
 }
 /* Draws one bordered grid row at (x0,y), honoring per-cell colspan against
    colWidths, and returns the row height used. Mirrors an Excel/Word table
@@ -23285,11 +23571,117 @@ if('serviceWorker' in navigator){
     }catch(e){}
   });
 }
+function renderSiteVisitExperienceForm(token){
+  const field=(label,required,inner)=>`<div class="sveField"><label class="sveLabel">${esc(label)}${required?' <span class="sveReq">*</span>':''}</label>${inner}</div>`;
+  const radioGroup=(name,options)=>`<div class="sveRadioRow">${options.map(o=>`<label class="sveRadioOpt"><input type="radio" name="${name}" value="${esc(o)}"/><span>${esc(o)}</span></label>`).join('')}</div>`;
+  const stars=(name)=>`<div class="sveStars" data-starfield="${name}">${[1,2,3,4,5].map(i=>`<span class="sveStar" data-val="${i}">★</span>`).join('')}</div><input type="hidden" name="${name}" value=""/>`;
+  const nps=()=>`<div class="sveNpsRow" data-npsfield="npsScore">${Array.from({length:11},(_,i)=>i).map(i=>`<button type="button" class="sveNpsBtn" data-val="${i}">${i}</button>`).join('')}</div><input type="hidden" name="npsScore" value=""/>`;
+  const wrap=document.createElement('div');
+  wrap.id='sveWrap'; wrap.className='sveWrap';
+  wrap.innerHTML=`
+    <div class="sveCard">
+      <img class="sveLogo" src="${TRULANDER_LOGO_SRC}" alt="Trulander JSF Ltd" onerror="this.style.display='none'"/>
+      <h1 class="sveTitle">Site Visit Experience Review</h1>
+      <p class="sveSub">Trulander JSF Ltd</p>
+      <p class="sveIntro">Thank you for honoring our invitation for a site visit. We'd love to hear how it went — it only takes a couple of minutes.</p>
+      <div id="sveFormHost"></div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const host=wrap.querySelector('#sveFormHost');
+  host.innerHTML=`
+    <form id="sveForm" class="sveForm" novalidate>
+      ${field('Full name',true,'<input type="text" name="fullName" required/>')}
+      ${field('Phone number',true,'<input type="tel" name="phone" required/>')}
+      ${field('Which site did you visit?',false,`
+        <div class="sveRadioRow">
+          <label class="sveRadioOpt"><input type="radio" name="siteVisited" value="Royal Palm Enclave, Tsopoli" checked/><span>Royal Palm Enclave, Tsopoli</span></label>
+          <label class="sveRadioOpt"><input type="radio" name="siteVisited" value="Other"/><span>Other</span></label>
+        </div>
+        <div id="sveSiteOtherWrap" class="sveConditional" style="display:none"><input type="text" name="siteVisitedOther" placeholder="Which site?"/></div>`)}
+      ${field('Date of visit',true,'<input type="date" name="visitDate" required/>')}
+      ${field('How was your journey to the site?',true,radioGroup('journeyRating',['Excellent','Good','Average','Poor']))}
+      ${field('Site manager / agent who hosted you',false,'<input type="text" name="siteManagerName"/>')}
+      ${field('How would you rate your relationship with our team?',false,stars('relationshipRating'))}
+      ${field('Anything about how we handled your visit you liked or disliked?',false,'<textarea name="handlingFeedback" rows="3"></textarea>')}
+      ${field('How did the site match its description?',false,radioGroup('siteDescriptionRating',['Exceeded expectations','Met expectations','Below expectations']))}
+      <div id="sveBelowReasonWrap" class="sveConditional" style="display:none">${field('What fell below expectations?',false,'<textarea name="belowExpectationReason" rows="3"></textarea>')}</div>
+      ${field('Overall, how would you rate your site visit experience?',true,stars('overallRating'))}
+      ${field('How likely are you to recommend us to a friend or colleague? (0 = not at all, 10 = extremely likely)',true,nps())}
+      ${field('What could we improve?',true,'<textarea name="improvementSuggestions" rows="3" required></textarea>')}
+      ${field('Are you ready to move forward with a purchase?',true,radioGroup('purchaseIntent',['Ready to purchase','Need more time to decide','Not at this time','Undecided']))}
+      ${field('Any other comments?',false,'<textarea name="additionalComments" rows="3"></textarea>')}
+      <div id="sveFormErr" class="sveErr" style="display:none"></div>
+      <button type="submit" class="sveSubmitBtn" id="sveSubmitBtn">Submit review</button>
+    </form>`;
+  const form=host.querySelector('#sveForm');
+  form.addEventListener('change',e=>{
+    if(e.target.name==='siteVisited') host.querySelector('#sveSiteOtherWrap').style.display=(e.target.value==='Other')?'':'none';
+    if(e.target.name==='siteDescriptionRating') host.querySelector('#sveBelowReasonWrap').style.display=(e.target.value==='Below expectations')?'':'none';
+  });
+  form.addEventListener('click',e=>{
+    const star=e.target.closest('.sveStar');
+    if(star){
+      const box=star.closest('.sveStars'), val=+star.dataset.val;
+      box.nextElementSibling.value=val;
+      box.querySelectorAll('.sveStar').forEach(s=>s.classList.toggle('on',+s.dataset.val<=val));
+      return;
+    }
+    const npsBtn=e.target.closest('.sveNpsBtn');
+    if(npsBtn){
+      const box=npsBtn.closest('.sveNpsRow'), val=npsBtn.dataset.val;
+      box.nextElementSibling.value=val;
+      box.querySelectorAll('.sveNpsBtn').forEach(b=>b.classList.toggle('on',b===npsBtn));
+    }
+  });
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const errBox=host.querySelector('#sveFormErr'); errBox.style.display='none';
+    const fd=new FormData(form);
+    const val=k=>(fd.get(k)||'').toString().trim();
+    const required={fullName:'Full name',phone:'Phone number',visitDate:'Date of visit',journeyRating:'How your journey went',overallRating:'Overall rating',npsScore:'Recommendation score',improvementSuggestions:'What we could improve',purchaseIntent:'Purchase readiness'};
+    for(const k in required){ if(!val(k)){ errBox.textContent='Please fill in: '+required[k]; errBox.style.display=''; return; } }
+    const btn=host.querySelector('#sveSubmitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+    const siteVisited=val('siteVisited')==='Other'?val('siteVisitedOther'):val('siteVisited');
+    const payload={token,fullName:val('fullName'),phone:val('phone'),siteVisited,visitDate:val('visitDate'),
+      journeyRating:val('journeyRating'),siteManagerName:val('siteManagerName'),relationshipRating:val('relationshipRating')?+val('relationshipRating'):null,
+      handlingFeedback:val('handlingFeedback'),siteDescriptionRating:val('siteDescriptionRating'),belowExpectationReason:val('belowExpectationReason'),
+      overallRating:+val('overallRating'),npsScore:+val('npsScore'),improvementSuggestions:val('improvementSuggestions'),
+      purchaseIntent:val('purchaseIntent'),additionalComments:val('additionalComments')};
+    try{
+      if(!sb) throw new Error('offline');
+      let {data,error}=await sb.functions.invoke('site-visit-experience-submit',{body:payload});
+      if(error && error.context && typeof error.context.json==='function'){
+        try{ data=await error.context.json(); }catch(e2){}
+      }
+      if(error||!data||!data.ok){
+        const reason=data&&data.reason;
+        errBox.textContent = reason==='already_submitted' ? "It looks like you've already submitted a review for this visit — thank you again!"
+          : reason==='invalid_token' ? 'This review link is no longer valid.'
+          : "Couldn't submit right now — please try again in a moment.";
+        errBox.style.display=''; btn.disabled=false; btn.textContent='Submit review'; return;
+      }
+      host.innerHTML=`<div class="sveThanks"><div class="sveThanksIcon">✓</div><h2>Thank you!</h2><p>Your review has been received. We really appreciate you taking the time to share your experience with us.</p></div>`;
+    }catch(err){
+      errBox.textContent="Couldn't submit right now — please check your connection and try again.";
+      errBox.style.display=''; btn.disabled=false; btn.textContent='Submit review';
+    }
+  });
+}
 function hideBoot(){
   const b=document.getElementById('boot');
   b.classList.add('fade');
   setTimeout(()=>b.classList.add('hidden'),450);
 }
+const __sveToken=new URLSearchParams(location.search).get('sve');
+if(__sveToken){
+  // Public, unauthenticated route for the Site Visit Experience review form --
+  // reached by a bare ?sve=<token> link texted to a client, no sign-in at all.
+  // Skip the whole boot/login ceremony (chime, splash video, staff dropdown)
+  // entirely; it means nothing to someone who was never going to log in.
+  document.getElementById('boot').classList.add('hidden');
+  tryInitClient();
+  renderSiteVisitExperienceForm(__sveToken);
+}else{
 playChime('reveal');
 (async function(){
   const bootStart=Date.now();
@@ -23335,6 +23727,7 @@ playChime('reveal');
   if(joinNotice) document.getElementById('loginErr').textContent=joinNotice;
   if(new URLSearchParams(location.search).get('preview')==='1') window.__previewComponents();
 })();
+}
 // Premium UI rebuild, Phase 1 -- component preview harness. Deliberately NOT
 // wired into route()/the dispatch table/any nav: reachable only by calling
 // window.__previewComponents() from the console, or loading the app with
