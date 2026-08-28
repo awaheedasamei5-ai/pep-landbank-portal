@@ -813,6 +813,10 @@ a{color:var(--green2)}
 .toolAccessRow:last-child{border-bottom:none}
 .toolAccessLabel{font-size:12.5px;font-weight:600;color:var(--text)}
 .toolAccessSel{font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+.sveReviewForm{display:flex;flex-direction:column;gap:12px}
+.sveReviewField label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.sveReviewField textarea,.sveReviewField select{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;font-size:12.5px;font-family:inherit;background:var(--card);color:var(--text)}
+.sveReviewField textarea{resize:vertical}
 .clauseList{border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .clauseItem{border-bottom:1px solid var(--line)}
 .clauseItem:last-child{border-bottom:none}
@@ -3833,7 +3837,9 @@ const mapSVESubmission=r=>({id:r.id,inviteId:r.invite_id,fullName:r.full_name,ph
   visitDate:r.visit_date,journeyRating:r.journey_rating,siteManagerName:r.site_manager_name,relationshipRating:r.relationship_rating,
   handlingFeedback:r.handling_feedback,siteDescriptionRating:r.site_description_rating,belowExpectationReason:r.below_expectation_reason,
   overallRating:r.overall_rating,npsScore:r.nps_score,improvementSuggestions:r.improvement_suggestions,purchaseIntent:r.purchase_intent,
-  additionalComments:r.additional_comments,managerComment:r.manager_comment,createdAt:r.created_at});
+  additionalComments:r.additional_comments,managerComment:r.manager_comment,managerReview:r.manager_review||null,createdAt:r.created_at});
+const mapSVEDayReport=r=>({id:r.id,visitDate:r.visit_date,siteManagerName:r.site_manager_name,summaryText:r.summary_text,
+  generatedByName:r.generated_by_name,generatedAt:r.generated_at});
 async function apiLoadSiteVisitExperienceInvites(){
   if(DEMO_MODE){ const d=await demoLoad(); return (d.sveInvites||[]).map(x=>({...x})); }
   const {data,error}=await sb.from('site_visit_experience_invites').select('*').order('created_at',{ascending:false});
@@ -3857,10 +3863,29 @@ async function apiLoadSiteVisitExperienceSubmissions(){
   const {data,error}=await sb.from('site_visit_experience_submissions').select('*').order('created_at',{ascending:false});
   if(error) throw error; return (data||[]).map(mapSVESubmission);
 }
-async function apiSaveSiteVisitExperienceManagerComment(id,comment){
-  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.sveSubmissions||[]).find(x=>x.id===id); if(r) r.managerComment=comment; await demoSave(); return; }
-  const {error}=await sb.from('site_visit_experience_submissions').update({manager_comment:comment}).eq('id',id);
+// The site manager's structured per-client debrief (SVE_REVIEW_QUESTIONS) --
+// replaces the old single free-text manager_comment as the report's real
+// content, kept as this submission's own manager_review jsonb map.
+async function apiSaveSveManagerReview(id,review){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.sveSubmissions||[]).find(x=>x.id===id); if(r) r.managerReview=review; await demoSave(); return; }
+  const {error}=await sb.from('site_visit_experience_submissions').update({manager_review:review}).eq('id',id);
   if(error) throw error;
+}
+async function apiLoadSveDayReport(date){
+  if(DEMO_MODE){ const d=await demoLoad(); const r=(d.sveDayReports||{})[date]; return r?{...r}:null; }
+  const {data,error}=await sb.from('site_visit_experience_day_reports').select('*').eq('visit_date',date).maybeSingle();
+  if(error) throw error; return data?mapSVEDayReport(data):null;
+}
+async function apiSaveSveDayReport(date,{siteManagerName,summaryText}){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.sveDayReports=d.sveDayReports||{};
+    d.sveDayReports[date]={id:d.sveDayReports[date]?.id||uid(),visitDate:date,siteManagerName,summaryText,generatedByName:PROFILE.name,generatedAt:new Date().toISOString()};
+    await demoSave(); return d.sveDayReports[date];
+  }
+  const {data,error}=await sb.from('site_visit_experience_day_reports')
+    .upsert({visit_date:date,site_manager_name:siteManagerName,summary_text:summaryText,generated_by:USER.id,generated_by_name:PROFILE.name,generated_at:new Date().toISOString()},{onConflict:'visit_date'})
+    .select().single();
+  if(error) throw error; return mapSVEDayReport(data);
 }
 async function apiClientInsertEnquiry(row){
   const {key:agentKey,name:agentName}=await apiClientAgentKeyName();
@@ -14552,7 +14577,23 @@ function bindSiteVisitAuthCtrls(){
    (near the boot sequence). This is the staff-facing half: group visits by day
    and Activate (send the SMS'd review link), browse Submissions, and generate
    the day's Reports (PDF, emailed + posted to Management's in-app chat). */
-let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_REPORT_DATE=null;
+let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_REPORT_DATE=null, SVE_DAY_REPORT=null;
+// The site manager's structured per-client debrief, replacing the old
+// single free-text "manager's note" -- max 10 questions, professional CRM
+// site-visit-debrief conventions (communication, objections, next steps,
+// closing confidence), not just a generic comment box.
+const SVE_REVIEW_QUESTIONS=[
+  {key:'communication',label:'How would you rate your communication with this client during the visit?',type:'rating'},
+  {key:'clientFeedback',label:"What was the client's overall feedback about the site?",type:'textarea'},
+  {key:'objections',label:'Did the client raise any concerns or objections? If so, what were they?',type:'textarea'},
+  {key:'howHandled',label:'How did you personally address those concerns?',type:'textarea'},
+  {key:'questionsAsked',label:'What specific questions did the client ask?',type:'textarea'},
+  {key:'interestLevel',label:"What is the client's current level of interest?",type:'select',options:['Very interested','Somewhat interested','Undecided','Not interested']},
+  {key:'followUp',label:'What follow-up actions were agreed with the client?',type:'textarea'},
+  {key:'riskFactors',label:'Any red flags or risk factors for this client?',type:'textarea'},
+  {key:'confidenceToClose',label:'How confident are you this client will proceed to purchase?',type:'rating'},
+  {key:'additionalNotes',label:'Any additional notes for Management?',type:'textarea'}
+];
 let SVE_WEEK_START=null, SVE_SELECTED_DAY=null;
 // Real client site visits only ever happen Tue/Wed/Fri/Sun -- JS Date.getDay()
 // values (0=Sun). Both the day-of-week chips below AND Logistics' own picker
@@ -14601,7 +14642,10 @@ async function paintSiteVisitExperienceBody(){
       [SVE_VISITS,SVE_INVITES]=await Promise.all([apiLoadFullSiteVisits(),apiLoadSiteVisitExperienceInvites()]);
     }else{
       SVE_SUBMISSIONS=await apiLoadSiteVisitExperienceSubmissions();
-      if(SVE_TAB==='reports' && !SVE_REPORT_DATE) SVE_REPORT_DATE=(SVE_SUBMISSIONS[0]&&SVE_SUBMISSIONS[0].visitDate)||today();
+      if(SVE_TAB==='reports'){
+        if(!SVE_REPORT_DATE) SVE_REPORT_DATE=(SVE_SUBMISSIONS[0]&&SVE_SUBMISSIONS[0].visitDate)||today();
+        try{ SVE_DAY_REPORT=await apiLoadSveDayReport(SVE_REPORT_DATE); }catch(e){ SVE_DAY_REPORT=null; }
+      }
     }
   }catch(e){ body.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
   body.innerHTML=siteVisitExperienceBodyHtml();
@@ -14661,30 +14705,56 @@ function sveSubmissionsTabHtml(){
       ${s.managerComment?`<div class="mini" style="margin-top:6px;color:var(--accent)">Manager: ${esc(s.managerComment)}</div>`:''}
     </div>`).join('')}</div>`}`;
 }
+function sveReviewFieldHtml(sid,q,value){
+  const id=sid+'__'+q.key;
+  if(q.type==='rating') return `<div class="sveReviewField"><label>${esc(q.label)}</label>${starRatingHtml(id,num(value)||0)}</div>`;
+  if(q.type==='select') return `<div class="sveReviewField"><label>${esc(q.label)}</label>
+    <select data-svereviewinput="${id}"><option value="">— Select —</option>${q.options.map(o=>`<option value="${esc(o)}" ${value===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>`;
+  return `<div class="sveReviewField"><label>${esc(q.label)}</label>
+    <textarea data-svereviewinput="${id}" rows="2" placeholder="Optional">${esc(value||'')}</textarea></div>`;
+}
+function sveReviewFormHtml(s){
+  const review=s.managerReview||{};
+  return `<div class="sveReviewForm">${SVE_REVIEW_QUESTIONS.map(q=>sveReviewFieldHtml(s.id,q,review[q.key])).join('')}
+    <button class="btn primary sm" data-svesavereview="${esc(s.id)}" style="margin-top:6px">Save review</button></div>`;
+}
 function sveReportsTabHtml(){
   const dates=[...new Set(SVE_SUBMISSIONS.map(s=>s.visitDate))].filter(Boolean).sort((a,b)=>b<a?-1:1);
   const activeDate=SVE_REPORT_DATE||dates[0]||today();
   const dayItems=SVE_SUBMISSIONS.filter(s=>s.visitDate===activeDate);
+  const allReviewed=dayItems.length>0 && dayItems.every(s=>s.managerReview);
+  const summaryFilled=!!(SVE_DAY_REPORT&&(SVE_DAY_REPORT.summaryText||'').trim());
+  const canGenerate=allReviewed&&summaryFilled;
   return `
   <div class="rowcard" style="margin-bottom:16px">
     <div class="mini" style="margin-bottom:8px">Pick a day to preview and generate its report</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <input type="date" id="sveReportDate" value="${esc(activeDate)}" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-size:13px"/>
-      <button class="btn ghost sm" id="sveDownloadReportBtn">⬇ Download PDF</button>
-      <button class="btn primary sm" id="sveGenerateBtn">Send to Management</button>
+      <button class="btn ghost sm" id="sveDownloadReportBtn" ${canGenerate?'':'disabled'}>⬇ Download PDF</button>
+      <button class="btn primary sm" id="sveGenerateBtn" ${canGenerate?'':'disabled'}>Send to Management</button>
     </div>
-    <div class="mini" style="margin-top:8px">Download keeps the PDF on this device only. Send to Management also emails it and posts it to their in-app chat.</div>
+    <div class="mini" style="margin-top:8px">${canGenerate?"Download keeps the PDF on this device only. Send to Management also emails it and posts it to their in-app chat.":'Review every client below and save the Site Visit Summary before you can generate this report.'}</div>
   </div>
-  <div class="sectitle" style="margin-top:0"><h3>Preview</h3><span class="cnt">${dayItems.length} submission${dayItems.length===1?'':'s'} · ${esc(fmtLongDate(activeDate))}</span></div>
+  <div class="sectitle" style="margin-top:0"><h3>Client Reviews</h3><span class="cnt">${dayItems.length} submission${dayItems.length===1?'':'s'} · ${esc(fmtLongDate(activeDate))}</span></div>
   ${!dayItems.length?emptyState(ic.doc,'Nothing for this day','No Site Visit Experience submissions were received on this date.'):
-  `<div style="display:flex;flex-direction:column;gap:12px">${dayItems.map(s=>`
-    <div class="rowcard">
-      <div style="font-weight:800">${esc(s.fullName||'Unnamed')}</div>
-      <div class="mini">Overall ${s.overallRating??'—'}/5 · Recommend ${s.npsScore??'—'}/10 · ${esc(s.purchaseIntent||'—')}</div>
-      ${s.improvementSuggestions?`<div class="mini" style="margin-top:6px">Improve: ${esc(s.improvementSuggestions)}</div>`:''}
-      <div style="margin-top:8px"><textarea data-svemgrcomment="${esc(s.id)}" placeholder="Add a comment for this client (optional)..." rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-size:12.5px;font-family:inherit">${esc(s.managerComment||'')}</textarea>
-        <button class="btn ghost sm" data-svesavecomment="${esc(s.id)}" style="margin-top:6px">Save comment</button></div>
-    </div>`).join('')}</div>`}`;
+  `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">${dayItems.map(s=>`
+    <details class="vaultCard" ${s.managerReview?'':'open'}>
+      <summary class="vaultSummary">
+        <span class="vaultIcon">📝</span>
+        <span class="vaultInfo"><span class="vaultTitle">${esc(s.fullName||'Unnamed')}</span><span class="vaultCount">Overall ${s.overallRating??'—'}/5 · Recommend ${s.npsScore??'—'}/10 · ${esc(s.purchaseIntent||'—')}${s.managerReview?' · ✓ Reviewed':''}</span></span>
+        <svg class="vaultChevron" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </summary>
+      <div class="vaultFormContents">
+        ${s.improvementSuggestions?`<div class="mini">Client's own improvement note: "${esc(s.improvementSuggestions)}"</div>`:''}
+        ${sveReviewFormHtml(s)}
+      </div>
+    </details>`).join('')}</div>`}
+  <div class="sectitle"><h3>Site Visit Summary</h3><span class="cnt">the whole day, not one client</span></div>
+  <div class="rowcard" style="margin-bottom:16px">
+    ${fld('Site manager','<input id="sveSummaryManager" placeholder="e.g. Abdul Waheed" value="'+esc((SVE_DAY_REPORT&&SVE_DAY_REPORT.siteManagerName)||'')+'"/>')}
+    ${fld('What happened on site today','<textarea id="sveSummaryText" rows="5" placeholder="Everything worth Management knowing about today\'s site visits -- positive and negative.">'+esc((SVE_DAY_REPORT&&SVE_DAY_REPORT.summaryText)||'')+'</textarea>')}
+    <button class="btn primary sm" id="sveSaveSummaryBtn">Save summary</button>
+  </div>`;
 }
 function bindSiteVisitExperienceCtrls(){
   const body=document.getElementById('svaMainBody'); if(!body) return;
@@ -14718,17 +14788,35 @@ function bindSiteVisitExperienceCtrls(){
     const s=SVE_SUBMISSIONS.find(x=>x.id===b.dataset.svedlsub); if(s) buildSiteVisitExperiencePDF(s);
   });
   const dateInput=document.getElementById('sveReportDate');
-  if(dateInput) dateInput.onchange=()=>{ SVE_REPORT_DATE=dateInput.value; paintSiteVisitExperienceBody(); };
-  body.querySelectorAll('[data-svesavecomment]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.svesavecomment;
-    const ta=body.querySelector(`[data-svemgrcomment="${id}"]`); if(!ta) return;
+  if(dateInput) dateInput.onchange=()=>{ SVE_REPORT_DATE=dateInput.value; SVE_DAY_REPORT=null; paintSiteVisitExperienceBody(); };
+  bindStarRatings(body);
+  body.querySelectorAll('[data-svesavereview]').forEach(b=>b.onclick=async()=>{
+    const sid=b.dataset.svesavereview;
+    const review={};
+    SVE_REVIEW_QUESTIONS.forEach(q=>{
+      const fieldId=sid+'__'+q.key;
+      if(q.type==='rating'){ const row=body.querySelector(`[data-starfield="${fieldId}"]`); const v=row?+row.dataset.value:0; if(v>0) review[q.key]=v; }
+      else{ const el=body.querySelector(`[data-svereviewinput="${fieldId}"]`); const v=el?el.value.trim():''; if(v) review[q.key]=v; }
+    });
     b.disabled=true; b.textContent='Saving…';
     try{
-      await apiSaveSiteVisitExperienceManagerComment(id,ta.value.trim());
-      const s=SVE_SUBMISSIONS.find(x=>x.id===id); if(s) s.managerComment=ta.value.trim();
-      toast('Comment saved'); b.textContent='Save comment'; b.disabled=false;
-    }catch(e){ toast('Could not save: '+(e.message||e)); b.disabled=false; b.textContent='Save comment'; }
+      await apiSaveSveManagerReview(sid,review);
+      const s=SVE_SUBMISSIONS.find(x=>x.id===sid); if(s) s.managerReview=review;
+      toast('Review saved'); paintSiteVisitExperienceBody();
+    }catch(e){ toast('Could not save: '+(e.message||e)); b.disabled=false; b.textContent='Save review'; }
   });
+  const saveSummaryBtn=document.getElementById('sveSaveSummaryBtn');
+  if(saveSummaryBtn) saveSummaryBtn.onclick=async()=>{
+    const date=(document.getElementById('sveReportDate')||{}).value||SVE_REPORT_DATE;
+    const siteManagerName=val('sveSummaryManager').trim();
+    const summaryText=val('sveSummaryText').trim();
+    if(!summaryText){ toast('Write what happened on site before saving'); return; }
+    saveSummaryBtn.disabled=true; saveSummaryBtn.textContent='Saving…';
+    try{
+      SVE_DAY_REPORT=await apiSaveSveDayReport(date,{siteManagerName,summaryText});
+      toast('Summary saved'); paintSiteVisitExperienceBody();
+    }catch(e){ toast('Could not save: '+(e.message||e)); saveSummaryBtn.disabled=false; saveSummaryBtn.textContent='Save summary'; }
+  };
   const genBtn=document.getElementById('sveGenerateBtn');
   if(genBtn) genBtn.onclick=async()=>{
     const date=(document.getElementById('sveReportDate')||{}).value||SVE_REPORT_DATE;
