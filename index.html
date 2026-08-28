@@ -5429,7 +5429,13 @@ async function setupPushNotifications(){
    installed PWA (the actual GitHub Pages deployment) got no push at all until
    now. Public key only -- safe to ship client-side, the private half lives as
    an Edge Function secret and never reaches the browser. */
-const VAPID_PUBLIC_KEY='BGHSQlbciq-x4N4ZOhXBhmIZZ7EEFrHdOBd1BEGPy6U2wQvV3KHaxE1pdprXBiBl7ryynSFI7bOFMMqGu1YvjWQ';
+// Regenerated -- the server-side VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY secrets
+// were confirmed missing from this Supabase project (send-push returned
+// "Push is not configured on the server yet" even after a prior attempt to
+// add them), so a fresh verified keypair was generated and this constant
+// must match whatever VAPID_PUBLIC_KEY is set as the Edge Function secret --
+// changing one without the other breaks every subscription silently.
+const VAPID_PUBLIC_KEY='BIq6wxllWznavANX6oLlTib1wsP4hwrc5WT0YSjJqtkNjPnspz-t4O5DphHO-pEXNxgnfSenw54HP5kl3eToEQI';
 function urlBase64ToUint8Array(base64String){
   const padding='='.repeat((4-base64String.length%4)%4);
   const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
