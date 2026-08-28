@@ -2322,6 +2322,22 @@ function defaultConfig(){ return {
 let CONFIG=defaultConfig();
 function PRICING(){ return {'Full Plot':{list:num(CONFIG.fullPrice),disc:num(CONFIG.fullDiscount),eq:1},
   'Half Plot':{list:num(CONFIG.halfPrice),disc:num(CONFIG.halfDiscount),eq:0.5}}; }
+// Breaks a lead's plotType+noPlots into the real physical units the
+// allocator needs to hand over -- e.g. 1 Full Plot -> ['Full Plot'], 0.5
+// (Half Plot) -> ['Half Plot'], 1.5 Full Plot -> ['Full Plot','Half Plot'].
+// Reuses PRICING().eq (the same full-plot-equivalence the app already uses
+// for interest calc) as the unit of account, so this isn't a new invented
+// concept -- just decomposing the existing "eq" total into whole/half units.
+function allocationUnitsNeeded(lead){
+  if(!lead) return ['Full Plot'];
+  const P=PRICING(); const p=P[lead.plotType]||P['Full Plot'];
+  const eq=p.eq*(num(lead.noPlots)||1);
+  const wholeCount=Math.floor(eq+1e-9);
+  const hasHalf=(eq-wholeCount)>=0.5-1e-9;
+  const units=[]; for(let i=0;i<wholeCount;i++) units.push('Full Plot');
+  if(hasHalf) units.push('Half Plot');
+  return units.length?units:['Full Plot'];
+}
 const PLAN_MONTHS={'3 Months':3,'6 Months':6,'9 Months':9,'12 Months':12};
 /* ---- Technical Quotation geometry helpers -----------------------------------
    One rate for everything (standard plots and custom/irregular lots alike),
@@ -10118,33 +10134,89 @@ let selectedAllocId=null;
 function renderAllocationDetail(a){
   const availablePlots=DB.plots.filter(p=>p.status==='Available').sort((x,y)=>x.plotNumber.localeCompare(y.plotNumber,undefined,{numeric:true}));
   const dl=`<datalist id="availPlotsList">${availablePlots.map(p=>`<option value="${esc(p.plotNumber)}">`).join('')}</datalist>`;
+  const lead=findLeadById(a.leadId);
+  const units=allocationUnitsNeeded(lead);
+  const multi=units.length>1;
+  const slotLabel=i=>multi?`${units[i]} ${i+1} *`:(i===0?'Option 1 *':`Option ${i+1}`);
+  const slotPlaceholder=i=>multi?'e.g. '+(i===0?'A12':i===1?'A13':'A14'):(i===0?'e.g. A12':'optional');
+  const introText=multi
+    ? `This client is buying ${units.length} units (${units.join(' + ')}). Suggest exactly one plot per unit below — all are required together, not alternatives. This builds an Authorization form for Management to sign off on physically — nothing is allocated yet.`
+    : `Suggest up to 3 candidate plots. This builds an Authorization form for Management to sign off on physically — nothing is allocated yet.`;
+  const slot=i=>fld(slotLabel(i),`<input id="al_plot${i+1}" list="availPlotsList" placeholder="${slotPlaceholder(i)}"/><div id="al_plot${i+1}_status" class="mini" style="margin-top:5px;font-weight:700"></div><div id="al_plot${i+1}_half"></div>`);
   return `<div class="formwrap" style="margin-top:6px">
     <div class="sectitle" style="margin-top:0"><h3>${esc(a.clientName)}</h3><span class="cnt">${esc(a.agentName)} · ${a.percent}% paid</span></div>
-    <div class="mini" style="margin-bottom:10px">Suggest up to 3 candidate plots. This builds an Authorization form for Management to sign off on physically — nothing is allocated yet.</div>
+    <div class="mini" style="margin-bottom:10px">${introText}</div>
     <button class="chip nm-link" data-custname="${esc(a.clientName)}" data-custcontact="" style="margin-bottom:12px;width:100%">Review full client record before suggesting →</button>
-    ${fld('Option 1 *','<input id="al_plot1" list="availPlotsList" placeholder="e.g. A12"/><div id="al_plot1_status" class="mini" style="margin-top:5px;font-weight:700"></div>')}
-    ${fld('Option 2','<input id="al_plot2" list="availPlotsList" placeholder="optional"/><div id="al_plot2_status" class="mini" style="margin-top:5px;font-weight:700"></div>')}
-    ${fld('Option 3','<input id="al_plot3" list="availPlotsList" placeholder="optional"/><div id="al_plot3_status" class="mini" style="margin-top:5px;font-weight:700"></div>')}
+    ${slot(0)}
+    ${(!multi||units.length>1)?slot(1):''}
+    ${(!multi||units.length>2)?slot(2):''}
     ${dl}
     <div class="formactions"><button class="btn ghost" id="cancelAlloc">Cancel</button><button class="btn primary" id="suggestAlloc">Download Authorization PDF</button></div>
   </div>`;
 }
-function checkPlotFieldLive(inputId,statusId){
+// neededType ('Full Plot'|'Half Plot'|null) lets this slot offer the
+// "which half?" sub-choice when the client needs a Half Plot but the plot
+// number typed in still resolves to a whole, unsplit Full Plot -- picking
+// one actually performs the split (via apiSplitPlot) and rewrites the
+// input to the resulting half's real plot number.
+function checkPlotFieldLive(inputId,statusId,halfWrapId,neededType){
   const input=document.getElementById(inputId); const status=document.getElementById(statusId);
+  const halfWrap=halfWrapId?document.getElementById(halfWrapId):null;
   if(!input||!status) return;
   const check=()=>{
     const pn=input.value.trim();
+    if(halfWrap) halfWrap.innerHTML='';
     if(!pn){ status.textContent=''; return; }
     const p=DB.plots.find(x=>x.plotNumber.toLowerCase()===pn.toLowerCase());
     if(!p){ status.style.color='var(--muted)'; status.textContent='Not found in inventory — check the plot number'; }
     else if(p.status==='Allocated'){ status.style.color='var(--danger)'; status.textContent='✕ Already allocated'+(p.clientName?(' to '+p.clientName):''); }
+    else if(p.status==='Subdivided'){ status.style.color='var(--warn)'; status.textContent='This plot has already been split — pick '+p.plotNumber+'a or '+p.plotNumber+'b instead'; }
     else if(p.status==='Running Search'){ status.style.color='var(--warn)'; status.textContent='⚠ Running search — confirm before offering this one'; }
+    else if(neededType==='Half Plot' && p.plotType==='Full Plot' && p.unitKind!=='half' && !p.parentPlotId){
+      status.style.color='var(--ok)'; status.textContent='✓ Available (whole) — pick which half for this client:';
+      if(halfWrap){
+        halfWrap.innerHTML=`<div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="chip" data-half="a">Use ${esc(p.plotNumber)}a</button>
+          <button type="button" class="chip" data-half="b">Use ${esc(p.plotNumber)}b</button>
+        </div>`;
+        halfWrap.querySelectorAll('[data-half]').forEach(btn=>btn.onclick=async()=>{
+          const which=btn.dataset.half;
+          btn.disabled=true; btn.textContent='Splitting…';
+          try{
+            const {plotA,plotB}=await apiSplitPlot(p.id);
+            p.status='Subdivided';
+            [plotA,plotB].forEach(child=>{ if(child && !DB.plots.some(x=>x.id===child.id)) DB.plots.push({...child,site:p.site,unitKind:'half',parentPlotId:p.id,clientName:child.clientName||'',clientContact:child.clientContact||'',agentKey:child.agentKey||'',notes:child.notes||''}); });
+            const chosen=which==='a'?plotA:plotB;
+            input.value=chosen.plotNumber;
+            check();
+          }catch(e){ toast('Could not split: '+(e.message||e)); btn.disabled=false; btn.textContent='Use '+p.plotNumber+which; }
+        });
+      }
+    }
     else{ status.style.color='var(--ok)'; status.textContent='✓ Available'; }
   };
   input.addEventListener('input',check); check();
 }
 function renderAllocationAwaiting(a){
   const plots=(a.suggestedPlots||'').split(',').map(s=>s.trim()).filter(Boolean);
+  // Whether this was a "3 alternatives, pick 1" suggestion or a "N required
+  // units, confirm together" one isn't stored anywhere new -- it's derived
+  // the same way both at suggest-time and here, from the lead's own
+  // plotType/noPlots, so it survives a fresh page load / different session
+  // between suggesting and confirming.
+  const lead=findLeadById(a.leadId);
+  const units=allocationUnitsNeeded(lead);
+  const multi=units.length>1 && plots.length===units.length;
+  if(multi){
+    return `<div class="formwrap" style="margin-top:6px;border-left:4px solid var(--warn)">
+      <div class="sectitle" style="margin-top:0"><h3>Awaiting Management sign-off</h3><span class="cnt">${esc(a.clientName)}</span></div>
+      <div class="mini" style="margin-bottom:12px">This client is buying ${units.length} units — once Management has physically signed the authorization form for all of them, confirm together below.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+        ${plots.map((pn,i)=>`<div style="padding:10px 12px;border:1.5px solid var(--line);border-radius:10px"><span style="font-weight:700">Plot ${esc(pn)}</span> <span class="mini">(${esc(units[i]||'')})</span></div>`).join('')}
+      </div>
+      <div class="formactions"><button class="btn ghost" id="redlAuthAlloc">Re-download PDF</button><button class="btn primary" id="confirmAlloc" data-allplots="${esc(plots.join(','))}">Confirm all ${plots.length} approved</button></div>
+    </div>`;
+  }
   return `<div class="formwrap" style="margin-top:6px;border-left:4px solid var(--warn)">
     <div class="sectitle" style="margin-top:0"><h3>Awaiting Management sign-off</h3><span class="cnt">${esc(a.clientName)}</span></div>
     <div class="mini" style="margin-bottom:12px">Once Management has physically signed the authorization form, pick the plot they approved and confirm.</div>
@@ -10156,8 +10228,10 @@ function renderAllocationAwaiting(a){
   </div>`;
 }
 function renderAllocationDone(a){
+  const plotNums=(a.plotNumber||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const plotLabel=plotNums.length>1?('Plots '+plotNums.map(esc).join(', ')):('Plot '+esc(plotNums[0]||a.plotNumber||''));
   return `<div class="rowcard" style="margin-top:6px;padding:16px;border-left:4px solid var(--ok)">
-    <div style="font-weight:700;font-size:14px;margin-bottom:6px">✓ Plot ${esc(a.plotNumber)} allocated to ${esc(a.clientName)}</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px">✓ ${plotLabel} allocated to ${esc(a.clientName)}</div>
     <div class="mini" style="margin-bottom:12px">Now showing as Allocated in Plot Inventory. Requested ${esc(a.createdAt||'')} · Allocated ${esc(a.resolvedAt||(today()+' '+nowTime()))}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="chip" data-dlalloc="${esc(a.id)}" style="flex:1;min-width:140px">⬇ Download PDF</button>
@@ -10179,7 +10253,7 @@ async function vacatePlotForAllocation(a){
   try{ await apiUpdatePlot(p.id,{status:'Available',clientName:'',clientContact:'',agentKey:''});
     Object.assign(p,{status:'Available',clientName:'',clientContact:'',agentKey:''}); }catch(e){}
 }
-function buildAuthorizationPDF(a,plotsList,siteManagerName){
+function buildAuthorizationPDF(a,plotsList,siteManagerName,multi){
   if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth();
@@ -10188,7 +10262,9 @@ function buildAuthorizationPDF(a,plotsList,siteManagerName){
   doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(11,30,61);
   doc.text('AUTHORIZATION FOR ALLOCATION',12,y); y+=7;
   doc.setFont('helvetica','italic'); doc.setFontSize(9.5); doc.setTextColor(100,112,133);
-  const writeup=doc.splitTextToSize('This form is an authorization to allocate a plot of land at Royal Palm Enclave, Tsopoli to the client named below. Management should review the candidate plots and payment status, then sign to approve exactly one of the options.',pageW-24);
+  const writeup=doc.splitTextToSize(multi
+    ? 'This form is an authorization to allocate '+plotsList.length+' plots of land at Royal Palm Enclave, Tsopoli to the client named below (this client is buying more than one unit). Management should review all plots listed and payment status, then sign to approve them together as a set.'
+    : 'This form is an authorization to allocate a plot of land at Royal Palm Enclave, Tsopoli to the client named below. Management should review the candidate plots and payment status, then sign to approve exactly one of the options.',pageW-24);
   doc.text(writeup,12,y); y+=writeup.length*4.5+6;
 
   y=pdfSectionBar(doc,y,pageW,'CLIENT & PAYMENT DETAILS');
@@ -10202,7 +10278,7 @@ function buildAuthorizationPDF(a,plotsList,siteManagerName){
   h2=pdfLabeledPair(doc,108,y,88,'Request Date',a.createdAt);
   y+=Math.max(h1,h2)*5+9;
 
-  y=pdfSectionBar(doc,y,pageW,'CANDIDATE PLOTS \u2014 MANAGEMENT: TICK ONE TO APPROVE');
+  y=pdfSectionBar(doc,y,pageW,multi?'PLOTS \u2014 MANAGEMENT: TICK ALL TO APPROVE THIS SET':'CANDIDATE PLOTS \u2014 MANAGEMENT: TICK ONE TO APPROVE');
   const colW=(pageW-24)/3;
   plotsList.forEach((pn,i)=>{
     const x=12+i*colW;
@@ -12247,20 +12323,27 @@ function bindAllocationCtrls(){
     if(a.status==='Allocated'){ wrap.innerHTML=renderAllocationDone(a); bindAllocationDoneCtrls(a); return; }
     if(a.status==='Awaiting Authorization'){ wrap.innerHTML=renderAllocationAwaiting(a); bindAllocationAwaitingCtrls(a,wrap); return; }
     wrap.innerHTML=renderAllocationDetail(a);
-    checkPlotFieldLive('al_plot1','al_plot1_status'); checkPlotFieldLive('al_plot2','al_plot2_status'); checkPlotFieldLive('al_plot3','al_plot3_status');
+    const units=allocationUnitsNeeded(findLeadById(a.leadId));
+    const multi=units.length>1;
+    checkPlotFieldLive('al_plot1','al_plot1_status','al_plot1_half',units[0]);
+    checkPlotFieldLive('al_plot2','al_plot2_status','al_plot2_half',units[1]);
+    checkPlotFieldLive('al_plot3','al_plot3_status','al_plot3_half',units[2]);
     document.getElementById('cancelAlloc').onclick=()=>{ selectedAllocId=null; wrap.innerHTML=''; };
     document.getElementById('suggestAlloc').onclick=async()=>{
       const plots=[val('al_plot1').trim(),val('al_plot2').trim(),val('al_plot3').trim()].filter(Boolean);
-      if(!plots.length){ toast('Enter at least one candidate plot'); return; }
+      if(multi){
+        if(plots.length<units.length){ toast('This client needs '+units.length+' plot(s) — fill in all '+units.length+' required unit'+(units.length===1?'':'s')+' before continuing.'); return; }
+      }else if(!plots.length){ toast('Enter at least one candidate plot'); return; }
       for(const pn of plots){
         const ep=DB.plots.find(p=>p.plotNumber.toLowerCase()===pn.toLowerCase());
         if(ep && ep.status==='Allocated'){ toast('Plot '+pn+' is already allocated'+(ep.clientName?' to '+ep.clientName:'')+' — remove it from your options.'); return; }
+        if(ep && ep.status==='Subdivided'){ toast('Plot '+pn+' has been split into halves — pick '+pn+'a or '+pn+'b instead.'); return; }
       }
       const btn=document.getElementById('suggestAlloc'); btn.disabled=true; btn.textContent='Building…';
       try{
         await apiSuggestAllocationPlots(id,plots);
         Object.assign(a,{status:'Awaiting Authorization',suggestedPlots:plots.join(',')});
-        buildAuthorizationPDF(a,plots,PROFILE.name);
+        buildAuthorizationPDF(a,plots,PROFILE.name,multi);
         toast('Authorization PDF downloaded — get it signed, then come back to confirm');
         wrap.innerHTML=renderAllocationAwaiting(a); bindAllocationAwaitingCtrls(a,wrap);
       }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Download Authorization PDF'; }
@@ -12315,17 +12398,31 @@ function openFlagAllocationModal(a){
 }
 function bindAllocationAwaitingCtrls(a,wrap){
   const redlBtn=document.getElementById('redlAuthAlloc');
-  if(redlBtn) redlBtn.onclick=()=>{ const plots=(a.suggestedPlots||'').split(',').map(s=>s.trim()).filter(Boolean); buildAuthorizationPDF(a,plots,PROFILE.name); };
+  if(redlBtn) redlBtn.onclick=()=>{ const plots=(a.suggestedPlots||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const units2=allocationUnitsNeeded(findLeadById(a.leadId));
+    buildAuthorizationPDF(a,plots,PROFILE.name,units2.length>1&&plots.length===units2.length); };
   const confirmBtn=document.getElementById('confirmAlloc');
   if(confirmBtn) confirmBtn.onclick=async()=>{
-    const chosen=document.querySelector('input[name="al_approved"]:checked');
-    if(!chosen){ toast('Select which plot Management approved'); return; }
-    const plot=chosen.value;
-    const existingPlot=DB.plots.find(p=>p.plotNumber.toLowerCase()===plot.toLowerCase());
-    if(existingPlot && existingPlot.status==='Allocated'){
-      toast('Plot '+plot+' has already been allocated'+(existingPlot.clientName?(' to '+existingPlot.clientName):'')+' — pick a different one.');
-      return;
+    // Two modes share this one handler: a plain single-plot confirm (the
+    // existing "pick which of up to 3 alternatives Management approved"
+    // radio flow, unchanged) vs. a multi-required confirm (this client
+    // needs more than one unit -- data-allplots carries the already
+    // comma-joined full set, no radio needed since all of them are
+    // required together, not alternatives).
+    let plot;
+    if(confirmBtn.dataset.allplots){
+      plot=confirmBtn.dataset.allplots;
+    }else{
+      const chosen=document.querySelector('input[name="al_approved"]:checked');
+      if(!chosen){ toast('Select which plot Management approved'); return; }
+      plot=chosen.value;
+      const existingPlot=DB.plots.find(p=>p.plotNumber.toLowerCase()===plot.toLowerCase());
+      if(existingPlot && existingPlot.status==='Allocated'){
+        toast('Plot '+plot+' has already been allocated'+(existingPlot.clientName?(' to '+existingPlot.clientName):'')+' — pick a different one.');
+        return;
+      }
     }
+    const plotNums=plot.split(',').map(s=>s.trim()).filter(Boolean);
     confirmBtn.disabled=true; confirmBtn.textContent='Confirming…';
     try{
       const noteTxt='Approved via signed authorization form';
@@ -12334,13 +12431,16 @@ function bindAllocationAwaitingCtrls(a,wrap){
         const nowStr=today()+' '+nowTime();
         Object.assign(a,{status:'Allocated',plotNumber:plot,note:noteTxt,allocatedBy:PROFILE.name,resolvedAt:nowStr});
         if(canManagePlots()){
-          if(existingPlot){
-            await apiUpdatePlot(existingPlot.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
-            Object.assign(existingPlot,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
-          }else{
-            const newPlot=await apiInsertPlot({site:PLOT_SITE,plotNumber:plot,plotType:'Full Plot',status:'Allocated',
-              price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Allocated via signed authorization'});
-            DB.plots.unshift(newPlot);
+          for(const pn of plotNums){
+            const existing=DB.plots.find(p=>p.plotNumber.toLowerCase()===pn.toLowerCase());
+            if(existing){
+              await apiUpdatePlot(existing.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
+              Object.assign(existing,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey});
+            }else{
+              const newPlot=await apiInsertPlot({site:PLOT_SITE,plotNumber:pn,plotType:'Full Plot',status:'Allocated',
+                price:null,clientName:a.clientName,clientContact:'',agentKey:a.agentKey,notes:'Allocated via signed authorization'});
+              DB.plots.unshift(newPlot);
+            }
           }
         }
       }else{
@@ -12351,17 +12451,21 @@ function bindAllocationAwaitingCtrls(a,wrap){
         // always syncs the plots table now, not just for manager/elias/emmanuel --
         // RLS already lets an allocation's own agent confirm it, so skipping the
         // inventory sync for that case was a gap, not an intentional restriction.
+        // p_plot_number may be a comma-joined list for a multi-unit purchase.
         const {data:r,error}=await sb.rpc('confirm_allocation',{p_allocation_id:a.id,p_plot_number:plot,p_note:noteTxt}); if(error) throw error;
         Object.assign(a,{status:'Allocated',plotNumber:r.plot_number,note:r.note,allocatedBy:r.allocated_by,resolvedAt:(r.resolved_at||'').slice(0,16).replace('T',' ')});
-        const plotObj={id:r.plot.id,site:r.plot.site,plotNumber:r.plot.plotNumber,plotType:r.plot.plotType,status:r.plot.status,price:r.plot.price,
-          clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey,notes:r.plot.notes,updatedAt:r.plot.updatedAt};
-        const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
-        if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
+        (r.plots||[r.plot]).forEach(rp=>{
+          if(!rp) return;
+          const plotObj={id:rp.id,site:rp.site,plotNumber:rp.plotNumber,plotType:rp.plotType,status:rp.status,price:rp.price,
+            clientName:rp.clientName,clientContact:rp.clientContact,agentKey:rp.agentKey,notes:rp.notes,updatedAt:rp.updatedAt};
+          const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
+          if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
+        });
       }
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocated','Plot '+plot+' has been allocated to you. Log in to view the details and download your allocation confirmation.').catch(()=>{}); }
       toast('Allocation confirmed — '+a.agentName+' will see it on their dashboard');
       wrap.innerHTML=renderAllocationDone(a); bindAllocationDoneCtrls(a);
-    }catch(e){ toast('Failed: '+(e.message||e)); confirmBtn.disabled=false; confirmBtn.textContent='Confirm approved plot'; }
+    }catch(e){ toast('Failed: '+(e.message||e)); confirmBtn.disabled=false; confirmBtn.textContent=confirmBtn.dataset.allplots?('Confirm all '+plotNums.length+' approved'):'Confirm approved plot'; }
   };
 }
 function bindAllocationDoneCtrls(a){
@@ -12438,12 +12542,20 @@ function openEditAllocatedPlotModal(a){
         // with one transaction, including a server-side re-check that the new
         // plot isn't already taken (closing the same race confirm_allocation
         // already closed for the initial allocation).
+        // p_new_plot_number may be a comma-joined list, same convention as the
+        // confirm flow -- the RPC frees every old plot in the previous
+        // (possibly multi-plot) allocation and allocates every new one; r.plots
+        // carries all of them (r.plot is just the first, kept for old callers).
         const {data:r,error}=await sb.rpc('edit_allocated_plot',{p_allocation_id:a.id,p_new_plot_number:newPlot}); if(error) throw error;
-        if(oldPlotNumber){ const oldIdx=DB.plots.findIndex(p=>p.plotNumber.toLowerCase()===oldPlotNumber.toLowerCase()); if(oldIdx>=0) Object.assign(DB.plots[oldIdx],{status:'Available',clientName:'',clientContact:'',agentKey:''}); }
-        const plotObj={id:r.plot.id,site:r.plot.site,plotNumber:r.plot.plotNumber,plotType:r.plot.plotType,status:r.plot.status,price:r.plot.price,
-          clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey,notes:r.plot.notes,updatedAt:r.plot.updatedAt};
-        const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
-        if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
+        const oldNums=String(oldPlotNumber||'').split(',').map(s=>s.trim()).filter(Boolean);
+        oldNums.forEach(pn=>{ const oldIdx=DB.plots.findIndex(p=>p.plotNumber.toLowerCase()===pn.toLowerCase()); if(oldIdx>=0) Object.assign(DB.plots[oldIdx],{status:'Available',clientName:'',clientContact:'',agentKey:''}); });
+        (r.plots||[r.plot]).forEach(rp=>{
+          if(!rp) return;
+          const plotObj={id:rp.id,site:rp.site,plotNumber:rp.plotNumber,plotType:rp.plotType,status:rp.status,price:rp.price,
+            clientName:rp.clientName,clientContact:rp.clientContact,agentKey:rp.agentKey,notes:rp.notes,updatedAt:rp.updatedAt};
+          const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
+          if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
+        });
       }
       Object.assign(a,{plotNumber:newPlot});
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocation updated','Your allocated plot is now '+newPlot+'. Log in to view the details.').catch(()=>{}); }
