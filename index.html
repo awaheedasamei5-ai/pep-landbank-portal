@@ -1687,7 +1687,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 <!-- LOGIN -->
 <section id="login" class="hidden">
 
-<video class="loginVideoBg" autoplay muted loop playsinline src="./login-bg.mp4"></video>
+<video id="loginVideoBg" class="loginVideoBg" autoplay muted loop playsinline src="./login-bg.mp4"></video>
 <div class="loginVideoScrim"></div>
 <div class="loginOrbs"><span class="orb orb1"></span><span class="orb orb2"></span><span class="orb orb3"></span></div>
   <div class="brand brand-big">
@@ -1872,6 +1872,21 @@ applyWaveVariant();
 /* ====================== EMBEDDED LOGO ====================== */
 const LOGO_SRC = "./logo.png";
 const TRULANDER_LOGO_SRC = "./trulander-logo.png";
+
+/* Two sign-in background videos that alternate on sign-out, so the login
+   screen doesn't always show the same clip -- fresh boots with no flag yet
+   default to the original video. */
+const LOGIN_VIDEO_KEY='pep_login_video';
+function applyLoginVideoSrc(){
+  const el=document.getElementById('loginVideoBg'); if(!el) return;
+  const src = localStorage.getItem(LOGIN_VIDEO_KEY)==='2' ? './login-bg-2.mp4' : './login-bg.mp4';
+  if(el.getAttribute('src')!==src){ el.setAttribute('src',src); el.load(); }
+}
+function flipLoginVideo(){
+  const cur=localStorage.getItem(LOGIN_VIDEO_KEY);
+  localStorage.setItem(LOGIN_VIDEO_KEY, cur==='2'?'1':'2');
+  applyLoginVideoSrc();
+}
 
 /* ====================== CONFIG ====================== */
 // Optional: hardcode your Supabase project here to skip the settings screen.
@@ -7646,6 +7661,7 @@ document.getElementById('logoutBtn').onclick=async()=>{
   DB=emptyDB();
   applyWaveVariant();
   document.getElementById('app').classList.add('hidden'); document.getElementById('login').classList.remove('hidden');
+  flipLoginVideo();
   document.getElementById('clientCard').classList.add('hidden'); document.getElementById('authCard').classList.add('hidden');
   document.getElementById('roleChoice').classList.remove('hidden');
   syncDemoBannerVisibility();
@@ -25111,6 +25127,7 @@ playChime('reveal');
   await refreshStaffList(); buildDropdown();
   await minSplash(); hideBoot();
   document.getElementById('login').classList.remove('hidden');
+  applyLoginVideoSrc();
   if(joinNotice) document.getElementById('loginErr').textContent=joinNotice;
   if(new URLSearchParams(location.search).get('preview')==='1') window.__previewComponents();
 })();
