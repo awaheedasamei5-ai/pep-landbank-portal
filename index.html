@@ -15703,10 +15703,12 @@ function viewClientAllocation(allocId){
   const lead=(CLIENT_DB&&CLIENT_DB.leads||[]).find(l=>l.id===(alloc&&alloc.leadId));
   if(!alloc){ route('clienthome'); return; }
   const resolvedDate=alloc.resolvedAt?new Date(alloc.resolvedAt):null;
-  V.innerHTML=`${back('clienthome')}<div class="pagehead"><div><div class="eyebrow">Your allocation</div><h2>Plot ${esc(alloc.plotNumber||'')}</h2><p>${lead?esc(lead.plotType||'Plot')+' · '+(lead.noPlots||1)+' plot(s)':''}</p></div></div>
+  const allocPlotNums=(alloc.plotNumber||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const isMultiPlot=allocPlotNums.length>1;
+  V.innerHTML=`${back('clienthome')}<div class="pagehead"><div><div class="eyebrow">Your allocation</div><h2>${isMultiPlot?'Plots '+allocPlotNums.map(esc).join(', '):'Plot '+esc(alloc.plotNumber||'')}</h2><p>${lead?esc(lead.plotType||'Plot')+' · '+(lead.noPlots||1)+' plot(s)':''}</p></div></div>
   <div class="rowcard" style="padding:20px;margin-bottom:16px;background:linear-gradient(135deg,#EAF6EC,#F4F6F5)">
-    <div class="mini" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;color:#1E7A56">Plot number</div>
-    <div style="font-size:28px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:4px">${esc(alloc.plotNumber||'—')}</div>
+    <div class="mini" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;color:#1E7A56">${isMultiPlot?'Plot numbers':'Plot number'}</div>
+    <div style="font-size:${isMultiPlot?'20px':'28px'};font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:4px">${allocPlotNums.length?allocPlotNums.map(esc).join(' · '):'—'}</div>
   </div>
   <div class="formwrap">
     ${fld('Allocated on','<div style="padding:10px 0;font-weight:600">'+(resolvedDate?esc(resolvedDate.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' at '+resolvedDate.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})):'—')+'</div>')}
@@ -15734,7 +15736,8 @@ function buildAllocationCertPDF(alloc,lead){
   doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(20,20,20);
   doc.text(CLIENT_PROFILE.name,12,y); y+=14;
 
-  y=pdfDarkStatBar(doc,y,pageW,[{label:'Plot Number',value:String(alloc.plotNumber||'—')},
+  const certPlotNums=String(alloc.plotNumber||'').split(',').map(s=>s.trim()).filter(Boolean);
+  y=pdfDarkStatBar(doc,y,pageW,[{label:certPlotNums.length>1?'Plot Numbers':'Plot Number',value:certPlotNums.length?certPlotNums.join(', '):'—'},
     {label:'Allocation Date',value:resolvedDate.toLocaleDateString('en-GB')},
     {label:'Time',value:resolvedDate.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}]);
   y+=6;
@@ -15757,7 +15760,7 @@ function buildAllocationCertPDF(alloc,lead){
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(140,140,140);
   doc.text('Generated '+dateStr,12,290);
 
-  const fname='Allocation_'+String(alloc.plotNumber||'plot').replace(/\s+/g,'_')+'_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'.pdf';
+  const fname='Allocation_'+String(alloc.plotNumber||'plot').replace(/[\s,]+/g,'_')+'_'+CLIENT_PROFILE.name.replace(/\s+/g,'_')+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
 }
 function openClientPlotRequestModal(leads){
