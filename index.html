@@ -4811,7 +4811,8 @@ const mapTask=r=>({id:r.id,title:r.title,description:r.description,category:r.ca
   assignedTo:r.assigned_to,assignedToName:r.assigned_to_name,assignedBy:r.assigned_by,assignedByName:r.assigned_by_name,
   status:scheduleStatusToTaskStatus(r.status),dueDate:r.due_date,createdAt:r.created_at,completedAt:r.completed_at,
   openedAt:r.opened_at,startedAt:r.started_at,cancelledAt:r.cancelled_at,leadId:r.lead_id,
-  escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note});
+  escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note,
+  requestPending:!!r.request_pending});
 const mapTaskEvent=r=>({id:r.id,taskId:r.task_id,type:r.type,actorKey:r.actor_key,actorName:r.actor_name,
   fromKey:r.from_key,fromName:r.from_name,toKey:r.to_key,toName:r.to_name,note:r.note,createdAt:r.created_at});
 // Sign-in load stays capped to the most recent TASK_LOAD_LIMIT tasks (Duties
@@ -4932,6 +4933,71 @@ async function apiEscalateTask(id,toKey,toName,note){
     const phone=phoneForStaffKey(toKey); if(phone) apiSendSms(phone,`${PROFILE.name} escalated a task to you on Palmstead${note?(': '+note):''}.`,'task_escalated');
     apiSendPush({ownerKind:'staff',ownerId:toKey,title:'Task escalated to you',body:`${PROFILE.name}${note?(': '+note):''}`,tag:'task'});
   }
+}
+/* ---- Task Request flow -- assigning/escalating to someone ELSE now asks
+   first instead of silently landing on their calendar (apiEscalateTask above
+   stays the underlying "reassign now" primitive, reused once a request is
+   accepted or a new time is proposed). While pending, assigned_to is left
+   untouched; only the existing escalated_* columns + the new request_pending
+   flag record the offer, so nothing else in the app needs to change to stay
+   correct about who currently owns the item. */
+async function apiRequestTaskAssignment(id,toKey,toName,note,urgent){
+  const requestedAt=new Date().toISOString();
+  if(DEMO_MODE){ const d=await demoLoad(); const t=(d.tasks||[]).find(x=>x.id===id)||(d.todos||[]).find(x=>x.id===id);
+    if(t){ t.escalatedTo=toKey; t.escalatedToName=toName; t.escalatedBy=PROFILE.key; t.escalatedByName=PROFILE.name; t.escalatedAt=requestedAt; t.escalationNote=note||null; t.requestPending=true; t.requestUrgent=!!urgent;
+      await apiLogTaskEvent(id,'requested',{toKey,toName,note:note||null,urgent:!!urgent}); }
+    await demoSave(); return; }
+  const {error}=await sb.from('schedule_items').update({escalated_to:toKey,escalated_to_name:toName,
+    escalated_by:PROFILE.key,escalated_by_name:PROFILE.name,escalated_at:requestedAt,escalation_note:note||null,
+    request_pending:true,request_urgent:!!urgent}).eq('id',id);
+  if(error) throw error;
+  try{ await apiLogTaskEvent(id,'requested',{toKey,toName,note:note||null,urgent:!!urgent}); }catch(e){}
+  const phone=phoneForStaffKey(toKey);
+  const urgentPrefix=urgent?'[Urgent] ':'';
+  if(phone) apiSendSms(phone,`${urgentPrefix}${PROFILE.name} wants to assign you a task on Palmstead${note?(': '+note):''}. Open Operations Tracker to accept, propose a new time, or decline.`,'task_requested');
+  apiSendPush({ownerKind:'staff',ownerId:toKey,title:urgentPrefix+'Task request',body:`${PROFILE.name}${note?(': '+note):''}`,tag:'task'});
+}
+async function apiRespondTaskRequestAccept(id){
+  if(DEMO_MODE){ const d=await demoLoad(); const t=(d.tasks||[]).find(x=>x.id===id)||(d.todos||[]).find(x=>x.id===id);
+    if(t){ t.requestPending=false; } await demoSave(); }
+  const {data:item}=await (DEMO_MODE?Promise.resolve({data:null}):sb.from('schedule_items').select('escalated_to,escalated_to_name,escalated_by,escalation_note').eq('id',id).single());
+  const toKey=DEMO_MODE?PROFILE.key:item.escalated_to, toName=DEMO_MODE?PROFILE.name:item.escalated_to_name;
+  await apiEscalateTask(id,toKey,toName,DEMO_MODE?null:item.escalation_note);
+  if(!DEMO_MODE){ await sb.from('schedule_items').update({request_pending:false}).eq('id',id); }
+  try{
+    const fromKey=DEMO_MODE?null:item.escalated_by;
+    if(fromKey && fromKey!==PROFILE.key){
+      const rec=await apiSendMessage(fromKey,`${PROFILE.name} accepted the task you assigned them.`); DB.messages.push(rec);
+    }
+  }catch(e){}
+}
+async function apiRespondTaskRequestProposeTime(id,newDate,newStart,newEnd){
+  if(DEMO_MODE){ const d=await demoLoad(); const t=(d.todos||[]).find(x=>x.id===id);
+    if(t){ t.date=newDate; t.startTime=newStart; t.endTime=newEnd; t.requestPending=false; t.assignedTo=PROFILE.key; t.assignedToName=PROFILE.name; }
+    await demoSave(); return; }
+  const {data:item}=await sb.from('schedule_items').select('escalated_to,escalated_to_name,escalated_by,escalation_note').eq('id',id).single();
+  const {error}=await sb.from('schedule_items').update({item_date:newDate,start_time:newStart,end_time:newEnd,
+    assigned_to:item.escalated_to,assigned_to_name:item.escalated_to_name,request_pending:false,opened_at:null,started_at:null}).eq('id',id);
+  if(error) throw error;
+  try{ await apiLogTaskEvent(id,'rescheduled_and_accepted',{newDate,newStart,newEnd}); }catch(e){}
+  try{
+    if(item.escalated_by && item.escalated_by!==PROFILE.key){
+      const rec=await apiSendMessage(item.escalated_by,`${PROFILE.name} proposed a new time for the task you assigned: ${fmtLongDate(newDate)} ${newStart}–${newEnd}.`); DB.messages.push(rec);
+    }
+  }catch(e){}
+}
+async function apiRespondTaskRequestDecline(id,reason){
+  if(DEMO_MODE){ const d=await demoLoad(); const t=(d.tasks||[]).find(x=>x.id===id)||(d.todos||[]).find(x=>x.id===id);
+    if(t){ t.requestPending=false; } await demoSave(); return; }
+  const {data:item}=await sb.from('schedule_items').select('escalated_by').eq('id',id).single();
+  const {error}=await sb.from('schedule_items').update({request_pending:false}).eq('id',id);
+  if(error) throw error;
+  try{ await apiLogTaskEvent(id,'declined',{reason:reason||null}); }catch(e){}
+  try{
+    if(item.escalated_by && item.escalated_by!==PROFILE.key){
+      const rec=await apiSendMessage(item.escalated_by,`${PROFILE.name} declined the task you assigned them${reason?(': '+reason):''}.`); DB.messages.push(rec);
+    }
+  }catch(e){}
 }
 async function apiEditTaskContent(id,newTitle,newDescription){
   if(DEMO_MODE){ const d=await demoLoad(); const t=(d.tasks||[]).find(x=>x.id===id);
@@ -11104,7 +11170,8 @@ function mapTodo(r){ return {id:r.id,ownerKey:r.owner_key,ownerName:r.owner_name
   assignedTo:r.assigned_to,assignedToName:r.assigned_to_name,escalatedTo:r.escalated_to,escalatedToName:r.escalated_to_name,
   escalatedBy:r.escalated_by,escalatedByName:r.escalated_by_name,escalatedAt:r.escalated_at,escalationNote:r.escalation_note,
   rescheduledToId:r.rescheduled_to_id,createdAt:r.created_at,closedAt:r.status==='done'?r.completed_at:null,
-  recursFreq:r.recurs_freq,recursInterval:r.recurs_interval,recursUntil:r.recurs_until,recursParentId:r.recurs_parent_id}; }
+  recursFreq:r.recurs_freq,recursInterval:r.recurs_interval,recursUntil:r.recurs_until,recursParentId:r.recurs_parent_id,
+  requestPending:!!r.request_pending}; }
 async function apiLoadTodos(fromDate,toDate){
   // Filtered by assignee, not creator/owner -- a to-do escalated to someone else
   // needs to show up on THEIR list and disappear from the escalator's, same as
@@ -11115,7 +11182,7 @@ async function apiLoadTodos(fromDate,toDate){
 }
 async function apiInsertTodo(t){
   if(DEMO_MODE){ const d=await demoLoad(); d.todos=d.todos||[];
-    const rec={id:uid(),ownerKey:PROFILE.key,ownerName:PROFILE.name,title:t.title,notes:t.notes,contact:t.contact,date:t.date,startTime:t.startTime,endTime:t.endTime,status:'open',createdAt:new Date().toISOString()};
+    const rec={id:uid(),ownerKey:PROFILE.key,ownerName:PROFILE.name,assignedTo:PROFILE.key,assignedToName:PROFILE.name,title:t.title,notes:t.notes,contact:t.contact,date:t.date,startTime:t.startTime,endTime:t.endTime,status:'open',createdAt:new Date().toISOString()};
     d.todos.push(rec); await demoSave(); return rec; }
   const {data,error}=await sb.from('schedule_items').insert({kind:'todo',owner_key:PROFILE.key,owner_name:PROFILE.name,
     assigned_to:PROFILE.key,assigned_to_name:PROFILE.name,assigned_by:PROFILE.key,assigned_by_name:PROFILE.name,
@@ -11290,7 +11357,14 @@ async function apiRespondToInvite(inviteId,status){
 // invitee's leave_requests -- surfaces both "X is busy 2-3pm" and "Y is on leave"
 // before the meeting is actually saved.
 async function apiCheckScheduleConflictsMulti(staffKeys,date,start,end,excludeId){
-  if(!staffKeys||!staffKeys.length||DEMO_MODE) return {busy:[],onLeave:[]};
+  if(!staffKeys||!staffKeys.length) return {busy:[],onLeave:[]};
+  if(DEMO_MODE){
+    const d=await demoLoad();
+    const busy=(d.todos||[]).filter(t=>t.id!==excludeId && t.date===date && t.status!=='rescheduled' && t.status!=='cancelled'
+      && staffKeys.includes(t.assignedTo) && start<t.endTime && t.startTime<end)
+      .map(t=>{ const s=STAFF_LIST.find(x=>x.key===t.assignedTo); return {staffKey:t.assignedTo,staffName:s?s.name:t.assignedTo,id:t.id,title:t.title,startTime:t.startTime,endTime:t.endTime}; });
+    return {busy,onLeave:[]};
+  }
   let busy=[], onLeave=[];
   try{
     const {data}=await sb.rpc('check_schedule_conflicts_multi',{p_staff_keys:staffKeys,p_date:date,p_start:start,p_end:end,p_exclude_id:excludeId||null});
@@ -11328,7 +11402,7 @@ function todoTabHtml(){
 function todoRowHtml(t){
   const notMine=t.ownerKey&&t.ownerKey!==t.assignedTo;
   const isRecurring=!!(t.recursFreq||t.recursParentId);
-  return `<div class="rowcard"><div class="top"><div><div class="nm">${esc(t.startTime)}–${esc(t.endTime)} · ${esc(t.title)}${isRecurring?' <span title="Part of a repeating series">🔁</span>':''}</div>${notMine?`<div class="meta">Escalated from ${esc(t.ownerName||t.ownerKey)}${t.escalationNote?': "'+esc(t.escalationNote)+'"':''}</div>`:''}${t.notes?`<div class="meta">${esc(t.notes)}</div>`:''}</div>${todoStatusTag(t.status)}</div>
+  return `<div class="rowcard"><div class="top"><div><div class="nm">${esc(t.startTime)}–${esc(t.endTime)} · ${esc(t.title)}${isRecurring?' <span title="Part of a repeating series">🔁</span>':''}</div>${notMine?`<div class="meta">Escalated from ${esc(t.ownerName||t.ownerKey)}${t.escalationNote?': "'+esc(t.escalationNote)+'"':''}</div>`:''}${t.requestPending?`<div class="meta">Request sent to ${esc(t.escalatedToName||t.escalatedTo)} — awaiting response</div>`:''}${t.notes?`<div class="meta">${esc(t.notes)}</div>`:''}</div>${t.requestPending?'<span class="tag warnt">Pending</span>':todoStatusTag(t.status)}</div>
   ${t.contact?`<div style="margin-top:8px">${contactLinks(t.contact)}</div>`:''}
   ${t.status==='open'?`<div class="foot" style="gap:7px;flex-wrap:wrap;margin-top:10px"><button class="chip" data-todoedit="${esc(t.id)}">Edit</button><button class="chip" data-todoreschedule="${esc(t.id)}">Reschedule</button><button class="chip" data-todoescalate="${esc(t.id)}">Escalate</button>${isRecurring?`<button class="chip" data-todostoprepeat="${esc(t.id)}">Stop repeating</button>`:''}<button class="chip" data-tododelete="${esc(t.id)}" style="color:#B91C1C">Delete</button><button class="btn primary" data-todoclose="${esc(t.id)}" style="padding:8px 18px;font-size:12.5px">Mark closed</button></div>`:''}
   ${t.status==='rescheduled'?`<div class="mini" style="margin-top:6px;color:var(--muted)">Moved to a new time</div>`:''}
@@ -11457,7 +11531,10 @@ function openTodoNewModal(){
     const keys=[PROFILE.key,...invited];
     const result=await apiCheckScheduleConflictsMulti(keys,date,start,end,null);
     const reason=multiConflictReasonText(result);
-    if(reason){ toast(reason); btn.disabled=false; btn.textContent='Save to-do'; return; }
+    // A real conflict is a heads-up, not a hard stop -- staff here genuinely
+    // multitask (several things going on at once is normal), so let them
+    // confirm and add it anyway instead of silently refusing.
+    if(reason && !confirm(reason+' Add this to-do anyway?')){ btn.disabled=false; btn.textContent='Save to-do'; return; }
     try{
       const t={title,notes:val('td_notes').trim(),contact:val('td_contact').trim(),date,startTime:start,endTime:end};
       const repeatChoice=val('td_repeat');
@@ -11504,7 +11581,7 @@ function openTodoRescheduleModal(t){
     if(end<=start){ toast('End time must be after start time'); return; }
     const btn=document.getElementById('tr_save'); btn.disabled=true; btn.textContent='Saving…';
     const hits=await apiCheckScheduleConflicts(PROFILE.key,newDate,start,end,t.id);
-    if(hits.length){ toast(scheduleConflictReasonText(hits)); btn.disabled=false; btn.textContent='Reschedule'; return; }
+    if(hits.length && !confirm(scheduleConflictReasonText(hits)+' Reschedule here anyway?')){ btn.disabled=false; btn.textContent='Reschedule'; return; }
     try{
       const rec=await apiRescheduleTodo(t.id,newDate,start,end);
       t.status='rescheduled'; t.rescheduledToId=rec.id; TODO_LIST.push(rec);
@@ -11681,8 +11758,16 @@ function bindDayGridDrag(container,items,date,onDone){
       const clamped=Math.max(0,Math.min(rawMinutes,cap));
       const newStart=dayGridMinutesToHHMM(clamped), newEnd=dayGridMinutesToHHMM(clamped+durationMin);
       if(newStart===item.startTime){ el.style.top=dayGridTopPx(item.startTime)+'px'; return; }
-      const hits=await apiCheckScheduleConflicts(item.assignedTo||PROFILE.key,date,newStart,newEnd,item.id);
-      if(hits.length){ toast(scheduleConflictReasonText(hits)); el.style.top=dayGridTopPx(item.startTime)+'px'; return; }
+      const targetKey=item.assignedTo||PROFILE.key;
+      const hits=await apiCheckScheduleConflicts(targetKey,date,newStart,newEnd,item.id);
+      // Dragging your own item onto a busy slot is just multitasking -- confirm
+      // and proceed. Dragging someone ELSE's item (Team view) still hard-blocks,
+      // since that's really a cross-person reassignment, not a personal choice.
+      if(hits.length){
+        const msg=scheduleConflictReasonText(hits,item.assignedToName);
+        if(targetKey===PROFILE.key){ if(!confirm(msg+' Move it here anyway?')){ el.style.top=dayGridTopPx(item.startTime)+'px'; return; } }
+        else{ toast(msg); el.style.top=dayGridTopPx(item.startTime)+'px'; return; }
+      }
       try{ await apiRescheduleTodo(item.id,date,newStart,newEnd); toast('Moved to '+newStart+'–'+newEnd); if(onDone) onDone(); }
       catch(err){ toast('Could not move: '+(err.message||err)); el.style.top=dayGridTopPx(item.startTime)+'px'; }
     });
@@ -11825,14 +11910,51 @@ function monthGridHtml(yearMonth,counts){
     }).join('')}
   </div>`;
 }
+let RECORDS_OPEN_DATE=null;
+/* Records for one day -- unlike My Day (a forward-looking schedule you can
+   still edit/drag), this is a read-only log of what actually happened:
+   every to-do/task due that day, with its real outcome (done/cancelled/still
+   open), reusing apiLoadDayAgenda (already includes closed/cancelled items,
+   see its own comment) rather than a new query. */
+function dayRecordStatusTag(status){
+  const s=String(status||'').toLowerCase();
+  if(s==='closed'||s==='completed'||s==='done') return '<span class="tag ok">Done</span>';
+  if(s==='cancelled') return '<span class="tag">Cancelled</span>';
+  return '<span class="tag warnt">Not completed</span>';
+}
+function dayRecordsHtml(dateIso,blocks,dueTasks){
+  const rows=[
+    ...blocks.map(b=>({title:b.title,meta:(b.startTime&&b.endTime)?(b.startTime+'–'+b.endTime):'To-do',status:b.status})),
+    ...dueTasks.map(t=>({title:t.title,meta:t.category||'Task',status:t.status}))
+  ];
+  const doneCount=rows.filter(r=>['closed','completed','done'].includes(String(r.status||'').toLowerCase())).length;
+  return `<div class="rowcard" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-weight:800">${esc(fmtLongDate(dateIso))}</div>
+      <div class="mini">${doneCount} of ${rows.length} done</div>
+    </div>
+    ${!rows.length?'<div class="empty">Nothing recorded for this day.</div>':rows.map(r=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)">
+        <div><div style="font-weight:600;font-size:13.5px">${esc(r.title||'Untitled')}</div><div class="mini">${esc(r.meta)}</div></div>
+        ${dayRecordStatusTag(r.status)}
+      </div>`).join('')}
+  </div>`;
+}
 async function paintMonthTab(){
   const body=document.getElementById('dutiesMonthBody'); if(!body) return;
   const [y,m]=MONTH_CURSOR.split('-').map(Number);
   const fromDate=MONTH_CURSOR+'-01';
   const toDate=MONTH_CURSOR+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0');
   let counts;
-  try{ counts=await withLoadTimeout(apiLoadMonthCounts(fromDate,toDate,[PROFILE.key]),8000,'Month view'); }
-  catch(e){ body.innerHTML=`<div class="empty">Could not load the month view: ${esc(e.message||e)}</div><button class="chip" id="monthRetryBtn" style="margin-top:10px">Retry</button>`; const rb=document.getElementById('monthRetryBtn'); if(rb) rb.onclick=()=>paintMonthTab(); return; }
+  try{ counts=await withLoadTimeout(apiLoadMonthCounts(fromDate,toDate,[PROFILE.key]),8000,'Records'); }
+  catch(e){ body.innerHTML=`<div class="empty">Could not load Records: ${esc(e.message||e)}</div><button class="chip" id="monthRetryBtn" style="margin-top:10px">Retry</button>`; const rb=document.getElementById('monthRetryBtn'); if(rb) rb.onclick=()=>paintMonthTab(); return; }
+  let dayHtml='';
+  if(RECORDS_OPEN_DATE&&RECORDS_OPEN_DATE.slice(0,7)===MONTH_CURSOR){
+    try{
+      const {blocks,dueTasks}=await apiLoadDayAgenda(RECORDS_OPEN_DATE,[PROFILE.key]);
+      dayHtml=dayRecordsHtml(RECORDS_OPEN_DATE,blocks,dueTasks);
+    }catch(e){ dayHtml=`<div class="empty">Could not load that day: ${esc(e.message||e)}</div>`; }
+  }
   body.innerHTML=`
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <button class="chip" id="monthPrevBtn">‹</button>
@@ -11840,11 +11962,14 @@ async function paintMonthTab(){
     <button class="chip" id="monthNextBtn">›</button>
   </div>
   ${monthGridHtml(MONTH_CURSOR,counts)}
-  <div class="mini" style="margin-top:10px;text-align:center">Tap a day to see it in My Day</div>`;
-  document.getElementById('monthPrevBtn').onclick=async()=>{ MONTH_CURSOR=isoPlusMonths(MONTH_CURSOR,-1); await paintMonthTab(); };
-  document.getElementById('monthNextBtn').onclick=async()=>{ MONTH_CURSOR=isoPlusMonths(MONTH_CURSOR,1); await paintMonthTab(); };
+  <div class="mini" style="margin-top:10px;text-align:center">Tap a day to see what was actually done</div>
+  ${dayHtml}`;
+  document.getElementById('monthPrevBtn').onclick=async()=>{ MONTH_CURSOR=isoPlusMonths(MONTH_CURSOR,-1); RECORDS_OPEN_DATE=null; await paintMonthTab(); };
+  document.getElementById('monthNextBtn').onclick=async()=>{ MONTH_CURSOR=isoPlusMonths(MONTH_CURSOR,1); RECORDS_OPEN_DATE=null; await paintMonthTab(); };
   body.querySelectorAll('[data-monthcellopen]').forEach(el=>el.onclick=async()=>{
-    MYDAY_DATE=el.dataset.monthcellopen; DUTIES_TAB='myday'; await viewDuties();
+    const iso=el.dataset.monthcellopen;
+    RECORDS_OPEN_DATE=(RECORDS_OPEN_DATE===iso)?null:iso;
+    await paintMonthTab();
   });
 }
 async function viewDuties(){
@@ -11856,15 +11981,16 @@ async function viewDuties(){
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Operations Tracker</h2><p>${isMgr?'Every task, who owns it, and how long it’s been open':'Your tasks, and anything you’ve assigned or been escalated'}</p></div></div>
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${DUTIES_TAB==='myday'?'on':''}" data-dutiestab="myday">My Day</button>
-    <button class="chip ${DUTIES_TAB==='month'?'on':''}" data-dutiestab="month">Month</button>
-    <button class="chip ${DUTIES_TAB==='tasks'?'on':''}" data-dutiestab="tasks">Tasks</button>
     <button class="chip ${DUTIES_TAB==='todo'?'on':''}" data-dutiestab="todo">To-Do List</button>
+    <button class="chip ${DUTIES_TAB==='tasks'?'on':''}" data-dutiestab="tasks">Tasks</button>
+    <button class="chip ${DUTIES_TAB==='month'?'on':''}" data-dutiestab="month">Records</button>
     ${isMgr?`<button class="chip ${DUTIES_TAB==='team'?'on':''}" data-dutiestab="team">Team</button>`:''}
     ${isMgr?`<button class="chip ${DUTIES_TAB==='reports'?'on':''}" data-dutiestab="reports">Reports</button>`:''}
   </div>
   <div id="dutiesMyDayBody" class="${DUTIES_TAB==='myday'?'':'hidden'}"><div class="skel" style="height:80px;border-radius:16px"></div></div>
   <div id="dutiesMonthBody" class="${DUTIES_TAB==='month'?'':'hidden'}"><div class="skel" style="height:280px;border-radius:16px"></div></div>
   <div id="dutiesTasksBody" class="${DUTIES_TAB==='tasks'?'':'hidden'}">
+  <div id="dutiesRequestsInbox"></div>
   <div class="kpis">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}${kpi('Avg days to close',teamSummary.avgDaysToClose!=null?teamSummary.avgDaysToClose:'—')}</div>
   ${(()=>{ const totalTasks=teamSummary.openCount+teamSummary.doneCount; const donePct=totalTasks?Math.round(teamSummary.doneCount/totalTasks*100):0;
     return `<div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
@@ -11890,7 +12016,7 @@ async function viewDuties(){
     if(b.dataset.dutiestab==='myday') MYDAY_DATE=today();
     DUTIES_TAB=b.dataset.dutiestab; await viewDuties();
   });
-  if(DUTIES_TAB==='tasks'){ bindDutiesCtrls(); paintDuties(); }
+  if(DUTIES_TAB==='tasks'){ bindDutiesCtrls(); paintDuties(); paintTaskRequestsInbox(); }
   else if(DUTIES_TAB==='todo'){
     if(!TODO_DATE) TODO_DATE=today();
     await todoEnsureRangeLoaded();
@@ -12030,6 +12156,68 @@ function bindDutiesRowCtrls(){
   document.querySelectorAll('[data-taskopen]').forEach(b=>b.onclick=()=>route('taskDetail',b.dataset.taskopen));
   const addBtn=document.getElementById('newTaskBtn'); if(addBtn) addBtn.onclick=openNewTaskModal;
 }
+// Fresh, targeted query rather than reading off DB.tasks/TODO_LIST -- those are
+// scoped to assigned_to/a loaded date window, and a pending request keeps
+// assigned_to on the ORIGINAL owner (see apiRequestTaskAssignment's comment)
+// and can be for any date, so neither would reliably surface it.
+async function apiLoadMyPendingTaskRequests(){
+  if(DEMO_MODE){ const d=await demoLoad();
+    return [...(d.tasks||[]),...(d.todos||[])].filter(t=>t.escalatedTo===PROFILE.key&&t.requestPending); }
+  try{
+    const {data,error}=await sb.from('schedule_items').select('*').eq('escalated_to',PROFILE.key).eq('request_pending',true);
+    if(error) throw error;
+    return (data||[]).map(r=>r.kind==='task'?mapTask(r):mapTodo(r));
+  }catch(e){ return []; }
+}
+function taskRequestRowHtml(t){
+  const isTodo=!!(t.date&&t.startTime&&t.endTime);
+  return `<div class="rowcard" data-reqrow="${esc(t.id)}" style="margin-bottom:10px;${t.requestUrgent?'border-color:var(--danger)':''}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div><div style="font-weight:700">${esc(t.title)}${t.requestUrgent?' <span class="tag dgr">Urgent</span>':''}</div>
+      <div class="mini">From ${esc(t.escalatedByName||t.escalatedBy)}${isTodo?(' · '+esc(fmtLongDate(t.date))+' '+esc(t.startTime)+'–'+esc(t.endTime)):''}${t.escalationNote?(' · '+esc(t.escalationNote)):''}</div></div>
+    </div>
+    <div id="reqPropose_${esc(t.id)}" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+      <div class="grid2">${fld('New date','<input type="date" id="reqDate_'+esc(t.id)+'" value="'+esc(t.date||today())+'"/>')}<div></div></div>
+      <div class="grid2">${fld('Start',timeInputHtml('reqStart_'+t.id,t.startTime||'09:00'))}${fld('End',timeInputHtml('reqEnd_'+t.id,t.endTime||'10:00'))}</div>
+      <button class="btn primary sm" data-reqconfirmpropose="${esc(t.id)}" style="width:100%">Send new time</button>
+    </div>
+    <div class="formactions" style="margin-top:10px">
+      <button class="btn primary sm" data-reqaccept="${esc(t.id)}">Accept</button>
+      ${isTodo?`<button class="btn ghost sm" data-reqpropose="${esc(t.id)}">Propose new time</button>`:''}
+      <button class="btn ghost sm" data-reqdecline="${esc(t.id)}">Decline</button>
+    </div>
+  </div>`;
+}
+async function paintTaskRequestsInbox(){
+  const box=document.getElementById('dutiesRequestsInbox'); if(!box) return;
+  let requests=[];
+  try{ requests=await apiLoadMyPendingTaskRequests(); }catch(e){}
+  if(!requests.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="sectitle" style="margin-top:0"><h3>Task requests</h3><span class="cnt">${requests.length} awaiting your response</span></div>
+  ${requests.map(taskRequestRowHtml).join('')}`;
+  box.querySelectorAll('[data-reqaccept]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; b.textContent='Accepting…';
+    try{ await apiRespondTaskRequestAccept(b.dataset.reqaccept); toast('Accepted'); await viewDuties(); }
+    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Accept'; }
+  });
+  box.querySelectorAll('[data-reqdecline]').forEach(b=>b.onclick=async()=>{
+    const reason=prompt('Reason for declining (optional):')||'';
+    b.disabled=true; b.textContent='Declining…';
+    try{ await apiRespondTaskRequestDecline(b.dataset.reqdecline,reason); toast('Declined'); await paintTaskRequestsInbox(); }
+    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Decline'; }
+  });
+  box.querySelectorAll('[data-reqpropose]').forEach(b=>b.onclick=()=>{
+    document.getElementById('reqPropose_'+b.dataset.reqpropose).classList.toggle('hidden');
+  });
+  box.querySelectorAll('[data-reqconfirmpropose]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.reqconfirmpropose;
+    const newDate=val('reqDate_'+id), start=val('reqStart_'+id), end=val('reqEnd_'+id);
+    if(end<=start){ toast('End time must be after start time'); return; }
+    b.disabled=true; b.textContent='Sending…';
+    try{ await apiRespondTaskRequestProposeTime(id,newDate,start,end); toast('New time sent — accepted onto your calendar'); await viewDuties(); }
+    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Send new time'; }
+  });
+}
 // Shared by task escalation (management-assigned work) and to-do escalation
 // (personal items handed to a colleague) -- both are schedule_items rows under
 // the hood, and apiEscalateTask already operates generically on that table by
@@ -12037,18 +12225,25 @@ function bindDutiesRowCtrls(){
 // tasks never do today), the new assignee's calendar is conflict-checked
 // before the escalate button is allowed to fire -- an escalation shouldn't
 // silently create a double-booking for whoever it lands on.
-function openEscalateItemModal(item,currentAssignee,onEscalated){
+// Sends a Task Request rather than reassigning instantly -- the item stays
+// with its current owner until the target Accepts, Proposes a new time (only
+// meaningful for time-blocked to-dos), or Declines (see the four
+// apiRespondTaskRequest*/apiRequestTaskAssignment functions above). If the
+// target already has something in that slot, the assigner is told and gets a
+// real choice (Insist and send anyway vs. go back and pick someone/something
+// else) instead of a silent block or a silent send.
+function openEscalateItemModal(item,currentAssignee,onRequested){
   const options=STAFF_LIST.filter(s=>s.key!==currentAssignee);
   const hasTimeBlock=!!(item.date&&item.startTime&&item.endTime);
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:6px">Escalate — ${esc(item.title)}</div>
-    <div class="mini" style="margin-bottom:14px">Reassigns this and notifies them in chat with your reason.</div>
-    ${fld('Escalate to',`<select id="esc_to">${options.map(s=>`<option value="${s.key}">${esc(s.name)}</option>`).join('')}</select>`)}
+    <div style="font-weight:800;font-size:16px;margin-bottom:6px">Request — ${esc(item.title)}</div>
+    <div class="mini" style="margin-bottom:14px">Asks them to take this on — they can accept, propose a new time, or decline. It stays yours until they respond.</div>
+    ${fld('Assign to',`<select id="esc_to">${options.map(s=>`<option value="${s.key}">${esc(s.name)}</option>`).join('')}</select>`)}
     ${fld('Reason','<textarea id="esc_note" placeholder="Why this needs their attention…"></textarea>')}
     ${hasTimeBlock?`<div id="esc_conflictWarn" class="mini" style="color:var(--danger);margin:-8px 0 12px"></div>`:''}
-    <div class="formactions"><button class="btn primary" id="doEscalate" style="width:100%">Escalate</button></div>
+    <div class="formactions"><button class="btn primary" id="doEscalate" style="width:100%">Send request</button></div>
   </div>`;
   document.body.appendChild(ov);
   makeModalAccessible(ov);
@@ -12061,33 +12256,36 @@ function openEscalateItemModal(item,currentAssignee,onEscalated){
   if(hasTimeBlock){ document.getElementById('esc_to').addEventListener('change',checkEscConflict); checkEscConflict(); }
   document.getElementById('doEscalate').onclick=async()=>{
     const toKey=val('esc_to'); const toStaff=STAFF_LIST.find(s=>s.key===toKey); const note=val('esc_note').trim();
-    const btn=document.getElementById('doEscalate'); btn.disabled=true; btn.textContent='Escalating…';
+    const btn=document.getElementById('doEscalate'); btn.disabled=true; btn.textContent='Sending…';
+    let urgent=false;
     if(hasTimeBlock){
       const hits=await apiCheckScheduleConflicts(toKey,item.date,item.startTime,item.endTime,item.id);
-      if(hits.length){ toast(scheduleConflictReasonText(hits,toStaff?toStaff.name:toKey)); btn.disabled=false; btn.textContent='Escalate'; return; }
+      if(hits.length){
+        if(!confirm(scheduleConflictReasonText(hits,toStaff?toStaff.name:toKey)+' Insist and send this request anyway?')){ btn.disabled=false; btn.textContent='Send request'; return; }
+        urgent=true;
+      }
     }
     try{
-      await apiEscalateTask(item.id,toKey,toStaff?toStaff.name:toKey,note);
-      try{ const rec=await apiSendMessage(toKey,`${PROFILE.name} escalated "${item.title}" to you${note?(': '+note):''}`); DB.messages.push(rec); }catch(e){}
-      toast('Escalated to '+(toStaff?toStaff.name:toKey)); ov.remove();
-      onEscalated(toKey,toStaff?toStaff.name:toKey,note);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Escalate'; }
+      await apiRequestTaskAssignment(item.id,toKey,toStaff?toStaff.name:toKey,note,urgent);
+      toast('Request sent to '+(toStaff?toStaff.name:toKey)); ov.remove();
+      onRequested(toKey,toStaff?toStaff.name:toKey,note);
+    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request'; }
   };
 }
 function openEscalateTaskModal(id){
   const t=(DB.tasks||[]).find(x=>x.id===id); if(!t) return;
   openEscalateItemModal({id:t.id,title:t.title},t.assignedTo,(toKey,toName,note)=>{
-    Object.assign(t,{assignedTo:toKey,assignedToName:toName,escalatedTo:toKey,escalatedToName:toName,
-      escalatedBy:PROFILE.key,escalatedByName:PROFILE.name,escalatedAt:new Date().toISOString(),escalationNote:note||null,openedAt:null,startedAt:null});
+    Object.assign(t,{escalatedTo:toKey,escalatedToName:toName,
+      escalatedBy:PROFILE.key,escalatedByName:PROFILE.name,escalatedAt:new Date().toISOString(),escalationNote:note||null,requestPending:true});
     route('taskDetail',id);
   });
 }
 // To-dos were always self-only before this rebuild -- this is the new part.
-// Once escalated, it's no longer assigned to the escalator, so it's dropped
-// from their local TODO_LIST immediately rather than waiting on a reload.
+// Stays on the requester's own TODO_LIST (tagged "Request pending") until the
+// target responds -- nothing moves until then.
 function openEscalateTodoModal(t){
   openEscalateItemModal({id:t.id,title:t.title,date:t.date,startTime:t.startTime,endTime:t.endTime},PROFILE.key,(toKey,toName,note)=>{
-    TODO_LIST=TODO_LIST.filter(x=>x.id!==t.id);
+    t.escalatedTo=toKey; t.escalatedToName=toName; t.escalationNote=note||null; t.requestPending=true;
     paintTodoTab();
   });
 }
