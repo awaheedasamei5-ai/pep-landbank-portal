@@ -7876,7 +7876,7 @@ function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
     customer:formCustomer,plots:viewPlots,
     paid:()=>kpiDrilldown('paid'),owed:()=>kpiDrilldown('owed'),visits:()=>kpiDrilldown('visits'),donepaying:()=>kpiDrilldown('donepaying'),
     monthlyclosed:()=>{ monthlyClosedCursor=today().slice(0,7); viewMonthlyClosed(); },
-    agentDetail:agentDetailView,stageList:viewStageList,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
+    agentDetail:agentDetailView,stageList:viewStageList,myStreak:viewStreakDetail,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
     clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,clientprofile:formClientProfile,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
     clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory,insightsHub:viewInsightsHub,managementHub:viewManagementHub}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
@@ -9826,21 +9826,41 @@ function computeMonthlyRisk(){
 const STREAK_MOOD={
   dull:{emoji:'😴',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
   danger:{emoji:'😰',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:"Don't let it break!"},
+  // Distinct from 'zero' (never started, or broken days ago) -- this fires
+  // for exactly one day, the day a real streak (3+ days) just died, so the
+  // mood actually matches what happened instead of looking identical to
+  // someone who simply never got going.
+  justBroken:{emoji:'💔',bg:'linear-gradient(135deg,#B91C1C,#78350F)',label:'Streak broken — start a new one today'},
   zero:{emoji:'🙂',bg:'linear-gradient(135deg,#7C3AED,#5B21B6)',label:"Let's start a streak"},
   building:{emoji:'😊',bg:'linear-gradient(135deg,#2563EB,#1D4ED8)',label:'Keep it going'},
   solid:{emoji:'🔥',bg:'linear-gradient(135deg,#F59E0B,#D97706)',label:'On fire'},
+  // Distinct from generic 'legendary'/'solid' -- this month's collected is
+  // this agent's best month ever, regardless of exactly how long the streak is.
+  bestMonth:{emoji:'🏆',bg:'linear-gradient(135deg,#EAB308,#B45309)',label:'Best month yet — keep it up'},
   legendary:{emoji:'🤩',bg:'linear-gradient(135deg,#EAB308,#7C3AED)',label:'Legendary'}
 };
-function computeStreakMoodKey(streakLen,todayMet,monthRiskTier){
+function computeStreakMoodKey(streakLen,todayMet,monthRiskTier,justBrokeStreak,isBestMonthEver){
   const nowHHMM=new Date().toISOString().slice(11,16);
   const deadlinePassed=nowHHMM>(CONFIG.workEndTime||'17:00');
   if(!todayMet && !deadlinePassed && streakLen===0) return 'dull';
   if(!todayMet && !deadlinePassed && streakLen>0) return 'dull';
-  if(!todayMet && deadlinePassed) return streakLen>0?'danger':'zero';
-  if(streakLen>=30) return monthRiskTier==='critical'?'solid':'legendary';
-  if(streakLen>=7) return 'solid';
+  if(!todayMet && deadlinePassed){ if(justBrokeStreak) return 'justBroken'; return streakLen>0?'danger':'zero'; }
+  if(streakLen>=30) return monthRiskTier==='critical'?'solid':(isBestMonthEver?'bestMonth':'legendary');
+  if(streakLen>=7) return isBestMonthEver?'bestMonth':'solid';
   if(streakLen>=1) return 'building';
   return 'zero';
+}
+// This agent's best-ever collected month, for the 'bestMonth' mood -- only
+// meaningful once there's at least one prior month to beat, so a brand-new
+// agent's very first month never trivially counts as "best ever".
+function isBestCollectedMonthEver(){
+  const byMonth={};
+  (DB.payments||[]).filter(p=>p.agentKey===PROFILE.key).forEach(p=>{ const mk=(p.date||'').slice(0,7); byMonth[mk]=(byMonth[mk]||0)+num(p.amount); });
+  const thisMonth=today().slice(0,7);
+  const priorMonths=Object.keys(byMonth).filter(mk=>mk!==thisMonth);
+  if(!priorMonths.length) return false;
+  const thisVal=byMonth[thisMonth]||0;
+  return thisVal>0 && thisVal>Math.max(...priorMonths.map(mk=>byMonth[mk]));
 }
 async function evaluateMyStreak(){
   if(!PROFILE) return null;
@@ -9851,8 +9871,11 @@ async function evaluateMyStreak(){
     await apiUpsertMyStreakToday({todoLogged,leadAdded,siteVisitBooked});
     const history=await apiLoadMyStreakHistory(PROFILE.key,60);
     const streakLen=computeRunningStreakLength(history);
+    const priorStreakLen=computeRunningStreakLength(history.filter(r=>r.date!==today()));
+    const justBrokeStreak=priorStreakLen>=3 && streakLen===0;
     const risk=computeMonthlyRisk();
-    const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier);
+    const isBestMonthEver=isBestCollectedMonthEver();
+    const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier,justBrokeStreak,isBestMonthEver);
     MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,moodKey,mood:STREAK_MOOD[moodKey],history};
     return MY_STREAK;
   }catch(e){ return null; }
@@ -9881,10 +9904,10 @@ function riskMoodLabel(risk){
   if(risk.tier==='at risk') return 'Falling behind this month\'s target';
   return risk.daysLeft+' day'+(risk.daysLeft===1?'':'s')+' left — act now';
 }
-function streakWidgetHtml(streak){
+function streakWidgetHtml(streak,clickable){
   if(!streak) return '';
   const m=streak.mood;
-  return `<div class="streakCard" style="background:${m.bg}">
+  return `<div class="streakCard${clickable?' kpi-click':''}" style="background:${m.bg}" ${clickable?'data-r="myStreak"':''}>
     <div class="streakCardTop">
       <div class="streakMoodStack">
         <div class="streakMoodPane paneA">
@@ -9903,6 +9926,43 @@ function streakWidgetHtml(streak){
       ${streak.risk.daysLeft} day${streak.risk.daysLeft===1?'':'s'} left this month · pipeline ${esc(streak.risk.tier)}
     </div>
   </div>`;
+}
+// Streak card's click-through -- the detail page the "not enough, basic,
+// nothing special" feedback asked for: this month's calendar of days
+// logged, a real summary across sales/ops/usage (not just the streak
+// number), and the same nudge engine the dashboard's Action Center uses
+// for "what to do next", so there's exactly one recommendation system in
+// the app, not two drifting copies of similar advice.
+function viewStreakDetail(){
+  if(!MY_STREAK){ route('home'); return; }
+  const m=MY_STREAK.mood;
+  const thisMonth=today().slice(0,7);
+  const monthHistory=(MY_STREAK.history||[]).filter(h=>(h.date||'').slice(0,7)===thisMonth);
+  const counts={}; monthHistory.forEach(h=>{ if(h.dayMet) counts[h.date]=1; });
+  const daysLogged=monthHistory.filter(h=>h.dayMet).length;
+  const myLeads=(DB.leads||[]).filter(l=>l.agent===PROFILE.key);
+  const leadsAdded=myLeads.filter(l=>(l.date||'')===today()||monthKey(l.date)===thisMonth).length;
+  const dealsClosed=myLeads.filter(l=>isFullyPaid(l)&&monthKey(l.date)===thisMonth).length;
+  const collected=(DB.payments||[]).filter(p=>p.agentKey===PROFILE.key&&(p.date||'').slice(0,7)===thisMonth).reduce((s,p)=>s+num(p.amount),0);
+  const myTasks=(DB.tasks||[]).filter(t=>t.assignedTo===PROFILE.key);
+  const duties=computeDutiesSummary(myTasks);
+  const nudges=computeStaffCompanionNudges(DB.leads,DB.payments);
+  V.innerHTML=`${back('home')}
+  <div class="pagehead"><div><div class="eyebrow">Streak</div><h2>${MY_STREAK.streakLen}-day streak</h2><p>${esc(m.label)}</p></div></div>
+  ${streakWidgetHtml(MY_STREAK,false)}
+  <div class="sectitle" style="margin-top:18px"><h3>${esc(monthLabel(thisMonth))}</h3><span class="cnt">${daysLogged} day${daysLogged===1?'':'s'} logged</span></div>
+  ${monthGridHtml(thisMonth,counts)}
+  <div class="sectitle"><h3>This month's summary</h3></div>
+  <div class="dashKpiGrid">
+    ${kpi('Leads added',leadsAdded,'hero')}
+    ${kpi('Deals closed',dealsClosed,'green')}
+    ${kpi('Collected',ghs(collected),'gold')}
+    ${kpi('To-dos done',duties.doneCount)}
+  </div>
+  <div class="sectitle"><h3>What you need to do next</h3></div>
+  ${nudges.length?renderCompanionWidget(nudges,[],{title:'',subtitle:''}):emptyState(ic.check,'Nothing urgent','You\'re on top of everything right now.')}
+  <div class="footer-note">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
+  bindTasks(); bindCompanionWidget();
 }
 function agentHome(){ const k=kpisOf(DB.leads);
   const thisMonth=today().slice(0,7);
@@ -9934,7 +9994,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
     </div>
   </div>
   <div class="dashFlow">
-    ${streakWidgetHtml(MY_STREAK)}
+    ${streakWidgetHtml(MY_STREAK,true)}
     ${renderBannerSlideshow()}
     ${renderAllocationBanners()}
     ${renderComplaintAssignBanners()}
