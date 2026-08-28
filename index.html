@@ -48,6 +48,13 @@ body.dark{
   --shadow-lg:0 18px 44px rgba(0,0,0,.5);
   --glass:rgba(33,29,74,.7);
 }
+/* Streak-milestone skins -- alternate brand-identity tokens only (same ones
+   the original color rebrand swapped), orthogonal to dark mode above (which
+   only touches paper/card/line/text/muted/shadow/glass) so any skin composes
+   correctly with either light or dark automatically. */
+body[data-skin="sunset"]{ --ink:#7C2D12; --ink2:#9A3412; --green:#EA580C; --green2:#F97316; --leaf:#FB923C; --gold:#DC2626; --gold2:#F87171; }
+body[data-skin="emerald"]{ --ink:#064E3B; --ink2:#065F46; --green:#059669; --green2:#10B981; --leaf:#34D399; --gold:#0D9488; --gold2:#2DD4BF; }
+body[data-skin="royal"]{ --ink:#3B0764; --ink2:#581C87; --green:#7C2D92; --green2:#9333EA; --leaf:#C084FC; --gold:#B45309; --gold2:#F59E0B; }
 body.dark .chatWallpaper{background-color:#0F1B2E}
 body.dark .chatlog .bubblerow:not(.me) .bubble{background:#1B2A45;color:#E7ECF5}
 body.dark .calcbox{background:linear-gradient(135deg,#132038,#0F1B2E);border-color:var(--leaf)}
@@ -1243,6 +1250,13 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .starBtn:hover{transform:scale(1.15)}
 body.dark .starBtn{color:#3A4048}
 .achGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.skinSwatchGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.skinSwatch{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 10px;border-radius:16px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;transition:.15s}
+.skinSwatch:hover:not(.locked){border-color:var(--leaf)}
+.skinSwatch.active{border-color:var(--gold);box-shadow:0 0 0 2px rgba(124,58,237,.15)}
+.skinSwatch.locked{opacity:.5;cursor:not-allowed}
+.skinSwatchDot{width:34px;height:34px;border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px}
+.skinSwatchLabel{font-size:12px;font-weight:700;color:var(--text);text-align:center}
 .achTile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 10px;text-align:center}
 .achTile.won{border-color:var(--premium);background:linear-gradient(180deg,#FDF6E3,var(--card) 60%);box-shadow:0 6px 16px -8px rgba(201,162,39,.4)}
 .achIcon{font-size:28px;line-height:1;margin-bottom:6px;transition:opacity 1s ease,filter 1s ease}
@@ -3213,7 +3227,7 @@ async function apiLoadAll(){
     DB.announcements=(d.announcements||[]).slice();
     DB.profiles=STAFF_LIST.filter(s=>s.role==='agent').map(s=>({name:s.name,role:'agent',agent_key:s.key,birthday:(d.profileBirthdays||{})[s.key]||null,
       position:((d.profileDetails||{})[s.key]||{}).position||null,address:((d.profileDetails||{})[s.key]||{}).address||null,
-      tool_access:demoToolAccess(s.key)}));
+      tool_access:demoToolAccess(s.key),unlocked_skins:demoUnlockedSkins(s.key)}));
     DB.agentMonthStats=await apiLoadAgentMonthStats();
     DB.tasks=await apiLoadTasks();
     DB.feedback=await apiLoadFeedback();
@@ -6812,7 +6826,7 @@ async function doLogin(){
   const btn=document.getElementById('signBtn'); btn.disabled=true; btn.textContent=LOGIN_MODE==='pin'?'Unlocking…':'Signing in…';
   if(DEMO_MODE){
     if(!demoActive(pickStaff.key)){ err.textContent='This account has been deactivated. Contact management.'; btn.disabled=false; btn.textContent='Sign in'; return; }
-    PROFILE={name:pickStaff.name,email:pickStaff.email,role:pickStaff.role,agent_key:pickStaff.key,key:pickStaff.key,toolAccess:demoToolAccess(pickStaff.key)};
+    PROFILE={name:pickStaff.name,email:pickStaff.email,role:pickStaff.role,agent_key:pickStaff.key,key:pickStaff.key,toolAccess:demoToolAccess(pickStaff.key),unlockedSkins:demoUnlockedSkins(pickStaff.key)};
     await enterApp(); return;
   }
   if(LOGIN_MODE==='pin'){
@@ -7609,6 +7623,7 @@ function applyDarkModePref(){
   }catch(e){}
 }
 applyDarkModePref();
+applySkinPref();
 if(DARK_MEDIA){
   DARK_MEDIA.addEventListener('change',e=>{
     let saved=null; try{ saved=localStorage.getItem('pep_dark'); }catch(err){}
@@ -7671,7 +7686,7 @@ document.getElementById('joinSubmit').onclick=async()=>{
       d.employees=d.employees||[]; d.employees.push({name,email,key,createdAt:today()});
       d.leads[key]=[]; await demoSave();
       await refreshStaffList(); buildDropdown();
-      PROFILE={name,email,role:'agent',agent_key:key,key,toolAccess:{}};
+      PROFILE={name,email,role:'agent',agent_key:key,key,toolAccess:{},unlockedSkins:[]};
       document.getElementById('joinCard').classList.add('hidden');
       toast('Account created — welcome, '+name.split(' ')[0]+'!');
       await enterApp();
@@ -9877,6 +9892,7 @@ async function evaluateMyStreak(){
     const isBestMonthEver=isBestCollectedMonthEver();
     const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier,justBrokeStreak,isBestMonthEver);
     MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,moodKey,mood:STREAK_MOOD[moodKey],history};
+    checkSkinMilestones(streakLen).catch(()=>{});
     return MY_STREAK;
   }catch(e){ return null; }
 }
@@ -15558,12 +15574,10 @@ function formProfile(){
 }
 function formAccount(){
   const homeRoute = PROFILE.role==='manager' ? 'mgr' : 'home';
-  if(DEMO_MODE){
-    V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Settings</h2></div></div>
-    ${emptyState(ic.update,'Not available in demo mode','Passwords and PIN sign-in only apply once the portal is connected to Supabase — in demo mode there is no real account to change. This screen works fully once you go live.')}`;
-    return;
-  }
-  const hasPin = pinLockExists(PROFILE.key);
+  const hasPin = !DEMO_MODE && pinLockExists(PROFILE.key);
+  // Display settings/Appearance are per-device preferences with no real account
+  // involved -- unlike Password/PIN below, there's no reason to hide these in
+  // demo mode (skins in particular need to be testable there).
   V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Account</div><h2>Settings</h2></div></div>
   ${settingsSectionHead('gear','Display settings','this device only')}
   <div class="formwrap">
@@ -15572,6 +15586,21 @@ function formAccount(){
     </select>`)}
     <div class="mini" style="margin-top:2px">Changes apply immediately and are saved to this device.</div>
   </div>
+  ${settingsSectionHead('palette','Appearance','earned by streak milestones')}
+  <div class="formwrap">
+    <div class="mini" style="margin:0 0 12px">Palmstead Indigo is always available. The rest unlock automatically as your streak grows — once earned, they're yours to switch between any time, on this device.</div>
+    <div class="skinSwatchGrid">${SKIN_PALETTES.map(sk=>{
+      const unlocked=sk.id==='default'||myUnlockedSkins().includes(sk.id);
+      const active=((()=>{ try{ return localStorage.getItem('pep_skin')||'default'; }catch(e){ return 'default'; } })())===sk.id;
+      return `<button class="skinSwatch${active?' active':''}${unlocked?'':' locked'}" data-skinpick="${esc(sk.id)}" ${unlocked?'':'disabled'}>
+        <span class="skinSwatchDot" style="background:${skinDotGradient(sk.id)}">${active?'✓':''}</span>
+        <span class="skinSwatchLabel">${esc(sk.label)}</span>
+        ${!unlocked?`<span class="mini">🔒 ${esc(sk.tierLabel)}</span>`:''}
+      </button>`;
+    }).join('')}</div>
+  </div>
+  ${DEMO_MODE?`${settingsSectionHead('lock','Password & PIN')}
+  <div class="formwrap">${emptyState(ic.update,'Not available in demo mode','Passwords and PIN sign-in only apply once the portal is connected to Supabase — in demo mode there is no real account to change. This works fully once you go live.')}</div>`:`
   ${settingsSectionHead('lock','Password')}
   <div class="formwrap">
     ${fld('New password *','<input id="a_p1" type="password" placeholder="At least 6 characters"/>')}
@@ -15592,12 +15621,17 @@ function formAccount(){
       ${fld('Confirm PIN','<input id="pin2" type="password" inputmode="numeric" maxlength="6" placeholder="Re-enter PIN"/>')}
       <div class="formactions"><button class="btn primary" id="savePinBtn">Turn on PIN sign-in</button></div>
     `}
-  </div>`;
+  </div>`}`;
   { const cur=applyDisplayPrefs();
     const ffSel=document.getElementById('dispFontFamily');
     ffSel.value=cur.fam;
     ffSel.onchange=()=>{ try{ localStorage.setItem('pep_font_family',ffSel.value); }catch(e){} applyDisplayPrefs(); };
   }
+  document.querySelectorAll('[data-skinpick]').forEach(b=>{ b.onclick=()=>{
+    try{ localStorage.setItem('pep_skin',b.dataset.skinpick); }catch(e){}
+    applySkinPref(); repaintCurrentRouteForTheme();
+  }; });
+  if(DEMO_MODE) return;
   document.getElementById('saveAcct').onclick=saveAccountPw;
   if(hasPin){ document.getElementById('removePinBtn').onclick=()=>{ if(!confirm('Remove PIN sign-in from this device?')) return; removePinLock(PROFILE.key); toast('PIN removed from this device'); formAccount(); }; }
   else{ document.getElementById('savePinBtn').onclick=saveAccountPin; }
@@ -19852,6 +19886,87 @@ function demoToolAccess(key){ return (demoMem&&demoMem.toolAccessOverrides&&demo
 async function apiSaveStaffToolAccess(agentKey,toolAccess){
   if(DEMO_MODE){ const d=await demoLoad(); d.toolAccessOverrides=d.toolAccessOverrides||{}; d.toolAccessOverrides[agentKey]=toolAccess; await demoSave(); return; }
   const {error}=await sb.from('profiles').update({tool_access:toolAccess}).eq('agent_key',agentKey); if(error) throw error;
+}
+// Streak-milestone skins -- alternate values for the same core brand tokens
+// the original "Premium UI rebuild" color swap already proved are a stable,
+// swappable contract (see the :root comment at the top of this file). Same
+// mechanism as dark mode: a body[data-skin] attribute + localStorage, applied
+// via CSS rules below rather than JS-computed inline styles. --premium/
+// --premium2/--paper/--card/--line/--text/--muted stay untouched by every
+// skin, same reasoning as dark mode -- those are semantic/structural, not
+// brand identity.
+const SKIN_PALETTES=[
+  {id:'default',label:'Palmstead Indigo',emoji:'💜',threshold:0,tierLabel:null},
+  {id:'sunset',label:'Sunset Amber',emoji:'🌅',threshold:7,tierLabel:'7-day streak'},
+  {id:'emerald',label:'Emerald Teal',emoji:'🌿',threshold:30,tierLabel:'30-day streak'},
+  {id:'royal',label:'Royal Violet',emoji:'👑',threshold:90,tierLabel:'90-day streak'}
+];
+// Literal preview colors for the Settings swatches -- can't rely on this
+// skin's own CSS vars since they're only active while it's the one applied.
+function skinDotGradient(id){
+  const g={default:'linear-gradient(135deg,#4F46E5,#7C3AED)',sunset:'linear-gradient(135deg,#EA580C,#DC2626)',emerald:'linear-gradient(135deg,#059669,#0D9488)',royal:'linear-gradient(135deg,#7C2D92,#B45309)'};
+  return g[id]||g.default;
+}
+function myUnlockedSkins(){ return (PROFILE&&(PROFILE.unlocked_skins||PROFILE.unlockedSkins))||[]; }
+function demoUnlockedSkins(key){ return (demoMem&&demoMem.unlockedSkinsOverrides&&demoMem.unlockedSkinsOverrides[key])||[]; }
+async function apiClaimSkin(agentKey,skinId){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.unlockedSkinsOverrides=d.unlockedSkinsOverrides||{};
+    const cur=d.unlockedSkinsOverrides[agentKey]||[];
+    if(!cur.includes(skinId)){ d.unlockedSkinsOverrides[agentKey]=[...cur,skinId]; await demoSave(); }
+    return d.unlockedSkinsOverrides[agentKey];
+  }
+  const cur=myUnlockedSkins();
+  if(cur.includes(skinId)) return cur;
+  const next=[...cur,skinId];
+  const {error}=await sb.from('profiles').update({unlocked_skins:next}).eq('agent_key',agentKey); if(error) throw error;
+  return next;
+}
+// Checked on every evaluateMyStreak() call (dashboard load) -- fully derived
+// from the running streak length already computed there, no separate
+// tracking table (per the standing design note: milestone crossings come
+// from staff_streaks, unlocked_skins only remembers what's already been
+// claimed so the same milestone never re-triggers the celebration).
+async function checkSkinMilestones(streakLen){
+  const unlocked=myUnlockedSkins();
+  for(const skin of SKIN_PALETTES){
+    if(skin.threshold>0 && streakLen>=skin.threshold && !unlocked.includes(skin.id)){
+      const next=await apiClaimSkin(PROFILE.key,skin.id);
+      PROFILE.unlocked_skins=next; PROFILE.unlockedSkins=next;
+      openSkinUnlockModal(skin);
+      return; // one celebration at a time even if multiple tiers were crossed at once
+    }
+  }
+}
+function applySkinPref(){
+  let saved=null; try{ saved=localStorage.getItem('pep_skin'); }catch(e){}
+  document.body.dataset.skin=(saved&&saved!=='default')?saved:'';
+}
+// Reuses the exact .successCard/.successCheckWrap celebration component
+// achievement unlocks already use (openAchievementUnlockModal) -- same pop-in
+// animation, just with a Claim & wear it now / Later choice instead of a
+// single acknowledgement, since unlike an achievement a skin is something
+// you can actually put on.
+function openSkinUnlockModal(skin){
+  playChime('success');
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  ov.innerHTML=`<div id="announceModal" class="successCard achUnlockCard" style="padding:34px 22px">
+    <div class="successCheckWrap achUnlockWrap"><div class="successCheckCircle achUnlockCircle">${esc(skin.emoji)}</div></div>
+    <div class="successTitle">New skin unlocked!</div>
+    <div class="successSub" style="font-weight:700;font-size:15px;margin-top:2px">${esc(skin.label)}</div>
+    <div class="successSub" style="margin-top:4px">Earned for a ${esc(skin.tierLabel)} — it's yours for good, switch to it any time from Settings.</div>
+    <button class="btn primary" id="wearSkinBtn" style="width:100%;margin-top:18px">Wear it now</button>
+    <button class="linkbtn" id="laterSkinBtn" style="margin-top:8px">Maybe later</button>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('laterSkinBtn').onclick=()=>ov.remove();
+  document.getElementById('wearSkinBtn').onclick=()=>{
+    try{ localStorage.setItem('pep_skin',skin.id); }catch(e){}
+    applySkinPref(); repaintCurrentRouteForTheme(); ov.remove();
+  };
 }
 function mgrSettingsHubHtml(){
   const byKey=k=>SETTINGS_APPS.find(a=>a.key===k);
