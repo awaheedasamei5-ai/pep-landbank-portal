@@ -512,6 +512,20 @@ a{color:var(--green2)}
 .kpi.green .kpi-ic{background:rgba(255,255,255,.25)}
 .kpi.green .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
 .kpi.green .kpi-delta.up,.kpi.green .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
+/* Same full-colour recipe, extended to the dashboard's second-row stat/chart
+   cards (Phase S) -- these stayed flat white while the KPI row above them
+   already got the colour treatment, reading as unfinished rather than
+   deliberately restrained. .red is a new fourth accent (none of hero/gold/
+   green fit an "escalated, needs attention" card semantically). */
+.statCard.hero,.rowcard.chartCard.hero{background:linear-gradient(150deg,#818CF8,#4F46E5);border-color:transparent;color:#fff}
+.statCard.gold,.rowcard.chartCard.gold{background:linear-gradient(150deg,#F5B94F,var(--warn));border-color:transparent;color:#fff}
+.statCard.green,.rowcard.chartCard.green{background:linear-gradient(150deg,#34D399,var(--ok));border-color:transparent;color:#fff}
+.statCard.red,.rowcard.chartCard.red{background:linear-gradient(150deg,#E0836A,var(--danger));border-color:transparent;color:#fff}
+.statCard.hero .statIcon,.statCard.gold .statIcon,.statCard.green .statIcon,.statCard.red .statIcon{background:rgba(255,255,255,.25);color:#fff}
+.statCard.hero .statValue,.statCard.gold .statValue,.statCard.green .statValue,.statCard.red .statValue{color:#fff}
+.statCard.hero .statCaption,.statCard.gold .statCaption,.statCard.green .statCaption,.statCard.red .statCaption{color:rgba(255,255,255,.75)}
+.statCard.hero .kpi-expand,.statCard.gold .kpi-expand,.statCard.green .kpi-expand,.statCard.red .kpi-expand,
+.rowcard.chartCard.hero .kpi-expand,.rowcard.chartCard.gold .kpi-expand,.rowcard.chartCard.green .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
 /* Compact period-over-period trend pill, inline next to the number now
    (reference shows it right beside the figure, not floating in a corner). */
 .kpi-delta{display:inline-flex;align-items:center;gap:2px;font-size:10.5px;font-weight:800;
@@ -8472,8 +8486,9 @@ function chartLegend(segments){
 // Every reference chart card shares one header: title + subtitle on the
 // left, a plain circular expand-arrow affordance (visual only, matching
 // kpi()'s) on the right. One wrapper keeps every chart card in sync.
-function chartCardHtml(title,subtitle,bodyHtml,routeTo){
-  return `<div class="rowcard chartCard${routeTo?' kpi-click':''}" style="margin-bottom:18px;padding:17px" ${routeTo?`data-r="${routeTo}"`:''}>
+function chartCardHtml(title,subtitle,bodyHtml,routeTo,cls){
+  const colorVars=cls?';--muted:rgba(255,255,255,.72);--line:rgba(255,255,255,.22)':'';
+  return `<div class="rowcard chartCard${cls?(' '+cls):''}${routeTo?' kpi-click':''}" style="margin-bottom:18px;padding:17px${colorVars}" ${routeTo?`data-r="${routeTo}"`:''}>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
       <div><div style="font-weight:700;font-size:13.5px">${esc(title)}</div>${subtitle?`<div class="mini">${esc(subtitle)}</div>`:''}</div>
       ${routeTo?`<span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`:''}
@@ -8483,16 +8498,20 @@ function chartCardHtml(title,subtitle,bodyHtml,routeTo){
 }
 // Reference's Revenue card -- real "last 6 months collected" bars (same
 // last6MonthKeys() window every other 6-month chart in the app uses), most
-// recent month highlighted with its value as a floating tooltip.
-function renderRevenueCard(monthVals,monthLbls){
+// recent month highlighted with its value as a floating tooltip. Colored
+// (Phase S): bars go translucent white against the gradient, and the
+// highlighted bar/tooltip swap to a solid dark indigo so the white tooltip
+// text stays legible instead of white-on-white.
+function renderRevenueCard(monthVals,monthLbls,cls){
   const hi=monthVals.length-1;
-  return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi])}),'monthlyclosed');
+  const barOpts=cls==='hero'?{color:'rgba(255,255,255,.4)',highlightColor:'#312E81'}:{};
+  return chartCardHtml('Revenue','This month vs last',svgBarChart(monthVals,monthLbls,{highlightIndex:hi,highlightLabel:ghs(monthVals[hi]),...barOpts}),'monthlyclosed',cls);
 }
 // Reference's small "98 orders / 12 orders are awaiting confirmation" style
 // card -- icon, big number, one-line caption. Sits next to the donut card
 // in the dashboard's second row.
-function statCardHtml(icon,value,caption,routeTo){
-  return `<div class="statCard${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}>
+function statCardHtml(icon,value,caption,routeTo,cls){
+  return `<div class="statCard${cls?(' '+cls):''}${routeTo?' kpi-click':''}" ${routeTo?`data-r="${routeTo}"`:''}>
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <span class="statIcon">${icon}</span>
       ${routeTo?`<span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`:''}
@@ -8504,8 +8523,8 @@ function statCardHtml(icon,value,caption,routeTo){
 // mgrTab + repaints) instead of route() -- the manager tab dispatch used by
 // mgrOverview's own tile grid takes a key, not a plain route name, so it
 // can't reuse statCardHtml()'s single-arg data-r/route() wiring.
-function statCardMgrHtml(icon,value,caption,mgrKey){
-  return `<div class="statCard kpi-click" data-statmgr="${esc(mgrKey)}">
+function statCardMgrHtml(icon,value,caption,mgrKey,cls){
+  return `<div class="statCard kpi-click${cls?(' '+cls):''}" data-statmgr="${esc(mgrKey)}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <span class="statIcon">${icon}</span>
       <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -9361,17 +9380,24 @@ function openSingleAnnounceModal(id){
 // expand-arrow) as the Revenue bar-chart card, donut + legend arranged
 // beside each other (a CSS flex row) instead of stacked, matching the
 // reference's "Sales by Category" card layout.
-function renderPipelineHealthCard(leads,routeArg){
+function renderPipelineHealthCard(leads,routeArg,cls){
   const h=computePipelineComposition(leads);
+  // Colored (Phase S): the default lime-green "committed" segment would
+  // blend into a green-gradient card, so on 'hero' the segments/swatches
+  // swap to white/translucent-white -- still two distinct tones, still
+  // legible against the indigo background.
+  const committedColor=cls==='hero'?'#ffffff':'#84CC16';
+  const prospectColor=cls==='hero'?'rgba(255,255,255,.4)':'#CBD5E1';
   const legend=`<div style="display:flex;flex-direction:column;gap:11px">
-    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#84CC16;flex:0 0 auto"></span><b>${h.committedCount}</b> committed <span class="mini">${ghs(h.committedVal)} · ${h.committedPct}%</span></div>
-    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:#CBD5E1;flex:0 0 auto"></span><b>${h.prospectCount}</b> prospects <span class="mini">${ghs(h.prospectVal)} · ${h.prospectPct}%</span></div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:${committedColor};flex:0 0 auto"></span><b>${h.committedCount}</b> committed <span class="mini">${ghs(h.committedVal)} · ${h.committedPct}%</span></div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:3px;background:${prospectColor};flex:0 0 auto"></span><b>${h.prospectCount}</b> prospects <span class="mini">${ghs(h.prospectVal)} · ${h.prospectPct}%</span></div>
   </div>`;
   const body=`<div style="display:flex;align-items:center;gap:20px">
-      <div style="position:relative;width:88px;height:88px;flex:0 0 auto">${svgDonut([{value:h.committedCount,color:'#84CC16'},{value:h.prospectCount,color:'#CBD5E1'}],{size:88,stroke:15})}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;font-family:'IBM Plex Mono',monospace">${h.committedPct}%</div></div>
+      <div style="position:relative;width:88px;height:88px;flex:0 0 auto">${svgDonut([{value:h.committedCount,color:committedColor},{value:h.prospectCount,color:prospectColor}],{size:88,stroke:15})}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;font-family:'IBM Plex Mono',monospace">${h.committedPct}%</div></div>
       <div style="flex:1;min-width:0">${legend}</div>
     </div>`;
-  return `<div class="rowcard chartCard" style="margin-bottom:18px;padding:17px;cursor:pointer" data-gopipelinehealth="${esc(routeArg||'')}">
+  const colorVars=cls?';--muted:rgba(255,255,255,.72);--line:rgba(255,255,255,.22)':'';
+  return `<div class="rowcard chartCard${cls?(' '+cls):''}" style="margin-bottom:18px;padding:17px;cursor:pointer${colorVars}" data-gopipelinehealth="${esc(routeArg||'')}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
       <div><div style="font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:8px">Pipeline health<span class="tag ${h.healthCls}" style="font-size:10.5px;padding:2px 8px">${h.healthLabel}</span></div><div class="mini">how much of your pipeline is real vs speculative</div></div>
       <span class="kpi-expand"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
@@ -9403,13 +9429,20 @@ function getMonthlyPlanClients(leads){
     .filter(Boolean)
     .sort((a,b)=>b.__sched.expectedThisMonth-a.__sched.expectedThisMonth);
 }
-function renderMonthlyPlanCard(leads){
+function renderMonthlyPlanCard(leads,colored){
   const list=getMonthlyPlanClients(leads);
   const total=list.reduce((s,l)=>s+l.__sched.expectedThisMonth,0);
   const behind=list.filter(l=>l.__sched.arrears>0).length;
   const onTrack=list.length-behind;
   const pct=list.length?Math.round(onTrack/list.length*100):100;
-  return `<div class="rowcard" style="margin-bottom:18px;padding:16px;cursor:pointer" data-gomonthlyplan="1">
+  // Colored (Phase S): same full-colour recipe as the KPI/statCard cards,
+  // but hand-applied here since this card's rich internal markup (donut +
+  // legend + list rows below) has its own literal text colors rather than
+  // a shared class -- redefining the CSS custom properties those colors
+  // already reference (--text/--muted/--line/--card) is enough to flip
+  // every one of them to a legible light-on-dark set in one place.
+  const colorStyle=colored?';background:linear-gradient(120deg,#065F46,#0F9D6C);color:#fff;--text:#fff;--muted:rgba(255,255,255,.72);--line:rgba(255,255,255,.28);--card:rgba(255,255,255,.14)':'';
+  return `<div class="rowcard" style="margin-bottom:18px;padding:16px;cursor:pointer${colorStyle}" data-gomonthlyplan="1">
     <div style="display:flex;align-items:center;gap:14px">
       <div style="position:relative;width:58px;height:58px;flex:0 0 auto">${svgDonut([{value:onTrack,color:'#3B82F6'},{value:behind,color:'#F59E0B'}],{size:58,stroke:10})}<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px;font-family:'IBM Plex Mono',monospace">${pct}%</div></div>
       <div style="flex:1"><div style="font-weight:700;font-size:13.5px">Expected from monthly-plan clients</div><div class="mini">${list.length} client${list.length===1?'':'s'} on an installment plan${behind?(' · '+behind+' behind'):''}</div></div>
@@ -9497,7 +9530,7 @@ function viewMonthlyPlanClients(){
   ],'Who_Owes_Us_'+today()+'.csv');
   document.getElementById('whoOwesPdf').onclick=()=>buildWhoOwesPDF(list,owing,PROFILE.role==='manager'?'Company-wide':'Your clients');
 }
-function renderTargetCard(monthCollected,targetVal){
+function renderTargetCard(monthCollected,targetVal,colored){
   const quota=num(CONFIG.targetPlotsPerMonth)||2;
   const mainPct=targetVal?Math.min(100,Math.round(monthCollected/targetVal*100)):0;
   const plotsEquiv=targetVal?Math.round((monthCollected/targetVal*quota)*10)/10:0;
@@ -9507,13 +9540,21 @@ function renderTargetCard(monthCollected,targetVal){
   const expectedCleared=Math.min(monthCollected,expectedTotal);
   const expectedLeft=Math.max(expectedTotal-monthCollected,0);
   const expectedPct=expectedTotal?Math.min(100,Math.round(monthCollected/expectedTotal*100)):0;
-  return `<div class="rowcard" style="margin-bottom:18px;padding:17px 17px 18px">
+  // Colored (Phase S): same technique as renderMonthlyPlanCard -- redefine
+  // the CSS custom properties this card's literal styles already reference
+  // so every var(--text)/var(--muted)/var(--line)/.chip resolves light-on-
+  // dark automatically. The two colors below (#8A6E12 amber, #1E7A56 green)
+  // aren't var()-based, so they get an explicit lighter swap.
+  const colorStyle=colored?';background:linear-gradient(120deg,var(--ink),#173D7A);color:#fff;--text:#fff;--muted:rgba(255,255,255,.72);--line:rgba(255,255,255,.28);--card:rgba(255,255,255,.14);--danger:#FCA5A5;--gold:#FDE68A':'';
+  const exceededMsgColor=colored?'#FDE68A':'#8A6E12';
+  const clearedColor=colored?'#6EE7B7':'#1E7A56';
+  return `<div class="rowcard" style="margin-bottom:18px;padding:17px 17px 18px${colorStyle}">
   <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
     ${progressRing(mainPct,exceeded?'#84CC16':'#3B82F6',82)}
     <div style="flex:1">
       <div style="font-weight:700;color:var(--text);font-size:14.5px;display:flex;align-items:center;gap:6px">Target · ${monthLabel(today().slice(0,7))}${exceeded?`<span style="width:15px;height:15px;display:inline-flex;color:var(--gold)">${ic.medal}</span>`:''}</div>
       <div style="font-size:12.5px;color:var(--muted);margin-top:3px">${ghs(monthCollected)} of ${ghs(targetVal)} collected${targetVal?(' · '+plotsEquiv+' of '+quota+' plots equivalent · '+mainPct+'%'):''}</div>
-      ${exceeded?`<div class="mini" style="margin-top:4px;color:#8A6E12;font-weight:700">Past quota — great work this month</div>`:''}
+      ${exceeded?`<div class="mini" style="margin-top:4px;color:${exceededMsgColor};font-weight:700">Past quota — great work this month</div>`:''}
     </div>
   </div>
   <div style="padding-top:14px;border-top:1px solid var(--line)">
@@ -9523,8 +9564,8 @@ function renderTargetCard(monthCollected,targetVal){
       <button class="chip" id="editTargetSelBtn" style="margin-top:4px;padding:5px 12px;font-size:11.5px;display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;display:inline-flex">${ic.edit}</span>Select clients</button></div>
     </div>
     ${expectedTotal>0?`<div style="display:flex;gap:18px;margin-top:12px;font-size:12px">
-      <div><div class="mini">Cleared</div><div style="font-weight:700;color:#1E7A56">${ghs(expectedCleared)}</div></div>
-      <div><div class="mini">Left</div><div style="font-weight:700;color:${expectedLeft>0?'var(--danger)':'#1E7A56'}">${ghs(expectedLeft)}</div></div>
+      <div><div class="mini">Cleared</div><div style="font-weight:700;color:${clearedColor}">${ghs(expectedCleared)}</div></div>
+      <div><div class="mini">Left</div><div style="font-weight:700;color:${expectedLeft>0?'var(--danger)':clearedColor}">${ghs(expectedLeft)}</div></div>
       <div><div class="mini">Progress</div><div style="font-weight:700">${expectedPct}%</div></div>
     </div>`:''}
     ${mySelections.length?`<div style="margin-top:10px;display:flex;flex-direction:column;gap:2px">${mySelections.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 0;border-top:1px solid var(--line)">
@@ -10096,14 +10137,14 @@ function agentHome(){ const k=kpisOf(DB.leads);
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
     <div class="dashKpiRow">
       <div class="dashKpiGrid">${kpi('Monthly collected',ghs(monthCollected),'hero','monthlyclosed',monthCollectedDelta)}${kpi('Active leads',k.leads,'','pipeline')}${kpi('Outstanding',ghs(k.out),'gold','owed')}${kpi('Collected',ghs(k.coll),'green','paid')}</div>
-      <div class="dashChartSlot">${renderRevenueCard(revVals,revLbls)}</div>
+      <div class="dashChartSlot">${renderRevenueCard(revVals,revLbls,'hero')}</div>
     </div>
     <div class="dashStatRow">
-      ${statCardHtml(kpiIc.pin,k.sv,'Site visits logged this month','sitevisit')}
-      ${statCardHtml(kpiIc.check,wonAll.length,'Clients paid in full','paid')}
-      <div class="dashDonutSlot">${renderPipelineHealthCard(DB.leads)}</div>
+      ${statCardHtml(kpiIc.pin,k.sv,'Site visits logged this month','sitevisit','gold')}
+      ${statCardHtml(kpiIc.check,wonAll.length,'Clients paid in full','paid','green')}
+      <div class="dashDonutSlot">${renderPipelineHealthCard(DB.leads,undefined,'hero')}</div>
     </div>
-    <div class="insightCarousel">${renderTargetCard(monthCollected,target)}${renderMonthlyPlanCard(DB.leads)}</div>
+    <div class="insightCarousel">${renderTargetCard(monthCollected,target,true)}${renderMonthlyPlanCard(DB.leads,true)}</div>
     ${renderCompanionWidget(computeStaffCompanionNudges(DB.leads,DB.payments),computeStaffCompanionChecklist(DB.leads),{title:'Action Center',subtitle:'Your next best actions, auto-generated'})}
   </div>
   <div class="footer-note">${DEMO_MODE?'<span class="demoflag"><span class="d"></span>Demo data</span>':''} Signed in as ${esc(PROFILE.email)}</div>
@@ -18722,12 +18763,12 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
     <div class="dashKpiRow">
       <div class="dashKpiGrid">${kpi('Total leads',tot.leads,'hero','pipeline')}${kpi('Outstanding',ghs(tot.out),'gold','owed')}${kpi('Fully paid',fullyPaid.length,'green','donepaying')}${kpi('Open complaints',DB.complaints.filter(c=>c.status!=='Resolved').length)}</div>
-      <div class="dashChartSlot">${renderRevenueCard(revValsMgr,revLblsMgr)}</div>
+      <div class="dashChartSlot">${renderRevenueCard(revValsMgr,revLblsMgr,'hero')}</div>
     </div>
     <div class="dashStatRow">
-      ${statCardMgrHtml(kpiIc.pin,tot.sv,'Site visits logged company-wide','Site visits')}
-      ${statCardMgrHtml(kpiIc.alert,escalated,'Escalated complaints needing attention','Complaints')}
-      <div class="dashDonutSlot">${renderPipelineHealthCard(allLeads)}</div>
+      ${statCardMgrHtml(kpiIc.pin,tot.sv,'Site visits logged company-wide','Site visits','gold')}
+      ${statCardMgrHtml(kpiIc.alert,escalated,'Escalated complaints needing attention','Complaints','red')}
+      <div class="dashDonutSlot">${renderPipelineHealthCard(allLeads,undefined,'hero')}</div>
     </div>
     <div class="insightCarousel">${renderExpectedRevenueCard()}</div>
     ${renderCompanionWidget(mySmartInsightsMgr.slice(0,4),computeStaffCompanionChecklist(allLeads),{title:'Action Center',subtitle:mySmartInsightsMgr.length+' auto-generated '+(mySmartInsightsMgr.length===1?'insight':'insights')+' from live company data'})}
