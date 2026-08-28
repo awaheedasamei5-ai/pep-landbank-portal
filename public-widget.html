@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Palmstead — live activity</title>
+<style>
+  :root{
+    --ink:#1E1B4B; --green:#4F46E5; --leaf:#818CF8; --gold:#A78BFA;
+    --paper:#F5F5FB; --text:#1B1A33; --muted:#68678A;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:transparent;
+  }
+  .pwCard{
+    position:relative; overflow:hidden; border-radius:22px; padding:22px 24px;
+    background:linear-gradient(135deg,var(--ink) 0%,var(--green) 55%,var(--leaf) 100%);
+    color:#fff; box-shadow:0 20px 44px -14px rgba(30,27,75,.5);
+    max-width:520px;
+  }
+  .pwCard::before{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(circle at 88% -15%,rgba(129,140,248,.4),transparent 55%);
+  }
+  .pwTop{position:relative; z-index:1; display:flex; align-items:center; gap:10px; margin-bottom:16px}
+  .pwLogo{width:30px; height:30px; border-radius:9px; background:rgba(255,255,255,.16); display:flex; align-items:center; justify-content:center; font-size:15px}
+  .pwBrand{font-weight:700; font-size:14px; letter-spacing:.08em; text-transform:uppercase}
+  .pwLive{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:10.5px; color:rgba(255,255,255,.75); font-weight:700; letter-spacing:.04em}
+  .pwDot{width:6px; height:6px; border-radius:50%; background:#4ADE80; animation:pwPulse 1.8s infinite}
+  @keyframes pwPulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .pwStats{position:relative; z-index:1; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px}
+  .pwStat{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:12px 10px; text-align:center}
+  .pwStatVal{font-family:'IBM Plex Mono',ui-monospace,monospace; font-weight:800; font-size:22px; line-height:1}
+  .pwStatLbl{font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:rgba(255,255,255,.7); margin-top:6px; font-weight:700}
+  .pwCta{
+    position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:rgba(255,255,255,.95); color:var(--ink); border-radius:100px; padding:10px 8px 10px 16px;
+  }
+  .pwCtaText{font-size:12.5px; font-weight:700}
+  .pwCtaBtn{
+    background:linear-gradient(135deg,var(--green),var(--gold)); color:#fff; border:none; border-radius:100px;
+    padding:9px 16px; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap;
+  }
+  .pwSkel{opacity:.35}
+  .pwErr{font-size:11px; color:rgba(255,255,255,.7); text-align:center; margin-top:4px; position:relative; z-index:1}
+</style>
+</head>
+<body>
+  <div class="pwCard" id="pwCard">
+    <div class="pwTop">
+      <span class="pwLogo">🌴</span>
+      <span class="pwBrand">Palmstead</span>
+      <span class="pwLive"><span class="pwDot"></span>Live</span>
+    </div>
+    <div class="pwStats" id="pwStats">
+      <div class="pwStat"><div class="pwStatVal pwSkel" id="pwClients">—</div><div class="pwStatLbl">Happy clients</div></div>
+      <div class="pwStat"><div class="pwStatVal pwSkel" id="pwSold">—</div><div class="pwStatLbl">Plots sold this month</div></div>
+      <div class="pwStat"><div class="pwStatVal pwSkel" id="pwVisits">—</div><div class="pwStatLbl">Site visits this week</div></div>
+    </div>
+    <div class="pwCta">
+      <span class="pwCtaText">Own a piece of Royal Palm Enclave</span>
+      <button class="pwCtaBtn" id="pwCtaBtn" type="button">Get started →</button>
+    </div>
+    <div class="pwErr" id="pwErr" style="display:none">Live numbers unavailable right now</div>
+  </div>
+<script>
+  // Purely a teaser widget: polls the public-stats Edge Function on an
+  // interval (never a live realtime subscription -- postgres_changes
+  // payloads aren't RLS-filtered, so a public/anonymous page must not
+  // subscribe to raw table changes). Every number returned is already an
+  // aggregate -- nothing here ever touches a name, contact, or per-client row.
+  var STATS_URL = 'https://lrahgcnftetnyxunaljs.supabase.co/functions/v1/public-stats';
+  var PORTAL_URL = 'https://awaheedasamei5-ai.github.io/pep-landbank-portal/';
+  var POLL_MS = 120000;
+
+  function animateCount(el, to){
+    var from = 0;
+    var start = null;
+    var dur = 900;
+    function step(ts){
+      if(!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * eased).toLocaleString();
+      if(p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function paintError(){
+    document.getElementById('pwErr').style.display = 'block';
+  }
+
+  function fetchStats(){
+    fetch(STATS_URL, { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error('bad response');
+        document.getElementById('pwErr').style.display = 'none';
+        ['pwClients','pwSold','pwVisits'].forEach(function(id){
+          document.getElementById(id).classList.remove('pwSkel');
+        });
+        animateCount(document.getElementById('pwClients'), d.totalClients || 0);
+        animateCount(document.getElementById('pwSold'), d.plotsSoldThisMonth || 0);
+        animateCount(document.getElementById('pwVisits'), d.siteVisitsThisWeek || 0);
+      })
+      .catch(paintError);
+  }
+
+  document.getElementById('pwCtaBtn').onclick = function(){
+    window.open(PORTAL_URL, '_blank', 'noopener');
+  };
+
+  fetchStats();
+  setInterval(fetchStats, POLL_MS);
+</script>
+</body>
+</html>
