@@ -21470,8 +21470,15 @@ function leaveMineHtml(){
   <div class="sectitle"><h3>My leave requests</h3><span class="cnt">${mine.length}</span></div>
   <div class="list">${mine.length?mine.map(leaveRowHtml).join(''):emptyState(ic.calendar,'No leave requests yet','Pick some dates above and save your plan.')}</div>`;
 }
+// "Used" means approved AND every date has actually passed -- distinct from
+// merely "approved" (which could still be an upcoming future leave). This is
+// purely a display label; leaveDaysUsed()'s quota math is untouched -- an
+// approved-but-future leave still blocks the calendar/quota exactly as it
+// does today, only the badge changes once the date has genuinely elapsed.
+function leaveIsUsed(r){ return r.status==='approved' && (r.dates||[]).length>0 && (r.dates||[]).every(d=>d<today()); }
 function leaveRowHtml(r){
-  const badge=r.status==='approved'?'<span class="tag ok">Approved</span>'
+  const badge=leaveIsUsed(r)?'<span class="tag ghost">Used</span>'
+    :r.status==='approved'?'<span class="tag ok">Approved</span>'
     :r.status==='declined'?'<span class="tag dgr">Declined</span>'
     :r.status==='rescheduled'?'<span class="tag dgr">Rescheduled — see note</span>'
     :r.status==='planned'?'<span class="tag ghost">Planned — not sent yet</span>'
