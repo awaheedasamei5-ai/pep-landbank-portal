@@ -2303,6 +2303,10 @@ function defaultConfig(){ return {
   commissionPct:3,
   commissionFullCap:1000, commissionHalfCap:500, commissionPoolPerPlot:500, lastCommissionMonth:'',
   note:'',
+  // Arkesel (the SMS gateway) caps alphanumeric sender IDs at 11 characters --
+  // this is a GSM-network standard, not a Palmstead choice, so "Trulander"
+  // fits but the full "Trulander JSF Limited" would not.
+  smsSenderName:'Trulander',
   quoteCompanyName:'Trulander JSF Limited', quoteSiteName:'P.O Box CO3644, Tema, Accra-Ghana',
   quoteDocTypeText:'Quotation with Payment Plan Schedule',
   quoteNotesText:'Kindly make all payments by cheque or transfer to Trulander JSF Ltd.\nQuotation and offer is valid for 10 days only.\nKindly ensure all payments are receipted with Trulander receipts.\nBank Details: Ecobank Account No. 1441002259946, Spintex Branch.\nKindly note all payments shall be latest by the 27th of each month.\nWe accept either post-dated cheques or standing orders for credit payment.',
@@ -2649,6 +2653,7 @@ function weekWorkdayIsos(weekStartIso){
 const mapWeeklyVisitForm=r=>({id:r.id,weekStart:r.week_start,visitDate:r.visit_date,
   vehicleRentalEst:r.vehicle_rental_est,driversTipEst:r.drivers_tip_est,fuelEst:r.fuel_est,refreshmentEst:r.refreshment_est,tntEst:r.tnt_est,
   vehicleRentalAct:r.vehicle_rental_act,driversTipAct:r.drivers_tip_act,fuelAct:r.fuel_act,refreshmentAct:r.refreshment_act,tntAct:r.tnt_act,
+  siteManagerName:r.site_manager_name,
   status:r.status,approvedBy:r.approved_by,approvedByName:r.approved_by_name,approvedSignature:r.approved_signature,finalizedAt:(r.finalized_at||'').slice(0,16).replace('T',' ')});
 
 /* ================= DEMO DATA LAYER (in-memory + optional window.storage) ================= */
@@ -3630,7 +3635,7 @@ async function apiDeletePlotRequest(id){
    migration -- so each day's cost breakdown and approval are independent. */
 function demoWeeklyVisitFormDefaults(weekStart,visitDate){
   return {id:uid(),weekStart,visitDate,vehicleRentalEst:0,driversTipEst:0,fuelEst:0,refreshmentEst:0,tntEst:0,
-    vehicleRentalAct:0,driversTipAct:0,fuelAct:0,refreshmentAct:0,tntAct:0,status:'Open',
+    vehicleRentalAct:0,driversTipAct:0,fuelAct:0,refreshmentAct:0,tntAct:0,status:'Open',siteManagerName:null,
     approvedBy:null,approvedByName:null,approvedSignature:null,finalizedAt:null};
 }
 async function apiLoadOrCreateWeeklyVisitForm(weekStart,visitDate){
@@ -3659,7 +3664,8 @@ async function apiListWeeklyVisitForms(){
 async function apiSaveWeeklyVisitCosts(id,patch){
   if(DEMO_MODE){ const d=await demoLoad(); const f=(d.weeklyVisitForms||[]).find(x=>x.id===id); if(f) Object.assign(f,patch); await demoSave(); return; }
   const map={vehicleRentalEst:'vehicle_rental_est',driversTipEst:'drivers_tip_est',fuelEst:'fuel_est',refreshmentEst:'refreshment_est',tntEst:'tnt_est',
-    vehicleRentalAct:'vehicle_rental_act',driversTipAct:'drivers_tip_act',fuelAct:'fuel_act',refreshmentAct:'refreshment_act',tntAct:'tnt_act'};
+    vehicleRentalAct:'vehicle_rental_act',driversTipAct:'drivers_tip_act',fuelAct:'fuel_act',refreshmentAct:'refreshment_act',tntAct:'tnt_act',
+    siteManagerName:'site_manager_name'};
   const dbPatch={updated_at:new Date().toISOString()};
   Object.keys(patch).forEach(k=>{ if(map[k]) dbPatch[map[k]]=patch[k]; });
   const {error}=await sb.from('weekly_visit_forms').update(dbPatch).eq('id',id);
@@ -4016,7 +4022,7 @@ async function apiSendSms(to,message,trigger){
   if(DEMO_MODE){ ok=true; }
   else{
     try{
-      const {data,error}=await sb.functions.invoke('send-sms',{body:{to,message}});
+      const {data,error}=await sb.functions.invoke('send-sms',{body:{to,message,sender:(CONFIG&&CONFIG.smsSenderName)||'Trulander'}});
       if(error) throw error;
       ok=!!(data&&data.ok);
       if(!ok) errMsg=data&&data.data&&data.data.message?String(data.data.message):'SMS provider rejected the request';
@@ -4089,7 +4095,8 @@ async function apiLoadConfig(){
       // undefined, and undefined*anything is NaN in agentPoints().
       leaderboardWeights:Object.assign({},defaultConfig().leaderboardWeights,data.leaderboard_weights||{}),
       referralPointsPerReferral:data.referral_points_per_referral!=null?num(data.referral_points_per_referral):50,
-      referralRewards:(data.referral_rewards&&data.referral_rewards.length)?data.referral_rewards:defaultConfig().referralRewards}; }
+      referralRewards:(data.referral_rewards&&data.referral_rewards.length)?data.referral_rewards:defaultConfig().referralRewards,
+      smsSenderName:data.sms_sender_name||defaultConfig().smsSenderName}; }
   }catch(e){}
   return CONFIG;
 }
@@ -4123,7 +4130,8 @@ async function apiSaveConfig(patch){
     work_end_time:CONFIG.workEndTime||'17:00',
     leaderboard_weights:CONFIG.leaderboardWeights||defaultConfig().leaderboardWeights,
     referral_points_per_referral:num(CONFIG.referralPointsPerReferral)||50,
-    referral_rewards:CONFIG.referralRewards||defaultConfig().referralRewards};
+    referral_rewards:CONFIG.referralRewards||defaultConfig().referralRewards,
+    sms_sender_name:CONFIG.smsSenderName||defaultConfig().smsSenderName};
   const {error}=await sb.from('app_config').upsert(row); if(error) throw error;
   // Only audit-log the money/incentive-adjacent fields -- most Company Settings
   // saves (address, quote text, attendance cutoff) are routine and would just
@@ -14198,6 +14206,9 @@ function siteVisitAuthBodyHtml(form,visits){
   </div>
 
   <div class="sectitle" style="margin-top:0"><h3>AUTHORIZATION FORM-TSOPOLI SITE VISIT</h3><span class="cnt">${esc(fmtLongDate(SVA_SELECTED_DAY))} · ${visits.length} visit${visits.length===1?'':'s'}</span></div>
+  <div class="rowcard" style="margin-bottom:14px;max-width:340px">
+    ${fld('Site manager in charge','<input id="sva_siteManager" placeholder="e.g. Abdul Waheed" value="'+esc(form.siteManagerName||'')+'" '+(costsEditable?'':'disabled')+'/>','shown on the downloaded PDF')}
+  </div>
   <div class="svaTableWrap" style="overflow-x:auto;margin-bottom:18px;border:1px solid var(--line);border-radius:12px;touch-action:pan-y">
     <table class="league-table svaTable" style="min-width:960px">
       <thead><tr>${SVA_VISIT_COLS.map(([label])=>`<th>${esc(label)}</th>`).join('')}<th></th></tr></thead>
@@ -14258,6 +14269,7 @@ function bindSiteVisitAuthCtrls(){
   const saveBtn=document.getElementById('svaSave');
   if(saveBtn) saveBtn.onclick=async()=>{
     const patch={}; SVA_COST_ROWS.forEach(r=>{ [r.estKey,r.actKey].forEach(k=>{ const el=document.getElementById('sva_'+k); if(el) patch[k]=num(el.value); }); });
+    const smEl=document.getElementById('sva_siteManager'); if(smEl) patch.siteManagerName=smEl.value.trim()||null;
     saveBtn.disabled=true; saveBtn.textContent='Saving…';
     try{
       await apiSaveWeeklyVisitCosts(SVA_FORM.id,patch);
@@ -14296,16 +14308,43 @@ function bindSiteVisitAuthCtrls(){
    (near the boot sequence). This is the staff-facing half: group visits by day
    and Activate (send the SMS'd review link), browse Submissions, and generate
    the day's Reports (PDF, emailed + posted to Management's in-app chat). */
-let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_SUB_DATE_FILTER='all', SVE_REPORT_DATE=null;
+let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_REPORT_DATE=null;
+let SVE_WEEK_START=null, SVE_SELECTED_DAY=null;
+// Same week-nav shape as Logistics (SVA_WEEK_START/weekRangeLabel/weekWorkdayIsos)
+// -- but real client site visits happen any day, not just Mon-Fri, so this
+// walks all 7 days of the week instead of reusing weekWorkdayIsos verbatim.
+function sveWeekDayIsos(weekStart){
+  const start=new Date(weekStart+'T00:00:00');
+  return Array.from({length:7},(_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return isoDateOnly(d); });
+}
+function sveWeekNavHtml(weekStart,selectedDay,countsByDate){
+  const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  return `<div class="rowcard" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <button class="chip" id="svePrevWeek">‹</button>
+      <div style="font-weight:800;font-size:14px">${esc(weekRangeLabel(weekStart))}</div>
+      <button class="chip" id="sveNextWeek">›</button>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      ${sveWeekDayIsos(weekStart).map(iso=>{
+        const count=countsByDate[iso]||0;
+        const d=new Date(iso+'T00:00:00');
+        return `<button class="chip ${iso===selectedDay?'on':''}" data-sveday="${iso}">${labels[d.getDay()]} ${d.getDate()}${count?' · '+count:''}</button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
 async function paintSiteVisitExperienceBody(){
   const body=document.getElementById('svaMainBody'); if(!body) return;
   body.innerHTML=`<div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div>`;
+  if(!SVE_WEEK_START) SVE_WEEK_START=currentWeekStartIso();
+  if(!SVE_SELECTED_DAY) SVE_SELECTED_DAY=today();
   try{
     if(SVE_TAB==='invites'){
       [SVE_VISITS,SVE_INVITES]=await Promise.all([apiLoadFullSiteVisits(),apiLoadSiteVisitExperienceInvites()]);
     }else{
       SVE_SUBMISSIONS=await apiLoadSiteVisitExperienceSubmissions();
-      if(!SVE_REPORT_DATE) SVE_REPORT_DATE=(SVE_SUBMISSIONS[0]&&SVE_SUBMISSIONS[0].visitDate)||today();
+      if(SVE_TAB==='reports' && !SVE_REPORT_DATE) SVE_REPORT_DATE=(SVE_SUBMISSIONS[0]&&SVE_SUBMISSIONS[0].visitDate)||today();
     }
   }catch(e){ body.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
   body.innerHTML=siteVisitExperienceBodyHtml();
@@ -14318,41 +14357,35 @@ function siteVisitExperienceBodyHtml(){
     <button class="chip ${SVE_TAB==='submissions'?'on':''}" data-svetab="submissions">Submissions${SVE_TAB!=='invites'&&SVE_SUBMISSIONS.length?' ('+SVE_SUBMISSIONS.length+')':''}</button>
     <button class="chip ${SVE_TAB==='reports'?'on':''}" data-svetab="reports">Reports</button>
   </div>
+  ${SVE_TAB!=='reports'?sveWeekNavHtml(SVE_WEEK_START,SVE_SELECTED_DAY,SVE_TAB==='invites'?sveInviteCountsByDate():sveSubmissionCountsByDate()):''}
   ${SVE_TAB==='invites'?sveInvitesTabHtml():SVE_TAB==='submissions'?sveSubmissionsTabHtml():sveReportsTabHtml()}`;
 }
+function sveInviteCountsByDate(){ const c={}; SVE_VISITS.forEach(v=>{ if(v.date) c[v.date]=(c[v.date]||0)+1; }); return c; }
+function sveSubmissionCountsByDate(){ const c={}; SVE_SUBMISSIONS.forEach(s=>{ if(s.visitDate) c[s.visitDate]=(c[s.visitDate]||0)+1; }); return c; }
 function sveInvitesTabHtml(){
-  const dates=[...new Set(SVE_VISITS.map(v=>v.date))].filter(Boolean).sort((a,b)=>b<a?-1:1);
-  if(!dates.length) return emptyState(ic.doc,'No site visits yet','Once visits are logged, they will show up here grouped by date so you can send Site Visit Experience invites.');
-  return `<div style="display:flex;flex-direction:column;gap:14px">${dates.map(date=>{
-    const visits=SVE_VISITS.filter(v=>v.date===date);
-    const rows=visits.map(v=>{
-      const inv=SVE_INVITES.find(i=>i.siteVisitId===v.id);
-      const statusTag=!inv?'<span class="tag">Not invited</span>':inv.submittedAt?'<span class="tag ok">Reviewed</span>':inv.sentAt?'<span class="tag warnt">Invited</span>':'<span class="tag">Pending</span>';
-      const waLink=inv&&v.contact?`https://wa.me/${waNumberFromPhone(v.contact)}?text=${encodeURIComponent('Hi '+(v.name?v.name.split(' ')[0]:'there')+', thank you for honoring our invitation for a site visit to '+(CONFIG.quoteCompanyName||'Trulander JSF Limited')+'! We would love your feedback -- please share your experience here: '+location.origin+location.pathname+'?sve='+inv.token)}`:'';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-        <div><div style="font-weight:700;font-size:13.5px">${esc(v.name||'—')}</div><div class="mini">${esc(v.contact||'No contact on file')} · ${esc(v.status||'')}</div></div>
-        <div style="display:flex;align-items:center;gap:8px">${statusTag}${waLink?`<a href="${esc(waLink)}" target="_blank" rel="noopener" class="mini" style="color:#25D366;font-weight:700">WhatsApp</a>`:''}</div>
-      </div>`;
-    }).join('');
-    const pending=visits.filter(v=>!SVE_INVITES.some(i=>i.siteVisitId===v.id) && v.contact);
-    return `<div class="rowcard">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-        <div style="font-weight:800">${esc(fmtLongDate(date))}</div>
-        ${pending.length?`<button class="btn primary sm" data-sveactivate="${esc(date)}">Activate (${pending.length})</button>`:`<span class="mini">All invited</span>`}
-      </div>
-      ${rows}
+  const visits=SVE_VISITS.filter(v=>v.date===SVE_SELECTED_DAY);
+  const rows=visits.map(v=>{
+    const inv=SVE_INVITES.find(i=>i.siteVisitId===v.id);
+    const statusTag=!inv?'<span class="tag">Not invited</span>':inv.submittedAt?'<span class="tag ok">Reviewed</span>':inv.sentAt?'<span class="tag warnt">Invited</span>':'<span class="tag">Pending</span>';
+    const waLink=inv&&v.contact?`https://wa.me/${waNumberFromPhone(v.contact)}?text=${encodeURIComponent('Hi '+(v.name?v.name.split(' ')[0]:'there')+', thank you for honoring our invitation for a site visit to '+PLOT_SITE+'! We would love your feedback -- please share your experience here: '+location.origin+location.pathname+'?sve='+inv.token)}`:'';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+      <div><div style="font-weight:700;font-size:13.5px">${esc(v.name||'—')}</div><div class="mini">${esc(v.contact||'No contact on file')} · ${esc(v.status||'')}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">${statusTag}${waLink?`<a href="${esc(waLink)}" target="_blank" rel="noopener" class="mini" style="color:#25D366;font-weight:700">WhatsApp</a>`:''}</div>
     </div>`;
-  }).join('')}</div>`;
+  }).join('');
+  const pending=visits.filter(v=>!SVE_INVITES.some(i=>i.siteVisitId===v.id) && v.contact);
+  return `<div class="rowcard">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <div style="font-weight:800">${esc(fmtLongDate(SVE_SELECTED_DAY))}</div>
+      ${pending.length?`<button class="btn primary sm" data-sveactivate="${esc(SVE_SELECTED_DAY)}">Activate (${pending.length})</button>`:visits.length?`<span class="mini">All invited</span>`:''}
+    </div>
+    ${visits.length?rows:'<div class="empty">No site visits logged for this day.</div>'}
+  </div>`;
 }
 function sveSubmissionsTabHtml(){
-  const dates=[...new Set(SVE_SUBMISSIONS.map(s=>s.visitDate))].filter(Boolean).sort((a,b)=>b<a?-1:1);
-  const filtered=SVE_SUB_DATE_FILTER==='all'?SVE_SUBMISSIONS:SVE_SUBMISSIONS.filter(s=>s.visitDate===SVE_SUB_DATE_FILTER);
+  const filtered=SVE_SUBMISSIONS.filter(s=>s.visitDate===SVE_SELECTED_DAY);
   return `
-  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-    <button class="chip ${SVE_SUB_DATE_FILTER==='all'?'on':''}" data-svesubdate="all">All (${SVE_SUBMISSIONS.length})</button>
-    ${dates.map(d=>`<button class="chip ${SVE_SUB_DATE_FILTER===d?'on':''}" data-svesubdate="${esc(d)}">${esc(fmtLongDate(d))}</button>`).join('')}
-  </div>
-  ${!filtered.length?emptyState(ic.doc,'No submissions yet','Once clients complete a Site Visit Experience review, it will show up here.'):
+  ${!filtered.length?emptyState(ic.doc,'Nothing for this day','Once a client completes a Site Visit Experience review for '+fmtLongDate(SVE_SELECTED_DAY)+', it will show up here.'):
   `<div style="display:flex;flex-direction:column;gap:12px">${filtered.map(s=>`
     <div class="rowcard">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
@@ -14380,8 +14413,10 @@ function sveReportsTabHtml(){
     <div class="mini" style="margin-bottom:8px">Pick a day to preview and generate its report</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <input type="date" id="sveReportDate" value="${esc(activeDate)}" style="padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-size:13px"/>
-      <button class="btn primary sm" id="sveGenerateBtn">Generate & send to Management</button>
+      <button class="btn ghost sm" id="sveDownloadReportBtn">⬇ Download PDF</button>
+      <button class="btn primary sm" id="sveGenerateBtn">Send to Management</button>
     </div>
+    <div class="mini" style="margin-top:8px">Download keeps the PDF on this device only. Send to Management also emails it and posts it to their in-app chat.</div>
   </div>
   <div class="sectitle" style="margin-top:0"><h3>Preview</h3><span class="cnt">${dayItems.length} submission${dayItems.length===1?'':'s'} · ${esc(fmtLongDate(activeDate))}</span></div>
   ${!dayItems.length?emptyState(ic.doc,'Nothing for this day','No Site Visit Experience submissions were received on this date.'):
@@ -14409,7 +14444,7 @@ function bindSiteVisitExperienceCtrls(){
         SVE_INVITES.unshift(inv);
         const link=location.origin+location.pathname+'?sve='+inv.token;
         const firstName=v.name?v.name.split(' ')[0]:'there';
-        const msg=`Hi ${firstName}, thank you for honoring our invitation for a site visit to ${(CONFIG.quoteCompanyName||'Trulander JSF Limited')}! We'd love your feedback -- please share your experience here: ${link}`;
+        const msg=`Hi ${firstName}, thank you for honoring our invitation for a site visit to ${PLOT_SITE}! We'd love your feedback -- please share your experience here: ${link}`;
         const ok=await apiSendSms(v.contact,msg,'site_visit_experience_invite');
         await apiMarkSiteVisitExperienceInviteSent(inv.id, ok?'sms':'sms_failed');
         inv.sentAt=new Date().toISOString(); inv.sentVia=ok?'sms':'sms_failed';
@@ -14419,7 +14454,9 @@ function bindSiteVisitExperienceCtrls(){
     toast(sent+' invite'+(sent===1?'':'s')+' sent');
     await paintSiteVisitExperienceBody();
   });
-  body.querySelectorAll('[data-svesubdate]').forEach(b=>b.onclick=()=>{ SVE_SUB_DATE_FILTER=b.dataset.svesubdate; body.innerHTML=siteVisitExperienceBodyHtml(); bindSiteVisitExperienceCtrls(); });
+  const svePrev=document.getElementById('svePrevWeek'); if(svePrev) svePrev.onclick=()=>{ SVE_WEEK_START=isoPlusDays(SVE_WEEK_START,-7); paintSiteVisitExperienceBody(); };
+  const sveNext=document.getElementById('sveNextWeek'); if(sveNext) sveNext.onclick=()=>{ SVE_WEEK_START=isoPlusDays(SVE_WEEK_START,7); paintSiteVisitExperienceBody(); };
+  body.querySelectorAll('[data-sveday]').forEach(b=>b.onclick=()=>{ SVE_SELECTED_DAY=b.dataset.sveday; paintSiteVisitExperienceBody(); });
   body.querySelectorAll('[data-svedlsub]').forEach(b=>b.onclick=()=>{
     const s=SVE_SUBMISSIONS.find(x=>x.id===b.dataset.svedlsub); if(s) buildSiteVisitExperiencePDF(s);
   });
@@ -14453,12 +14490,31 @@ function bindSiteVisitExperienceCtrls(){
       }
       toast('Report generated'+(res.pdfBase64?' and sent to Management':''));
     }catch(e){ toast('Could not generate: '+(e.message||e)); }
-    genBtn.disabled=false; genBtn.textContent='Generate & send to Management';
+    genBtn.disabled=false; genBtn.textContent='Send to Management';
+  };
+  const dlBtn=document.getElementById('sveDownloadReportBtn');
+  if(dlBtn) dlBtn.onclick=async()=>{
+    const date=(document.getElementById('sveReportDate')||{}).value||SVE_REPORT_DATE;
+    dlBtn.disabled=true; dlBtn.textContent='Building…';
+    try{
+      const res=await apiGenerateSiteVisitExperienceReport(date,true);
+      if(res.pdfBase64){
+        const bin=atob(res.pdfBase64); const bytes=new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+        const blob=new Blob([bytes],{type:'application/pdf'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='Site_Visit_Experience_Report_'+date+'.pdf';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),4000);
+        toast('Report downloaded');
+      }else{ toast('No PDF returned — try again'); }
+    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    dlBtn.disabled=false; dlBtn.textContent='⬇ Download PDF';
   };
 }
-async function apiGenerateSiteVisitExperienceReport(date){
+async function apiGenerateSiteVisitExperienceReport(date,skipEmail){
   if(DEMO_MODE) return {ok:true, pdfBase64:null, emailResult:{skipped:'demo mode'}};
-  const {data,error}=await sb.functions.invoke('site-visit-experience-report',{body:{date}});
+  const {data,error}=await sb.functions.invoke('site-visit-experience-report',{body:{date,skipEmail:!!skipEmail}});
   if(error){
     let reason=null;
     if(error.context && typeof error.context.json==='function'){ try{ const j=await error.context.json(); reason=j&&j.reason; }catch(e2){} }
@@ -14530,6 +14586,9 @@ function buildWeeklyVisitAuthPDF(form,visits){
   const tableTop=y;
 
   y+=svaGridRow(doc,x0,y,colW,[{text:'AUTHORIZATION FORM-TSOPOLI SITE VISIT',span:8,bold:true,align:'center',size:10.5}],8.5);
+  y+=svaGridRow(doc,x0,y,colW,[
+    {text:'Site manager in charge'},{text:form.siteManagerName||'',span:7}
+  ]);
   y+=svaGridRow(doc,x0,y,colW,[
     {text:'Date of visit'},{text:(form.visitDate?fmtLongDate(form.visitDate):weekRangeLabel(form.weekStart).replace(/–/g,'-')),span:3},{text:''},
     {text:'Approved By:'},{text:form.status==='Finalized'?(form.approvedByName||''):'',span:2}
@@ -20743,10 +20802,17 @@ async function viewSmsApp(){
 }
 function smsSelectedCount(){ return Object.keys(SMS_SELECTED).length; }
 function smsModeChip(mode,label){ return `<button class="chip ${SMS_MODE===mode?'on':''}" data-smsmode="${mode}">${label}</button>`; }
+function canManageSmsSettings(){ return PROFILE.role==='manager'||PROFILE.key==='adams'; }
 function paintSmsBody(){
   const body=document.getElementById('smsBody'); if(!body) return;
   const customVal=SMS_MODE==='custom'?(document.getElementById('sms_custom')?document.getElementById('sms_custom').value:''):'';
   body.innerHTML=`
+  ${canManageSmsSettings()?`<div class="rowcard" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div style="font-weight:700;font-size:13.5px">Sender name</div><div class="mini">What clients/staff see as the sender · currently "${esc(CONFIG.smsSenderName||'Trulander')}"</div></div>
+      <button class="chip" id="smsSenderSettingsBtn">Change</button>
+    </div>
+  </div>`:''}
   <div class="sectitle" style="margin-top:0"><h3>Who</h3></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${smsModeChip('staff','Staff')}${smsModeChip('clients','Clients')}${smsModeChip('custom','Custom number')}</div>
   <div class="formwrap" id="smsRecipientArea">${smsRecipientAreaHtml()}</div>
@@ -20794,7 +20860,28 @@ function smsPersonRowHtml(p){
     <div class="ai"><div><div class="nm">${esc(p.name||'Unnamed')}</div><div class="mini">${phone?esc(p.phone):'No phone on file'}</div></div></div>
   </label>`;
 }
+function openSmsSenderSettingsModal(){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  ov.innerHTML=`<div id="announceModal">
+    <div style="font-weight:800;font-size:16px;margin-bottom:6px">SMS sender name</div>
+    <div class="mini" style="margin-bottom:14px">What appears as the sender on every text message. Arkesel (our SMS gateway) caps this at 11 characters — longer names may be rejected or silently truncated by the network.</div>
+    ${fld('Sender name','<input id="smsSenderInput" maxlength="11" value="'+esc(CONFIG.smsSenderName||'Trulander')+'"/>','max 11 characters')}
+    <div class="formactions"><button class="btn primary" id="smsSenderSaveBtn" style="width:100%">Save</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('smsSenderSaveBtn').onclick=async()=>{
+    const v=val('smsSenderInput').trim();
+    if(!v){ toast('Enter a sender name'); return; }
+    const btn=document.getElementById('smsSenderSaveBtn'); btn.disabled=true; btn.textContent='Saving…';
+    try{ await apiSaveConfig({smsSenderName:v}); toast('Sender name updated'); ov.remove(); paintSmsBody(); }
+    catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save'; }
+  };
+}
 function bindSmsCtrls(){
+  const senderBtn=document.getElementById('smsSenderSettingsBtn'); if(senderBtn) senderBtn.onclick=openSmsSenderSettingsModal;
   document.querySelectorAll('[data-smsmode]').forEach(b=>b.onclick=async()=>{
     SMS_MODE=b.dataset.smsmode; SMS_SEARCH='';
     if(SMS_MODE==='clients'&&!SMS_CLIENTS_LOADED){
