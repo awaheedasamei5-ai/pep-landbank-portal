@@ -504,6 +504,38 @@ a{color:var(--green2)}
    screen that still wants a genuine two-column split. */
 .dashFlow>*{margin-bottom:var(--sp-5)}
 .dashFlow>*:last-child{margin-bottom:0}
+/* Streak & Mood card -- Duolingo-style daily habit tracker (see
+   evaluateMyStreak/streakWidgetHtml). Mobile spec below is deliberately its
+   own layout (stacked: mood+number on top, week row underneath), not a
+   shrunk version of the desktop one -- the desktop override further down
+   restructures it into a side-by-side row instead of just scaling text down,
+   per the standing instruction to build each breakpoint on its own terms. */
+.streakCard{border-radius:20px;padding:18px 20px;color:#fff;position:relative;overflow:hidden;box-shadow:0 14px 32px -12px rgba(0,0,0,.35)}
+.streakCardTop{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.streakEmoji{font-size:40px;line-height:1;flex:0 0 auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.25))}
+.streakNum{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace}
+.streakLbl{font-size:12.5px;opacity:.92;margin-top:2px;font-weight:600}
+.streakWeekRow{display:flex;justify-content:space-between;gap:6px}
+.streakWeekDay{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1}
+.streakWeekLbl{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.75;font-weight:700}
+.streakWeekMark{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+.streakWeekMark.met{background:rgba(255,255,255,.92);color:#166534}
+.streakWeekMark.future{background:rgba(255,255,255,.1);opacity:.5}
+.streakRiskRow{display:flex;align-items:center;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.22);font-size:12px;font-weight:600;opacity:.95}
+.streakRiskDot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.streakRiskDot.ok{background:#4ADE80}
+.streakRiskDot.warn{background:#FBBF24}
+.streakRiskDot.dgr{background:#F87171}
+@media(min-width:768px){
+  .streakCard{padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+  .streakCardTop{margin-bottom:0;flex:0 0 auto}
+  .streakEmoji{font-size:48px}
+  .streakNum{font-size:22px}
+  .streakWeekRow{flex:0 0 auto;gap:10px}
+  .streakWeekDay{flex:0 0 auto}
+  .streakWeekMark{width:28px;height:28px}
+  .streakRiskRow{margin-top:0;padding-top:0;border-top:none;border-left:1px solid rgba(255,255,255,.22);padding-left:20px;flex:0 0 auto;white-space:nowrap}
+}
 /* Premium UI rebuild -- Barbara reference's dashboard arrangement: a 2x2
    KPI block on the left with one wide chart card beside it at the same
    height (row 1), then two small stat cards + a donut card (row 2).
@@ -3041,7 +3073,7 @@ function seedDemoPlots(){
   ];
 }
 function seedDemo(){
-  const m={version:DEMO_VERSION,leads:{},enquiries:[],complaints:[],sitevisits:[],activity:[],config:defaultConfig(),employees:[],overrides:{},invites:[],plots:seedDemoPlots(),payments:[],announcements:[],allocations:[],messages:[],notes:[],todos:[],sveInvites:[],sveSubmissions:[]};
+  const m={version:DEMO_VERSION,leads:{},enquiries:[],complaints:[],sitevisits:[],activity:[],config:defaultConfig(),employees:[],overrides:{},invites:[],plots:seedDemoPlots(),payments:[],announcements:[],allocations:[],messages:[],notes:[],todos:[],sveInvites:[],sveSubmissions:[],streaks:[]};
   Object.keys(DEMO_PIPELINES).forEach(k=>{ m.leads[k]=DEMO_PIPELINES[k].map(l=>({id:uid(),agent:k,...l,
     netTotal:l.netTotal,grandTotal:l.grandTotal,balance:l.balance})); });
   // backfill: one opening payment per lead with money already paid, dated to when it was added
@@ -3068,6 +3100,7 @@ async function demoLoad(){
     if(!demoMem.todos) demoMem.todos=[];
     if(!demoMem.sveInvites) demoMem.sveInvites=[];
     if(!demoMem.sveSubmissions) demoMem.sveSubmissions=[];
+    if(!demoMem.streaks) demoMem.streaks=[];
     return demoMem; }
   demoMem=seedDemo();
   await demoSave();
@@ -6890,6 +6923,7 @@ async function enterApp(){
   ensurePresenceSubscribed();
   ensureOfflineQueueRunning();
   if(PROFILE.role!=='manager') evaluateMyAchievements();
+  await evaluateMyStreak();
   startInactivityTimer();
   startMonthRolloverWatchdog();
   checkClockSanity();
@@ -9602,6 +9636,149 @@ function agentQuickAccessItems(){
     {r:'chat',fic:'chat',label:'Chat'}
   ];
 }
+/* ================= STREAK & MOOD (Duolingo-style daily habit tracker) =================
+   staff_streaks holds one row per staff per day (todo_logged_by_deadline,
+   lead_added, site_visit_booked, streak_day_met). Computed at checkpoints
+   (sign-in, opening home, marking a to-do done) -- see evaluateMyStreak(),
+   called from enterApp() -- same "checkpoint not timer" pattern already used
+   for achievements (evaluateMyAchievements), not a new cron job. Baseline
+   daily requirement is logging a to-do before the work-day deadline; adding
+   a lead or booking a site visit are bonus signals surfaced separately, not
+   daily-required (demanding either literally every day would make the
+   streak impossible to maintain honestly). Monthly pacing/risk is a pure
+   function over data that already exists (CONFIG.targetPlotsPerMonth +
+   deals closed this month, same source checkTargetExceeded() already uses)
+   -- no new target setting to maintain. */
+let MY_STREAK=null;
+const mapStreak=r=>({id:r.id,staffKey:r.staff_key,date:r.streak_date,todoLogged:r.todo_logged_by_deadline,
+  leadAdded:r.lead_added,siteVisitBooked:r.site_visit_booked,dayMet:r.streak_day_met});
+async function apiCheckTodoLoggedToday(){
+  const startBound=today()+'T'+(CONFIG.workStartTime||'08:00');
+  const endBound=today()+'T'+(CONFIG.workEndTime||'17:00');
+  if(DEMO_MODE){ const d=await demoLoad();
+    return (d.todos||[]).some(t=>t.ownerKey===PROFILE.key && t.date===today() && (t.createdAt||'').slice(0,16)>=startBound && (t.createdAt||'').slice(0,16)<=endBound); }
+  try{
+    const {count,error}=await sb.from('schedule_items').select('id',{count:'exact',head:true}).eq('kind','todo').eq('owner_key',PROFILE.key)
+      .eq('item_date',today()).gte('created_at',startBound).lte('created_at',endBound);
+    if(error) return false; return (count||0)>0;
+  }catch(e){ return false; }
+}
+async function apiUpsertMyStreakToday(patch){
+  const dayMet=!!patch.todoLogged;
+  if(DEMO_MODE){ const d=await demoLoad(); d.streaks=d.streaks||[];
+    let row=d.streaks.find(s=>s.staffKey===PROFILE.key&&s.date===today());
+    if(!row){ row={id:uid(),staffKey:PROFILE.key,date:today()}; d.streaks.push(row); }
+    Object.assign(row,patch,{dayMet}); await demoSave(); return row; }
+  try{
+    const {data,error}=await sb.from('staff_streaks').upsert({staff_key:PROFILE.key,streak_date:today(),
+      todo_logged_by_deadline:!!patch.todoLogged,lead_added:!!patch.leadAdded,site_visit_booked:!!patch.siteVisitBooked,
+      streak_day_met:dayMet,updated_at:new Date().toISOString()},{onConflict:'staff_key,streak_date'}).select().single();
+    if(error) throw error; return mapStreak(data);
+  }catch(e){ return null; }
+}
+async function apiLoadMyStreakHistory(staffKey,days){
+  const fromDate=isoPlusDays(today(),-(days||60));
+  if(DEMO_MODE){ const d=await demoLoad();
+    return (d.streaks||[]).filter(s=>s.staffKey===staffKey&&s.date>=fromDate).sort((a,b)=>b.date.localeCompare(a.date)); }
+  try{
+    const {data,error}=await sb.from('staff_streaks').select('*').eq('staff_key',staffKey).gte('streak_date',fromDate).order('streak_date',{ascending:false});
+    if(error) throw error; return (data||[]).map(mapStreak);
+  }catch(e){ return []; }
+}
+// Counts back from the most recent day that's actually been decided -- if
+// today isn't met yet but the deadline hasn't passed, today doesn't count
+// against the streak yet (there's still time), so counting starts from
+// yesterday instead. Once the deadline passes with today still unmet, the
+// next evaluateMyStreak() call naturally includes today as a miss and the
+// count starts from today again, breaking the streak for real.
+function computeRunningStreakLength(history){
+  const nowHHMM=new Date().toISOString().slice(11,16);
+  const deadlinePassed=nowHHMM>(CONFIG.workEndTime||'17:00');
+  const todayRow=history.find(r=>r.date===today());
+  let rows=history.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(todayRow && !todayRow.dayMet && !deadlinePassed) rows=rows.filter(r=>r.date!==today());
+  let len=0;
+  for(const r of rows){ if(r.dayMet) len++; else break; }
+  return len;
+}
+function computeMonthlyRisk(){
+  const d=new Date(today()+'T00:00:00');
+  const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  const dayOfMonth=d.getDate();
+  const daysLeft=daysInMonth-dayOfMonth;
+  const monthProgress=dayOfMonth/daysInMonth;
+  const quota=num(CONFIG.targetPlotsPerMonth)||2;
+  const thisMonth=today().slice(0,7);
+  const closedCount=(DB.leads||[]).filter(l=>l.agent===PROFILE.key&&isFullyPaid(l)&&monthKey(l.date)===thisMonth).length;
+  const pipelineProgress=quota?closedCount/quota:1;
+  const tier=pipelineProgress>=monthProgress?'on track':pipelineProgress>=monthProgress*0.6?'at risk':'critical';
+  return {daysLeft,tier,closedCount,quota};
+}
+// Default mood palette drawn from the Duolingo streak-card/app-icon reference
+// (warm orange = solid streak, blue/purple = building, red/dark = at-risk or
+// broken) -- one lookup table so a future custom emoji/asset set is a
+// one-line swap here, not a rebuild.
+const STREAK_MOOD={
+  dull:{emoji:'😴',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
+  danger:{emoji:'😰',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:"Don't let it break!"},
+  zero:{emoji:'🙂',bg:'linear-gradient(135deg,#7C3AED,#5B21B6)',label:"Let's start a streak"},
+  building:{emoji:'😊',bg:'linear-gradient(135deg,#2563EB,#1D4ED8)',label:'Keep it going'},
+  solid:{emoji:'🔥',bg:'linear-gradient(135deg,#F59E0B,#D97706)',label:'On fire'},
+  legendary:{emoji:'🤩',bg:'linear-gradient(135deg,#EAB308,#7C3AED)',label:'Legendary'}
+};
+function computeStreakMoodKey(streakLen,todayMet,monthRiskTier){
+  const nowHHMM=new Date().toISOString().slice(11,16);
+  const deadlinePassed=nowHHMM>(CONFIG.workEndTime||'17:00');
+  if(!todayMet && !deadlinePassed && streakLen===0) return 'dull';
+  if(!todayMet && !deadlinePassed && streakLen>0) return 'dull';
+  if(!todayMet && deadlinePassed) return streakLen>0?'danger':'zero';
+  if(streakLen>=30) return monthRiskTier==='critical'?'solid':'legendary';
+  if(streakLen>=7) return 'solid';
+  if(streakLen>=1) return 'building';
+  return 'zero';
+}
+async function evaluateMyStreak(){
+  if(!PROFILE) return null;
+  try{
+    const todoLogged=await apiCheckTodoLoggedToday();
+    const leadAdded=(DB.leads||[]).some(l=>l.agent===PROFILE.key&&l.date===today());
+    const siteVisitBooked=(DB.sitevisits||[]).some(v=>v.agentKey===PROFILE.key&&v.date===today());
+    await apiUpsertMyStreakToday({todoLogged,leadAdded,siteVisitBooked});
+    const history=await apiLoadMyStreakHistory(PROFILE.key,60);
+    const streakLen=computeRunningStreakLength(history);
+    const risk=computeMonthlyRisk();
+    const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier);
+    MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,moodKey,mood:STREAK_MOOD[moodKey],history};
+    return MY_STREAK;
+  }catch(e){ return null; }
+}
+// Mon-Fri checkmark row like the reference streak cards, for the current work week.
+function streakWeekRowHtml(history){
+  const byDate={}; history.forEach(r=>{ byDate[r.date]=r.dayMet; });
+  const d=new Date(today()+'T00:00:00'); const day=d.getDay();
+  const monday=new Date(d); monday.setDate(d.getDate()-((day+6)%7));
+  const labels=['Mon','Tue','Wed','Thu','Fri'];
+  return `<div class="streakWeekRow">${labels.map((lbl,i)=>{
+    const dt=new Date(monday); dt.setDate(monday.getDate()+i); const iso=isoDateOnly(dt);
+    const met=byDate[iso]; const isFuture=iso>today();
+    return `<div class="streakWeekDay"><div class="streakWeekLbl">${lbl}</div><div class="streakWeekMark${met?' met':isFuture?' future':''}">${met?'✓':isFuture?'':'✕'}</div></div>`;
+  }).join('')}</div>`;
+}
+function streakWidgetHtml(streak){
+  if(!streak) return '';
+  const m=streak.mood;
+  return `<div class="streakCard" style="background:${m.bg}">
+    <div class="streakCardTop">
+      <div class="streakEmoji">${m.emoji}</div>
+      <div><div class="streakNum">🔥 ${streak.streakLen} day${streak.streakLen===1?'':'s'}</div><div class="streakLbl">${esc(m.label)}</div></div>
+    </div>
+    ${streakWeekRowHtml(streak.history)}
+    <div class="streakRiskRow">
+      <span class="streakRiskDot ${streak.risk.tier==='on track'?'ok':streak.risk.tier==='at risk'?'warn':'dgr'}"></span>
+      ${streak.risk.daysLeft} day${streak.risk.daysLeft===1?'':'s'} left this month · pipeline ${esc(streak.risk.tier)}
+    </div>
+  </div>`;
+}
 function agentHome(){ const k=kpisOf(DB.leads);
   const thisMonth=today().slice(0,7);
   const wonAll=DB.leads.filter(l=>isFullyPaid(l));
@@ -9632,6 +9809,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
     </div>
   </div>
   <div class="dashFlow">
+    ${streakWidgetHtml(MY_STREAK)}
     ${renderBannerSlideshow()}
     ${renderAllocationBanners()}
     ${renderComplaintAssignBanners()}
@@ -11449,7 +11627,7 @@ function bindTodoCtrls(){
   });
   document.querySelectorAll('[data-todoclose]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
-    try{ await apiUpdateTodoStatus(b.dataset.todoclose,'closed'); const t=TODO_LIST.find(x=>x.id===b.dataset.todoclose); if(t){ t.status='closed'; t.closedAt=new Date().toISOString(); } toast('Marked closed'); paintTodoTab(); evaluateMyAchievements(); }
+    try{ await apiUpdateTodoStatus(b.dataset.todoclose,'closed'); const t=TODO_LIST.find(x=>x.id===b.dataset.todoclose); if(t){ t.status='closed'; t.closedAt=new Date().toISOString(); } toast('Marked closed'); paintTodoTab(); evaluateMyAchievements(); evaluateMyStreak(); }
     catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
   });
   document.querySelectorAll('[data-todoreschedule]').forEach(b=>b.onclick=()=>{
@@ -11550,7 +11728,7 @@ function openTodoNewModal(){
         apiSendScheduleInviteBrief(recs[0].id,title,date,start,end,[...invited]).catch(()=>{});
       }
       TODO_LIST.push(...recs); TODO_LIST.sort((a,b)=>a.date===b.date?a.startTime.localeCompare(b.startTime):a.date.localeCompare(b.date));
-      toast(recs.length>1?recs.length+' occurrences saved':'To-do saved'); ov.remove(); todoArmAlarms(); paintTodoTab();
+      toast(recs.length>1?recs.length+' occurrences saved':'To-do saved'); ov.remove(); todoArmAlarms(); paintTodoTab(); evaluateMyStreak();
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save to-do'; }
   };
 }
@@ -18094,6 +18272,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     </div>
   </div>
   <div class="dashFlow">
+    <div id="mgrTeamStreak"><div class="skel" style="height:70px;border-radius:16px"></div></div>
     ${renderBannerSlideshow()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
     <div class="dashKpiRow">
@@ -18125,6 +18304,7 @@ function bindOverviewCtrls(){
   bindCompanionWidget();
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
+  paintTeamStreakToday();
 }
 // mgrOverview() itself is synchronous (its HTML is assigned directly to
 // body.innerHTML by the caller), so the team day-grid -- which needs a real
@@ -18143,6 +18323,37 @@ async function paintMgrOpsToday(){
   ${renderDayGrid(STAFF_LIST,byStaff,true)}`;
   document.querySelectorAll('#mgrOpsToday [data-daygridopen]').forEach(el=>el.onclick=()=>route('duties'));
   const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')) route('duties'); });
+}
+// Team-wide streak visibility for Management -- who's kept today's habit
+// going vs who hasn't logged a to-do yet, same signal MY_STREAK uses for an
+// individual agent, just one flat query across the whole roster.
+async function apiLoadTeamStreaksToday(){
+  const staffKeys=STAFF_LIST.filter(s=>s.role==='agent').map(s=>s.key);
+  if(!staffKeys.length) return [];
+  if(DEMO_MODE){ const d=await demoLoad();
+    return staffKeys.map(key=>{ const row=(d.streaks||[]).find(s=>s.staffKey===key&&s.date===today()); const s=STAFF_LIST.find(x=>x.key===key);
+      return {staffKey:key,staffName:s?s.name:key,todoLogged:row?!!row.dayMet:false}; }); }
+  try{
+    const {data,error}=await sb.from('staff_streaks').select('staff_key,streak_day_met').eq('streak_date',today()).in('staff_key',staffKeys);
+    if(error) throw error;
+    const byKey={}; (data||[]).forEach(r=>{ byKey[r.staff_key]=r.streak_day_met; });
+    return staffKeys.map(key=>{ const s=STAFF_LIST.find(x=>x.key===key); return {staffKey:key,staffName:s?s.name:key,todoLogged:!!byKey[key]}; });
+  }catch(e){ return []; }
+}
+async function paintTeamStreakToday(){
+  const body=document.getElementById('mgrTeamStreak'); if(!body) return;
+  let rows=[];
+  try{ rows=await apiLoadTeamStreaksToday(); }catch(e){}
+  if(!rows.length){ body.innerHTML=''; return; }
+  const loggedCount=rows.filter(r=>r.todoLogged).length;
+  const atRisk=rows.filter(r=>!r.todoLogged);
+  body.innerHTML=`<div class="rowcard">
+    <div style="display:flex;justify-content:space-between;align-items:center;${atRisk.length?'margin-bottom:10px':''}">
+      <div style="font-weight:800">🔥 Today's streaks</div>
+      <div class="mini">${loggedCount} of ${rows.length} logged their to-do</div>
+    </div>
+    ${atRisk.length?atRisk.map(r=>`<div class="mini" style="padding:3px 0">${esc(r.staffName)} hasn't logged today's to-do yet</div>`).join(''):'<div class="mini" style="color:var(--muted)">Everyone is on track today.</div>'}
+  </div>`;
 }
 function viewStageList(stage){
   const homeRoute=PROFILE.role==='manager'?'mgr':'home';
