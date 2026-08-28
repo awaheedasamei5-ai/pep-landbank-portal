@@ -7952,7 +7952,7 @@ function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
     customer:formCustomer,plots:viewPlots,
     paid:()=>kpiDrilldown('paid'),owed:()=>kpiDrilldown('owed'),visits:()=>kpiDrilldown('visits'),donepaying:()=>kpiDrilldown('donepaying'),
     monthlyclosed:()=>{ monthlyClosedCursor=today().slice(0,7); viewMonthlyClosed(); },
-    agentDetail:agentDetailView,stageList:viewStageList,myStreak:viewStreakDetail,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
+    agentDetail:agentDetailView,stageList:viewStageList,myStreak:viewStreakDetail,staffReport:viewStaffReport,allocations:viewAllocations,chat:viewChat,chatThread:viewChatThread,myDataCheck:viewMyDataCheck,insightList:viewInsightList,monthlyPlanClients:viewMonthlyPlanClients,pipelineHealth:viewPipelineHealth,expectedRevenue:viewExpectedRevenue,paymentSchedule:viewPaymentSchedule,duties:viewDuties,taskDetail:viewTaskDetail,feedback:viewFeedback,insights:viewSmartInsights,salesdesk:viewSalesDesk,crm:viewSalesDesk,more:viewMore,downloads:viewDownloads,mgrTabView:key=>{ mgrTab=key||'overview'; managerView(); },mgrSettingsHub:()=>{ mgrTab='Settings'; managerView(); },myCommission:viewMyCommission,
     clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,clientprofile:formClientProfile,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
     clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory,insightsHub:viewInsightsHub,managementHub:viewManagementHub}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
@@ -8566,7 +8566,7 @@ function viewSalesDesk(){
 const MGR_APP_ROUTE_NAMES={'Feedback':'feedback','Duties':'duties','Leave Schedules':'leaveapp','Memorandum':'memoapp',
   'Banner Tracking':'bannerapp','Insights':'insights','Downloads':'downloads','Plot Requests':'plotrequests',
   'Company Leads':'companyleads','Log Payment':'logpayment','Expenses':'expenses','Management Reports':'mgmtreports',
-  'Site Visit Auth':'sitevisitauth','Contract of Sale':'contractapp','Notes':'notes','Attendance':'attendanceapp','SMS':'sms'};
+  'Site Visit Auth':'sitevisitauth','Contract of Sale':'contractapp','Notes':'notes','Attendance':'attendanceapp','SMS':'sms','Staff Report':'staffReport'};
 function mgrAppRoute(key){
   const rn=MGR_APP_ROUTE_NAMES[key];
   if(rn) route(rn);
@@ -8670,7 +8670,8 @@ function officeDeskGroups(){
       {key:'Feedback',fic:'feedback',label:'Team Feedback'},
       {key:'Banner Tracking',fic:'billboard',label:'Banner Tracking'},
       {key:'Attendance',fic:'attendance',label:'Attendance'},
-      {key:'SMS',fic:'sms',label:'SMS'}
+      {key:'SMS',fic:'sms',label:'SMS'},
+      ...(isMgr?[{key:'Staff Report',fic:'reportdoc',label:'Staff Report'}]:[])
     ]},
     {title:'Money',items:[
       ...(canManagePayments()?[{key:'Log Payment',fic:'payment',label:'Log Payment'}]:[]),
@@ -22594,6 +22595,174 @@ function buildOpsReportPDF(range,d,prior,priorData){
   const fname='Ops_Report_'+range.from+'_to_'+range.to+'.pdf';
   const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri);
   toast('Report downloaded');
+}
+/* ================= STAFF REPORT -- one staff member's full cross-app activity =================
+   Stitches together three data sources that don't otherwise share a screen: pipeline
+   (allAgentLists, same company-wide lead lists the Leaderboard export uses), operations
+   (computeOpsReportData -- reused, not re-derived, so this can never disagree with the
+   Operations Report's own numbers), and attendance/streak (leaderboard_rows RPC for
+   days attended, apiLoadMyStreakHistory for which days of the week they're actually
+   logging in -- both already keyed by an arbitrary staff key, not hardcoded to "me"). */
+let STAFFRPT_PERIOD='month', STAFFRPT_FROM='', STAFFRPT_TO='', STAFFRPT_STAFF='';
+async function computeStaffReportData(staffKey,from,to){
+  const inRange=d=>{ const s=(d||'').slice(0,10); return !!s && s>=from && s<=to; };
+  const [tasksData,taskEventsData,todos]=await Promise.all([apiLoadFullTasks(),apiLoadAllTaskEvents(),apiLoadAllTodosForLeaderboard(from,to)]);
+  const opsData=computeOpsReportData(from,to,todos,tasksData,taskEventsData);
+  let leaderboardRows=[]; try{ leaderboardRows=await apiLoadLeaderboardRows(from,to); }catch(e){}
+  const agents=allAgentLists();
+  const perStaffSales=agents.map(a=>{
+    const leadsAdded=a.list.filter(l=>inRange(l.date)).length;
+    const dealsClosed=a.list.filter(l=>isFullyPaid(l)&&inRange(l.date)).length;
+    const revenue=(DB.payments||[]).filter(p=>p.agentKey===a.key&&inRange(p.date)).reduce((s,p)=>s+num(p.amount),0);
+    const opsRow=opsData.perStaffRows.find(r=>r.key===a.key)||{assigned:0,completed:0,overdue:0,escalated:0,avgCloseDays:null,avgCloseHours:null};
+    const lb=leaderboardRows.find(r=>r.staffKey===a.key)||{};
+    return {key:a.key,name:a.name,leadsAdded,dealsClosed,revenue,...opsRow,daysAttended:lb.daysAttended||0,onTimeDays:lb.onTimeDays||0,siteVisits:lb.siteVisits||0};
+  }).sort((a,b)=>b.revenue-a.revenue);
+  let dayOfWeek=null;
+  if(staffKey){
+    const span=Math.max(1,daysBetween(from,to)||30);
+    const history=await apiLoadMyStreakHistory(staffKey,Math.min(span+3,90));
+    const buckets=[0,0,0,0,0,0,0];
+    history.filter(h=>h.dayMet&&inRange(h.date)).forEach(h=>{ buckets[new Date(h.date+'T00:00:00').getDay()]++; });
+    dayOfWeek=buckets;
+  }
+  return {perStaffSales,one:staffKey?perStaffSales.find(r=>r.key===staffKey):null,dayOfWeek};
+}
+async function viewStaffReport(){
+  if(PROFILE.role!=='manager'){ route('officedesk'); return; }
+  V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Staff Report</h2><p>Everything one staff member has done, across every app — pipeline, operations, attendance, and system usage, or compare everyone at once.</p></div></div>
+  <div id="staffRptBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
+  await paintStaffReport();
+}
+async function paintStaffReport(){
+  const body=document.getElementById('staffRptBody'); if(!body) return;
+  const isCustom=STAFFRPT_PERIOD==='custom';
+  const agentStaff=STAFF_LIST.filter(s=>s.role==='agent');
+  body.innerHTML=`
+  <div class="formwrap" style="margin-bottom:16px">
+    <div class="sectitle" style="margin-top:0"><h3>Filters</h3></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${['week','month','lastmonth','year','lastyear','custom'].map(k=>`<button class="chip ${STAFFRPT_PERIOD===k?'on':''}" data-staffrptperiod="${k}">${k==='week'?'This week':k==='month'?'This month':k==='lastmonth'?'Last month':k==='year'?'This year':k==='lastyear'?'Last year':'Custom range'}</button>`).join('')}
+    </div>
+    ${isCustom?`<div class="grid2">${fld('From','<input id="staffrpt_from" type="date" value="'+(STAFFRPT_FROM||today())+'"/>')}${fld('To','<input id="staffrpt_to" type="date" value="'+(STAFFRPT_TO||today())+'"/>')}</div>`:''}
+    ${fld('Staff',`<select id="staffrpt_staff"><option value="">All staff (comparison)</option>${agentStaff.map(s=>`<option value="${esc(s.key)}" ${STAFFRPT_STAFF===s.key?'selected':''}>${esc(s.name)}</option>`).join('')}</select>`)}
+    <div class="formactions"><button class="btn primary" id="staffRptGoBtn" style="width:100%">⬇ Download PDF report</button></div>
+  </div>
+  <div id="staffRptPreview"><div class="skel" style="height:140px;border-radius:16px"></div></div>`;
+  bindStaffReportCtrls();
+  await paintStaffReportPreview();
+}
+async function paintStaffReportPreview(){
+  const el=document.getElementById('staffRptPreview'); if(!el) return;
+  const range=reportPeriodRange(STAFFRPT_PERIOD,STAFFRPT_FROM,STAFFRPT_TO);
+  let data; try{ data=await computeStaffReportData(STAFFRPT_STAFF,range.from,range.to); }
+  catch(e){ el.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
+  if(!STAFFRPT_STAFF){
+    el.innerHTML=`<div class="sectitle" style="margin-top:0"><h3>Comparison</h3><span class="cnt">${data.perStaffSales.length} staff · ${esc(range.label)}</span></div>
+    <div class="list">${data.perStaffSales.map(s=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(s.name)}</div><div class="meta">${s.leadsAdded} leads · ${s.dealsClosed} deals · ${s.completed} tasks done · ${s.siteVisits} site visits</div></div><div class="amt">${ghs(s.revenue)}</div></div></div>`).join('')}</div>`;
+    return;
+  }
+  const row=data.one||{name:STAFFRPT_STAFF,leadsAdded:0,dealsClosed:0,revenue:0,assigned:0,completed:0,overdue:0,escalated:0,daysAttended:0,onTimeDays:0,siteVisits:0};
+  const dayLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const maxDay=Math.max(1,...(data.dayOfWeek||[1]));
+  el.innerHTML=`<div class="sectitle" style="margin-top:0"><h3>${esc(row.name)}</h3><span class="cnt">${esc(range.label)}</span></div>
+  <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
+    ${kpi('Leads added',row.leadsAdded)}${kpi('Deals closed',row.dealsClosed,'green')}
+    ${kpi('Revenue collected',ghs(row.revenue),'gold')}${kpi('Tasks completed',row.completed)}
+  </div>
+  <div class="sectitle"><h3>Operations</h3></div>
+  <div class="rowcard" style="margin-bottom:14px"><div class="mini">${row.assigned} assigned · ${row.completed} completed · ${row.overdue} overdue · ${row.escalated} escalated</div></div>
+  <div class="sectitle"><h3>Attendance</h3></div>
+  <div class="rowcard" style="margin-bottom:14px"><div class="mini">${row.daysAttended} days attended · ${row.onTimeDays} on time · ${row.siteVisits} site visits logged</div></div>
+  ${data.dayOfWeek?`<div class="sectitle"><h3>Time on system by day of week</h3></div>
+  <div class="rowcard" style="display:flex;gap:8px;align-items:flex-end;height:90px;padding:14px">
+    ${data.dayOfWeek.map((v,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;border-radius:4px 4px 0 0;background:var(--leaf);height:${Math.max(4,v/maxDay*56)}px"></div><div class="mini">${dayLabels[i]}</div></div>`).join('')}
+  </div>`:''}`;
+}
+function bindStaffReportCtrls(){
+  document.querySelectorAll('[data-staffrptperiod]').forEach(b=>b.onclick=()=>{ STAFFRPT_PERIOD=b.dataset.staffrptperiod; paintStaffReport(); });
+  const staffSel=document.getElementById('staffrpt_staff'); if(staffSel) staffSel.onchange=()=>{ STAFFRPT_STAFF=staffSel.value; paintStaffReport(); };
+  const fromInp=document.getElementById('staffrpt_from'); if(fromInp) fromInp.onchange=()=>{ STAFFRPT_FROM=fromInp.value; paintStaffReportPreview(); };
+  const toInp=document.getElementById('staffrpt_to'); if(toInp) toInp.onchange=()=>{ STAFFRPT_TO=toInp.value; paintStaffReportPreview(); };
+  const btn=document.getElementById('staffRptGoBtn');
+  btn.onclick=async()=>{
+    btn.disabled=true; btn.textContent='Building…';
+    try{
+      const range=reportPeriodRange(STAFFRPT_PERIOD,STAFFRPT_FROM,STAFFRPT_TO);
+      const data=await computeStaffReportData(STAFFRPT_STAFF,range.from,range.to);
+      const doc=buildStaffReportPDF(data,STAFFRPT_STAFF,range);
+      if(doc){ const fname=(STAFFRPT_STAFF?'Staff_Report_'+STAFFRPT_STAFF:'Staff_Report_All')+'_'+range.from+'_to_'+range.to+'.pdf';
+        const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri); toast('Report downloaded'); }
+    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    btn.disabled=false; btn.textContent='⬇ Download PDF report';
+  };
+}
+function buildStaffReportPDF(data,staffKey,range){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+  const pageW=doc.internal.pageSize.getWidth();
+  const rightLines=['Generated by '+PROFILE.name,new Date().toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})];
+  if(!staffKey){
+    let y=pdfBrandedHeader(doc,'STAFF REPORT','All staff comparison · '+range.label,rightLines);
+    y+=6;
+    y=pdfSectionTitle(doc,y,pageW,'Comparison',data.perStaffSales.length+' staff');
+    if(data.perStaffSales.length){
+      y=pdfBarChart(doc,12,y,pageW-24,38,data.perStaffSales.slice(0,8).map((s,i)=>({label:s.name,value:Math.round(s.revenue),color:PDF_PALETTE[i%PDF_PALETTE.length]})));
+      y=pdfSimpleTable(doc,y,pageW,['STAFF','LEADS ADDED','DEALS CLOSED','REVENUE','TASKS DONE','SITE VISITS'],
+        data.perStaffSales.map(s=>[s.name,String(s.leadsAdded),String(s.dealsClosed),ghs(s.revenue),String(s.completed),String(s.siteVisits)]),[0.28,0.14,0.14,0.18,0.13,0.13]);
+    }
+    pdfReportFooter(doc,CONFIG.quoteCompanyName);
+    return doc;
+  }
+  const row=data.one||{name:staffKey,leadsAdded:0,dealsClosed:0,revenue:0,assigned:0,completed:0,overdue:0,escalated:0,daysAttended:0,onTimeDays:0,siteVisits:0};
+  const profile=(DB.profiles||[]).find(p=>(p.agent_key||p.agentKey)===staffKey);
+  let y=pdfBrandedHeader(doc,'STAFF REPORT',row.name+' · '+range.label,rightLines);
+  y+=8;
+  // Profile block -- photo (only a real on-file data-URI, never invented) or
+  // initials circle, plus designation, right under the header.
+  const r=11, cx=14+r, cy=y+r;
+  let drewPhoto=false;
+  if(profile&&profile.avatar&&/^data:image\//.test(profile.avatar)){
+    try{ doc.addImage(profile.avatar,'JPEG',cx-r,cy-r,r*2,r*2); drewPhoto=true; }catch(e){}
+  }
+  if(!drewPhoto){
+    doc.setFillColor(79,70,229); doc.circle(cx,cy,r,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,255,255);
+    const initials=(row.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    doc.text(initials,cx,cy+1.4,{align:'center'});
+  }
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(11,30,61);
+  doc.text(row.name,14+r*2+8,y+9);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(...PDF_MUTED);
+  doc.text((profile&&profile.position)||'Sales Agent',14+r*2+8,y+15);
+  y+=r*2+8;
+
+  y=pdfSectionTitle(doc,y,pageW,'Pipeline activity',range.label);
+  y=pdfAccentStatRow(doc,y,pageW,[
+    {label:'Leads added',value:row.leadsAdded,accent:PDF_LEAF},
+    {label:'Deals closed',value:row.dealsClosed,accent:PDF_OK},
+    {label:'Revenue collected',value:ghs(row.revenue),accent:PDF_GOLD},
+    {label:'Site visits',value:row.siteVisits,accent:PDF_LEAF}
+  ]);
+  y=pdfSectionTitle(doc,y,pageW,'Operations');
+  y=pdfAccentStatRow(doc,y,pageW,[
+    {label:'Tasks assigned',value:row.assigned,accent:PDF_LEAF},
+    {label:'Completed',value:row.completed,accent:PDF_OK},
+    {label:'Overdue',value:row.overdue,accent:row.overdue?PDF_DANGER:PDF_OK},
+    {label:'Escalated',value:row.escalated,accent:row.escalated?PDF_WARN:PDF_OK}
+  ]);
+  y=pdfSectionTitle(doc,y,pageW,'Attendance');
+  y=pdfAccentStatRow(doc,y,pageW,[
+    {label:'Days attended',value:row.daysAttended,accent:PDF_OK},
+    {label:'On-time days',value:row.onTimeDays,accent:PDF_OK}
+  ]);
+  if(data.dayOfWeek){
+    y=pdfSectionTitle(doc,y,pageW,'Time on system by day of week');
+    const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    y=pdfBarChart(doc,12,y,pageW-24,36,data.dayOfWeek.map((v,i)=>({label:labels[i],value:v,color:PDF_PALETTE[i%PDF_PALETTE.length]})));
+  }
+  pdfReportFooter(doc,CONFIG.quoteCompanyName);
+  return doc;
 }
 // Same two-table skeleton as Management Report -- monthlyList is getMonthlyPlanClients()'
 // output (each row already carries __sched), owingList is viewMonthlyPlanClients()' own
