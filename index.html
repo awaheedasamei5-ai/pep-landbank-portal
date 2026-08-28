@@ -511,7 +511,17 @@ a{color:var(--green2)}
    restructures it into a side-by-side row instead of just scaling text down,
    per the standing instruction to build each breakpoint on its own terms. */
 .streakCard{border-radius:20px;padding:18px 20px;color:#fff;position:relative;overflow:hidden;box-shadow:0 14px 32px -12px rgba(0,0,0,.35)}
-.streakCardTop{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.streakCardTop{margin-bottom:14px}
+/* Two panes sharing one spot, crossfading forever -- usage/streak mood and
+   pipeline-risk mood are genuinely different signals (you can be fine on
+   your daily streak while the month's numbers are bleeding), so rather than
+   force one static emoji to represent both, the card alternates between
+   them. Pure CSS (opposite-phased animation-delay on an identical keyframe),
+   no JS interval to clean up. */
+.streakMoodStack{position:relative;min-height:48px;min-width:210px}
+.streakMoodPane{display:flex;align-items:center;gap:14px;position:absolute;inset:0;animation:streakMoodFade 10s ease-in-out infinite}
+.streakMoodPane.paneB{animation-delay:-5s}
+@keyframes streakMoodFade{0%,42%{opacity:1}50%,92%{opacity:0}100%{opacity:1}}
 .streakEmoji{font-size:40px;line-height:1;flex:0 0 auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.25))}
 .streakNum{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace}
 .streakLbl{font-size:12.5px;opacity:.92;margin-top:2px;font-weight:600}
@@ -529,6 +539,7 @@ a{color:var(--green2)}
 @media(min-width:768px){
   .streakCard{padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:24px}
   .streakCardTop{margin-bottom:0;flex:0 0 auto}
+  .streakMoodStack{min-width:250px;min-height:58px}
   .streakEmoji{font-size:48px}
   .streakNum{font-size:22px}
   .streakWeekRow{flex:0 0 auto;gap:10px}
@@ -690,12 +701,19 @@ a{color:var(--green2)}
    fades to a smaller, translucent resting state so it stops visually
    fighting with whatever's underneath it -- full size/opacity returns on
    hover/focus/touch, so it's still easy to find and tap. */
-#announceBubble{position:fixed;right:14px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:200;width:50px;height:50px;border-radius:100px;touch-action:none;
+/* Default idle position nudged smaller + further from the bottom nav than
+   before -- the previous 50px circle right at 74px sat directly over the
+   trailing card of any 2-column stat grid that reaches the bottom of the
+   page (Banner Tracking's "Needs maintenance", Leaderboard's summary text),
+   a collision that kept recurring across different screens. Shrinking the
+   idle footprint and pushing it a little higher reduces how often it lands
+   on real content; it still expands back to full size on hover/touch. */
+#announceBubble{position:fixed;right:10px;bottom:calc(94px + env(safe-area-inset-bottom));z-index:200;width:42px;height:42px;border-radius:100px;touch-action:none;
   background:linear-gradient(150deg,var(--ink),#4F46E5);box-shadow:0 8px 22px rgba(30,27,75,.35);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;opacity:.7;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;opacity:.55;
   transition:opacity .2s ease,transform .2s ease,width .2s ease,height .2s ease;
   animation:bubbleIn .5s cubic-bezier(.34,1.56,.64,1) both}
-#announceBubble:hover,#announceBubble:focus-visible,#announceBubble.active-touch{opacity:1;width:58px;height:58px}
+#announceBubble:hover,#announceBubble:focus-visible,#announceBubble.active-touch{opacity:1;width:56px;height:56px}
 #announceBubble::before{content:"";position:absolute;inset:-6px;border-radius:100px;border:2px solid rgba(129,140,248,.55);animation:pulseRing 2.2s ease-out infinite}
 #announceBubble svg{position:relative;z-index:1;color:#fff}
 #announceBubble .badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:100px;
@@ -1007,7 +1025,7 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .rowcard .foot{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
 .rowcard .note{font-size:12.5px;color:#4a5149;margin-top:9px;line-height:1.55;
   background:#FAF8F1;border-left:3px solid var(--gold2);padding:8px 10px;border-radius:0 9px 9px 0}
-.tag{font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:.01em}
+.tag{font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:.01em;white-space:nowrap;flex:0 0 auto}
 .tag.stage-1{background:#EDEFF1;color:#5b6470}
 .tag.stage-2A{background:#E1EEF3;color:#2E6E8E}
 .tag.stage-2B{background:#DCEAFB;color:#1D4ED8}
@@ -1228,6 +1246,17 @@ body.dark .achEarned{color:#E8C158}
    were visually identical everywhere this pattern is used. */
 .chip.on{background:var(--green);color:#fff;border-color:var(--green)}
 .chip.on:hover{background:var(--ink);border-color:var(--ink)}
+/* A 4-tab chip row wrapped in a plain flex+wrap (the default everywhere)
+   naturally packs 2 per row on a narrow phone, leaving a ragged gap on the
+   right of each row -- this variant makes a wrapped row of 4 into a real
+   2-column grid below 480px so both rows use the full width evenly. Desktop
+   is untouched (still a normal single-row flex). Opt-in per tab bar rather
+   than a global .chip change, since most chip rows in this app have varying
+   item counts where a fixed 2-col grid wouldn't make sense. */
+@media(max-width:480px){
+  .chipGrid2{display:grid;grid-template-columns:1fr 1fr}
+  .chipGrid2 .chip{text-align:center}
+}
 
 .formwrap{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px 17px;box-shadow:var(--shadow);animation:fadeUp .4s ease both}
 .field{margin-bottom:15px}
@@ -1420,7 +1449,16 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
    (e.g. the right edge, past the table's own bounds) where a normal vertical
    swipe reliably scrolls. Chip/tab carousels deliberately keep default touch
    handling since horizontal swipe IS their primary interaction there. */
-.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both;touch-action:pan-y}
+.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both;touch-action:pan-y;position:relative}
+/* touch-action stays pan-y (see the comment above dayGridWrap/svaTableWrap --
+   reverting it would bring back unreliable vertical page-scroll over the
+   table). Since touch-drag can't scroll it sideways, tap arrows do instead --
+   visible only when the table actually overflows and only on narrow screens
+   where a mouse-driven scrollbar isn't available. */
+.leagueScrollBtn{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:30px;height:30px;border-radius:100px;
+  border:1px solid var(--line);background:var(--card);color:var(--text);align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
+.leagueScrollBtn.left{left:6px} .leagueScrollBtn.right{right:6px}
+@media(max-width:680px){ .leagueScrollBtn.show{display:flex} }
 .league-table{width:100%;border-collapse:collapse;min-width:640px}
 .league-table thead th{position:sticky;top:0;background:var(--ink);color:#fff;text-align:left;font-size:11px;letter-spacing:.08em;
   text-transform:uppercase;font-weight:700;padding:13px 16px;white-space:nowrap}
@@ -9772,13 +9810,33 @@ function streakWeekRowHtml(history){
     return `<div class="streakWeekDay"><div class="streakWeekLbl">${lbl}</div><div class="streakWeekMark${met?' met':isFuture?' future':''}">${met?'✓':isFuture?'':'✕'}</div></div>`;
   }).join('')}</div>`;
 }
+// Being on a streak (using the system today) and having a bleeding pipeline
+// (this month's numbers) are two genuinely different things -- collapsing
+// them into one static emoji was exactly the complaint ("how can my pipeline
+// be critical and am I seeing a smiling emoji"). Rather than invent a hybrid
+// mood, the card now shows BOTH, crossfading between them on a loop (pure
+// CSS animation, see @keyframes streakMoodFade -- no JS timer to leak).
+const RISK_MOOD_EMOJI={'on track':'💪','at risk':'😬','critical':'🥵'};
+function riskMoodLabel(risk){
+  if(risk.tier==='on track') return 'On pace to hit this month\'s target';
+  if(risk.tier==='at risk') return 'Falling behind this month\'s target';
+  return risk.daysLeft+' day'+(risk.daysLeft===1?'':'s')+' left — act now';
+}
 function streakWidgetHtml(streak){
   if(!streak) return '';
   const m=streak.mood;
   return `<div class="streakCard" style="background:${m.bg}">
     <div class="streakCardTop">
-      <div class="streakEmoji">${m.emoji}</div>
-      <div><div class="streakNum">🔥 ${streak.streakLen} day${streak.streakLen===1?'':'s'}</div><div class="streakLbl">${esc(m.label)}</div></div>
+      <div class="streakMoodStack">
+        <div class="streakMoodPane paneA">
+          <div class="streakEmoji">${m.emoji}</div>
+          <div><div class="streakNum">🔥 ${streak.streakLen} day${streak.streakLen===1?'':'s'}</div><div class="streakLbl">${esc(m.label)}</div></div>
+        </div>
+        <div class="streakMoodPane paneB">
+          <div class="streakEmoji">${RISK_MOOD_EMOJI[streak.risk.tier]}</div>
+          <div><div class="streakNum">Pipeline: ${esc(streak.risk.tier)}</div><div class="streakLbl">${esc(riskMoodLabel(streak.risk))}</div></div>
+        </div>
+      </div>
     </div>
     ${streakWeekRowHtml(streak.history)}
     <div class="streakRiskRow">
@@ -18303,10 +18361,10 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
   const agentMax=Math.max(1,...agentVals);
   const rows=agents.map(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi;
     const pct=k.val?Math.max(4,Math.round(k.val/agentMax*100)):0;
-    return `<button class="blockrow" data-agentkey="${esc(a.key)}" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
-      <div style="width:104px;font-size:12px;color:var(--text);font-weight:600;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>
-      <div style="flex:1;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--leaf),var(--green));border-radius:100px"></div></div>
-      <div style="width:76px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto">${ghs(k.val)}</div>
+    return `<button class="blockrow" data-agentkey="${esc(a.key)}" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
+      <div style="width:88px;font-size:12px;color:var(--text);font-weight:600;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>
+      <div style="flex:1;min-width:24px;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--leaf),var(--green));border-radius:100px"></div></div>
+      <div style="min-width:76px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto;white-space:nowrap">${ghs(k.val)}</div>
     </button>`; }).join('');
 
   const SRC_COLORS={Facebook:'#3B82F6',Instagram:'#EC4899','Walk In':'#84CC16',Referral:'#F59E0B',Website:'#1D4ED8',TikTok:'#111827',Google:'#EF4444'};
@@ -18814,7 +18872,10 @@ function mgrLeaderboard(){
       <button class="chip" id="lbWeightsBtn">⚙ Weights</button>
     </div></div>
   ${leaderBanner}
-  <div class="league-wrap" style="margin-top:18px"><table class="league-table">
+  <div class="league-wrap" id="leagueWrap" style="margin-top:18px">
+    <button class="leagueScrollBtn left" id="leagueScrollLeft" aria-label="Scroll left">‹</button>
+    <button class="leagueScrollBtn right" id="leagueScrollRight" aria-label="Scroll right">›</button>
+    <table class="league-table">
     <thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Total Collected</th><th>Avg Monthly</th><th>Site Visits</th><th>Deals Closed (${slYear})</th><th>Win Rate</th><th>Tasks Done (90d)</th><th>To-Dos Done (90d)</th><th>Workload</th><th>Pipeline</th></tr></thead>
     <tbody>${rowsHtml || '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--muted)">No data yet.</td></tr>'}</tbody>
   </table></div>
@@ -18836,6 +18897,24 @@ function bindLeagueCtrls(){
   };
   document.querySelectorAll('[data-leagueagent]').forEach(tr=>tr.onclick=()=>route('agentDetail',tr.dataset.leagueagent));
   document.getElementById('lbWeightsBtn').onclick=openLeaderboardWeightsModal;
+  // Touch-drag on this wrapper is deliberately vertical-only (touch-action:pan-y,
+  // so a swipe here can't hijack the page's own vertical scroll) -- these arrows
+  // are the alternative way to reach columns past the fold on mobile. Only shown
+  // when the table actually overflows, and only while there's still somewhere to go.
+  const wrap=document.getElementById('leagueWrap');
+  const btnL=document.getElementById('leagueScrollLeft'), btnR=document.getElementById('leagueScrollRight');
+  if(wrap&&btnL&&btnR){
+    const refresh=()=>{
+      const overflowing=wrap.scrollWidth>wrap.clientWidth+2;
+      btnL.classList.toggle('show',overflowing&&wrap.scrollLeft>4);
+      btnR.classList.toggle('show',overflowing&&wrap.scrollLeft<wrap.scrollWidth-wrap.clientWidth-4);
+    };
+    btnL.onclick=()=>wrap.scrollBy({left:-160,behavior:'smooth'});
+    btnR.onclick=()=>wrap.scrollBy({left:160,behavior:'smooth'});
+    wrap.addEventListener('scroll',refresh);
+    window.addEventListener('resize',refresh);
+    refresh();
+  }
 }
 
 /* ================= REPORTS (Excel workbook + CSV) ================= */
@@ -23406,7 +23485,7 @@ async function viewBannerApp(){
 }
 function paintBannerApp(){
   const body=document.getElementById('bannerBody'); if(!body) return;
-  const tabs=`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+  const tabs=`<div class="chipGrid2" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${bannerAppTab==='dashboard'?'on':''}" data-bntab="dashboard">Dashboard</button>
     <button class="chip ${bannerAppTab==='list'?'on':''}" data-bntab="list">Banners</button>
     <button class="chip ${bannerAppTab==='map'?'on':''}" data-bntab="map">Map &amp; Routes</button>
