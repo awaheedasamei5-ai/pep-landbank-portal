@@ -18437,13 +18437,9 @@ async function managerView(){
     if(jobs.length){ try{ await Promise.all(jobs); }catch(e){ toast(e.message||'Could not load leaderboard'); } }
     body.innerHTML=mgrLeaderboard(); bindLeagueCtrls();
   }
-  else if(mgrTab==='Reports'){ body.innerHTML=mgrReports(); bindReportCtrls(); }
-  else if(mgrTab==='Analytics'){ body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls(); }
-  else if(mgrTab==='Report Archive'){
-    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
-    try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
-  }
+  else if(mgrTab==='Reports'){ route('mgmtreports','exports'); }
+  else if(mgrTab==='Analytics'){ route('mgmtreports','overview'); }
+  else if(mgrTab==='Report Archive'){ route('mgmtreports','archive'); }
   else if(mgrTab==='Import History'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ IMPORT_BATCHES_LIST=await withLoadTimeout(apiLoadImportBatches(),15000,'Import History'); IMPORT_BATCHES_LOADED=true; body.innerHTML=importHistoryHtml(); bindImportHistoryCtrls(); }
@@ -19285,7 +19281,7 @@ function mgrAnalytics(){
   const pipelineSegments=[{label:'Committed (paying)',value:comp.committedVal,color:'var(--ok)'},{label:'Prospects (unpaid)',value:comp.prospectVal,color:'#94A3B8'}];
   const topAgents=monthData.perAgent.slice(0,5);
 
-  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Analytics</div><h2>Company performance at a glance</h2><p>Live figures for ${monthLabel(thisMonth)} — for period exports and PDFs, see Reports.</p></div></div>
+  return `<div class="sectitle" style="margin-top:0"><h3>Company performance at a glance</h3><span class="cnt">${esc(monthLabel(thisMonth))}</span></div>
   <div class="kpis">${kpi('Revenue this month',ghs(monthData.revenue))}${kpi('Outstanding',ghs(monthData.outstandingTotal),'gold')}${kpi('Fully paid',monthData.fullyPaidCount)}${kpi('Net position',ghs(net.net),net.net>=0?'':'gold')}</div>
 
   <div class="sectitle" style="margin-top:0"><h3>Revenue trend</h3><span class="cnt">last 6 months, all agents</span></div>
@@ -19317,10 +19313,11 @@ function mgrAnalytics(){
   <p class="mini" style="margin-top:14px">Need a downloadable PDF or Excel export instead? <button id="analyticsReportsGo" style="background:none;border:none;padding:0;color:var(--leaf);cursor:pointer;font:inherit;text-decoration:underline">Go to Reports →</button></p>`;
 }
 function bindAnalyticsCtrls(){
-  const b=document.getElementById('analyticsReportsGo'); if(b) b.onclick=()=>{ mgrTab='Reports'; managerView(); };
+  const b=document.getElementById('analyticsReportsGo'); if(b) b.onclick=()=>viewManagementReportsApp('exports');
 }
 function mgrReports(){
-  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Reports</div><h2>Download company data</h2><p>Live figures, exported on demand — nothing pre-generated or stale.</p></div></div>
+  return `<div class="sectitle" style="margin-top:0"><h3>Download company data</h3></div>
+  <p class="mini" style="margin:-6px 0 12px">Live figures, exported on demand — nothing pre-generated or stale.</p>
   <div class="searchbar" style="margin-bottom:10px"><input id="reportsSearchInput" placeholder="Search a client by name or contact…" value="${esc(REPORTS_SEARCH)}"/></div>
   <div id="reportsSearchResults">${reportsSearchResultsHtml()}</div>
   <div class="formwrap" style="margin-bottom:20px">
@@ -21143,7 +21140,8 @@ function reportArchiveHtml(){
   const rowsHtml=rows.map(r=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(fmtLongDate(r.reportDate))}</div><div class="meta">${r.recipients?esc(r.recipients):'no recipients on file'} · generated ${esc((r.generatedAt||'').slice(0,16).replace('T',' '))}</div></div>${reportArchiveStatusTag(r)}</div>
     ${r.errorDetail?`<div class="note" style="margin-top:6px;color:#B91C1C">${esc(r.errorDetail)}</div>`:''}
     <div class="foot"><button class="chip" data-dlreport="${r.id}">Download PDF</button></div></div>`).join('');
-  return `<div class="pagehead" style="margin-bottom:6px"><div><div class="eyebrow">Insights &amp; data</div><h2>Report Archive</h2><p>Every automated 9AM report, kept even if the email failed — most recent ${rows.length}.</p></div></div>
+  return `<div class="sectitle" style="margin-top:0"><h3>Report Archive</h3><span class="cnt">${rows.length} report${rows.length===1?'':'s'}</span></div>
+  <p class="mini" style="margin:-6px 0 12px">Every automated 9AM report, kept even if the email failed.</p>
   <div class="list">${rows.length?rowsHtml:emptyState(ic.reportdoc||ic.doc,'Nothing yet','Fills in automatically once the 9AM report runs.')}</div>`;
 }
 function bindReportArchiveCtrls(){
@@ -22143,13 +22141,44 @@ function pctChangeStr(prior,current){
   const pct=Math.round(((current-prior)/Math.abs(prior))*100);
   return (pct>0?'+':'')+pct+'%';
 }
-async function viewManagementReportsApp(){
+// Reports hub -- merges what used to be four separate screens (Analytics,
+// the on-demand Management Report PDF, the Reports/CSV export hub, and the
+// Report Archive) into one shell with a tab row. Each tab still calls the
+// exact same render+bind functions those four screens always used
+// (mgrAnalytics/bindAnalyticsCtrls, paintMgmtRptBody, mgrReports/
+// bindReportCtrls, reportArchiveHtml/bindReportArchiveCtrls) -- this is a
+// shared shell + nav, not a rebuild of any of the four.
+let REPORTSHUB_TAB='generate';
+async function viewManagementReportsApp(startTab){
   if(PROFILE.role!=='manager'){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Management only','Reports are restricted to Management.'); return; }
-  MGMTRPT_PERIOD='month';
-  V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Management</div><h2>Reports</h2><p>Generate a branded PDF summary — performance, revenue, outstanding balances, and pending approvals for any period.</p></div></div>
-  <div id="mgmtRptBody"></div>`;
+  REPORTSHUB_TAB=startTab||REPORTSHUB_TAB||'generate';
+  if(REPORTSHUB_TAB==='generate') MGMTRPT_PERIOD='month';
+  V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Management</div><h2>Reports</h2><p>Live analytics, branded PDF reports, raw exports, and the automated daily-report archive — all in one place.</p></div></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="chip ${REPORTSHUB_TAB==='overview'?'on':''}" data-reportshubtab="overview">Overview</button>
+    <button class="chip ${REPORTSHUB_TAB==='generate'?'on':''}" data-reportshubtab="generate">Generate Report</button>
+    <button class="chip ${REPORTSHUB_TAB==='exports'?'on':''}" data-reportshubtab="exports">Exports</button>
+    <button class="chip ${REPORTSHUB_TAB==='archive'?'on':''}" data-reportshubtab="archive">Archive</button>
+  </div>
+  <div id="reportsHubBody"><div class="skel" style="height:120px;border-radius:16px"></div></div>`;
+  document.querySelectorAll('[data-reportshubtab]').forEach(b=>b.onclick=()=>viewManagementReportsApp(b.dataset.reportshubtab));
   if(!EXP_LOADED && !DEMO_MODE){ try{ [EXP_CATEGORIES_LIST,EXPENSES_LIST,FUND_REQUESTS_LIST,DAILY_BALANCES_LIST]=await Promise.all([apiLoadExpenseCategories(),apiLoadExpenses(),apiLoadFundRequests(),apiLoadDailyBalances()]); EXP_LOADED=true; }catch(e){} }
-  paintMgmtRptBody();
+  await paintReportsHubBody();
+}
+async function paintReportsHubBody(){
+  const body=document.getElementById('reportsHubBody'); if(!body) return;
+  if(REPORTSHUB_TAB==='overview'){
+    body.innerHTML=mgrAnalytics(); bindAnalyticsCtrls();
+  } else if(REPORTSHUB_TAB==='exports'){
+    body.innerHTML=mgrReports(); bindReportCtrls();
+  } else if(REPORTSHUB_TAB==='archive'){
+    body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
+    try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  } else {
+    body.innerHTML=`<div id="mgmtRptBody"></div>`;
+    paintMgmtRptBody();
+  }
 }
 function paintMgmtRptBody(){
   const body=document.getElementById('mgmtRptBody');
