@@ -2744,12 +2744,14 @@ function weekRangeLabel(weekStartIso){
   const fmt=d=>d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
   return fmt(s)+' – '+fmt(e)+', '+e.getFullYear();
 }
-// The 5 Monday-Friday ISO dates for the week starting weekStartIso -- Site Visit
-// Authorization groups visits by day within this range (isoPlusDays is defined
+// Site Visit Auth's date picker -- real site visits only ever happen
+// Tue/Wed/Fri/Sun (SVE_ALLOWED_DAYS). weekStartIso is always a Monday
+// (mondayOfDate), so walking all 7 days out to weekStartIso+6 correctly
+// reaches that same week's Sunday as its last day (isoPlusDays is defined
 // later in the file but hoisted, same as any other function declaration).
-function weekWorkdayIsos(weekStartIso){
-  const out=[]; for(let i=0;i<5;i++) out.push(isoPlusDays(weekStartIso,i));
-  return out;
+function sveAuthAllowedDayIsos(weekStartIso){
+  const out=[]; for(let i=0;i<7;i++) out.push(isoPlusDays(weekStartIso,i));
+  return out.filter(iso=>SVE_ALLOWED_DAYS.includes(new Date(iso+'T00:00:00').getDay()));
 }
 const mapWeeklyVisitForm=r=>({id:r.id,weekStart:r.week_start,visitDate:r.visit_date,
   vehicleRentalEst:r.vehicle_rental_est,driversTipEst:r.drivers_tip_est,fuelEst:r.fuel_est,refreshmentEst:r.refreshment_est,tntEst:r.tnt_est,
@@ -14414,9 +14416,9 @@ async function paintSiteVisitAuthBody(){
   const body=document.getElementById('svaMainBody'); if(!body) return;
   try{
     SVA_ALL_WEEK_VISITS=await apiLoadSiteVisitsForWeek(SVA_WEEK_START);
-    const workdays=weekWorkdayIsos(SVA_WEEK_START);
+    const workdays=sveAuthAllowedDayIsos(SVA_WEEK_START);
     if(!SVA_SELECTED_DAY||!workdays.includes(SVA_SELECTED_DAY)){
-      SVA_SELECTED_DAY=workdays.find(d=>SVA_ALL_WEEK_VISITS.some(v=>v.date===d))||SVA_WEEK_START;
+      SVA_SELECTED_DAY=workdays.find(d=>SVA_ALL_WEEK_VISITS.some(v=>v.date===d))||workdays[0]||SVA_WEEK_START;
     }
     SVA_VISITS=SVA_ALL_WEEK_VISITS.filter(v=>v.date===SVA_SELECTED_DAY);
     SVA_FORM=await apiLoadOrCreateWeeklyVisitForm(SVA_WEEK_START,SVA_SELECTED_DAY);
@@ -14438,10 +14440,11 @@ function siteVisitAuthBodyHtml(form,visits){
       <span class="tag ${form.status==='Finalized'?'ok':'warnt'}">${esc(form.status)}</span>
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
-      ${weekWorkdayIsos(form.weekStart).map((iso,i)=>{
+      ${sveAuthAllowedDayIsos(form.weekStart).map(iso=>{
         const count=SVA_ALL_WEEK_VISITS.filter(v=>v.date===iso).length;
-        const dnum=new Date(iso+'T00:00:00').getDate();
-        return `<button class="chip ${iso===SVA_SELECTED_DAY?'on':''}" data-svaday="${iso}">${['Mon','Tue','Wed','Thu','Fri'][i]} ${dnum}${count?' · '+count:''}</button>`;
+        const d=new Date(iso+'T00:00:00'); const dnum=d.getDate();
+        const label=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+        return `<button class="chip ${iso===SVA_SELECTED_DAY?'on':''}" data-svaday="${iso}">${label} ${dnum}${count?' · '+count:''}</button>`;
       }).join('')}
     </div>
   </div>
@@ -14551,12 +14554,25 @@ function bindSiteVisitAuthCtrls(){
    the day's Reports (PDF, emailed + posted to Management's in-app chat). */
 let SVE_TAB='invites', SVE_VISITS=[], SVE_INVITES=[], SVE_SUBMISSIONS=[], SVE_REPORT_DATE=null;
 let SVE_WEEK_START=null, SVE_SELECTED_DAY=null;
+// Real client site visits only ever happen Tue/Wed/Fri/Sun -- JS Date.getDay()
+// values (0=Sun). Both the day-of-week chips below AND Logistics' own picker
+// (sveAuthAllowedDayIsos, near siteVisitAuthBodyHtml) filter to this same set.
+const SVE_ALLOWED_DAYS=[2,3,5,0];
 // Same week-nav shape as Logistics (SVA_WEEK_START/weekRangeLabel/weekWorkdayIsos)
 // -- but real client site visits happen any day, not just Mon-Fri, so this
-// walks all 7 days of the week instead of reusing weekWorkdayIsos verbatim.
+// walks all 7 days of the week then keeps only the allowed ones.
 function sveWeekDayIsos(weekStart){
   const start=new Date(weekStart+'T00:00:00');
-  return Array.from({length:7},(_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return isoDateOnly(d); });
+  return Array.from({length:7},(_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return isoDateOnly(d); })
+    .filter(iso=>SVE_ALLOWED_DAYS.includes(new Date(iso+'T00:00:00').getDay()));
+}
+// Walks forward day-by-day from a given date to the nearest allowed site-visit
+// day (at most 6 steps, since Sunday is always allowed) -- used to snap the
+// default selected day off of today() when today isn't one of the 4.
+function nearestAllowedSveDay(fromIso){
+  let d=new Date(fromIso+'T00:00:00');
+  for(let i=0;i<7;i++){ if(SVE_ALLOWED_DAYS.includes(d.getDay())) return isoDateOnly(d); d.setDate(d.getDate()+1); }
+  return fromIso;
 }
 function sveWeekNavHtml(weekStart,selectedDay,countsByDate){
   const labels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -14579,7 +14595,7 @@ async function paintSiteVisitExperienceBody(){
   const body=document.getElementById('svaMainBody'); if(!body) return;
   body.innerHTML=`<div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div>`;
   if(!SVE_WEEK_START) SVE_WEEK_START=currentWeekStartIso();
-  if(!SVE_SELECTED_DAY) SVE_SELECTED_DAY=today();
+  if(!SVE_SELECTED_DAY) SVE_SELECTED_DAY=nearestAllowedSveDay(today());
   try{
     if(SVE_TAB==='invites'){
       [SVE_VISITS,SVE_INVITES]=await Promise.all([apiLoadFullSiteVisits(),apiLoadSiteVisitExperienceInvites()]);
