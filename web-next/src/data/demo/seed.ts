@@ -17,9 +17,9 @@ export function seedDemo(): DemoDb {
   const t = today();
 
   const leads: DemoDb['leads'] = [
-    { id: uid(), agent: AGENT_KEY, name: 'Mercy Owusu', date: isoPlusDays(t, -18), amtPaid: 24000, grandTotal: 48000, stage: '2A' },
-    { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', date: isoPlusDays(t, -40), amtPaid: 60000, grandTotal: 60000, stage: 'paid' },
-    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', date: isoPlusDays(t, -5), amtPaid: 0, grandTotal: 36000, stage: '1' },
+    { id: uid(), agent: AGENT_KEY, name: 'Mercy Owusu', contact: '0240758072', date: isoPlusDays(t, -18), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 24000, grandTotal: 48000, stage: '2B' },
+    { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 60000, grandTotal: 60000, stage: '4' },
+    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1' },
   ];
 
   const payments: DemoDb['payments'] = [

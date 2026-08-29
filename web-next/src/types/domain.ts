@@ -11,14 +11,37 @@ export interface Profile {
   email?: string;
 }
 
+export type PlotType = 'Full Plot' | 'Half Plot';
+export type PaymentPlan = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
+// Internal stage codes -- displayed to staff via the flipped
+// DISPLAY_STAGE_CODE mapping (index.html:17138), never shown raw.
+export type Stage = '1' | '2A' | '2B' | '3' | '4' | 'Lost';
+
 export interface Lead {
   id: string;
   agent: string;
   name: string;
+  contact: string;
   date: string;
+  plotType: PlotType;
+  noPlots: number;
+  unitPrice: number;
+  paymentPlan: PaymentPlan;
   amtPaid: number;
   grandTotal: number;
-  stage: string;
+  stage: Stage;
+  notes?: string;
+}
+
+export interface NewLead {
+  name: string;
+  contact: string;
+  plotType: PlotType;
+  noPlots: number;
+  unitPrice: number;
+  paymentPlan: PaymentPlan;
+  amtPaid: number;
+  notes?: string;
 }
 
 export interface Payment {

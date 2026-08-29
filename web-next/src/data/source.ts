@@ -1,5 +1,6 @@
-import type { Config, Lead, Payment, ScheduleItem, StreakRow } from '../types/domain';
-import { demoLoad } from './demo/store';
+import type { Config, Lead, NewLead, Payment, ScheduleItem, StreakRow } from '../types/domain';
+import { demoLoad, demoSave } from './demo/store';
+import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -10,6 +11,7 @@ import { demoLoad } from './demo/store';
 export interface DataSource {
   leads: {
     listForAgent(agentKey: string): Promise<Lead[]>;
+    create(agentKey: string, input: NewLead): Promise<Lead>;
   };
   payments: {
     listForAgent(agentKey: string): Promise<Payment[]>;
@@ -44,6 +46,28 @@ function createDemoDataSource(): DataSource {
     leads: {
       async listForAgent(agentKey) {
         return demoLoad().leads.filter((l) => l.agent === agentKey);
+      },
+      async create(agentKey, input) {
+        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        const lead: Lead = {
+          id: Math.random().toString(36).slice(2, 10),
+          agent: agentKey,
+          name: input.name,
+          contact: input.contact,
+          date: new Date().toISOString().slice(0, 10),
+          plotType: input.plotType,
+          noPlots: input.noPlots,
+          unitPrice: input.unitPrice,
+          paymentPlan: input.paymentPlan,
+          amtPaid: input.amtPaid,
+          grandTotal,
+          stage: deriveStageFromPayment(input.amtPaid, grandTotal),
+          notes: input.notes,
+        };
+        const db = demoLoad();
+        db.leads.push(lead);
+        demoSave();
+        return lead;
       },
     },
     payments: {

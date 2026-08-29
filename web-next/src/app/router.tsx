@@ -4,6 +4,9 @@ import { RequireAuth, RequireRole } from '../auth/RequireRole';
 import { AppShell } from './AppShell';
 import { HomeScreen } from '../features/home/screens/HomeScreen';
 import { MgrHomeScreen } from '../features/manager/screens/MgrHomeScreen';
+import { SalesDeskScreen } from '../features/sales-desk/screens/SalesDeskScreen';
+import { PipelineListScreen } from '../features/pipeline/screens/PipelineListScreen';
+import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -38,7 +41,30 @@ export const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-      { path: 'sales', element: <StubScreen title="Sales Desk" /> },
+      {
+        path: 'sales',
+        element: (
+          <RequireRole role="agent">
+            <SalesDeskScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'sales/pipeline',
+        element: (
+          <RequireRole role="agent">
+            <PipelineListScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'sales/pipeline/new',
+        element: (
+          <RequireRole role="agent">
+            <AddLeadScreen />
+          </RequireRole>
+        ),
+      },
       { path: 'office', element: <StubScreen title="Office Desk" /> },
       { path: 'chat', element: <StubScreen title="Chat" /> },
       { path: 'more', element: <StubScreen title="More" /> },
