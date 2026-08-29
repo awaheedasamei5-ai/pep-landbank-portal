@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, ManagerOverview, Memo, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -10,6 +10,7 @@ import {
   mapEnquiryRow,
   mapLeaderboardRawRow,
   mapLeadRow,
+  mapLeaveRequestRow,
   mapMemoRow,
   mapPaymentRow,
   mapPlotRow,
@@ -175,6 +176,20 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<ContractRequest[]>;
     create(agentKey: string, agentName: string, input: NewContractRequest): Promise<ContractRequest>;
     fulfil(id: string): Promise<ContractRequest>;
+  };
+  // Real table `leave_requests` (confirmed live). Unlike contract_requests,
+  // SELECT RLS here is genuinely open to any authenticated staff member
+  // (not agent/manager-scoped) -- list() is a real unfiltered read in live
+  // mode, matched in demo mode too (no artificial scoping needed). decide()
+  // is manager-only in practice (leave_requests_upd: own row or manager;
+  // approve/decline is gated client-side to manager since a regular agent
+  // deciding their own request makes no sense even though RLS permits self
+  // UPDATE for other real reasons like cancelling your own pending
+  // request -- not built here either).
+  leaveRequests: {
+    list(): Promise<LeaveRequest[]>;
+    create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
+    decide(id: string, approve: boolean, decidedBy: string, decidedByName: string): Promise<LeaveRequest>;
   };
   // Real table `attendance_log` (confirmed live, currently 0 production
   // rows), one row per (staff_key, work_date) enforced by a real unique
@@ -646,6 +661,40 @@ function createDemoDataSource(): DataSource {
         // update happen, not just a lucky same-tick mutation.
         const updated: ContractRequest = { ...db.contractRequests[index], status: 'fulfilled', fulfilledAt: new Date().toISOString() };
         db.contractRequests = [...db.contractRequests.slice(0, index), updated, ...db.contractRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+    },
+    leaveRequests: {
+      async list() {
+        return demoLoad().leaveRequests;
+      },
+      async create(agentKey, agentName, input) {
+        const request: LeaveRequest = {
+          id: Math.random().toString(36).slice(2, 10),
+          agentKey,
+          agentName,
+          year: new Date(input.dates[0]).getFullYear(),
+          dates: input.dates,
+          daysCount: input.dates.length,
+          letterText: input.letterText ?? null,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          decidedAt: null,
+          decidedBy: null,
+          decidedByName: null,
+        };
+        const db = demoLoad();
+        db.leaveRequests.push(request);
+        demoSave();
+        return request;
+      },
+      async decide(id, approve, decidedBy, decidedByName) {
+        const db = demoLoad();
+        const index = db.leaveRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Leave request not found');
+        const updated: LeaveRequest = { ...db.leaveRequests[index], status: approve ? 'approved' : 'declined', decidedAt: new Date().toISOString(), decidedBy, decidedByName };
+        db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
         demoSave();
         return updated;
       },
@@ -1344,6 +1393,43 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('contract_requests').update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapContractRequestRow(data);
+      },
+    },
+    leaveRequests: {
+      async list() {
+        const { data, error } = await requireClient().from('leave_requests').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapLeaveRequestRow);
+      },
+      async create(agentKey, agentName, input) {
+        const year = new Date(input.dates[0]).getFullYear();
+        const { data, error } = await requireClient()
+          .from('leave_requests')
+          .insert({
+            agent_key: agentKey,
+            agent_name: agentName,
+            year,
+            dates: input.dates,
+            days_count: input.dates.length,
+            letter_text: input.letterText ?? null,
+            status: 'pending',
+            is_emergency: false,
+            deduct_quota: true,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async decide(id, approve, decidedBy, decidedByName) {
+        const { data, error } = await requireClient()
+          .from('leave_requests')
+          .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
       },
     },
     attendance: {

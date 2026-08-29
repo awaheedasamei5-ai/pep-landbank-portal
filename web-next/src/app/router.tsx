@@ -38,6 +38,7 @@ import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
 import { ReportsScreen } from '../features/manager/screens/ReportsScreen';
 import { QuotationScreen } from '../features/quotation/screens/QuotationScreen';
+import { LeaveScreen } from '../features/leave/screens/LeaveScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -155,6 +156,7 @@ export const router = createBrowserRouter([
       { path: 'office/payments', element: <LogPaymentScreen /> },
       { path: 'office/contracts', element: <ContractRequestsScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
+      { path: 'office/leave', element: <LeaveScreen /> },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },

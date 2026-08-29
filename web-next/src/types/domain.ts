@@ -722,3 +722,34 @@ export interface NewContractRequest {
   clientName: string;
   note?: string;
 }
+
+// Real table `leave_requests` (confirmed live). Unusually open SELECT RLS
+// (`auth.uid() IS NOT NULL`, not agent/manager-scoped) -- any signed-in
+// staff member sees every request company-wide, matching index.html's own
+// cross-staff "who's on leave" checks elsewhere in the app. UPDATE is own
+// row OR manager. Deliberately the request/decide subset of a much larger
+// real feature: the annual-calendar "planned" (private, not yet sent)
+// stage, emergency-leave, deduct-quota toggle, reschedule flow, and the
+// signature-on-approval requirement (index.html calls getStaffSignature(),
+// a per-staff digital signature file this app has no capture UI for yet)
+// are all out of scope -- every request here goes straight to 'pending',
+// and an approval leaves `decidedSignature` null rather than faking one.
+export interface LeaveRequest {
+  id: string;
+  agentKey: string;
+  agentName: string;
+  year: number;
+  dates: string[];
+  daysCount: number;
+  letterText: string | null;
+  status: 'pending' | 'approved' | 'declined';
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+}
+
+export interface NewLeaveRequest {
+  dates: string[];
+  letterText?: string;
+}

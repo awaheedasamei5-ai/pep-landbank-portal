@@ -18,6 +18,7 @@ export function OfficeDeskScreen() {
       : []),
     { key: 'contracts', label: 'Contract requests', sub: 'Request & track contracts of sale', color: 'red', glyph: '📄', onOpen: () => navigate('/app/office/contracts') },
     { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', glyph: '🧮', onOpen: () => navigate('/app/office/quotation') },
+    { key: 'leave', label: 'Leave', sub: 'Request & approve staff leave', color: 'blue', glyph: '🌴', onOpen: () => navigate('/app/office/leave') },
   ];
 
   return (

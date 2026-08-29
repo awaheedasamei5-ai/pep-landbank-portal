@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -309,6 +309,23 @@ export function mapContractRequestRow(r: Record<string, unknown>): ContractReque
     status: (r.status as ContractRequest['status']) ?? 'pending',
     createdAt: r.created_at as string,
     fulfilledAt: (r.fulfilled_at as string) ?? null,
+  };
+}
+
+export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
+  return {
+    id: r.id as string,
+    agentKey: r.agent_key as string,
+    agentName: r.agent_name as string,
+    year: Number(r.year),
+    dates: (r.dates as string[]) ?? [],
+    daysCount: Number(r.days_count ?? 0),
+    letterText: (r.letter_text as string) ?? null,
+    status: (r.status as LeaveRequest['status']) ?? 'pending',
+    createdAt: r.created_at as string,
+    decidedAt: (r.decided_at as string) ?? null,
+    decidedBy: (r.decided_by as string) ?? null,
+    decidedByName: (r.decided_by_name as string) ?? null,
   };
 }
 

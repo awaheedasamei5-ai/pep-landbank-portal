@@ -402,6 +402,40 @@ export function seedDemo(): DemoDb {
     },
   ];
 
+  // Real workflow: any staff can request, decide is manager-gated
+  // client-side. One still-pending (a real upcoming date range) and one
+  // already approved, so Management's view has both states to show.
+  const leaveRequests: DemoDb['leaveRequests'] = [
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      year: new Date(isoPlusDays(t, 10)).getFullYear(),
+      dates: [isoPlusDays(t, 10), isoPlusDays(t, 11), isoPlusDays(t, 12)],
+      daysCount: 3,
+      letterText: "Taking a few days for a family event, back to work right after.",
+      status: 'pending',
+      createdAt: isoPlusDays(t, -1),
+      decidedAt: null,
+      decidedBy: null,
+      decidedByName: null,
+    },
+    {
+      id: uid(),
+      agentKey: 'emmanuel',
+      agentName: 'Emmanuel Owusu',
+      year: new Date(isoPlusDays(t, -20)).getFullYear(),
+      dates: [isoPlusDays(t, -20), isoPlusDays(t, -19)],
+      daysCount: 2,
+      letterText: null,
+      status: 'approved',
+      createdAt: isoPlusDays(t, -25),
+      decidedAt: isoPlusDays(t, -23),
+      decidedBy: 'management',
+      decidedByName: 'Management',
+    },
+  ];
+
   // A short, realistic 1:1 thread with 'management' -- deliberately not
   // fully read (last inbound message unread) so the conversation list's
   // unread badge has something real to show immediately.
@@ -453,7 +487,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 18, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 19, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };
