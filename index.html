@@ -578,12 +578,23 @@ a{color:var(--green2)}
    .streakContent sits above both layers via z-index. */
 .streakBgLayer{position:absolute;inset:0;z-index:0;animation:streakMoodFade 16s ease-in-out infinite}
 .streakBgLayer.bgB{animation-delay:-8s}
-.streakContent{position:relative;z-index:1}
+/* Character art -- a full-height overlay pinned to the bottom-right,
+   bleeding slightly off the card's own edge (cropped clean by streakCard's
+   overflow:hidden), matching the reference design instead of a small icon
+   squeezed inline with the text. Crossfades in perfect sync with the
+   background/text panes via the same animation+phase-offset. streakContent
+   reserves room for it via padding-right so text/checkmarks never run
+   underneath it. */
+.streakArtLayer{position:absolute;inset:0;z-index:0;pointer-events:none}
+.streakArtPane{position:absolute;right:-4px;bottom:-6px;width:46%;height:92%;animation:streakMoodFade 16s ease-in-out infinite}
+.streakArtPane.paneB{animation-delay:-8s}
+.streakArtImg{width:100%;height:100%;object-fit:contain;object-position:bottom right;display:block;filter:drop-shadow(0 10px 22px rgba(0,0,0,.4))}
+.streakContent{position:relative;z-index:1;padding-right:42%}
 /* The pipeline pet's "severe" band reuses the same worried pose as
    "moderate" but escalates through the deeper red background, the corner
    badge and more urgent copy -- the GIF itself (already animated by the
    user) is never transformed or distorted. */
-.streakPetBadge{position:absolute;bottom:-4px;left:-6px;width:26px;height:26px;border-radius:50%;
+.streakPetBadge{position:absolute;bottom:2%;left:-8px;width:15%;max-width:34px;min-width:22px;aspect-ratio:1;border-radius:50%;
   box-shadow:0 3px 8px rgba(0,0,0,.4);animation:ringPulse 1.6s ease-in-out infinite}
 .clientMoodCard{border-radius:20px;padding:16px 18px;color:#fff;display:flex;align-items:center;gap:14px;margin-bottom:18px;box-shadow:0 14px 32px -12px rgba(0,0,0,.3);animation:fadeUp .4s ease both}
 .clientMoodEmoji{font-size:34px;line-height:1;flex:0 0 auto}
@@ -602,19 +613,11 @@ a{color:var(--green2)}
    varies (e.g. "4 monthly-plan clients haven't paid yet" vs a short label),
    so a fixed min-height was guaranteed to collide with the week-row below
    it eventually. This fixes that permanently, not just for today's copy. */
-.streakMoodStack{position:relative;min-width:210px;display:grid}
-.streakMoodPane{display:flex;align-items:center;justify-content:space-between;gap:16px;grid-area:1/1;animation:streakMoodFade 16s ease-in-out infinite}
+.streakMoodStack{position:relative;min-width:0;display:grid}
+.streakMoodPane{grid-area:1/1;animation:streakMoodFade 16s ease-in-out infinite}
 .streakMoodPane.paneB{animation-delay:-8s}
 @keyframes streakMoodFade{0%,42%{opacity:1}50%,92%{opacity:0}100%{opacity:1}}
-.streakMoodText{min-width:0;flex:1}
 .streakEyebrow{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;font-weight:700}
-/* The mood/pet GIFs are used exactly as sourced -- no CSS transform/motion
-   is applied on top of them, only a static drop-shadow for depth. Sized up
-   and pinned to the far right of the pane (text block is flex:1 to its
-   left) so the icon reads as a real focal point, not a small inline glyph
-   squeezed against the text. The crossfade above runs at 16s (unchanged
-   phase relationship, -8s = half cycle). */
-.streakEmoji3d{width:64px;height:64px;flex:0 0 auto;display:block;filter:drop-shadow(0 6px 10px rgba(0,0,0,.22))}
 .streakNum{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px}
 .streakLbl{font-size:12.5px;opacity:.92;margin-top:5px;font-weight:600;line-height:1.4}
 .streakWeekRow{display:flex;justify-content:space-between;gap:6px}
@@ -631,8 +634,7 @@ a{color:var(--green2)}
 @media(min-width:768px){
   .streakCard{padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:24px}
   .streakCardTop{margin-bottom:0;flex:0 0 auto}
-  .streakMoodStack{min-width:250px}
-  .streakEmoji3d{width:72px;height:72px}
+  .streakMoodStack{min-width:0}
   .streakNum{font-size:22px}
   .streakWeekRow{flex:0 0 auto;gap:10px}
   .streakWeekDay{flex:0 0 auto}
@@ -1274,11 +1276,9 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
   .homeHero .heroMain{flex:0 0 auto;max-width:460px}
   .homeHero .heroStreakSlot{flex:1;display:flex}
   .homeHero .heroStreakSlot .streakCard{flex:1;display:block}
-  /* Much more room here than the card's own compact default -- let the
-     mood glyph stand alone, larger, with real breathing room beside the
-     text instead of the tight inline pairing the compact card uses. */
-  .homeHero .heroStreakSlot .streakEmoji3d{width:104px;height:104px}
-  .homeHero .heroStreakSlot .streakMoodPane{gap:22px}
+  /* The character art layer is already percentage-sized against the card's
+     own box, so it scales up naturally with the hero's taller card -- no
+     breakpoint-specific override needed here any more. */
   .homeHero .heroStreakSlot .streakNum{font-size:24px}
   /* .streakRiskRow has its OWN separate 768px+ rule (side-column: no top
      margin/border, a left border instead) that applies purely by viewport
@@ -10280,6 +10280,22 @@ function pipelinePetDisplay(petMood){
   const k=petMood.key==='pet_worried'?('pet_worried_'+(petMood.severity||'moderate')):petMood.key;
   return PIPELINE_PET[k]||PIPELINE_PET.pet_neutral;
 }
+// Real completion state of today's to-do list (kind='todo' schedule_items
+// due today), independent of the streak's own todayMet/dayMet flag (which
+// only requires ONE to have been logged, done or not). 'rescheduled' items
+// are excluded -- they've moved to another day, not part of today's list
+// any more.
+function computeTodayTodoProgress(todos){
+  const list=(todos||[]).filter(t=>t.status!=='rescheduled');
+  const total=list.length;
+  if(total===0) return 'notStarted';
+  const doneCount=list.filter(t=>t.status==='closed').length;
+  const openCount=list.filter(t=>t.status==='open').length;
+  if(doneCount===0 && openCount===0) return 'skipped';
+  if(doneCount===0) return 'notStarted';
+  if(openCount===0) return 'allDone';
+  return 'halfway';
+}
 // User-sourced animated mascot/emoji set (./pet/*.gif) for the general
 // system-usage streak -- 10 states now instead of the original 8, splitting
 // the old single "building" bucket into two real stages (1-3 days vs 4-6
@@ -10291,7 +10307,17 @@ function pipelinePetDisplay(petMood){
 // visual moment layered on top of the base streak icon, which is the same
 // idea 'bestMonth'/'peakPerformance' play here.
 const STREAK_MOOD={
-  dull:{emoji:'😴',img:'./emoji3d/sleeping_face.png',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
+  // Pre-deadline "day in progress" states -- these replace the old single
+  // flat 'dull' bucket with real intelligence about TODAY's actual to-do
+  // completion (not just whether one was logged, which is all the streak's
+  // own continuity flag tracks). All 4 reuse assets already assigned
+  // elsewhere for a different axis (streak length) or an unused spare --
+  // no runtime collision since these only ever fire pre-deadline, before
+  // any streak-tier state is reachable.
+  notStarted:{emoji:'😎',img:'./pet/cool_chill.gif',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
+  halfway:{emoji:'🙂',img:'./pet/relieved_happy.gif',bg:'linear-gradient(135deg,#0D9488,#0369A1)',label:'Halfway there — keep going'},
+  allDone:{emoji:'🎉',img:'./pet/party_idle.gif',bg:'linear-gradient(135deg,#22C55E,#15803D)',label:"Today's to-do list, cleared!"},
+  skipped:{emoji:'😬',img:'./pet/hot_overwhelmed.gif',bg:'linear-gradient(135deg,#EA580C,#9A3412)',label:"Skipped today's list — try again tomorrow"},
   danger:{emoji:'😨',img:'./pet/shocked.gif',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:"Don't let it break!"},
   // Distinct from 'zero' (never started, or broken days ago) -- this fires
   // for exactly one day, the day a real streak (3+ days) just died, so the
@@ -10314,11 +10340,20 @@ const STREAK_MOOD={
   // never gets mistaken for plain 'legendary' or plain 'bestMonth'.
   peakPerformance:{emoji:'🤯',img:'./pet/mindblown.gif',bg:'linear-gradient(135deg,#FACC15,#7C3AED)',label:'Peak performance — best month of a legendary streak'}
 };
-function computeStreakMoodKey(streakLen,todayMet,monthRiskTier,justBrokeStreak,isBestMonthEver){
+// todayProgress: 'notStarted'|'halfway'|'allDone'|'skipped', from
+// computeTodayTodoProgress() -- real completion state of today's to-do
+// list, a richer signal than the streak's own todayMet flag (which only
+// tracks whether ONE was logged, not whether any got done). While the
+// work day is still live, this always wins over the streak-tier state --
+// the card spends the day coaching you through today's list, then settles
+// into the streak-length reward once the day locks in at the deadline.
+// todoLogged/dayMet itself is untouched by any of this -- streak
+// continuity still only ever requires logging one to-do, exactly as before.
+function computeStreakMoodKey(streakLen,todayMet,monthRiskTier,justBrokeStreak,isBestMonthEver,todayProgress){
   const nowHHMM=new Date().toISOString().slice(11,16);
   const deadlinePassed=nowHHMM>(CONFIG.workEndTime||'17:00');
-  if(!todayMet && !deadlinePassed) return 'dull';
-  if(!todayMet && deadlinePassed){ if(justBrokeStreak) return 'justBroken'; return streakLen>0?'danger':'zero'; }
+  if(!deadlinePassed) return todayProgress||'notStarted';
+  if(!todayMet){ if(justBrokeStreak) return 'justBroken'; return streakLen>0?'danger':'zero'; }
   if(streakLen>=30){
     // Don't celebrate a legendary system streak while the pipeline's in
     // real trouble -- the numbers would read as tone-deaf next to each other.
@@ -10356,9 +10391,11 @@ async function evaluateMyStreak(){
     const risk=computeMonthlyRisk();
     const signals=computeAgentActivitySignals(PROFILE.key);
     const isBestMonthEver=isBestCollectedMonthEver();
-    const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier,justBrokeStreak,isBestMonthEver);
+    const todayTodos=await apiLoadTodos(today(),today());
+    const todayProgress=computeTodayTodoProgress(todayTodos);
+    const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier,justBrokeStreak,isBestMonthEver,todayProgress);
     const petMood=computePipelinePetMood();
-    MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,signals,moodKey,mood:STREAK_MOOD[moodKey],petMood,pet:pipelinePetDisplay(petMood),history};
+    MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,signals,moodKey,mood:STREAK_MOOD[moodKey],petMood,pet:pipelinePetDisplay(petMood),history,todayProgress};
     checkSkinMilestones(streakLen).catch(()=>{});
     return MY_STREAK;
   }catch(e){ return null; }
@@ -10419,30 +10456,34 @@ function streakWidgetHtml(streak,clickable){
   // content panes via the same streakMoodFade animation/phase-offset,
   // the standard technique for animating between two different gradients
   // (a plain CSS transition can't interpolate gradient values directly).
+  // The character art is now its own full-height overlay layer (like the
+  // reference cards: a big mascot bleeding off the card's own edge) instead
+  // of a small icon sharing a flex row with the text -- streakContent
+  // reserves space for it via padding-right so text/checkmarks never run
+  // under it. Crossfades in sync with the background/text panes via the
+  // same animation+phase-offset.
   return `<div class="streakCard${clickable?' kpi-click':''}" ${clickable?'data-r="myStreak"':''}>
     <div class="streakBgLayer bgA" style="background:${m.bg}"></div>
     <div class="streakBgLayer bgB" style="background:${pet.bg}"></div>
+    <div class="streakArtLayer">
+      <div class="streakArtPane paneA"><img class="streakArtImg" src="${m.img}" alt="${m.emoji}" draggable="false"/></div>
+      <div class="streakArtPane paneB">
+        <img class="streakArtImg${severe?' severe':''}" src="${pet.img}" alt="pipeline mood" draggable="false"/>
+        ${pet.badge?`<img class="streakPetBadge" src="${pet.badge}" alt="" draggable="false"/>`:''}
+      </div>
+    </div>
     <div class="streakContent">
     <div class="streakCardTop">
       <div class="streakMoodStack">
         <div class="streakMoodPane paneA">
-          <div class="streakMoodText">
-            <div class="streakEyebrow">Daily streak</div>
-            <div class="streakNum">${streak.streakLen} day${streak.streakLen===1?'':'s'}</div>
-            <div class="streakLbl">${esc(m.label)}</div>
-          </div>
-          <img class="streakEmoji3d" src="${m.img}" alt="${m.emoji}" draggable="false"/>
+          <div class="streakEyebrow">Daily streak</div>
+          <div class="streakNum">${streak.streakLen} day${streak.streakLen===1?'':'s'}</div>
+          <div class="streakLbl">${esc(m.label)}</div>
         </div>
         <div class="streakMoodPane paneB">
-          <div class="streakMoodText">
-            <div class="streakEyebrow">Pipeline status</div>
-            <div class="streakNum" style="color:${pet.color}">${esc(pet.label)}</div>
-            <div class="streakLbl">${esc(riskMoodLabel(streak.risk,streak.signals))}</div>
-          </div>
-          <div style="position:relative;flex:0 0 auto">
-            <img class="streakEmoji3d${severe?' severe':''}" src="${pet.img}" alt="pipeline mood" draggable="false"/>
-            ${pet.badge?`<img class="streakPetBadge" src="${pet.badge}" alt="" draggable="false"/>`:''}
-          </div>
+          <div class="streakEyebrow">Pipeline status</div>
+          <div class="streakNum" style="color:${pet.color}">${esc(pet.label)}</div>
+          <div class="streakLbl">${esc(riskMoodLabel(streak.risk,streak.signals))}</div>
         </div>
       </div>
     </div>
