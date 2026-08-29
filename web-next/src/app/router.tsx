@@ -8,6 +8,8 @@ import { SalesDeskScreen } from '../features/sales-desk/screens/SalesDeskScreen'
 import { PipelineListScreen } from '../features/pipeline/screens/PipelineListScreen';
 import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
 import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetailScreen';
+import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
+import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -74,7 +76,22 @@ export const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-      { path: 'office', element: <StubScreen title="Office Desk" /> },
+      {
+        path: 'office',
+        element: (
+          <RequireRole role="agent">
+            <OfficeDeskScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'office/myday',
+        element: (
+          <RequireRole role="agent">
+            <MyDayScreen />
+          </RequireRole>
+        ),
+      },
       { path: 'chat', element: <StubScreen title="Chat" /> },
       { path: 'more', element: <StubScreen title="More" /> },
     ],

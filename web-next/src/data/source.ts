@@ -1,4 +1,4 @@
-import type { Config, Lead, NewLead, Payment, ScheduleItem, StreakRow } from '../types/domain';
+import type { Config, Lead, NewLead, Payment, ScheduleItem, ScheduleItemStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 
@@ -20,6 +20,8 @@ export interface DataSource {
   };
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
+    create(agentKey: string, date: string, title: string): Promise<ScheduleItem>;
+    updateStatus(id: string, status: ScheduleItemStatus): Promise<ScheduleItem>;
   };
   streaks: {
     history(staffKey: string, days: number): Promise<StreakRow[]>;
@@ -97,6 +99,29 @@ function createDemoDataSource(): DataSource {
     scheduleItems: {
       async listForAgentOnDate(agentKey, date) {
         return demoLoad().scheduleItems.filter((s) => s.assignedTo === agentKey && s.date === date);
+      },
+      async create(agentKey, date, title) {
+        const item: ScheduleItem = {
+          id: Math.random().toString(36).slice(2, 10),
+          kind: 'todo',
+          ownerKey: agentKey,
+          assignedTo: agentKey,
+          date,
+          status: 'open',
+          title,
+        };
+        const db = demoLoad();
+        db.scheduleItems.push(item);
+        demoSave();
+        return item;
+      },
+      async updateStatus(id, status) {
+        const db = demoLoad();
+        const item = db.scheduleItems.find((s) => s.id === id);
+        if (!item) throw new Error('Schedule item not found');
+        item.status = status;
+        demoSave();
+        return item;
       },
     },
     streaks: {
