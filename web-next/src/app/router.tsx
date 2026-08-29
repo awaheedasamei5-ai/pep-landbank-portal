@@ -12,6 +12,8 @@ import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScre
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
 import { ClientDatabaseScreen } from '../features/clients/screens/ClientDatabaseScreen';
+import { SiteVisitsScreen } from '../features/site-visits/screens/SiteVisitsScreen';
+import { AddSiteVisitScreen } from '../features/site-visits/screens/AddSiteVisitScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -96,6 +98,22 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="agent">
             <ClientDatabaseScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'sales/sitevisits',
+        element: (
+          <RequireRole role="agent">
+            <SiteVisitsScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'sales/sitevisits/new',
+        element: (
+          <RequireRole role="agent">
+            <AddSiteVisitScreen />
           </RequireRole>
         ),
       },

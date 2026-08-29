@@ -17,7 +17,7 @@ export function SalesDeskScreen() {
     ...(hasPlotAccess
       ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
       : []),
-    { key: 'sitevisit', label: 'Site visit', sub: 'Coming in a later phase', color: 'teal', glyph: '📍' },
+    { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', glyph: '📍', onOpen: () => navigate('/app/sales/sitevisits') },
     { key: 'enquiry', label: 'Client enquiry', sub: 'Coming in a later phase', color: 'blue', glyph: '❓' },
     { key: 'referrals', label: 'Referrals', sub: 'Coming in a later phase', color: 'orange', glyph: '🎁' },
   ];

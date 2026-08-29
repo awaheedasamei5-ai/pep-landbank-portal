@@ -1,8 +1,8 @@
-import type { Config, Lead, NewLead, Payment, Plot, ScheduleItem, ScheduleItemStatus, StreakRow } from '../types/domain';
+import type { Config, Lead, NewLead, NewSiteVisit, Payment, Plot, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapLeadRow, mapPaymentRow, mapPlotRow, mapScheduleItemRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import { mapLeadRow, mapPaymentRow, mapPlotRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -36,6 +36,15 @@ export interface DataSource {
   // must gate visibility accordingly, not rely on this returning empty.
   plots: {
     list(): Promise<Plot[]>;
+  };
+  // Real RLS (confirmed live): agent sees/edits only their own visits
+  // (agent_key = my_key()); manager + a small staff allowlist see all.
+  // agentName is passed separately from agentKey because the real table
+  // stores both columns (agent_name is a display-only denormalization,
+  // not derived from agent_key at write time).
+  siteVisits: {
+    listForAgent(agentKey: string): Promise<SiteVisit[]>;
+    create(agentKey: string, agentName: string, input: NewSiteVisit): Promise<SiteVisit>;
   };
 }
 
@@ -146,6 +155,44 @@ function createDemoDataSource(): DataSource {
     plots: {
       async list() {
         return demoLoad().plots;
+      },
+    },
+    siteVisits: {
+      async listForAgent(agentKey) {
+        return demoLoad().siteVisits.filter((v) => v.agentKey === agentKey);
+      },
+      async create(agentKey, agentName, input) {
+        const visit: SiteVisit = {
+          id: Math.random().toString(36).slice(2, 10),
+          agentKey,
+          agentName,
+          name: input.name,
+          contact: input.contact,
+          site: input.site,
+          plot: input.plot ?? null,
+          visitDate: input.visitDate,
+          visitTime: input.visitTime ?? null,
+          people: input.people ?? null,
+          transport: input.transport ?? null,
+          pickup: input.pickup ?? null,
+          placeOfWork: input.placeOfWork ?? null,
+          position: input.position ?? null,
+          nationality: input.nationality ?? null,
+          purpose: input.purpose ?? null,
+          discussionSoFar: input.discussionSoFar ?? null,
+          keyUnderstanding: input.keyUnderstanding ?? null,
+          feedbackAfter: null,
+          keyNextSteps: null,
+          source: input.source ?? null,
+          accompanied: input.accompanied ?? null,
+          notes: input.notes ?? null,
+          status: 'Pending',
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.siteVisits.push(visit);
+        demoSave();
+        return visit;
       },
     },
   };
@@ -273,6 +320,43 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('plots').select('*').order('site').order('plot_number');
         if (error) throw error;
         return (data ?? []).map(mapPlotRow);
+      },
+    },
+    siteVisits: {
+      async listForAgent(agentKey) {
+        const { data, error } = await requireClient().from('site_visits').select('*').eq('agent_key', agentKey).order('visit_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapSiteVisitRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data, error } = await requireClient()
+          .from('site_visits')
+          .insert({
+            agent_key: agentKey,
+            agent_name: agentName,
+            name: input.name,
+            contact: input.contact,
+            site: input.site,
+            plot: input.plot ?? null,
+            visit_date: input.visitDate,
+            visit_time: input.visitTime ?? null,
+            people: input.people ?? null,
+            transport: input.transport ?? null,
+            pickup: input.pickup ?? null,
+            place_of_work: input.placeOfWork ?? null,
+            position: input.position ?? null,
+            nationality: input.nationality ?? null,
+            purpose: input.purpose ?? null,
+            discussion_so_far: input.discussionSoFar ?? null,
+            key_understanding: input.keyUnderstanding ?? null,
+            source: input.source ?? null,
+            accompanied: input.accompanied ?? null,
+            notes: input.notes ?? null,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapSiteVisitRow(data);
       },
     },
   };

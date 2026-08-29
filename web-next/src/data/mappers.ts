@@ -1,4 +1,4 @@
-import type { Lead, Payment, Plot, ScheduleItem, ScheduleItemStatus, StreakRow, Config } from '../types/domain';
+import type { Lead, Payment, Plot, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -79,6 +79,36 @@ export function mapPlotRow(r: Record<string, unknown>): Plot {
     notes: (r.notes as string) ?? null,
     unitKind: (r.unit_kind as Plot['unitKind']) ?? 'whole',
     parentPlotId: (r.parent_plot_id as string) ?? null,
+  };
+}
+
+export function mapSiteVisitRow(r: Record<string, unknown>): SiteVisit {
+  return {
+    id: r.id as string,
+    agentKey: r.agent_key as string,
+    agentName: (r.agent_name as string) ?? '',
+    name: r.name as string,
+    contact: (r.contact as string) ?? '',
+    site: (r.site as string) ?? '',
+    plot: (r.plot as string) ?? null,
+    visitDate: r.visit_date as string,
+    visitTime: (r.visit_time as string) ?? null,
+    people: r.people == null ? null : Number(r.people),
+    transport: (r.transport as string) ?? null,
+    pickup: (r.pickup as string) ?? null,
+    placeOfWork: (r.place_of_work as string) ?? null,
+    position: (r.position as string) ?? null,
+    nationality: (r.nationality as string) ?? null,
+    purpose: (r.purpose as string) ?? null,
+    discussionSoFar: (r.discussion_so_far as string) ?? null,
+    keyUnderstanding: (r.key_understanding as string) ?? null,
+    feedbackAfter: (r.feedback_after as string) ?? null,
+    keyNextSteps: (r.key_next_steps as string) ?? null,
+    source: (r.source as string) ?? null,
+    accompanied: (r.accompanied as string) ?? null,
+    notes: (r.notes as string) ?? null,
+    status: (r.status as string) ?? 'Pending',
+    createdAt: r.created_at as string,
   };
 }
 

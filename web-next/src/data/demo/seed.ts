@@ -63,7 +63,67 @@ export function seedDemo(): DemoDb {
     { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
   ];
 
-  return { version: 2, leads, payments, scheduleItems, streaks, config, plots };
+  // Matches the real shape/style of production's actual site_visits rows
+  // (Royal Palm Enclave, Tsopoli site, free-text visit_time slots,
+  // status always 'Pending' -- confirmed against real sampled data).
+  const siteVisits: DemoDb['siteVisits'] = [
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      name: 'Mercy Owusu',
+      contact: '0240758072',
+      site: 'Royal Palm Enclave',
+      plot: 'B-01-H1',
+      visitDate: isoPlusDays(t, -12),
+      visitTime: 'Saturday 11:00am',
+      people: 2,
+      transport: 'Company bus',
+      pickup: 'Tsopoli junction',
+      placeOfWork: 'Ministry of Health',
+      position: 'Nurse',
+      nationality: 'Ghanaian',
+      purpose: 'First site inspection before committing to half-plot deposit',
+      discussionSoFar: 'Walked the half-plot subdivision, explained payment plan options',
+      keyUnderstanding: 'Understands 6-month plan, wants to confirm with spouse',
+      feedbackAfter: null,
+      keyNextSteps: null,
+      source: 'Referral',
+      accompanied: 'Spouse',
+      notes: null,
+      status: 'Pending',
+      createdAt: isoPlusDays(t, -12),
+    },
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      name: 'Abena Boateng',
+      contact: '0559876543',
+      site: 'Royal Palm Enclave',
+      plot: 'A-02',
+      visitDate: isoPlusDays(t, -3),
+      visitTime: 'Sunday 2:00pm',
+      people: 1,
+      transport: 'Self-drive',
+      pickup: null,
+      placeOfWork: null,
+      position: null,
+      nationality: 'Ghanaian',
+      purpose: 'Second visit, ready to reserve',
+      discussionSoFar: 'Confirmed plot boundaries and 12-month payment plan',
+      keyUnderstanding: 'Ready to pay deposit this week',
+      feedbackAfter: null,
+      keyNextSteps: null,
+      source: 'Walk-in',
+      accompanied: null,
+      notes: null,
+      status: 'Pending',
+      createdAt: isoPlusDays(t, -3),
+    },
+  ];
+
+  return { version: 3, leads, payments, scheduleItems, streaks, config, plots, siteVisits };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

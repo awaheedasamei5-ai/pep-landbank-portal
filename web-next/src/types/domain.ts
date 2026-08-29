@@ -113,3 +113,63 @@ export interface Client {
   totalPaid: number;
   latestDate: string;
 }
+
+// Real table (confirmed live, 25 columns, 43 real rows). RLS: agent sees/
+// edits only their own (agent_key = my_key()), plus manager and a small
+// staff allowlist ('elias','emmanuel','elizabeth') see/edit all -- same
+// shape as site_visits_ins/_sel/_upd/_del policies. `status` exists in the
+// schema but every real row today is 'Pending' -- it's effectively unused
+// in practice, not a working outcome tracker yet, so it's modelled as a
+// plain string rather than a closed enum.
+// feedbackAfter/keyNextSteps are real columns but populated *after* a visit
+// happens (a follow-up log, not part of creation) -- deliberately excluded
+// from NewSiteVisit below; editing them is a distinct later piece of work,
+// same discipline as leaving live payment recording unwired.
+export interface SiteVisit {
+  id: string;
+  agentKey: string;
+  agentName: string;
+  name: string;
+  contact: string;
+  site: string;
+  plot: string | null;
+  visitDate: string;
+  visitTime: string | null;
+  people: number | null;
+  transport: string | null;
+  pickup: string | null;
+  placeOfWork: string | null;
+  position: string | null;
+  nationality: string | null;
+  purpose: string | null;
+  discussionSoFar: string | null;
+  keyUnderstanding: string | null;
+  feedbackAfter: string | null;
+  keyNextSteps: string | null;
+  source: string | null;
+  accompanied: string | null;
+  notes: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface NewSiteVisit {
+  name: string;
+  contact: string;
+  site: string;
+  plot?: string;
+  visitDate: string;
+  visitTime?: string;
+  people?: number;
+  transport?: string;
+  pickup?: string;
+  placeOfWork?: string;
+  position?: string;
+  nationality?: string;
+  purpose?: string;
+  discussionSoFar?: string;
+  keyUnderstanding?: string;
+  source?: string;
+  accompanied?: string;
+  notes?: string;
+}
