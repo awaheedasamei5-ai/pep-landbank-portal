@@ -35,6 +35,14 @@ export function mapPaymentRow(r: Record<string, unknown>): Payment {
     agentKey: r.agent_key as string,
     amount: Number(r.amount ?? 0),
     date: r.payment_date as string,
+    clientName: (r.client_name as string) ?? undefined,
+    paymentMethod: (r.payment_method as Payment['paymentMethod']) ?? null,
+    note: (r.note as string) ?? null,
+    status: (r.status as Payment['status']) ?? 'approved',
+    decidedBy: (r.decided_by as string) ?? null,
+    decidedByName: (r.decided_by_name as string) ?? null,
+    decidedAt: (r.decided_at as string) ?? null,
+    receiptNumber: (r.receipt_number as string) ?? null,
   };
 }
 

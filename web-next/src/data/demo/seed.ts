@@ -31,8 +31,14 @@ export function seedDemo(): DemoDb {
   ];
 
   const payments: DemoDb['payments'] = [
-    { id: uid(), leadId: leads[0].id, agentKey: AGENT_KEY, amount: 24000, date: isoPlusDays(t, -18) },
-    { id: uid(), leadId: leads[1].id, agentKey: AGENT_KEY, amount: 60000, date: isoPlusDays(t, -3) },
+    { id: uid(), leadId: leads[0].id, agentKey: AGENT_KEY, amount: 24000, date: isoPlusDays(t, -18), clientName: leads[0].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[1].id, agentKey: AGENT_KEY, amount: 60000, date: isoPlusDays(t, -3), clientName: leads[1].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    // A pending payment 'elias' logged on emmanuel's lead -- exercises the
+    // full real workflow in demo mode: shows in Pending Approvals for the
+    // manager persona, and does NOT show up in leads[3]'s amtPaid above
+    // (45000) until approved, matching the real rule that a pending entry
+    // touches nothing on the lead yet.
+    { id: uid(), leadId: leads[3].id, agentKey: 'emmanuel', amount: 15000, date: isoPlusDays(t, -1), clientName: leads[3].name, paymentMethod: 'Cash', status: 'pending', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: 'Logged on emmanuel\'s behalf while he was on a site visit' },
   ];
 
   // Today's to-do list: one done, one still open -- lands on the 'halfway'
@@ -358,7 +364,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 10, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
+  return { version: 11, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

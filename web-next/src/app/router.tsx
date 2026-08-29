@@ -26,6 +26,7 @@ import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
 import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
 import { ChatScreen } from '../features/chat/screens/ChatScreen';
 import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
+import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -63,157 +64,40 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        // Sales/Office Desk and everything under them are shared staff
+        // tools, not per-role dashboards -- unlike 'home'/'mgr' (two
+        // genuinely different screens by design), a manager needs to open
+        // these too (Log Payment's approvals are manager-primary). Coarse
+        // gate is just "authenticated"; finer per-screen restrictions
+        // (Plot Inventory, SVE management, Log Payment, etc.) already
+        // live inside each screen component. Fixed 2026-08-29: these were
+        // all wrongly wrapped in RequireRole role="agent" until now, which
+        // silently made this entire tree unreachable for any manager --
+        // caught while wiring Log Payment, which a manager must be able
+        // to open to approve/decline pending payments.
         path: 'sales',
-        element: (
-          <RequireRole role="agent">
-            <SalesDeskScreen />
-          </RequireRole>
-        ),
+        element: <SalesDeskScreen />,
       },
-      {
-        path: 'sales/pipeline',
-        element: (
-          <RequireRole role="agent">
-            <PipelineListScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/pipeline/new',
-        element: (
-          <RequireRole role="agent">
-            <AddLeadScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/pipeline/:id',
-        element: (
-          <RequireRole role="agent">
-            <PipelineDetailScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        // Coarse role gate matches every other Sales Desk route; the finer
-        // manager/elias/emmanuel-only restriction (mirroring real production
-        // RLS on `plots`) lives in usePlots()'s `enabled` check, so a
-        // different agent reaching this URL directly sees an empty,
-        // permanently-loading-free screen rather than a route bounce.
-        path: 'sales/plots',
-        element: (
-          <RequireRole role="agent">
-            <PlotInventoryScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/clients',
-        element: (
-          <RequireRole role="agent">
-            <ClientDatabaseScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/sitevisits',
-        element: (
-          <RequireRole role="agent">
-            <SiteVisitsScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/sitevisits/new',
-        element: (
-          <RequireRole role="agent">
-            <AddSiteVisitScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        // Coarse role gate matches every other Sales Desk route; the
-        // finer manager/elias/emmanuel/elizabeth-only restriction lives
-        // in SveManagementScreen itself, same pattern as Plot Inventory.
-        path: 'sales/sitevisits/experience',
-        element: (
-          <RequireRole role="agent">
-            <SveManagementScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/referrals',
-        element: (
-          <RequireRole role="agent">
-            <ReferralsScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/referrals/new',
-        element: (
-          <RequireRole role="agent">
-            <AddReferralScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/enquiries',
-        element: (
-          <RequireRole role="agent">
-            <EnquiriesScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'sales/enquiries/new',
-        element: (
-          <RequireRole role="agent">
-            <AddEnquiryScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'office',
-        element: (
-          <RequireRole role="agent">
-            <OfficeDeskScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'office/myday',
-        element: (
-          <RequireRole role="agent">
-            <MyDayScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'office/attendance',
-        element: (
-          <RequireRole role="agent">
-            <AttendanceScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'office/memos',
-        element: (
-          <RequireRole role="agent">
-            <MemosScreen />
-          </RequireRole>
-        ),
-      },
-      {
-        path: 'office/memos/new',
-        element: (
-          <RequireRole role="agent">
-            <ComposeMemoScreen />
-          </RequireRole>
-        ),
-      },
+      { path: 'sales/pipeline', element: <PipelineListScreen /> },
+      { path: 'sales/pipeline/new', element: <AddLeadScreen /> },
+      { path: 'sales/pipeline/:id', element: <PipelineDetailScreen /> },
+      { path: 'sales/plots', element: <PlotInventoryScreen /> },
+      { path: 'sales/clients', element: <ClientDatabaseScreen /> },
+      { path: 'sales/sitevisits', element: <SiteVisitsScreen /> },
+      { path: 'sales/sitevisits/new', element: <AddSiteVisitScreen /> },
+      { path: 'sales/sitevisits/experience', element: <SveManagementScreen /> },
+      { path: 'sales/referrals', element: <ReferralsScreen /> },
+      { path: 'sales/referrals/new', element: <AddReferralScreen /> },
+      { path: 'sales/enquiries', element: <EnquiriesScreen /> },
+      { path: 'sales/enquiries/new', element: <AddEnquiryScreen /> },
+      { path: 'office', element: <OfficeDeskScreen /> },
+      { path: 'office/myday', element: <MyDayScreen /> },
+      { path: 'office/attendance', element: <AttendanceScreen /> },
+      { path: 'office/memos', element: <MemosScreen /> },
+      { path: 'office/memos/new', element: <ComposeMemoScreen /> },
+      // Finer manager/'elias'-only restriction lives in LogPaymentScreen
+      // itself (useCanLogPayments), matching real payments_ins RLS.
+      { path: 'office/payments', element: <LogPaymentScreen /> },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },

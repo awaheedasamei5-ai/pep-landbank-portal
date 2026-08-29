@@ -34,13 +34,26 @@ test('add-lead form validates required fields before submit', async ({ page }) =
   await expect(page.getByText('Required').first()).toBeVisible();
 });
 
-test('logging a payment updates pipeline totals and the streak card mood together', async ({ page }) => {
+test('logging a payment as elias goes to pending, not the collected total', async ({ page }) => {
+  // Real production RLS (payments_ins, confirmed live) only lets manager
+  // or the 'elias' key insert a payment at all -- and only a manager's
+  // own entry auto-approves. elias logging one here must land as
+  // 'pending' and leave the lead's Collected pill untouched until a
+  // manager reviews it -- this replaced an earlier, incorrect assumption
+  // that any agent could self-log an already-applied payment.
   await loginAsAgent(page);
   await page.goto('/app/sales/pipeline');
   await page.getByText('Mercy Owusu').click();
   await expect(page).toHaveURL(/\/app\/sales\/pipeline\/.+/);
 
+  const collectedBefore = await page.getByText('GHS 24,000').first().isVisible();
+  expect(collectedBefore).toBe(true);
+
   await page.getByPlaceholder('0').fill('5000');
   await page.getByRole('button', { name: 'Save payment' }).click();
   await expect(page.getByText('+GHS 5,000')).toBeVisible();
+  await expect(page.getByText('awaiting approval')).toBeVisible();
+  // Collected must still read the pre-payment total -- a pending entry
+  // has not been applied to the lead yet.
+  await expect(page.getByText('GHS 24,000').first()).toBeVisible();
 });

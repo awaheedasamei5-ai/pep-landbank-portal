@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
+import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
 import { StageBadge } from '../components/StageBadge';
-import { useLead, useRecordPayment } from '../hooks/useLead';
+import { useLead } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import styles from './PipelineDetailScreen.module.css';
 
@@ -13,12 +15,19 @@ import styles from './PipelineDetailScreen.module.css';
 // Balance pills + a log-payment form. Stage/plot/discount editing and the
 // full accordion of client/plot/deposit/documentation sections are out of
 // scope for this slice; only the payment-logging write path is ported.
+//
+// The log-payment form only renders for manager/'elias' (useCanLogPayments)
+// -- confirmed live via payments_ins RLS that a regular agent cannot
+// insert a payment at all, not even as 'pending'. Every other agent still
+// sees their own lead's payment history, just not the form to add to it.
 export function PipelineDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
+  const canLog = useCanLogPayments();
   const { data: lead, isLoading } = useLead(id ?? '');
   const { data: payments } = usePayments();
-  const recordPayment = useRecordPayment(id ?? '');
+  const createPayment = useCreatePayment();
   const [amount, setAmount] = useState('');
 
   if (isLoading) return <div className={styles.wrap}>Loading…</div>;
@@ -36,8 +45,8 @@ export function PipelineDetailScreen() {
   async function submitPayment(e: React.FormEvent) {
     e.preventDefault();
     const n = Number(amount);
-    if (!n || n <= 0) return;
-    await recordPayment.mutateAsync(n);
+    if (!n || n <= 0 || !id) return;
+    await createPayment.mutateAsync({ input: { leadId: id, amount: n }, leadName: lead!.name, leadAgentKey: lead!.agent });
     setAmount('');
   }
 
@@ -63,18 +72,21 @@ export function PipelineDetailScreen() {
         </PipePillStrip>
       </div>
 
-      <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>Log a payment</h2>
-        <form onSubmit={submitPayment}>
-          <div className={styles.field}>
-            <label className={styles.label}>Amount (GHS)</label>
-            <input className={styles.input} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-          </div>
-          <button type="submit" className={styles.btn} disabled={recordPayment.isPending || !amount}>
-            {recordPayment.isPending ? 'Saving…' : 'Save payment'}
-          </button>
-        </form>
-      </div>
+      {canLog && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Log a payment</h2>
+          <form onSubmit={submitPayment}>
+            <div className={styles.field}>
+              <label className={styles.label}>Amount (GHS)</label>
+              <input className={styles.input} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+            </div>
+            <button type="submit" className={styles.btn} disabled={createPayment.isPending || !amount}>
+              {createPayment.isPending ? 'Saving…' : 'Save payment'}
+            </button>
+            {profile?.role !== 'manager' && <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8 }}>This will be sent to Management for approval before it reflects on the balance.</p>}
+          </form>
+        </div>
+      )}
 
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>Payment history</h2>
@@ -82,8 +94,13 @@ export function PipelineDetailScreen() {
           {leadPayments.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No individual payments logged yet — only a starting total.</p>}
           {leadPayments.map((p) => (
             <div className={styles.historyRow} key={p.id}>
-              <span>{p.date}</span>
-              <span style={{ fontWeight: 700, color: 'var(--ok)' }}>+{ghs(p.amount)}</span>
+              <span>
+                {p.date}
+                {p.status && p.status !== 'approved' && (
+                  <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: p.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>{p.status === 'pending' ? '· awaiting approval' : '· declined'}</span>
+                )}
+              </span>
+              <span style={{ fontWeight: 700, color: p.status === 'declined' ? 'var(--muted)' : 'var(--ok)' }}>+{ghs(p.amount)}</span>
             </div>
           ))}
         </div>

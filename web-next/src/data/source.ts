@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -53,12 +53,36 @@ export interface ReceivedMemo {
 export interface DataSource {
   leads: {
     listForAgent(agentKey: string): Promise<Lead[]>;
+    // Company-wide, unfiltered -- the Log Payment lead-picker needs to
+    // search across every agent's leads (real RLS lets manager/elias see
+    // all leads already, confirmed live; this just doesn't add an
+    // agent_key filter on top of that, same reasoning as
+    // manager.overview() and sve.listVisitsWithStatus()).
+    listAll(): Promise<Lead[]>;
     create(agentKey: string, input: NewLead): Promise<Lead>;
     get(agentKey: string, id: string): Promise<Lead | undefined>;
-    recordPayment(agentKey: string, id: string, amount: number, date: string): Promise<Lead>;
   };
+  // Real workflow (confirmed live via RLS + the actual production RPCs +
+  // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
+  // functions, not guessed): only manager or the 'elias' key can insert a
+  // payment at all (payments_ins WITH CHECK). A manager's own entry is
+  // immediately 'approved' and this app applies the lead balance/stage
+  // recompute itself, matching applyApprovedPaymentToLead() exactly.
+  // elias's entry is always 'pending' and touches nothing on the lead
+  // until a real manager calls approve()/decline() below -- which must
+  // go through the real approve_payment/decline_payment RPCs, never a
+  // raw UPDATE, since those RPCs also write activity_log/messages and
+  // conditionally create allocation_requests (the latter two are NOT
+  // replicated here -- allocation_requests is a distinct, larger
+  // unbuilt feature (Plot Allocation), and there's no SMS provider
+  // wired anywhere in this app, matching this session's "no free SMS
+  // API exists" finding -- both deliberately out of scope for this pass).
   payments: {
     listForAgent(agentKey: string): Promise<Payment[]>;
+    listPending(): Promise<Payment[]>;
+    create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
+    approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
+    decline(paymentId: string, decidedBy: string, decidedByName: string, reason?: string): Promise<void>;
   };
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
@@ -186,6 +210,9 @@ function createDemoDataSource(): DataSource {
       async listForAgent(agentKey) {
         return demoLoad().leads.filter((l) => l.agent === agentKey);
       },
+      async listAll() {
+        return demoLoad().leads;
+      },
       async create(agentKey, input) {
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
         const lead: Lead = {
@@ -211,24 +238,73 @@ function createDemoDataSource(): DataSource {
       async get(agentKey, id) {
         return demoLoad().leads.find((l) => l.agent === agentKey && l.id === id);
       },
-      // Mirrors index.html's saveNewLead-style "log a payment, recompute
-      // stage from the new total" pattern -- the lead's amtPaid and derived
-      // stage move together, atomically, so a UI can never show a payment
-      // logged against a lead whose stage badge hasn't caught up.
-      async recordPayment(agentKey, id, amount, date) {
-        const db = demoLoad();
-        const lead = db.leads.find((l) => l.agent === agentKey && l.id === id);
-        if (!lead) throw new Error('Lead not found');
-        lead.amtPaid += amount;
-        lead.stage = deriveStageFromPayment(lead.amtPaid, lead.grandTotal);
-        db.payments.push({ id: Math.random().toString(36).slice(2, 10), leadId: id, agentKey, amount, date });
-        demoSave();
-        return lead;
-      },
     },
     payments: {
       async listForAgent(agentKey) {
         return demoLoad().payments.filter((p) => p.agentKey === agentKey);
+      },
+      async listPending() {
+        return demoLoad().payments.filter((p) => p.status === 'pending');
+      },
+      async create(input, leadName, leadAgentKey, requestedStatus) {
+        const db = demoLoad();
+        const payment: Payment = {
+          id: Math.random().toString(36).slice(2, 10),
+          leadId: input.leadId,
+          agentKey: leadAgentKey,
+          amount: input.amount,
+          date: input.paymentDate ?? new Date().toISOString().slice(0, 10),
+          clientName: leadName,
+          paymentMethod: input.paymentMethod ?? null,
+          note: input.note ?? null,
+          status: requestedStatus,
+          decidedBy: null,
+          decidedByName: null,
+          decidedAt: null,
+          receiptNumber: null,
+        };
+        db.payments.push(payment);
+        if (requestedStatus === 'approved') {
+          const lead = db.leads.find((l) => l.id === input.leadId);
+          if (lead) {
+            lead.amtPaid += input.amount;
+            lead.stage = deriveStageFromPayment(lead.amtPaid, lead.grandTotal);
+          }
+        }
+        demoSave();
+        return payment;
+      },
+      async approve(paymentId, decidedBy, decidedByName) {
+        const db = demoLoad();
+        const payment = db.payments.find((p) => p.id === paymentId);
+        if (!payment) throw new Error('Payment not found');
+        if (payment.status !== 'pending') throw new Error('This payment is no longer pending');
+        payment.status = 'approved';
+        payment.decidedBy = decidedBy;
+        payment.decidedByName = decidedByName;
+        payment.decidedAt = new Date().toISOString();
+        const lead = db.leads.find((l) => l.id === payment.leadId);
+        let newAmtPaid = 0;
+        let newBalance = 0;
+        if (lead) {
+          lead.amtPaid += payment.amount;
+          lead.stage = deriveStageFromPayment(lead.amtPaid, lead.grandTotal);
+          newAmtPaid = lead.amtPaid;
+          newBalance = Math.max(lead.grandTotal - lead.amtPaid, 0);
+        }
+        demoSave();
+        return { decidedBy, decidedByName, newAmtPaid, newBalance };
+      },
+      async decline(paymentId, decidedBy, decidedByName) {
+        const db = demoLoad();
+        const payment = db.payments.find((p) => p.id === paymentId);
+        if (!payment) throw new Error('Payment not found');
+        if (payment.status !== 'pending') throw new Error('This payment is no longer pending');
+        payment.status = 'declined';
+        payment.decidedBy = decidedBy;
+        payment.decidedByName = decidedByName;
+        payment.decidedAt = new Date().toISOString();
+        demoSave();
       },
     },
     scheduleItems: {
@@ -641,17 +717,14 @@ function createDemoDataSource(): DataSource {
 // configured for, which during this build phase is deliberately the
 // STAGING project, never production.
 //
-// leads.recordPayment is a deliberate exception: production's real payment
-// flow is NOT a simple insert. schedule_items status is 'pending' by
-// default there and only a manager can call the approve_payment/
-// decline_payment RPC functions (SECURITY DEFINER, confirmed via
-// pg_get_functiondef) -- approving atomically updates the lead's
-// amt_paid/balance AND can auto-create an allocation_requests row once
-// 30% is paid. A naive direct insert here would silently bypass that
-// approval workflow and the audit trail (activity_log/audit_events) it
-// writes -- exactly the class of integrity bug flagged in this project's
-// own history. Wiring this correctly is a distinct, focused piece of work,
-// not a corner to cut inside this pass.
+// Payment recording is fully wired (payments.create/approve/decline
+// below) -- an earlier phase left this unwired under the assumption that
+// any agent could self-log a payment as 'pending' for review. That
+// assumption was wrong: confirmed live via payments_ins RLS that only
+// manager or the 'elias' key can insert a payment at all, and reading
+// index.html's real logNewPayment()/applyApprovedPaymentToLead()
+// functions directly (not guessed) to match the exact real behavior --
+// see the Payment/NewPaymentEntry types' comments in types/domain.ts.
 function createLiveDataSource(): DataSource {
   function requireClient() {
     const client = getSupabaseClient();
@@ -695,11 +768,10 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return data ? mapLeadRow(data) : undefined;
       },
-      async recordPayment() {
-        throw new Error(
-          'Live payment recording is intentionally not wired yet -- production payments go through a manager approval workflow ' +
-            '(approve_payment/decline_payment RPCs), not a direct insert. See the comment above createLiveDataSource() for the full reasoning.',
-        );
+      async listAll() {
+        const { data, error } = await requireClient().from('leads').select('*').order('name');
+        if (error) throw error;
+        return (data ?? []).map(mapLeadRow);
       },
     },
     payments: {
@@ -707,6 +779,63 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('payments').select('*').eq('agent_key', agentKey);
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
+      },
+      async listPending() {
+        const { data, error } = await requireClient().from('payments').select('*').eq('status', 'pending').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapPaymentRow);
+      },
+      async create(input, leadName, leadAgentKey, requestedStatus) {
+        const { data, error } = await requireClient()
+          .from('payments')
+          .insert({
+            lead_id: input.leadId,
+            agent_key: leadAgentKey,
+            client_name: leadName,
+            amount: input.amount,
+            payment_date: input.paymentDate ?? new Date().toISOString().slice(0, 10),
+            payment_method: input.paymentMethod ?? null,
+            note: input.note ?? null,
+            status: requestedStatus,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        const payment = mapPaymentRow(data);
+        // Mirrors applyApprovedPaymentToLead() exactly for the manager-
+        // self-approves case -- allocation_requests creation and the
+        // client thank-you SMS are the RPC's job for the review-and-
+        // approve path below, deliberately not replicated here (no SMS
+        // provider wired anywhere in this app; allocation_requests is a
+        // distinct, larger unbuilt feature).
+        if (requestedStatus === 'approved') {
+          const { data: leadRow, error: leadError } = await requireClient().from('leads').select('amt_paid,grand_total').eq('id', input.leadId).single();
+          if (leadError) throw leadError;
+          const newAmtPaid = Number(leadRow.amt_paid ?? 0) + input.amount;
+          const grandTotal = Number(leadRow.grand_total ?? 0);
+          const newBalance = Math.max(grandTotal - newAmtPaid, 0);
+          const newStage = deriveStageFromPayment(newAmtPaid, grandTotal);
+          const { error: updError } = await requireClient().from('leads').update({ amt_paid: newAmtPaid, balance: newBalance, stage: newStage }).eq('id', input.leadId);
+          if (updError) throw updError;
+        }
+        return payment;
+      },
+      // Deliberately the ONLY path that can move a payment out of
+      // 'pending' -- both call the real production RPCs, never a raw
+      // UPDATE. A raw update would satisfy RLS/the trigger fine (manager
+      // role passes both) but would silently skip the lead balance
+      // recompute, activity_log write, agent notification, and
+      // allocation-threshold check that approve_payment does atomically
+      // server-side -- exactly the class of bug this project's own
+      // history warns about.
+      async approve(paymentId) {
+        const { data, error } = await requireClient().rpc('approve_payment', { p_payment_id: paymentId });
+        if (error) throw error;
+        return { decidedBy: data.decided_by, decidedByName: data.decided_by_name, newAmtPaid: Number(data.new_amt_paid), newBalance: Number(data.new_balance) };
+      },
+      async decline(paymentId, _decidedBy, _decidedByName, reason) {
+        const { error } = await requireClient().rpc('decline_payment', { p_payment_id: paymentId, p_reason: reason ?? null });
+        if (error) throw error;
       },
     },
     scheduleItems: {

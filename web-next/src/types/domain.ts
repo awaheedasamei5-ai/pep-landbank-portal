@@ -44,12 +44,49 @@ export interface NewLead {
   notes?: string;
 }
 
+// Real distinct values seen on production's payment_method column
+// (index.html's PAYMENT_METHODS constant, confirmed still the live set).
+export type PaymentMethod = 'Ecobank' | 'Stanbic Bank' | 'MTN MoMo' | 'Vodafone Cash' | 'Hubtel' | 'Cash' | 'Other';
+export type PaymentStatus = 'pending' | 'approved' | 'declined';
+
+// Extended in place (not a parallel type) since this is the same real
+// `payments` table "My pipeline"/pipeline detail already read from --
+// those screens just never needed the fuller shape. See Log Payment's
+// screen comment for the full real workflow this now models: only
+// manager or the 'elias' key can log a payment at all (confirmed live
+// RLS, payments_ins), status is 'approved' immediately when a manager
+// logs it, 'pending' when elias does (awaiting a manager's review via
+// the real approve_payment/decline_payment RPCs) -- there is no
+// regular-agent self-service path in production today.
 export interface Payment {
   id: string;
   leadId: string;
   agentKey: string;
   amount: number;
   date: string;
+  clientName?: string;
+  paymentMethod?: PaymentMethod | null;
+  note?: string | null;
+  status?: PaymentStatus;
+  decidedBy?: string | null;
+  decidedByName?: string | null;
+  decidedAt?: string | null;
+  receiptNumber?: string | null;
+}
+
+export interface NewPaymentEntry {
+  leadId: string;
+  amount: number;
+  paymentDate?: string;
+  paymentMethod?: PaymentMethod;
+  note?: string;
+}
+
+export interface PaymentDecisionResult {
+  decidedBy: string;
+  decidedByName: string;
+  newAmtPaid: number;
+  newBalance: number;
 }
 
 export type ScheduleItemStatus = 'open' | 'closed' | 'cancelled' | 'rescheduled';
