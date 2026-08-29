@@ -567,20 +567,20 @@ a{color:var(--green2)}
    shrunk version of the desktop one -- the desktop override further down
    restructures it into a side-by-side row instead of just scaling text down,
    per the standing instruction to build each breakpoint on its own terms. */
-.streakCard{border-radius:20px;padding:18px 20px;color:#fff;position:relative;overflow:hidden;box-shadow:0 14px 32px -12px rgba(0,0,0,.35)}
+.streakCard{border-radius:20px;padding:22px 22px 20px;color:#fff;position:relative;overflow:hidden;box-shadow:0 14px 32px -12px rgba(0,0,0,.35)}
 .clientMoodCard{border-radius:20px;padding:16px 18px;color:#fff;display:flex;align-items:center;gap:14px;margin-bottom:18px;box-shadow:0 14px 32px -12px rgba(0,0,0,.3);animation:fadeUp .4s ease both}
 .clientMoodEmoji{font-size:34px;line-height:1;flex:0 0 auto}
 .clientMoodState{font-weight:800;font-size:15px}
 .clientMoodMsg{font-size:12.5px;opacity:.9;margin-top:2px}
-.streakCardTop{margin-bottom:14px}
+.streakCardTop{margin-bottom:18px}
 /* Two panes sharing one spot, crossfading forever -- usage/streak mood and
    pipeline-risk mood are genuinely different signals (you can be fine on
    your daily streak while the month's numbers are bleeding), so rather than
    force one static emoji to represent both, the card alternates between
    them. Pure CSS (opposite-phased animation-delay on an identical keyframe),
    no JS interval to clean up. */
-.streakMoodStack{position:relative;min-height:48px;min-width:210px}
-.streakMoodPane{display:flex;align-items:center;gap:14px;position:absolute;inset:0;animation:streakMoodFade 16s ease-in-out infinite}
+.streakMoodStack{position:relative;min-height:52px;min-width:210px}
+.streakMoodPane{display:flex;align-items:center;gap:16px;position:absolute;inset:0;animation:streakMoodFade 16s ease-in-out infinite}
 .streakMoodPane.paneB{animation-delay:-8s}
 @keyframes streakMoodFade{0%,42%{opacity:1}50%,92%{opacity:0}100%{opacity:1}}
 /* Real motion, not a static glyph -- each mood/risk icon is now a Fluent
@@ -589,7 +589,7 @@ a{color:var(--green2)}
    genuinely alive rather than a picture standing in for an emoji. The
    crossfade above was slowed from 10s to 16s (same phase relationship,
    -8s = half cycle) so it doesn't compete with this now-busier motion. */
-.streakEmoji3d{width:44px;height:44px;flex:0 0 auto;display:block;filter:drop-shadow(0 6px 10px rgba(0,0,0,.22));
+.streakEmoji3d{width:50px;height:50px;flex:0 0 auto;display:block;filter:drop-shadow(0 6px 10px rgba(0,0,0,.22));
   animation:streakEmoji3dMotion 3.2s ease-in-out infinite}
 @keyframes streakEmoji3dMotion{
   0%,100%{transform:translateY(0) rotate(0deg) scale(1)}
@@ -598,14 +598,14 @@ a{color:var(--green2)}
   75%{transform:translateY(-4px) rotate(4deg) scale(1.03)}
 }
 .streakNum{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace}
-.streakLbl{font-size:12.5px;opacity:.92;margin-top:2px;font-weight:600}
+.streakLbl{font-size:12.5px;opacity:.92;margin-top:5px;font-weight:600;line-height:1.4}
 .streakWeekRow{display:flex;justify-content:space-between;gap:6px}
 .streakWeekDay{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1}
 .streakWeekLbl{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.75;font-weight:700}
 .streakWeekMark{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
 .streakWeekMark.met{background:rgba(255,255,255,.92);color:#166534}
 .streakWeekMark.future{background:rgba(255,255,255,.1);opacity:.5}
-.streakRiskRow{display:flex;align-items:center;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.22);font-size:12px;font-weight:600;opacity:.95}
+.streakRiskRow{display:flex;align-items:center;gap:7px;margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,255,255,.22);font-size:12px;font-weight:600;opacity:.95}
 .streakRiskDot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
 .streakRiskDot.ok{background:#4ADE80}
 .streakRiskDot.warn{background:#FBBF24}
@@ -1239,23 +1239,36 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .homeHero .heroRefresh:hover{background:rgba(255,255,255,.22)}
 .homeHero .heroRefresh.spinning svg{animation:spin .7s linear infinite}
 /* A small emoji-badge version of this was tried first and read as "empty
-   page" -- the real ask was to end the greeting column where Pipeline
-   value ends, and put the FULL streak card on that same row filling the
-   rest of the hero, not a tiny chip near the refresh button. .heroMain
-   carries all the pre-existing hero content unchanged; .heroStreakSlot is
-   the new sibling column, block below md (stacked, matching how the
-   streak card rendered before this change) and a real side-by-side row
-   at/above 768px. The streak card's own 768px+ layout (horizontal, built
-   for full content width) would be cramped in a ~400px column, so it's
-   forced back to its base block/stacked layout inside this slot specifically. */
+   page"; the follow-up gave .heroMain flex:1 too, which stretched its
+   invisible flex box far past its actual (narrow, left-aligned) text
+   content and left a dead gap before the streak card started. Fixed by
+   letting .heroMain size to its own content (flex:0 0 auto, shrink-to-fit
+   -- a flex item with no explicit basis takes its widest child's
+   intrinsic width even though that child is a block-level div) so
+   .heroStreakSlot (flex:1) starts immediately after real content ends,
+   not after an oversized invisible box. Stacked on mobile, side-by-side
+   at 768px+. */
 .homeHero .heroLayout{display:flex;flex-direction:column;gap:16px}
 .homeHero .heroMain{min-width:0}
 .homeHero .heroStreakSlot{min-width:0}
 @media(min-width:768px){
   .homeHero .heroLayout{flex-direction:row;align-items:stretch;gap:24px}
-  .homeHero .heroMain{flex:1}
-  .homeHero .heroStreakSlot{flex:1;min-width:340px;display:flex}
+  .homeHero .heroMain{flex:0 0 auto;max-width:460px}
+  .homeHero .heroStreakSlot{flex:1;display:flex}
   .homeHero .heroStreakSlot .streakCard{flex:1;display:block}
+  /* Much more room here than the card's own compact default -- let the
+     mood glyph stand alone, larger, with real breathing room beside the
+     text instead of the tight inline pairing the compact card uses. */
+  .homeHero .heroStreakSlot .streakEmoji3d{width:84px;height:84px}
+  .homeHero .heroStreakSlot .streakMoodPane{gap:22px}
+  .homeHero .heroStreakSlot .streakNum{font-size:24px}
+  /* .streakRiskRow has its OWN separate 768px+ rule (side-column: no top
+     margin/border, a left border instead) that applies purely by viewport
+     width -- it doesn't know or care that .streakCard was just forced back
+     to display:block above, so left unfixed it collapses flush against the
+     week row with no visible gap. Re-declare the base (block-appropriate)
+     values here with higher specificity so they win regardless of width. */
+  .homeHero .heroStreakSlot .streakRiskRow{margin-top:22px;padding-top:14px;border-top:1px solid rgba(255,255,255,.22);border-left:none;padding-left:0;flex:unset;white-space:normal}
 }
 .homeHero .heroStat{margin-top:20px;position:relative;z-index:1}
 .homeHero .heroStatLabel{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700}
@@ -10325,7 +10338,11 @@ function streakWidgetHtml(streak,clickable){
         </div>
         <div class="streakMoodPane paneB">
           <img class="streakEmoji3d" src="${RISK_MOOD_IMG[streak.risk.tier]}" alt="${RISK_MOOD_EMOJI[streak.risk.tier]}" draggable="false"/>
-          <div><div class="streakNum">Pipeline: ${esc(streak.risk.tier)}</div><div class="streakLbl">${esc(riskMoodLabel(streak.risk,streak.signals))}</div></div>
+          <div>
+            <div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;font-weight:700">Pipeline status</div>
+            <div class="streakNum" style="margin-top:3px;color:${streak.risk.tier==='on track'?'#4ADE80':streak.risk.tier==='at risk'?'#FBBF24':'#F87171'}">${esc(streak.risk.tier.toUpperCase())}</div>
+            <div class="streakLbl">${esc(riskMoodLabel(streak.risk,streak.signals))}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -12504,6 +12521,47 @@ function scheduleBlockHtml(item,color,hasConflict,draggable){
     <div class="dayGridBlockTitle">${prefix}${esc(item.title)}</div>
   </div>`;
 }
+// Real click-and-drag / touch-swipe horizontal scrolling for a wide
+// overflow-x:auto wrapper (Ops Today, Leaderboard) -- dragging the actual
+// scrollbar thumb technically already worked, but that's not what "swipe
+// to scroll" means to anyone; this makes the content itself draggable,
+// the way a Trello board or any real horizontal carousel behaves.
+// Axis-locked from the first few pixels of movement: if the gesture is
+// mostly horizontal, this takes over (preventDefault, drag the content);
+// if mostly vertical, it does nothing at all and the page scrolls
+// normally -- touch-action:pan-y on these wrappers is kept as a CSS-level
+// fallback in case this script fails to bind for any reason, but this JS
+// axis-lock is what actually decides the gesture once it runs.
+function bindDragToScroll(el){
+  if(!el || el.dataset.dragScrollBound) return; el.dataset.dragScrollBound='1';
+  let startX=0,startY=0,startScrollLeft=0,dragging=false,moved=false,axis=null;
+  const THRESH=6;
+  el.style.cursor='grab';
+  el.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    dragging=true; moved=false; axis=null;
+    startX=e.clientX; startY=e.clientY; startScrollLeft=el.scrollLeft;
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(!axis){
+      if(Math.abs(dx)<THRESH&&Math.abs(dy)<THRESH) return;
+      axis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+      if(axis==='x'){ try{ el.setPointerCapture(e.pointerId); }catch(err){} el.style.cursor='grabbing'; }
+    }
+    if(axis==='x'){ moved=true; el.scrollLeft=startScrollLeft-dx; e.preventDefault(); }
+  });
+  const end=()=>{ dragging=false; axis=null; el.style.cursor='grab'; };
+  el.addEventListener('pointerup',end);
+  el.addEventListener('pointercancel',end);
+  // A real drag (moved past the threshold) shouldn't also fire whatever
+  // click handler lives on a row underneath (e.g. Leaderboard's
+  // data-leagueagent row-click, Ops Today's click-to-open-Duties) --
+  // swallow exactly one click after a drag, in the capture phase so it
+  // never reaches those handlers.
+  el.addEventListener('click',e=>{ if(moved){ e.preventDefault(); e.stopPropagation(); moved=false; } },true);
+}
 // staffList: [{key,name}]. itemsByStaffKey: {key:[todo,...]}. showHeader=false
 // skips the per-column name row for the single-person "My Day" case. draggable
 // enables drag-to-reschedule on open items -- only turned on for My Day's single
@@ -12877,6 +12935,7 @@ async function paintMyDayTab(){
   });
   bindDayGridDrag(body,blocks,date,()=>paintMyDayTab());
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
+  bindDragToScroll(body.querySelector('.dayGridWrap'));
 }
 // Team -- manager-only free/busy view across every staff member for the
 // current day, the "tells anyone in your shared space when you are not
@@ -12903,6 +12962,7 @@ async function paintTeamTab(){
     const it=blocks.find(b=>b.id===el.dataset.daygridopen); if(it) toast((it.assignedToName||'')+' · '+it.startTime+'–'+it.endTime+' · '+it.title);
   });
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
+  bindDragToScroll(body.querySelector('.dayGridWrap'));
 }
 // Manager-only, on-demand branded PDF for Operations -- same period-picker shape
 // as Management Reports (reportPeriodRange is shared, not duplicated).
@@ -19200,6 +19260,7 @@ async function paintMgrOpsToday(){
   ${renderDayGrid(STAFF_LIST,byStaff,true)}`;
   document.querySelectorAll('#mgrOpsToday [data-daygridopen]').forEach(el=>el.onclick=()=>route('duties'));
   const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')) route('duties'); });
+  bindDragToScroll(body.querySelector('.dayGridWrap'));
 }
 // Team-wide streak visibility for Management -- who's kept today's habit
 // going vs who hasn't logged a to-do yet, same signal MY_STREAK uses for an
@@ -19659,6 +19720,7 @@ function bindLeagueCtrls(){
   };
   document.querySelectorAll('[data-leagueagent]').forEach(tr=>tr.onclick=()=>route('agentDetail',tr.dataset.leagueagent));
   document.getElementById('lbWeightsBtn').onclick=openLeaderboardWeightsModal;
+  bindDragToScroll(document.getElementById('leagueWrap'));
 }
 
 /* ================= REPORTS (Excel workbook + CSV) ================= */
