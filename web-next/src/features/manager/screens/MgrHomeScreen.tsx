@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
@@ -17,6 +18,7 @@ const STAGE_COLORS: Record<string, string> = { '1': '#94A3B8', '2A': '#64748B', 
 // per-agent breakdown, the numbers a manager actually opens this screen
 // to check first.
 export function MgrHomeScreen() {
+  const navigate = useNavigate();
   const { data, isLoading } = useManagerOverview();
 
   const maxStageCount = Math.max(1, ...(data?.stageFunnel.map((s) => s.count) ?? [1]));
@@ -24,8 +26,15 @@ export function MgrHomeScreen() {
 
   return (
     <div className={styles.wrap}>
-      <h1 className={styles.title}>Manager Home</h1>
-      <p className={styles.sub}>Live across every agent</p>
+      <div className={styles.headRow}>
+        <div>
+          <h1 className={styles.title}>Manager Home</h1>
+          <p className={styles.sub}>Live across every agent</p>
+        </div>
+        <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/leaderboard')}>
+          🏆 Leaderboard
+        </button>
+      </div>
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {data && (

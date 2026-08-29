@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Complaint, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, ChatMessage, Complaint, Config, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -295,10 +295,43 @@ export function mapComplaintRow(r: Record<string, unknown>): Complaint {
   };
 }
 
+// Matches index.html's defaultConfig().leaderboardWeights exactly --
+// production's real app_config.leaderboard_weights row currently holds
+// these same values, but a fresh/never-configured row would come back
+// null, so this is the fallback, not a guess.
+export const DEFAULT_LEADERBOARD_WEIGHTS: LeaderboardWeights = {
+  collected: 1 / 500,
+  dealsClosed: 20,
+  siteVisits: 5,
+  tasksCompleted: 8,
+  todosCompleted: 3,
+  taskSpeedBonus: 5,
+  regularity: 2,
+  punctuality: 3,
+};
+
 export function mapConfigRow(r: Record<string, unknown>): Config {
   return {
     workEndTime: (r.work_end_time as string) ?? '17:00',
     targetPlotsPerMonth: Number(r.target_plots_per_month ?? 2),
     targets: (r.targets as Record<string, number>) ?? {},
+    leaderboardWeights: { ...DEFAULT_LEADERBOARD_WEIGHTS, ...((r.leaderboard_weights as Partial<LeaderboardWeights>) ?? {}) },
+  };
+}
+
+// Raw leaderboard_rows() RPC row -> domain shape, minus `points` (computed
+// separately by agentPoints() once the caller also has the weights config).
+export function mapLeaderboardRawRow(r: Record<string, unknown>): Omit<LeaderboardRow, 'points'> {
+  return {
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    totalCollected: Number(r.total_collected ?? 0),
+    dealsClosedYear: Number(r.deals_closed_year ?? 0),
+    siteVisits: Number(r.site_visits ?? 0),
+    tasksCompleted: Number(r.tasks_completed ?? 0),
+    avgTaskDays: r.avg_task_days != null ? Math.round(Number(r.avg_task_days) * 10) / 10 : null,
+    todosCompleted: Number(r.todos_completed ?? 0),
+    daysAttended: Number(r.days_attended ?? 0),
+    onTimeDays: Number(r.on_time_days ?? 0),
   };
 }

@@ -107,10 +107,45 @@ export interface StreakRow {
   dayMet: boolean;
 }
 
+// Real column `leaderboard_weights` (jsonb) on app_config -- confirmed live,
+// same shape on both projects. Feeds agentPoints() below; a manager can
+// tune these from the Leaderboard screen's Weights control.
+export interface LeaderboardWeights {
+  collected: number;
+  dealsClosed: number;
+  siteVisits: number;
+  tasksCompleted: number;
+  todosCompleted: number;
+  taskSpeedBonus: number;
+  regularity: number;
+  punctuality: number;
+}
+
 export interface Config {
   workEndTime: string;
   targetPlotsPerMonth: number;
   targets: Record<string, number>;
+  leaderboardWeights: LeaderboardWeights;
+}
+
+// One row of the real `leaderboard_rows(p_from, p_to)` RPC (confirmed live,
+// SECURITY DEFINER, EXECUTE granted to `authenticated` only -- any signed-in
+// staff member can rank themselves without the broader leads/payments RLS a
+// manager has). `points` is NOT part of the RPC -- it's agentPoints() run
+// client-side against the row + the real leaderboard_weights config, exactly
+// mirroring index.html so the two can never disagree.
+export interface LeaderboardRow {
+  staffKey: string;
+  staffName: string;
+  totalCollected: number;
+  dealsClosedYear: number;
+  siteVisits: number;
+  tasksCompleted: number;
+  avgTaskDays: number | null;
+  todosCompleted: number;
+  daysAttended: number;
+  onTimeDays: number;
+  points: number;
 }
 
 export type PlotStatus = 'Available' | 'Reserved' | 'Sold';

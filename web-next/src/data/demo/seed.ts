@@ -1,5 +1,6 @@
 import type { DemoDb } from './store';
 import { isoPlusDays, today } from '../../shared/lib/format';
+import { DEFAULT_LEADERBOARD_WEIGHTS } from '../mappers';
 
 // Small, hand-crafted (not a full port of index.html's much larger
 // DEMO_PIPELINES fixture set) but realistic seed -- enough real leads/
@@ -61,6 +62,7 @@ export function seedDemo(): DemoDb {
     workEndTime: '17:00',
     targetPlotsPerMonth: 2,
     targets: { [AGENT_KEY]: 600000 },
+    leaderboardWeights: DEFAULT_LEADERBOARD_WEIGHTS,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -404,7 +406,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 12, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
+  return { version: 13, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

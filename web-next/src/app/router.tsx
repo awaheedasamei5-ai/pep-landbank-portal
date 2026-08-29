@@ -29,6 +29,7 @@ import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
 import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen';
 import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
 import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
+import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -62,6 +63,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <MgrHomeScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/leaderboard',
+        element: (
+          <RequireRole role="manager">
+            <LeaderboardScreen />
           </RequireRole>
         ),
       },

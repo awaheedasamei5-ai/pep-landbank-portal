@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Enquiry, Lead, ManagerOverview, Memo, NewComplaint, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Enquiry, Lead, LeaderboardRow, ManagerOverview, Memo, NewComplaint, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -7,6 +7,7 @@ import {
   mapChatMessageRow,
   mapComplaintRow,
   mapEnquiryRow,
+  mapLeaderboardRawRow,
   mapLeadRow,
   mapMemoRow,
   mapPaymentRow,
@@ -176,6 +177,12 @@ export interface DataSource {
   // SELECT every row -- a real unfiltered query, not client-side illusion.
   manager: {
     overview(): Promise<ManagerOverview>;
+    // Raw leaderboard_rows() RPC rows for a date range, unscored (no
+    // `points` -- callers combine with config.get().leaderboardWeights via
+    // agentPoints()). Matches index.html's own real DEMO_MODE behavior:
+    // the demo store has no multi-agent staff roster to rank, so this
+    // returns [] in demo, same as apiLoadLeaderboardRows() always has.
+    leaderboardRows(fromDate: string, toDate: string): Promise<Omit<LeaderboardRow, 'points'>[]>;
   };
   // Staff-authenticated side of Site Visit Experience (distinct from the
   // public RPC-based data/sveClient.ts a visitor uses). Real RLS
@@ -666,6 +673,33 @@ function createDemoDataSource(): DataSource {
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
         };
+      },
+      // No dedicated demo RPC to call -- this mirrors leaderboard_rows()'s
+      // own aggregation (agents-only roster, 90-day windows for tasks/
+      // todos/attendance, date-ranged deals-closed) against the demo
+      // store's existing multi-agent leads/siteVisits/scheduleItems/
+      // attendance data, the same fixture set Manager Home's overview
+      // already aggregates. avgTaskDays stays null -- the demo ScheduleItem
+      // shape has no completed-at timestamp to compute a duration from.
+      async leaderboardRows(fromDate, toDate) {
+        const db = demoLoad();
+        const windowStart = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        return DEMO_STAFF.filter((s) => s.role === 'agent').map((s) => {
+          const agentLeads = db.leads.filter((l) => l.agent === s.key);
+          const attendanceWindow = db.attendance.filter((a) => a.staffKey === s.key && a.workDate >= windowStart);
+          return {
+            staffKey: s.key,
+            staffName: s.name,
+            totalCollected: agentLeads.reduce((sum, l) => sum + l.amtPaid, 0),
+            dealsClosedYear: agentLeads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal && l.date >= fromDate && l.date <= toDate).length,
+            siteVisits: db.siteVisits.filter((v) => v.agentKey === s.key).length,
+            tasksCompleted: db.scheduleItems.filter((t) => t.kind === 'task' && t.status === 'closed' && t.assignedTo === s.key && t.date >= windowStart).length,
+            avgTaskDays: null,
+            todosCompleted: db.scheduleItems.filter((t) => t.kind === 'todo' && t.status === 'closed' && t.ownerKey === s.key && t.date >= windowStart).length,
+            daysAttended: attendanceWindow.filter((a) => a.signInAt).length,
+            onTimeDays: attendanceWindow.filter((a) => a.signInAt && a.signInAt.slice(11, 16) <= '09:00').length,
+          };
+        });
       },
     },
     sve: {
@@ -1264,6 +1298,11 @@ function createLiveDataSource(): DataSource {
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
         };
+      },
+      async leaderboardRows(fromDate, toDate) {
+        const { data, error } = await requireClient().rpc('leaderboard_rows', { p_from: fromDate, p_to: toDate });
+        if (error) throw error;
+        return (data ?? []).map(mapLeaderboardRawRow);
       },
     },
     sve: {

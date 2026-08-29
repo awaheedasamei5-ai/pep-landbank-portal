@@ -1,6 +1,20 @@
 .wrap { padding: 20px 16px 90px; }
+.headRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .title { font-size: 22px; margin: 0 0 4px; }
-.sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
+.sub { color: var(--muted); margin: 0; font-size: 13.5px; }
+
+.leaderboardBtn {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: var(--r-pill);
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
 
 .pillsWrap { margin-bottom: 12px; }
 
