@@ -39,7 +39,7 @@ export function PipelineListScreen() {
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {leads?.map((l) => (
-        <div className={styles.row} key={l.id}>
+        <div className={styles.row} key={l.id} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)} role="button" tabIndex={0}>
           <div>
             <div className={styles.name}>{l.name}</div>
             <div className={styles.meta}>

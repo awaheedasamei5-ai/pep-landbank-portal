@@ -12,6 +12,8 @@ export interface DataSource {
   leads: {
     listForAgent(agentKey: string): Promise<Lead[]>;
     create(agentKey: string, input: NewLead): Promise<Lead>;
+    get(agentKey: string, id: string): Promise<Lead | undefined>;
+    recordPayment(agentKey: string, id: string, amount: number, date: string): Promise<Lead>;
   };
   payments: {
     listForAgent(agentKey: string): Promise<Payment[]>;
@@ -66,6 +68,23 @@ function createDemoDataSource(): DataSource {
         };
         const db = demoLoad();
         db.leads.push(lead);
+        demoSave();
+        return lead;
+      },
+      async get(agentKey, id) {
+        return demoLoad().leads.find((l) => l.agent === agentKey && l.id === id);
+      },
+      // Mirrors index.html's saveNewLead-style "log a payment, recompute
+      // stage from the new total" pattern -- the lead's amtPaid and derived
+      // stage move together, atomically, so a UI can never show a payment
+      // logged against a lead whose stage badge hasn't caught up.
+      async recordPayment(agentKey, id, amount, date) {
+        const db = demoLoad();
+        const lead = db.leads.find((l) => l.agent === agentKey && l.id === id);
+        if (!lead) throw new Error('Lead not found');
+        lead.amtPaid += amount;
+        lead.stage = deriveStageFromPayment(lead.amtPaid, lead.grandTotal);
+        db.payments.push({ id: Math.random().toString(36).slice(2, 10), leadId: id, agentKey, amount, date });
         demoSave();
         return lead;
       },

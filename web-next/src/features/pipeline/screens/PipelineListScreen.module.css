@@ -30,6 +30,7 @@
   padding: 14px 16px;
   margin-bottom: 10px;
   box-shadow: var(--shadow);
+  cursor: pointer;
 }
 .name { font-weight: 700; font-size: 14px; color: var(--text); }
 .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
