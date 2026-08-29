@@ -1,6 +1,8 @@
 import type { Config, Lead, NewLead, Payment, ScheduleItem, ScheduleItemStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
+import { getSupabaseClient } from './client';
+import { mapLeadRow, mapPaymentRow, mapScheduleItemRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -31,18 +33,16 @@ export interface DataSource {
   };
 }
 
-let cached: DataSource | null = null;
+let cachedDemo: DataSource | null = null;
+let cachedLive: DataSource | null = null;
 
 export function getDataSource(demoMode: boolean): DataSource {
   if (!demoMode) {
-    throw new Error('Live Supabase data source is not wired yet (deferred past Phase 1) -- stay in demo mode.');
+    if (!cachedLive) cachedLive = createLiveDataSource();
+    return cachedLive;
   }
-  if (!cached) {
-    // Lazy import keeps the demo module out of any future live-only bundle
-    // path once live wiring exists.
-    cached = createDemoDataSource();
-  }
-  return cached;
+  if (!cachedDemo) cachedDemo = createDemoDataSource();
+  return cachedDemo;
 }
 
 function createDemoDataSource(): DataSource {
@@ -135,6 +135,126 @@ function createDemoDataSource(): DataSource {
     config: {
       async get() {
         return demoLoad().config;
+      },
+    },
+  };
+}
+
+// Real Supabase queries, verified against the actual production schema
+// (columns, types, and RLS policies all confirmed live via the Supabase
+// MCP tools -- not guessed). Points at whichever project client.ts is
+// configured for, which during this build phase is deliberately the
+// STAGING project, never production.
+//
+// leads.recordPayment is a deliberate exception: production's real payment
+// flow is NOT a simple insert. schedule_items status is 'pending' by
+// default there and only a manager can call the approve_payment/
+// decline_payment RPC functions (SECURITY DEFINER, confirmed via
+// pg_get_functiondef) -- approving atomically updates the lead's
+// amt_paid/balance AND can auto-create an allocation_requests row once
+// 30% is paid. A naive direct insert here would silently bypass that
+// approval workflow and the audit trail (activity_log/audit_events) it
+// writes -- exactly the class of integrity bug flagged in this project's
+// own history. Wiring this correctly is a distinct, focused piece of work,
+// not a corner to cut inside this pass.
+function createLiveDataSource(): DataSource {
+  function requireClient() {
+    const client = getSupabaseClient();
+    if (!client) throw new Error('Supabase is not configured -- set VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY (see .env.local.example).');
+    return client;
+  }
+
+  return {
+    leads: {
+      async listForAgent(agentKey) {
+        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey);
+        if (error) throw error;
+        return (data ?? []).map(mapLeadRow);
+      },
+      async create(agentKey, input) {
+        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        const stage = deriveStageFromPayment(input.amtPaid, grandTotal);
+        const { data, error } = await requireClient()
+          .from('leads')
+          .insert({
+            agent_key: agentKey,
+            name: input.name,
+            contact: input.contact,
+            plot_type: input.plotType,
+            no_plots: input.noPlots,
+            unit_price: input.unitPrice,
+            payment_plan: input.paymentPlan,
+            amt_paid: input.amtPaid,
+            grand_total: grandTotal,
+            balance: Math.max(grandTotal - input.amtPaid, 0),
+            stage,
+            notes: input.notes ?? null,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
+      async get(agentKey, id) {
+        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey).eq('id', id).maybeSingle();
+        if (error) throw error;
+        return data ? mapLeadRow(data) : undefined;
+      },
+      async recordPayment() {
+        throw new Error(
+          'Live payment recording is intentionally not wired yet -- production payments go through a manager approval workflow ' +
+            '(approve_payment/decline_payment RPCs), not a direct insert. See the comment above createLiveDataSource() for the full reasoning.',
+        );
+      },
+    },
+    payments: {
+      async listForAgent(agentKey) {
+        const { data, error } = await requireClient().from('payments').select('*').eq('agent_key', agentKey);
+        if (error) throw error;
+        return (data ?? []).map(mapPaymentRow);
+      },
+    },
+    scheduleItems: {
+      async listForAgentOnDate(agentKey, date) {
+        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'todo').eq('assigned_to', agentKey).eq('item_date', date);
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemRow);
+      },
+      async create(agentKey, date, title) {
+        const { data, error } = await requireClient()
+          .from('schedule_items')
+          .insert({ kind: 'todo', owner_key: agentKey, assigned_to: agentKey, item_date: date, title, status: 'open' })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapScheduleItemRow(data);
+      },
+      async updateStatus(id, status) {
+        const { data, error } = await requireClient()
+          .from('schedule_items')
+          .update({ status: domainStatusToDb(status) })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapScheduleItemRow(data);
+      },
+    },
+    streaks: {
+      async history(staffKey, days) {
+        const from = new Date();
+        from.setDate(from.getDate() - days);
+        const fromIso = from.toISOString().slice(0, 10);
+        const { data, error } = await requireClient().from('staff_streaks').select('*').eq('staff_key', staffKey).gte('streak_date', fromIso);
+        if (error) throw error;
+        return (data ?? []).map(mapStreakRow);
+      },
+    },
+    config: {
+      async get() {
+        const { data, error } = await requireClient().from('app_config').select('*').eq('id', 1).single();
+        if (error) throw error;
+        return mapConfigRow(data);
       },
     },
   };

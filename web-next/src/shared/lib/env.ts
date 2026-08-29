@@ -10,6 +10,12 @@ export const env = {
   mapboxToken: import.meta.env.VITE_MAPBOX_TOKEN ?? '',
   sentryDsn: import.meta.env.VITE_SENTRY_DSN ?? '',
   arkeselApiKey: import.meta.env.VITE_ARKESEL_API_KEY ?? '',
+  // Supabase -- deliberately points at the STAGING project by default (an
+  // empty schema-clone, safe to develop against), never production.
+  // Pointing this at production is a real, separate, later decision -- see
+  // data/client.ts.
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
 };
 
 export function isConfigured(key: keyof typeof env): boolean {
