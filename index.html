@@ -586,10 +586,10 @@ a{color:var(--green2)}
    reserves room for it via padding-right so text/checkmarks never run
    underneath it. */
 .streakArtLayer{position:absolute;inset:0;z-index:0;pointer-events:none}
-.streakArtPane{position:absolute;right:-4px;bottom:-6px;width:46%;height:92%;animation:streakMoodFade 16s ease-in-out infinite}
+.streakArtPane{position:absolute;right:-4px;bottom:-6px;width:54%;height:104%;animation:streakMoodFade 16s ease-in-out infinite}
 .streakArtPane.paneB{animation-delay:-8s}
 .streakArtImg{width:100%;height:100%;object-fit:contain;object-position:bottom right;display:block;filter:drop-shadow(0 10px 22px rgba(0,0,0,.4))}
-.streakContent{position:relative;z-index:1;padding-right:42%}
+.streakContent{position:relative;z-index:1;padding-right:50%}
 /* The pipeline pet's "severe" band reuses the same worried pose as
    "moderate" but escalates through the deeper red background and more
    urgent copy alone -- the GIF itself (already animated by the user) is
@@ -1172,6 +1172,7 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
 .pipePill.orange{background:linear-gradient(150deg,#FDBA74,#EA580C)}
 .pipePill.gold{background:linear-gradient(150deg,#FCD34D,#B45309)}
 .pipePill.green{background:linear-gradient(150deg,#6EE7B7,#059669)}
+.pipePill.red{background:linear-gradient(150deg,#F87171,#B91C1C)}
 .pipeToolsBar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .pipeToolsBar button{flex:1;min-width:130px;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
   border:1px solid var(--line);background:var(--card);font-size:12.5px;font-weight:700;color:var(--text);transition:.15s}
@@ -13074,7 +13075,7 @@ async function paintMyDayTab(){
   const summary=computeDutiesSummary(mine);
   const escalatedToMe=mine.filter(t=>t.escalatedTo===PROFILE.key).length;
   body.innerHTML=`
-  <div class="kpis">${kpi('Open',summary.openCount)}${kpi('Escalated',escalatedToMe)}${kpi('Overdue',summary.overdueCount)}${kpi('Completed',summary.doneCount)}</div>
+  <div class="pipePillStrip"><div class="pipePill blue"><div class="v">${summary.openCount}</div><div class="l">Open</div></div><div class="pipePill red"><div class="v">${escalatedToMe}</div><div class="l">Escalated</div></div><div class="pipePill orange"><div class="v">${summary.overdueCount}</div><div class="l">Overdue</div></div><div class="pipePill green"><div class="v">${summary.doneCount}</div><div class="l">Completed</div></div></div>
   <div class="sectitle" style="margin-top:0"><h3>${isToday?'Today':esc(fmtLongDate(date))}</h3><span class="cnt">${isToday?esc(fmtLongDate(date)):`<button class="chip" id="mydayBackToday" style="padding:4px 10px;font-size:11px">Back to today</button>`}</span></div>
   ${renderDayGrid([{key:PROFILE.key,name:'Today'}],{[PROFILE.key]:blocks},false,true)}
   ${dueTaskChipsHtml(dueTasks)}
@@ -14361,7 +14362,7 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
   V.innerHTML=`${back('update')}<div class="pagehead"><div style="display:flex;align-items:center;gap:12px"><div class="pipeAvatar" style="width:46px;height:46px;font-size:16px;border-radius:14px">${esc(updInitials)}</div><div><div class="eyebrow">Updating</div><h2>${esc(l.name)}</h2><p>${esc(l.contact||'')} · ${esc(l.plotType||'')}${l.noPlots?' ×'+esc(l.noPlots):''}</p></div></div></div>
   ${priceMismatch?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid var(--danger)"><div style="font-weight:700;font-size:13.5px;color:var(--danger)">⚠ Price check</div><div class="mini" style="margin-top:2px">This lead's unit price (${ghs(num(l.unitPrice))}) doesn't match the current ${esc(l.plotType)} price (${ghs(expectedUnit)}). This can be legitimate (a past promo) — but worth confirming it's correct.</div></div>`:''}
   ${overpaid?`<div class="rowcard" style="margin-bottom:14px;padding:14px 16px;border-left:4px solid var(--danger)"><div style="font-weight:700;font-size:13.5px;color:var(--danger)">⚠ Amount paid exceeds grand total</div><div class="mini" style="margin-top:2px">Paid ${ghs(num(l.amtPaid))} against a grand total of ${ghs(g)}. Check the numbers below.</div></div>`:''}
-  <div class="pipeStatStrip"><div class="pipeStat"><div class="v">${ghs(g)}</div><div class="l">Pipeline value</div></div><div class="pipeStat"><div class="v">${ghs(num(l.amtPaid))}</div><div class="l">Collected</div></div><div class="pipeStat"><div class="v">${ghs(bal)}</div><div class="l">Balance</div></div></div>
+  <div class="pipePillStrip"><div class="pipePill blue"><div class="v money">${ghs(g)}</div><div class="l">Pipeline value</div></div><div class="pipePill green"><div class="v money">${ghs(num(l.amtPaid))}</div><div class="l">Collected</div></div><div class="pipePill gold"><div class="v money">${ghs(bal)}</div><div class="l">Balance</div></div></div>
   <div class="formactions" style="margin-bottom:16px"><button class="btn ghost" onclick="route('update')">Back</button><button class="btn gold" id="saveUpd">Save update</button></div>
   ${vaultGridHtml(updGroups,{hubId:'pipelineUpdate',openFirst:true})}`;
   bindVaultAccordion(V,'pipelineUpdate');
