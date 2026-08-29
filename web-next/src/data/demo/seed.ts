@@ -311,7 +311,47 @@ export function seedDemo(): DemoDb {
     { id: uid(), memoId: sentMemoId, staffKey: 'emmanuel', staffName: 'Emmanuel Owusu', read: false, createdAt: isoPlusDays(t, -7) },
   ];
 
-  const complaints: DemoDb['complaints'] = [{ status: 'Open' }, { status: 'Resolved' }];
+  // Matches real production's actual shape (confirmed live): category/
+  // priority are free text, "Land / Plot Issue" and "High" are real
+  // values seen. Production has zero Resolved complaints today -- the
+  // second row here demonstrates the resolve flow works, not a claim
+  // that real data looks like this yet.
+  const complaints: DemoDb['complaints'] = [
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      name: 'Kwabena Owusu',
+      contact: '0244556677',
+      plot: '',
+      category: 'Land / Plot Issue',
+      details: "I haven't been allocated a plot yet even though I've paid 60%.",
+      owner: null,
+      priority: 'High',
+      resolution: '',
+      status: 'Open',
+      createdAt: isoPlusDays(t, -2),
+      source: null,
+      sentiment: null,
+    },
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      name: 'Yaa Asantewaa',
+      contact: '0209887766',
+      plot: 'A-02',
+      category: 'Service Quality',
+      details: 'Documentation is taking longer than promised.',
+      owner: 'Elias Torgbuivi',
+      priority: 'Medium',
+      resolution: 'Followed up with the surveyor, document ready for collection.',
+      status: 'Resolved',
+      createdAt: isoPlusDays(t, -10),
+      source: null,
+      sentiment: null,
+    },
+  ];
 
   // A short, realistic 1:1 thread with 'management' -- deliberately not
   // fully read (last inbound message unread) so the conversation list's
@@ -364,7 +404,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 11, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
+  return { version: 12, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, ChatMessage, Complaint, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -272,6 +272,26 @@ export function mapChatMessageRow(r: Record<string, unknown>): ChatMessage {
     kind: (r.kind as string) ?? null,
     refType: (r.ref_type as string) ?? null,
     refId: (r.ref_id as string) ?? null,
+  };
+}
+
+export function mapComplaintRow(r: Record<string, unknown>): Complaint {
+  return {
+    id: r.id as string,
+    agentKey: r.agent_key as string,
+    agentName: (r.agent_name as string) ?? null,
+    name: (r.name as string) ?? null,
+    contact: (r.contact as string) ?? null,
+    plot: (r.plot as string) ?? null,
+    category: (r.category as string) ?? null,
+    details: (r.details as string) ?? null,
+    owner: (r.owner as string) ?? null,
+    priority: (r.priority as string) ?? null,
+    resolution: (r.resolution as string) ?? null,
+    status: (r.status as string) ?? 'Open',
+    createdAt: r.created_at as string,
+    source: (r.source as string) ?? null,
+    sentiment: (r.sentiment as string) ?? null,
   };
 }
 

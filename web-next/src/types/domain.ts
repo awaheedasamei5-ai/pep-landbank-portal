@@ -540,3 +540,53 @@ export interface ChatConversation {
   lastMessage: ChatMessage | null;
   unreadCount: number;
 }
+
+// Real table (confirmed live, 15 columns, 2 real rows). No CHECK
+// constraints or enum types anywhere -- category/priority/status/
+// sentiment/source are all plain free text, enforced only by UI
+// convention in production, not the database. Real values seen: category
+// in {"Land / Plot Issue", "Service Quality"}, priority "High" (the only
+// value present), status "Open" (the only value present, matches the
+// column default -- no complaint has ever been marked Resolved in real
+// data yet). source/sentiment are null in both real rows -- unused/
+// aspirational columns, deliberately not exposed in the UI rather than
+// inventing values for a dormant field.
+// RLS (confirmed live): unlike payments' manager-only approve/decline,
+// complaints_upd is agent-scoped exactly like complaints_sel/_del (own
+// rows, or manager sees/edits all) -- any owning agent can already
+// resolve their own complaint via a plain UPDATE, no RPC exists and none
+// is needed; this is a real, deliberate difference from the payments
+// workflow, not an oversight.
+export interface Complaint {
+  id: string;
+  agentKey: string;
+  agentName: string | null;
+  name: string | null;
+  contact: string | null;
+  plot: string | null;
+  category: string | null;
+  details: string | null;
+  owner: string | null;
+  priority: string | null;
+  resolution: string | null;
+  status: string;
+  createdAt: string;
+  source: string | null;
+  sentiment: string | null;
+}
+
+export interface NewComplaint {
+  name: string;
+  contact: string;
+  plot?: string;
+  category?: string;
+  details?: string;
+  priority?: string;
+}
+
+export interface ComplaintUpdate {
+  status?: string;
+  resolution?: string;
+  priority?: string;
+  owner?: string;
+}

@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
+import type { AttendanceRecord, ChatMessage, Complaint, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -22,11 +22,7 @@ export interface DemoDb {
   attendance: AttendanceRecord[];
   memos: Memo[];
   memoRecipients: MemoRecipient[];
-  // Minimal shape (status only) -- no full Complaints feature/screen
-  // exists yet, this exists purely so Manager Home's "open complaints"
-  // KPI has real demo data to aggregate, matching production's real
-  // complaints.status column (confirmed live: default 'Open').
-  complaints: { status: string }[];
+  complaints: Complaint[];
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
   // kind is always null here -- this demo store never simulates the
@@ -34,7 +30,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 11;
+const DEMO_VERSION = 12;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

@@ -1,10 +1,11 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Enquiry, Lead, ManagerOverview, Memo, NewComplaint, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
 import {
   mapAttendanceRow,
   mapChatMessageRow,
+  mapComplaintRow,
   mapEnquiryRow,
   mapLeadRow,
   mapMemoRow,
@@ -126,6 +127,17 @@ export interface DataSource {
   enquiries: {
     listForAgent(agentKey: string): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
+  };
+  // Agent-scoped via agent_key exactly like enquiries -- but unlike
+  // payments, complaints_upd (confirmed live) is ALSO agent-scoped, not
+  // manager-only. Any owning agent can already resolve their own
+  // complaint via a plain UPDATE; no RPC exists or is needed here, a
+  // real and deliberate difference from the payments approve/decline
+  // workflow, not an inconsistency.
+  complaints: {
+    listForAgent(agentKey: string): Promise<Complaint[]>;
+    create(agentKey: string, agentName: string, input: NewComplaint): Promise<Complaint>;
+    update(id: string, patch: ComplaintUpdate): Promise<Complaint>;
   };
   // Real table `attendance_log` (confirmed live, currently 0 production
   // rows), one row per (staff_key, work_date) enforced by a real unique
@@ -447,6 +459,42 @@ function createDemoDataSource(): DataSource {
         db.enquiries.push(enquiry);
         demoSave();
         return enquiry;
+      },
+    },
+    complaints: {
+      async listForAgent(agentKey) {
+        return demoLoad().complaints.filter((c) => c.agentKey === agentKey);
+      },
+      async create(agentKey, agentName, input) {
+        const complaint: Complaint = {
+          id: Math.random().toString(36).slice(2, 10),
+          agentKey,
+          agentName,
+          name: input.name,
+          contact: input.contact,
+          plot: input.plot ?? null,
+          category: input.category ?? null,
+          details: input.details ?? null,
+          owner: null,
+          priority: input.priority ?? null,
+          resolution: null,
+          status: 'Open',
+          createdAt: new Date().toISOString(),
+          source: null,
+          sentiment: null,
+        };
+        const db = demoLoad();
+        db.complaints.push(complaint);
+        demoSave();
+        return complaint;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        const complaint = db.complaints.find((c) => c.id === id);
+        if (!complaint) throw new Error('Complaint not found');
+        Object.assign(complaint, patch);
+        demoSave();
+        return complaint;
       },
     },
     attendance: {
@@ -983,6 +1031,46 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapEnquiryRow(data);
+      },
+    },
+    complaints: {
+      async listForAgent(agentKey) {
+        const { data, error } = await requireClient().from('complaints').select('*').eq('agent_key', agentKey).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapComplaintRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data, error } = await requireClient()
+          .from('complaints')
+          .insert({
+            agent_key: agentKey,
+            agent_name: agentName,
+            name: input.name,
+            contact: input.contact,
+            plot: input.plot ?? null,
+            category: input.category ?? null,
+            details: input.details ?? null,
+            priority: input.priority ?? null,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapComplaintRow(data);
+      },
+      async update(id, patch) {
+        const { data, error } = await requireClient()
+          .from('complaints')
+          .update({
+            status: patch.status,
+            resolution: patch.resolution,
+            priority: patch.priority,
+            owner: patch.owner,
+          })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapComplaintRow(data);
       },
     },
     attendance: {

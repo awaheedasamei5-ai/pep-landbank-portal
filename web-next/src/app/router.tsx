@@ -27,6 +27,8 @@ import { SveManagementScreen } from '../features/sve-management/screens/SveManag
 import { ChatScreen } from '../features/chat/screens/ChatScreen';
 import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
 import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen';
+import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
+import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -90,6 +92,8 @@ export const router = createBrowserRouter([
       { path: 'sales/referrals/new', element: <AddReferralScreen /> },
       { path: 'sales/enquiries', element: <EnquiriesScreen /> },
       { path: 'sales/enquiries/new', element: <AddEnquiryScreen /> },
+      { path: 'sales/complaints', element: <ComplaintsScreen /> },
+      { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },
       { path: 'office/myday', element: <MyDayScreen /> },
       { path: 'office/attendance', element: <AttendanceScreen /> },

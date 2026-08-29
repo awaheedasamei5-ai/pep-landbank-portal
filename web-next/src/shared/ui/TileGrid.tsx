@@ -1,6 +1,6 @@
 import styles from './TileGrid.module.css';
 
-export type TileColor = 'purple' | 'teal' | 'blue' | 'orange' | 'green';
+export type TileColor = 'purple' | 'teal' | 'blue' | 'orange' | 'green' | 'red';
 
 export interface TileItem {
   key: string;
