@@ -1238,16 +1238,25 @@ a:hover>.contactTileIcon{transform:translateY(-2px) scale(1.05)}
   display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;flex:0 0 auto}
 .homeHero .heroRefresh:hover{background:rgba(255,255,255,.22)}
 .homeHero .heroRefresh.spinning svg{animation:spin .7s linear infinite}
-/* Compact streak indicator beside the greeting -- was asked for once already
-   and the greeting layout got reworked to leave room for it (the right-hand
-   cluster wrapper below), but the badge itself never actually got added.
-   Same glass-chip language as heroRefresh/heroChip, small enough to sit in
-   the header row without crowding it. */
-.homeHero .heroStreakBadge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.24);
-  border-radius:100px;padding:4px 12px 4px 4px;cursor:pointer;transition:.15s;flex:0 0 auto}
-.homeHero .heroStreakBadge:hover{background:rgba(255,255,255,.24)}
-.homeHero .heroStreakBadge img{width:26px;height:26px;display:block;animation:streakEmoji3dMotion 3.2s ease-in-out infinite}
-.homeHero .heroStreakBadge span{font-weight:800;font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:#fff}
+/* A small emoji-badge version of this was tried first and read as "empty
+   page" -- the real ask was to end the greeting column where Pipeline
+   value ends, and put the FULL streak card on that same row filling the
+   rest of the hero, not a tiny chip near the refresh button. .heroMain
+   carries all the pre-existing hero content unchanged; .heroStreakSlot is
+   the new sibling column, block below md (stacked, matching how the
+   streak card rendered before this change) and a real side-by-side row
+   at/above 768px. The streak card's own 768px+ layout (horizontal, built
+   for full content width) would be cramped in a ~400px column, so it's
+   forced back to its base block/stacked layout inside this slot specifically. */
+.homeHero .heroLayout{display:flex;flex-direction:column;gap:16px}
+.homeHero .heroMain{min-width:0}
+.homeHero .heroStreakSlot{min-width:0}
+@media(min-width:768px){
+  .homeHero .heroLayout{flex-direction:row;align-items:stretch;gap:24px}
+  .homeHero .heroMain{flex:1}
+  .homeHero .heroStreakSlot{flex:1;min-width:340px;display:flex}
+  .homeHero .heroStreakSlot .streakCard{flex:1;display:block}
+}
 .homeHero .heroStat{margin-top:20px;position:relative;z-index:1}
 .homeHero .heroStatLabel{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:700}
 .homeHero .heroStatValue{font-size:32px;font-weight:800;font-family:'IBM Plex Mono',monospace;margin-top:3px;letter-spacing:-.01em}
@@ -1384,16 +1393,14 @@ body.dark .achEarned{color:#E8C158}
    viewport, which is what read as "text spilling out of the placeholder" and the
    page wobbling while scrolling on narrow screens. */
 input[type="file"]{max-width:100%;box-sizing:border-box}
+/* touch-action stays pan-y (see the comment above .league-wrap): without it,
+   a vertical swipe starting over this wide grid gets captured as an attempt
+   to pan it sideways instead of scrolling the page. Reaching hidden columns
+   is via the real scrollbar (styled globally, ~line 68) -- mouse-drag, a
+   trackpad, or dragging the thumb directly on touch -- not tap-arrow
+   buttons, which turned out one-directional and unreliable in practice. */
 .dayGridWrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:16px;touch-action:pan-y;position:relative}
 .dayGrid{display:grid;min-width:100%}
-/* touch-action stays pan-y (see the comment above .league-wrap, ~line 1512):
-   without it, a vertical swipe starting over this wide grid gets captured as
-   an attempt to pan it sideways instead of scrolling the page. Unlike
-   Leaderboard, this had no tap-arrow fallback at all -- add the same one. */
-.dayGridScrollBtn{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:30px;height:30px;border-radius:100px;
-  border:1px solid var(--line);background:var(--card);color:var(--text);align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
-.dayGridScrollBtn.left{left:6px} .dayGridScrollBtn.right{right:6px}
-@media(max-width:680px){ .dayGridScrollBtn.show{display:flex} }
 .dayGridStaffHead{padding:8px 10px;font-size:11.5px;font-weight:800;color:var(--text);text-align:center;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card)}
 .dayGridHourCol{border-bottom:1px solid var(--line)}
 .dayGridHourLabel{font-size:9.5px;color:var(--muted);text-align:right;padding:2px 6px 0 0;box-sizing:border-box;border-top:1px solid var(--line)}
@@ -1557,16 +1564,15 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
    (e.g. the right edge, past the table's own bounds) where a normal vertical
    swipe reliably scrolls. Chip/tab carousels deliberately keep default touch
    handling since horizontal swipe IS their primary interaction there. */
-.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both;touch-action:pan-y;position:relative}
 /* touch-action stays pan-y (see the comment above dayGridWrap/svaTableWrap --
    reverting it would bring back unreliable vertical page-scroll over the
-   table). Since touch-drag can't scroll it sideways, tap arrows do instead --
-   visible only when the table actually overflows and only on narrow screens
-   where a mouse-driven scrollbar isn't available. */
-.leagueScrollBtn{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:30px;height:30px;border-radius:100px;
-  border:1px solid var(--line);background:var(--card);color:var(--text);align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
-.leagueScrollBtn.left{left:6px} .leagueScrollBtn.right{right:6px}
-@media(max-width:680px){ .leagueScrollBtn.show{display:flex} }
+   table). Tap-arrow buttons were tried here as the reach-hidden-columns
+   fallback but turned out one-directional and unreliable in practice --
+   removed in favor of the real (globally styled, ~line 68) scrollbar,
+   draggable by mouse, trackpad, or touch directly on the thumb. Below
+   430px the table becomes stacked cards instead (see that media query
+   further down), so this only matters in the 431-680px range now anyway. */
+.league-wrap{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow-x:auto;animation:fadeUp .4s ease both;touch-action:pan-y;position:relative}
 .league-table{width:100%;border-collapse:collapse;min-width:640px}
 .league-table thead th{position:sticky;top:0;background:var(--ink);color:#fff;text-align:left;font-size:11px;letter-spacing:.08em;
   text-transform:uppercase;font-weight:700;padding:13px 16px;white-space:nowrap}
@@ -1611,10 +1617,9 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .league-table .lg-strong{color:#8A6E12;font-weight:700}
 /* Same "N-column table can't fit a phone" transform as .svaTable (see its own
    comment, ~line 376) -- 12 columns is unreadable squished into 375-430px
-   even with the tap-arrow scroll, so it becomes one card per agent instead. */
+   even with the scrollbar, so it becomes one card per agent instead. */
 @media(max-width:430px){
   .league-wrap{overflow-x:visible}
-  .leagueScrollBtn{display:none!important}
   .league-table{min-width:0!important}
   .league-table thead{display:none}
   .league-table tbody tr{display:block;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
@@ -10387,21 +10392,22 @@ function agentHome(){ const k=kpisOf(DB.leads);
   const revLbls=revMonths.map(mk=>monthLabel2(mk).split(' ')[0]);
   V.innerHTML=`
   <div class="homeHero">
-    <div class="heroTop">
-      <div><div class="heroGreet">${homeHeroGreeting()}, ${esc(PROFILE.name.split(' ')[0])}</div><div class="heroDate">${esc(fmtLongDate(today()))} · Royal Palm Enclave</div></div>
-      <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto">
-        ${MY_STREAK?`<div class="heroStreakBadge kpi-click" data-r="myStreak" title="${esc(MY_STREAK.mood.label)}"><img src="${MY_STREAK.mood.img}" alt="${MY_STREAK.mood.emoji}"/><span>${MY_STREAK.streakLen}</span></div>`:''}
-        <button class="heroRefresh" id="dashRefreshBtn" title="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="heroLayout">
+      <div class="heroMain">
+        <div class="heroTop">
+          <div><div class="heroGreet">${homeHeroGreeting()}, ${esc(PROFILE.name.split(' ')[0])}</div><div class="heroDate">${esc(fmtLongDate(today()))} · Royal Palm Enclave</div></div>
+          <button class="heroRefresh" id="dashRefreshBtn" title="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <div class="heroStat"><div class="heroStatLabel">Pipeline value</div><div class="heroStatValue">${ghs(k.val)}</div></div>
+        <div class="heroSecondary">
+          <div class="heroChip" id="heroCommissionChip"><div class="l">My commission · ${monthLabel(thisMonth)}</div><div class="v">${ghs(myCommission)}</div></div>
+          <div class="heroChip" id="heroQuoteChip"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
+        </div>
       </div>
-    </div>
-    <div class="heroStat"><div class="heroStatLabel">Pipeline value</div><div class="heroStatValue">${ghs(k.val)}</div></div>
-    <div class="heroSecondary">
-      <div class="heroChip" id="heroCommissionChip"><div class="l">My commission · ${monthLabel(thisMonth)}</div><div class="v">${ghs(myCommission)}</div></div>
-      <div class="heroChip" id="heroQuoteChip"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
+      ${MY_STREAK?`<div class="heroStreakSlot">${streakWidgetHtml(MY_STREAK,true)}</div>`:''}
     </div>
   </div>
   <div class="dashFlow">
-    ${streakWidgetHtml(MY_STREAK,true)}
     ${renderBannerSlideshow()}
     ${renderAllocationBanners()}
     ${renderComplaintAssignBanners()}
@@ -12507,8 +12513,6 @@ function renderDayGrid(staffList,itemsByStaffKey,showHeader,draggable){
   const totalH=(DAYGRID_END_HOUR-DAYGRID_START_HOUR)*DAYGRID_ROW_PX;
   const cols=staffList.length||1;
   return `<div class="dayGridWrap">
-    <button class="dayGridScrollBtn left" data-daygridscroll="left" aria-label="Scroll left">‹</button>
-    <button class="dayGridScrollBtn right" data-daygridscroll="right" aria-label="Scroll right">›</button>
     <div class="dayGrid" style="grid-template-columns:40px repeat(${cols},minmax(120px,1fr))">
     ${showHeader?`<div class="dayGridStaffHead"></div>${staffList.map(s=>`<div class="dayGridStaffHead">${esc(s.name)}</div>`).join('')}`:''}
     <div class="dayGridHourCol">${dayGridHourRailHtml()}</div>
@@ -12525,26 +12529,6 @@ function renderDayGrid(staffList,itemsByStaffKey,showHeader,draggable){
       </div>`;
     }).join('')}
   </div></div>`;
-}
-// Same tap-arrow fallback Leaderboard already has for its own touch-action:pan-y
-// table wrapper (see the comment on .league-wrap CSS) -- Ops Today had the same
-// restriction with no way at all to reach staff columns past the fold on mobile.
-// Binds every .dayGridWrap currently in the DOM (there's normally just one).
-function bindDayGridScrollBtns(){
-  document.querySelectorAll('.dayGridWrap').forEach(wrap=>{
-    const btnL=wrap.querySelector('[data-daygridscroll="left"]'), btnR=wrap.querySelector('[data-daygridscroll="right"]');
-    if(!btnL||!btnR) return;
-    const refresh=()=>{
-      const overflowing=wrap.scrollWidth>wrap.clientWidth+2;
-      btnL.classList.toggle('show',overflowing&&wrap.scrollLeft>4);
-      btnR.classList.toggle('show',overflowing&&wrap.scrollLeft<wrap.scrollWidth-wrap.clientWidth-4);
-    };
-    btnL.onclick=e=>{ e.stopPropagation(); wrap.scrollBy({left:-160,behavior:'smooth'}); };
-    btnR.onclick=e=>{ e.stopPropagation(); wrap.scrollBy({left:160,behavior:'smooth'}); };
-    wrap.addEventListener('scroll',refresh);
-    window.addEventListener('resize',refresh);
-    refresh();
-  });
 }
 // Pointer-based drag (not native HTML5 drag-and-drop, which has poor touch
 // support) -- vertical-only, within the single day column, snapped to 5-minute
@@ -12892,7 +12876,6 @@ async function paintMyDayTab(){
     const it=blocks.find(b=>b.id===el.dataset.daygridopen); if(it) toast(it.startTime+'–'+it.endTime+' · '+it.title);
   });
   bindDayGridDrag(body,blocks,date,()=>paintMyDayTab());
-  bindDayGridScrollBtns();
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
 }
 // Team -- manager-only free/busy view across every staff member for the
@@ -12920,7 +12903,6 @@ async function paintTeamTab(){
     const it=blocks.find(b=>b.id===el.dataset.daygridopen); if(it) toast((it.assignedToName||'')+' · '+it.startTime+'–'+it.endTime+' · '+it.title);
   });
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
-  bindDayGridScrollBtns();
 }
 // Manager-only, on-demand branded PDF for Operations -- same period-picker shape
 // as Management Reports (reportPeriodRange is shared, not duplicated).
@@ -19217,8 +19199,7 @@ async function paintMgrOpsToday(){
   body.innerHTML=`<div class="kpis" style="margin-bottom:12px">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}</div>
   ${renderDayGrid(STAFF_LIST,byStaff,true)}`;
   document.querySelectorAll('#mgrOpsToday [data-daygridopen]').forEach(el=>el.onclick=()=>route('duties'));
-  const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')&&!e.target.closest('[data-daygridscroll]')) route('duties'); });
-  bindDayGridScrollBtns();
+  const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')) route('duties'); });
 }
 // Team-wide streak visibility for Management -- who's kept today's habit
 // going vs who hasn't logged a to-do yet, same signal MY_STREAK uses for an
@@ -19656,8 +19637,6 @@ function mgrLeaderboard(){
     </div></div>
   ${leaderBanner}
   <div class="league-wrap" id="leagueWrap" style="margin-top:18px">
-    <button class="leagueScrollBtn left" id="leagueScrollLeft" aria-label="Scroll left">‹</button>
-    <button class="leagueScrollBtn right" id="leagueScrollRight" aria-label="Scroll right">›</button>
     <table class="league-table">
     <thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Total Collected</th><th>Avg Monthly</th><th>Site Visits</th><th>Deals Closed (${slYear})</th><th>Win Rate</th><th>Tasks Done (90d)</th><th>To-Dos Done (90d)</th><th>Workload</th><th>Pipeline</th></tr></thead>
     <tbody>${rowsHtml || '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--muted)">No data yet.</td></tr>'}</tbody>
@@ -19680,24 +19659,6 @@ function bindLeagueCtrls(){
   };
   document.querySelectorAll('[data-leagueagent]').forEach(tr=>tr.onclick=()=>route('agentDetail',tr.dataset.leagueagent));
   document.getElementById('lbWeightsBtn').onclick=openLeaderboardWeightsModal;
-  // Touch-drag on this wrapper is deliberately vertical-only (touch-action:pan-y,
-  // so a swipe here can't hijack the page's own vertical scroll) -- these arrows
-  // are the alternative way to reach columns past the fold on mobile. Only shown
-  // when the table actually overflows, and only while there's still somewhere to go.
-  const wrap=document.getElementById('leagueWrap');
-  const btnL=document.getElementById('leagueScrollLeft'), btnR=document.getElementById('leagueScrollRight');
-  if(wrap&&btnL&&btnR){
-    const refresh=()=>{
-      const overflowing=wrap.scrollWidth>wrap.clientWidth+2;
-      btnL.classList.toggle('show',overflowing&&wrap.scrollLeft>4);
-      btnR.classList.toggle('show',overflowing&&wrap.scrollLeft<wrap.scrollWidth-wrap.clientWidth-4);
-    };
-    btnL.onclick=()=>wrap.scrollBy({left:-160,behavior:'smooth'});
-    btnR.onclick=()=>wrap.scrollBy({left:160,behavior:'smooth'});
-    wrap.addEventListener('scroll',refresh);
-    window.addEventListener('resize',refresh);
-    refresh();
-  }
 }
 
 /* ================= REPORTS (Excel workbook + CSV) ================= */
@@ -22899,6 +22860,12 @@ function computeOpsReportData(from,to,todos,tasksData,taskEventsData){
   const overdueNow=all.filter(t=>t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled');
   const perStaff={};
   const ensure=(key,name)=>{ if(!key) return null; perStaff[key]=perStaff[key]||{key,name:name||key,assigned:0,completed:0,overdue:0,escalated:0,closeDays:[],closeHours:[]}; return perStaff[key]; };
+  // Seed every staff member up front -- without this, perStaff only ever
+  // gained an entry when a task loop found activity for that key, so a staff
+  // member with zero assigned/completed/overdue/escalated tasks in the
+  // period silently never appeared in "By staff member" or "Staff directory"
+  // at all, instead of showing up with real zeros like everyone else.
+  (STAFF_LIST||[]).forEach(s=>ensure(s.key,s.name));
   assignedInRange.forEach(t=>{ const s=ensure(t.assignedTo,t.assignedToName); if(s) s.assigned++; });
   completedInRange.forEach(t=>{ const s=ensure(t.assignedTo,t.assignedToName); if(s){ s.completed++;
     const dd=daysBetween(t.createdAt,t.completedAt); if(dd!=null) s.closeDays.push(dd);
