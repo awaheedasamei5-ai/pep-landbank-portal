@@ -200,7 +200,62 @@ export function seedDemo(): DemoDb {
     });
   }
 
-  return { version: 6, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance };
+  // Fictional demo content -- shaped like real production's actual memo
+  // categories (leave requests, management notices, cc'd staffing memos)
+  // without reproducing any real correspondence.
+  const receivedMemoId = uid();
+  const sentMemoId = uid();
+  const draftMemoId = uid();
+  const memos: DemoDb['memos'] = [
+    {
+      id: receivedMemoId,
+      fromKey: 'management',
+      fromName: 'Management',
+      toKey: AGENT_KEY,
+      toName: 'Elias Torgbuivi',
+      subject: 'Site visit schedule for next week',
+      bodyHtml: "Please confirm your availability for the Royal Palm Enclave site visits scheduled next week. Let the office know if any of your slots need to move.",
+      parentId: null,
+      kind: 'memo',
+      createdAt: isoPlusDays(t, -2),
+      read: false,
+      status: 'sent',
+    },
+    {
+      id: sentMemoId,
+      fromKey: AGENT_KEY,
+      fromName: 'Elias Torgbuivi',
+      toKey: 'management',
+      toName: 'Management',
+      subject: 'Leave Request Letter',
+      bodyHtml: 'Requesting 2 days leave next month for a family event. Happy to hand off my open follow-ups to a colleague in the meantime.',
+      parentId: null,
+      kind: 'memo',
+      createdAt: isoPlusDays(t, -7),
+      read: true,
+      status: 'sent',
+    },
+    {
+      id: draftMemoId,
+      fromKey: AGENT_KEY,
+      fromName: 'Elias Torgbuivi',
+      toKey: 'management',
+      toName: 'Management',
+      subject: 'Request for petty cash',
+      bodyHtml: 'Draft -- still filling in the amount and purpose before sending.',
+      parentId: null,
+      kind: 'memo',
+      createdAt: isoPlusDays(t, -1),
+      read: false,
+      status: 'draft',
+    },
+  ];
+
+  const memoRecipients: DemoDb['memoRecipients'] = [
+    { id: uid(), memoId: sentMemoId, staffKey: 'emmanuel', staffName: 'Emmanuel Owusu', read: false, createdAt: isoPlusDays(t, -7) },
+  ];
+
+  return { version: 7, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

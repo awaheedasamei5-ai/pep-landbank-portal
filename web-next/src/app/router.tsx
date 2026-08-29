@@ -19,6 +19,8 @@ import { AddReferralScreen } from '../features/referrals/screens/AddReferralScre
 import { EnquiriesScreen } from '../features/enquiries/screens/EnquiriesScreen';
 import { AddEnquiryScreen } from '../features/enquiries/screens/AddEnquiryScreen';
 import { AttendanceScreen } from '../features/attendance/screens/AttendanceScreen';
+import { MemosScreen } from '../features/memos/screens/MemosScreen';
+import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -175,6 +177,22 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="agent">
             <AttendanceScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'office/memos',
+        element: (
+          <RequireRole role="agent">
+            <MemosScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'office/memos/new',
+        element: (
+          <RequireRole role="agent">
+            <ComposeMemoScreen />
           </RequireRole>
         ),
       },

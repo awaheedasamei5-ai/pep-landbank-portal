@@ -309,3 +309,47 @@ export interface SignOutInput {
   offSite?: boolean;
   reason?: string;
 }
+
+// Real tables `memos` + `memo_recipients` (confirmed live, 6 real memo
+// rows) -- NOT a filtered view of the separate `messages` table used for
+// other things (plot requests, critical alerts). A memo has one primary
+// addressee (to_key/to_name) plus an optional CC list via memo_recipients
+// rows (sender-insert-only). "Draft" is a real `status='draft'` value the
+// recipient literally cannot SELECT yet (RLS blocks it) -- sending is a
+// plain UPDATE flipping status to 'sent', not a separate action/RPC.
+// body_html is real column name/intent (rich text), but this app
+// deliberately treats it as PLAIN TEXT end to end -- never rendered via
+// dangerouslySetInnerHTML -- to avoid taking on stored-XSS risk for a
+// first-cut screen. Newlines are preserved via CSS white-space, not markup.
+export interface Memo {
+  id: string;
+  fromKey: string;
+  fromName: string;
+  toKey: string;
+  toName: string;
+  subject: string;
+  bodyHtml: string;
+  parentId: string | null;
+  kind: string;
+  createdAt: string;
+  read: boolean;
+  status: string;
+}
+
+export interface MemoRecipient {
+  id: string;
+  memoId: string;
+  staffKey: string;
+  staffName: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NewMemo {
+  toKey: string;
+  toName: string;
+  subject: string;
+  bodyHtml: string;
+  status: 'draft' | 'sent';
+  cc?: { key: string; name: string }[];
+}

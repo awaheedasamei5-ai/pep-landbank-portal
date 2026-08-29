@@ -1,8 +1,45 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, NewEnquiry, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapAttendanceRow, mapEnquiryRow, mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import {
+  mapAttendanceRow,
+  mapEnquiryRow,
+  mapLeadRow,
+  mapMemoRow,
+  mapPaymentRow,
+  mapPlotRow,
+  mapProfileRow,
+  mapReferralRow,
+  mapScheduleItemRow,
+  mapSiteVisitRow,
+  mapStreakRow,
+  mapConfigRow,
+  domainStatusToDb,
+} from './mappers';
+
+// Small realistic roster for demo mode's staff picker -- names/keys match
+// the real staff allowlist this session's schema research surfaced
+// repeatedly across plots/site_visits/complaints RLS policies
+// ('elias','emmanuel','elizabeth' + a manager), not invented.
+const DEMO_STAFF: Profile[] = [
+  { key: 'management', name: 'Management', role: 'manager' },
+  { key: 'elias', name: 'Elias Torgbuivi', role: 'agent' },
+  { key: 'emmanuel', name: 'Emmanuel Owusu', role: 'agent' },
+  { key: 'elizabeth', name: 'Elizabeth Misiame', role: 'agent' },
+];
+
+// A memo a staff member "received" either because they're the primary
+// to_key, or because they were CC'd via a memo_recipients row -- the two
+// cases read `read` from different columns (memos.read vs
+// memo_recipients.read) and are only deletable in the primary case (see
+// the Memo type's comment in types/domain.ts: memo_recipients has no
+// DELETE policy on production at all).
+export interface ReceivedMemo {
+  memo: Memo;
+  viaCC: boolean;
+  recipientRowId: string | null;
+}
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -75,6 +112,25 @@ export interface DataSource {
     history(staffKey: string, days: number): Promise<AttendanceRecord[]>;
     signIn(staffKey: string, staffName: string, input: SignInInput): Promise<AttendanceRecord>;
     signOut(staffKey: string, id: string, input: SignOutInput): Promise<AttendanceRecord>;
+  };
+  // Real `profiles` table -- needed as a recipient/CC picker for
+  // Memorandum. RLS (p_profiles_sel) lets any authenticated staff member
+  // see every profile, so this is a plain unfiltered list.
+  staff: {
+    list(): Promise<Profile[]>;
+  };
+  // Real tables `memos` + `memo_recipients` -- see the Memo type's comment
+  // in types/domain.ts for the RLS/draft/CC shape. delete() throws if
+  // called on a memo the caller didn't send and isn't a manager for,
+  // matching real RLS (memos_del) rather than silently no-opping.
+  memos: {
+    sent(myKey: string): Promise<Memo[]>;
+    drafts(myKey: string): Promise<Memo[]>;
+    received(myKey: string): Promise<ReceivedMemo[]>;
+    create(fromKey: string, fromName: string, input: NewMemo): Promise<Memo>;
+    send(id: string): Promise<Memo>;
+    markRead(item: ReceivedMemo): Promise<void>;
+    remove(id: string): Promise<void>;
   };
 }
 
@@ -338,6 +394,86 @@ function createDemoDataSource(): DataSource {
         record.signOutReason = input.offSite ? (input.reason ?? null) : null;
         demoSave();
         return record;
+      },
+    },
+    staff: {
+      async list() {
+        return DEMO_STAFF;
+      },
+    },
+    memos: {
+      async sent(myKey) {
+        return demoLoad().memos.filter((m) => m.fromKey === myKey);
+      },
+      async drafts(myKey) {
+        return demoLoad().memos.filter((m) => m.fromKey === myKey && m.status === 'draft');
+      },
+      async received(myKey) {
+        const db = demoLoad();
+        const direct: ReceivedMemo[] = db.memos.filter((m) => m.toKey === myKey && m.status !== 'draft').map((memo) => ({ memo, viaCC: false, recipientRowId: null }));
+        const viaCc: ReceivedMemo[] = db.memoRecipients
+          .filter((r) => r.staffKey === myKey)
+          .map((r): ReceivedMemo | null => {
+            const memo = db.memos.find((m) => m.id === r.memoId);
+            return memo ? { memo, viaCC: true, recipientRowId: r.id } : null;
+          })
+          .filter((x): x is ReceivedMemo => x !== null);
+        return [...direct, ...viaCc].sort((a, b) => (a.memo.createdAt < b.memo.createdAt ? 1 : -1));
+      },
+      async create(fromKey, fromName, input) {
+        const db = demoLoad();
+        const memo: Memo = {
+          id: Math.random().toString(36).slice(2, 10),
+          fromKey,
+          fromName,
+          toKey: input.toKey,
+          toName: input.toName,
+          subject: input.subject,
+          bodyHtml: input.bodyHtml,
+          parentId: null,
+          kind: 'memo',
+          createdAt: new Date().toISOString(),
+          read: false,
+          status: input.status,
+        };
+        db.memos.push(memo);
+        for (const cc of input.cc ?? []) {
+          db.memoRecipients.push({
+            id: Math.random().toString(36).slice(2, 10),
+            memoId: memo.id,
+            staffKey: cc.key,
+            staffName: cc.name,
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        demoSave();
+        return memo;
+      },
+      async send(id) {
+        const db = demoLoad();
+        const memo = db.memos.find((m) => m.id === id);
+        if (!memo) throw new Error('Memo not found');
+        memo.status = 'sent';
+        demoSave();
+        return memo;
+      },
+      async markRead(item) {
+        const db = demoLoad();
+        if (item.viaCC && item.recipientRowId) {
+          const r = db.memoRecipients.find((x) => x.id === item.recipientRowId);
+          if (r) r.read = true;
+        } else {
+          const m = db.memos.find((x) => x.id === item.memo.id);
+          if (m) m.read = true;
+        }
+        demoSave();
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.memos = db.memos.filter((m) => m.id !== id);
+        db.memoRecipients = db.memoRecipients.filter((r) => r.memoId !== id);
+        demoSave();
       },
     },
   };
@@ -628,6 +764,87 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapAttendanceRow(data);
+      },
+    },
+    staff: {
+      async list() {
+        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email').eq('active', true);
+        if (error) throw error;
+        return (data ?? []).map(mapProfileRow);
+      },
+    },
+    memos: {
+      async sent(myKey) {
+        const { data, error } = await requireClient().from('memos').select('*').eq('from_key', myKey).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapMemoRow);
+      },
+      async drafts(myKey) {
+        const { data, error } = await requireClient().from('memos').select('*').eq('from_key', myKey).eq('status', 'draft').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapMemoRow);
+      },
+      async received(myKey) {
+        const client = requireClient();
+        const { data: directData, error: directError } = await client.from('memos').select('*').eq('to_key', myKey).neq('status', 'draft');
+        if (directError) throw directError;
+        const direct: ReceivedMemo[] = (directData ?? []).map((m) => ({ memo: mapMemoRow(m), viaCC: false, recipientRowId: null }));
+
+        const { data: ccData, error: ccError } = await client.from('memo_recipients').select('*, memo:memos(*)').eq('staff_key', myKey);
+        if (ccError) throw ccError;
+        const viaCc: ReceivedMemo[] = ((ccData ?? []) as (Record<string, unknown> & { memo?: Record<string, unknown> })[])
+          .filter((r) => r.memo)
+          .map((r) => ({ memo: mapMemoRow(r.memo as Record<string, unknown>), viaCC: true, recipientRowId: r.id as string }));
+
+        return [...direct, ...viaCc].sort((a, b) => (a.memo.createdAt < b.memo.createdAt ? 1 : -1));
+      },
+      async create(fromKey, fromName, input) {
+        const client = requireClient();
+        const { data, error } = await client
+          .from('memos')
+          .insert({
+            from_key: fromKey,
+            from_name: fromName,
+            to_key: input.toKey,
+            to_name: input.toName,
+            subject: input.subject,
+            body_html: input.bodyHtml,
+            status: input.status,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        const memo = mapMemoRow(data);
+        if (input.cc && input.cc.length > 0) {
+          const { error: ccError } = await client.from('memo_recipients').insert(input.cc.map((c) => ({ memo_id: memo.id, staff_key: c.key, staff_name: c.name })));
+          if (ccError) throw ccError;
+        }
+        return memo;
+      },
+      async send(id) {
+        const { data, error } = await requireClient().from('memos').update({ status: 'sent' }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapMemoRow(data);
+      },
+      async markRead(item) {
+        const client = requireClient();
+        if (item.viaCC && item.recipientRowId) {
+          const { error } = await client.from('memo_recipients').update({ read: true }).eq('id', item.recipientRowId);
+          if (error) throw error;
+        } else {
+          const { error } = await client.from('memos').update({ read: true }).eq('id', item.memo.id);
+          if (error) throw error;
+        }
+      },
+      async remove(id) {
+        // No memo_recipients DELETE policy exists on production at all
+        // (confirmed live) -- deleting a memo here only removes the memos
+        // row; any CC rows referencing it become orphaned, matching a
+        // real limitation of the production schema, not a bug to route
+        // around from the client.
+        const { data, error } = await requireClient().from('memos').delete().eq('id', id).select('id');
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('You can only delete memos you sent (or ask a manager to).');
       },
     },
   };

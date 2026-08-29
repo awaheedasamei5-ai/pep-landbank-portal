@@ -9,7 +9,7 @@ export function OfficeDeskScreen() {
 
   const items: TileItem[] = [
     { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', glyph: '🗂️', onOpen: () => navigate('/app/office/myday') },
-    { key: 'memo', label: 'Memorandum', sub: 'Coming in a later phase', color: 'teal', glyph: '📝' },
+    { key: 'memo', label: 'Memorandum', sub: 'Internal correspondence', color: 'teal', glyph: '📝', onOpen: () => navigate('/app/office/memos') },
     { key: 'attendance', label: 'Attendance', sub: 'Sign in & out for the day', color: 'blue', glyph: '✅', onOpen: () => navigate('/app/office/attendance') },
     { key: 'payment', label: 'Log Payment', sub: 'Coming in a later phase', color: 'orange', glyph: '💳' },
   ];

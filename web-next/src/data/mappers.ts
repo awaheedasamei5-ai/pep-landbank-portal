@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -171,6 +171,43 @@ export function mapAttendanceRow(r: Record<string, unknown>): AttendanceRecord {
     isOffSiteIn: r.is_off_site_in == null ? null : !!r.is_off_site_in,
     isOffSiteOut: r.is_off_site_out == null ? null : !!r.is_off_site_out,
     signInPhoto: (r.sign_in_photo as string) ?? null,
+  };
+}
+
+export function mapProfileRow(r: Record<string, unknown>): Profile {
+  return {
+    key: r.agent_key as string,
+    name: r.name as string,
+    role: (r.role as Profile['role']) ?? 'agent',
+    email: (r.email as string) ?? undefined,
+  };
+}
+
+export function mapMemoRow(r: Record<string, unknown>): Memo {
+  return {
+    id: r.id as string,
+    fromKey: r.from_key as string,
+    fromName: r.from_name as string,
+    toKey: r.to_key as string,
+    toName: r.to_name as string,
+    subject: r.subject as string,
+    bodyHtml: r.body_html as string,
+    parentId: (r.parent_id as string) ?? null,
+    kind: (r.kind as string) ?? 'memo',
+    createdAt: r.created_at as string,
+    read: !!r.read,
+    status: (r.status as string) ?? 'sent',
+  };
+}
+
+export function mapMemoRecipientRow(r: Record<string, unknown>): MemoRecipient {
+  return {
+    id: r.id as string,
+    memoId: r.memo_id as string,
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    read: !!r.read,
+    createdAt: r.created_at as string,
   };
 }
 
