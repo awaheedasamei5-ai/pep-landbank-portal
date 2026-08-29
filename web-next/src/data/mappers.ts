@@ -316,6 +316,14 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     targetPlotsPerMonth: Number(r.target_plots_per_month ?? 2),
     targets: (r.targets as Record<string, number>) ?? {},
     leaderboardWeights: { ...DEFAULT_LEADERBOARD_WEIGHTS, ...((r.leaderboard_weights as Partial<LeaderboardWeights>) ?? {}) },
+    // Real production values (confirmed live, same on staging): cap 1000/500,
+    // pool 500/plot, full/half list price 48000/24000 -- used as the
+    // fallback for a fresh/never-configured row, not a guess.
+    commissionFullCap: Number(r.commission_full_cap ?? 1000),
+    commissionHalfCap: Number(r.commission_half_cap ?? 500),
+    commissionPoolPerPlot: Number(r.commission_pool_per_plot ?? 500),
+    fullPrice: Number(r.full_price ?? 48000),
+    halfPrice: Number(r.half_price ?? 24000),
   };
 }
 

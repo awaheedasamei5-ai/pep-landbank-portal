@@ -126,6 +126,50 @@ export interface Config {
   targetPlotsPerMonth: number;
   targets: Record<string, number>;
   leaderboardWeights: LeaderboardWeights;
+  // Real app_config columns (confirmed live, same values on both projects):
+  // commission is capped-per-payment, not a flat percentage -- see
+  // commissionLogic.ts's paymentContribution() for the exact formula.
+  commissionFullCap: number;
+  commissionHalfCap: number;
+  commissionPoolPerPlot: number;
+  fullPrice: number;
+  halfPrice: number;
+}
+
+// One payment's contribution to an agent's personal commission, and what it
+// was earned against -- the breakdown a "My commission" screen shows so an
+// agent can see exactly which plots/payments produced the total, not just
+// a number to trust blindly.
+export interface CommissionBreakdownRow {
+  leadId: string;
+  clientName: string;
+  plotType: string;
+  paymentDate: string;
+  paymentAmount: number;
+  contribution: number;
+}
+
+// One agent's row in the company-wide monthly commission report (manager
+// view) -- personal (their own capped-per-payment earnings this month) +
+// poolShare (an equal split of a company-wide new-plots pool, only for
+// agents who sold at least one new plot in the last 3 months).
+export interface CommissionAgentRow {
+  key: string;
+  name: string;
+  personal: number;
+  newPlotsThisMonth: number;
+  eligible: boolean;
+  poolShare: number;
+  total: number;
+}
+
+export interface CompanyCommissionReport {
+  monthKey: string;
+  rows: CommissionAgentRow[];
+  poolTotal: number;
+  poolShare: number;
+  eligibleCount: number;
+  totalNewPlotsThisMonth: number;
 }
 
 // One row of the real `leaderboard_rows(p_from, p_to)` RPC (confirmed live,

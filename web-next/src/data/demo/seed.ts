@@ -63,6 +63,11 @@ export function seedDemo(): DemoDb {
     targetPlotsPerMonth: 2,
     targets: { [AGENT_KEY]: 600000 },
     leaderboardWeights: DEFAULT_LEADERBOARD_WEIGHTS,
+    commissionFullCap: 1000,
+    commissionHalfCap: 500,
+    commissionPoolPerPlot: 500,
+    fullPrice: 48000,
+    halfPrice: 24000,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -406,7 +411,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 13, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
+  return { version: 14, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

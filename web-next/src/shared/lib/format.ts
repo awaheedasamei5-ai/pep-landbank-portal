@@ -29,6 +29,19 @@ export function monthKey(iso: string | undefined): string {
   return (iso || '').slice(0, 7);
 }
 
+// Ported from index.html's monthLabel() (index.html:2870) -- 'YYYY-MM' -> 'Aug 2026'.
+export function monthLabel(mk: string): string {
+  if (!mk) return '—';
+  const [y, m] = mk.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+export function shiftMonth(mk: string, delta: number): string {
+  const [y, m] = mk.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 export function daysSince(iso: string): number {
   const then = new Date(iso + 'T00:00:00').getTime();
   const now = new Date(today() + 'T00:00:00').getTime();

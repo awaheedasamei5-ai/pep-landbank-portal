@@ -3,6 +3,8 @@
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--muted); margin: 0; font-size: 13.5px; }
 
+.headBtns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+
 .leaderboardBtn {
   background: var(--card);
   border: 1px solid var(--line);

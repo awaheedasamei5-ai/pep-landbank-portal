@@ -30,6 +30,8 @@ import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen'
 import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
 import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
 import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen';
+import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
+import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -74,6 +76,15 @@ export const router = createBrowserRouter([
           </RequireRole>
         ),
       },
+      {
+        path: 'mgr/commission',
+        element: (
+          <RequireRole role="manager">
+            <CommissionScreen />
+          </RequireRole>
+        ),
+      },
+      { path: 'commission', element: <MyCommissionScreen /> },
       {
         // Sales/Office Desk and everything under them are shared staff
         // tools, not per-role dashboards -- unlike 'home'/'mgr' (two

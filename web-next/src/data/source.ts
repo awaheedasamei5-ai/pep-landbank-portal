@@ -183,6 +183,14 @@ export interface DataSource {
     // the demo store has no multi-agent staff roster to rank, so this
     // returns [] in demo, same as apiLoadLeaderboardRows() always has.
     leaderboardRows(fromDate: string, toDate: string): Promise<Omit<LeaderboardRow, 'points'>[]>;
+    // Unfiltered payments/leads (real payments_sel/leads_sel RLS confirmed
+    // to let a manager session SELECT every row) + the agent roster --
+    // commissionLogic.ts does the actual monthly computation client-side
+    // from this, same shape index.html's DB.payments/DB.leads/allAgentLists()
+    // gave computeCommissionForMonth(). Every payment status comes back
+    // (not just approved) -- commissionLogic.ts is responsible for
+    // filtering to approved before any arithmetic, never this layer.
+    commissionData(): Promise<{ payments: Payment[]; leads: Lead[]; staff: { key: string; name: string }[] }>;
   };
   // Staff-authenticated side of Site Visit Experience (distinct from the
   // public RPC-based data/sveClient.ts a visitor uses). Real RLS
@@ -700,6 +708,14 @@ function createDemoDataSource(): DataSource {
             onTimeDays: attendanceWindow.filter((a) => a.signInAt && a.signInAt.slice(11, 16) <= '09:00').length,
           };
         });
+      },
+      async commissionData() {
+        const db = demoLoad();
+        return {
+          payments: db.payments,
+          leads: db.leads,
+          staff: DEMO_STAFF.filter((s) => s.role === 'agent').map((s) => ({ key: s.key, name: s.name })),
+        };
       },
     },
     sve: {
@@ -1303,6 +1319,18 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().rpc('leaderboard_rows', { p_from: fromDate, p_to: toDate });
         if (error) throw error;
         return (data ?? []).map(mapLeaderboardRawRow);
+      },
+      async commissionData() {
+        const client = requireClient();
+        const [paymentsRes, leadsRes, staffRes] = await Promise.all([client.from('payments').select('*'), client.from('leads').select('*'), client.from('profiles').select('agent_key,name').eq('role', 'agent')]);
+        if (paymentsRes.error) throw paymentsRes.error;
+        if (leadsRes.error) throw leadsRes.error;
+        if (staffRes.error) throw staffRes.error;
+        return {
+          payments: (paymentsRes.data ?? []).map(mapPaymentRow),
+          leads: (leadsRes.data ?? []).map(mapLeadRow),
+          staff: (staffRes.data ?? []).map((r) => ({ key: r.agent_key as string, name: r.name as string })),
+        };
       },
     },
     sve: {

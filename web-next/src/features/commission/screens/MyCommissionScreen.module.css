@@ -1,0 +1,28 @@
+.wrap { padding: 20px 16px 90px; }
+
+.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+.total { font-size: 32px; font-family: 'IBM Plex Mono', monospace; margin: 4px 0 0; }
+.sub { color: var(--muted); margin: 6px 0 20px; font-size: 13px; line-height: 1.45; }
+
+.sectitle { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 12px; }
+
+.list { display: flex; flex-direction: column; gap: 8px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 13px 15px;
+  box-shadow: var(--shadow);
+}
+
+.name { font-weight: 700; font-size: 14px; }
+.meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+.right { text-align: right; flex-shrink: 0; }
+.amt { font-family: 'IBM Plex Mono', monospace; font-weight: 800; font-size: 15px; }
+.amtLabel { font-size: 10.5px; color: var(--muted); margin-top: 1px; }

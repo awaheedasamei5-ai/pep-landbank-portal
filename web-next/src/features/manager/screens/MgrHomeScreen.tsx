@@ -31,9 +31,14 @@ export function MgrHomeScreen() {
           <h1 className={styles.title}>Manager Home</h1>
           <p className={styles.sub}>Live across every agent</p>
         </div>
-        <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/leaderboard')}>
-          🏆 Leaderboard
-        </button>
+        <div className={styles.headBtns}>
+          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/leaderboard')}>
+            🏆 Leaderboard
+          </button>
+          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/commission')}>
+            💰 Commission
+          </button>
+        </div>
       </div>
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
