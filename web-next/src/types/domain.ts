@@ -146,6 +146,18 @@ export interface Config {
   commissionPoolPerPlot: number;
   fullPrice: number;
   halfPrice: number;
+  // Real columns full_discount/half_discount/int_3/int_6/int_9/int_12
+  // (confirmed live -- note the underscored int_N naming, NOT int3/int6/
+  // int9/int12 like the JS-side CONFIG object uses; a real place a naive
+  // port would have silently broken). Interest is a flat per-full-plot-
+  // equivalent figure for each payment plan length -- see
+  // quotationLogic.ts for the exact formula this feeds.
+  fullDiscount: number;
+  halfDiscount: number;
+  int3: number;
+  int6: number;
+  int9: number;
+  int12: number;
 }
 
 // One payment's contribution to an agent's personal commission, and what it

@@ -74,6 +74,12 @@ export function seedDemo(): DemoDb {
     commissionPoolPerPlot: 500,
     fullPrice: 48000,
     halfPrice: 24000,
+    fullDiscount: 0,
+    halfDiscount: 0,
+    int3: 750,
+    int6: 1500,
+    int9: 2250,
+    int12: 3000,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -447,7 +453,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 17, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 18, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

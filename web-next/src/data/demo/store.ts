@@ -36,7 +36,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 17;
+const DEMO_VERSION = 18;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

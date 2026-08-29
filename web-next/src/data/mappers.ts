@@ -341,6 +341,12 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     commissionPoolPerPlot: Number(r.commission_pool_per_plot ?? 500),
     fullPrice: Number(r.full_price ?? 48000),
     halfPrice: Number(r.half_price ?? 24000),
+    fullDiscount: Number(r.full_discount ?? 0),
+    halfDiscount: Number(r.half_discount ?? 0),
+    int3: Number(r.int_3 ?? 750),
+    int6: Number(r.int_6 ?? 1500),
+    int9: Number(r.int_9 ?? 2250),
+    int12: Number(r.int_12 ?? 3000),
   };
 }
 

@@ -17,6 +17,7 @@ export function OfficeDeskScreen() {
       ? [{ key: 'payment', label: 'Log Payment', sub: 'Record & approve client payments', color: 'orange', glyph: '💳', onOpen: () => navigate('/app/office/payments') } satisfies TileItem]
       : []),
     { key: 'contracts', label: 'Contract requests', sub: 'Request & track contracts of sale', color: 'red', glyph: '📄', onOpen: () => navigate('/app/office/contracts') },
+    { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', glyph: '🧮', onOpen: () => navigate('/app/office/quotation') },
   ];
 
   return (
