@@ -1627,6 +1627,16 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   opacity:0;transform:scale(.82);animation:namePopIn .6s cubic-bezier(.34,1.56,.64,1) 2.5s forwards}
 .bootscreen .boot-sub{font-size:12px;color:#5C7280;letter-spacing:.14em;text-transform:uppercase;opacity:0;margin-top:4px;animation:fadeIn .6s 2.9s ease forwards}
 .bootscreen .bootTap{position:absolute;bottom:34px;font-size:10.5px;color:#8592A3;opacity:0;animation:fadeIn .6s 3.3s ease forwards;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+/* Purely indeterminate (there's no real percentage to show, just "still
+   loading") -- three pulsing dots read as active/purposeful instead of the
+   screen looking frozen during a real data fetch. Fades in early (.4s, well
+   before the wordmark) and is removed by hideBoot()'s screen-wide fade like
+   everything else here, so it never needs its own exit animation. */
+.bootscreen .bootLoadDots{position:absolute;bottom:64px;display:flex;gap:6px;opacity:0;animation:fadeIn .5s .4s ease forwards}
+.bootscreen .bootLoadDots span{width:6px;height:6px;border-radius:50%;background:var(--green);animation:bootDotPulse 1.2s ease-in-out infinite}
+.bootscreen .bootLoadDots span:nth-child(2){animation-delay:.15s}
+.bootscreen .bootLoadDots span:nth-child(3){animation-delay:.3s}
+@keyframes bootDotPulse{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
 @media (max-width:380px){
   .bootscreen .bootIconWrap{width:210px;height:210px;margin-bottom:-22px}
   .bootscreen .boot-word{font-size:34px}
@@ -1716,6 +1726,7 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
     <div class="boot-word" id="bootWord">Palmstead</div>
     <div class="boot-sub">by PEP Landbank</div>
   </div>
+  <div class="bootLoadDots" id="bootLoadDots"><span></span><span></span><span></span></div>
   <div class="bootTap" id="bootTap">Tap to continue</div>
 </div>
 
@@ -25276,16 +25287,25 @@ if(__sveToken){
 playChime('reveal');
 (async function(){
   const bootStart=Date.now();
-  // Minimum matches the icon video's own ~5.03s length (it settles by ~0.5s,
-  // holds, then "Palmstead"/subtitle pop in around its midpoint) so the clip
-  // always plays all the way through instead of getting cut off mid-way --
-  // but a returning user who's seen it a hundred times shouldn't have to sit
-  // through it every single sign-in, so a tap anywhere ends the wait immediately.
+  // Guaranteed floor is 3900ms, not the full ~5.03s clip length like before.
+  // 3900ms is the earliest point the WHOLE choreographed text reveal has
+  // actually finished (wordmark pop-in starts at 2.5s/takes .6s, subtitle
+  // fades in .6s starting 2.9s, tap-hint fades in .6s starting 3.3s -- last
+  // one finishes at 3.9s) -- cutting any earlier would fade the screen out
+  // mid-animation, which looked broken, not premium. The old flat 5.1s wait
+  // applied on every single boot regardless of how fast data actually
+  // loaded, which on a fast connection read as an artificially slow, static
+  // intro rather than a real loading moment; this saves ~1.2s there while
+  // never truncating the reveal. This is a floor, not a cap: bootStart is
+  // captured before the real session/profile/staff-list loading below even
+  // starts, so if that work takes longer than 3900ms this naturally waits
+  // for it (same as before) -- it can only ever be faster than the old fixed
+  // wait, never slower. A tap anywhere still ends the wait immediately either way.
   let skipBoot;
   const skipPromise=new Promise(r=>{ skipBoot=r; });
   document.getElementById('boot').addEventListener('click',()=>skipBoot(),{once:true});
   const minSplash=async()=>{
-    const left=5100-(Date.now()-bootStart);
+    const left=3900-(Date.now()-bootStart);
     if(left>0) await Promise.race([new Promise(r=>setTimeout(r,left)),skipPromise]);
   };
   const connected = tryInitClient();
