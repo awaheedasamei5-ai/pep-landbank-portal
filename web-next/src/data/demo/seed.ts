@@ -436,6 +436,46 @@ export function seedDemo(): DemoDb {
     },
   ];
 
+  // Real workflow: an agent manually requests allocation for one of their
+  // own leads (this app's honest simplification of the real automatic
+  // server-side trigger -- see the type's comment in domain.ts). One
+  // still-pending and one already allocated, so Management's view has
+  // both states to show.
+  const allocationRequests: DemoDb['allocationRequests'] = [
+    {
+      id: uid(),
+      leadId: leads[0].id,
+      clientName: leads[0].name,
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      percentPaid: 50,
+      grandTotal: leads[0].grandTotal,
+      amtPaid: leads[0].amtPaid,
+      status: 'Pending',
+      plotNumber: null,
+      note: null,
+      allocatedBy: null,
+      createdAt: isoPlusDays(t, -2),
+      resolvedAt: null,
+    },
+    {
+      id: uid(),
+      leadId: leads[1].id,
+      clientName: leads[1].name,
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      percentPaid: 100,
+      grandTotal: leads[1].grandTotal,
+      amtPaid: leads[1].amtPaid,
+      status: 'Allocated',
+      plotNumber: 'A-14',
+      note: 'Corner plot, confirmed with client on-site.',
+      allocatedBy: 'Management',
+      createdAt: isoPlusDays(t, -6),
+      resolvedAt: isoPlusDays(t, -4),
+    },
+  ];
+
   // A short, realistic 1:1 thread with 'management' -- deliberately not
   // fully read (last inbound message unread) so the conversation list's
   // unread badge has something real to show immediately.
@@ -487,7 +527,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 19, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 20, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

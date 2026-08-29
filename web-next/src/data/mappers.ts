@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -326,6 +326,25 @@ export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
     decidedAt: (r.decided_at as string) ?? null,
     decidedBy: (r.decided_by as string) ?? null,
     decidedByName: (r.decided_by_name as string) ?? null,
+  };
+}
+
+export function mapAllocationRequestRow(r: Record<string, unknown>): AllocationRequest {
+  return {
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    clientName: r.client_name as string,
+    agentKey: r.agent_key as string,
+    agentName: (r.agent_name as string) ?? null,
+    percentPaid: r.percent_paid != null ? Number(r.percent_paid) : null,
+    grandTotal: r.grand_total != null ? Number(r.grand_total) : null,
+    amtPaid: r.amt_paid != null ? Number(r.amt_paid) : null,
+    status: (r.status as AllocationRequest['status']) ?? 'Pending',
+    plotNumber: (r.plot_number as string) ?? null,
+    note: (r.note as string) ?? null,
+    allocatedBy: (r.allocated_by as string) ?? null,
+    createdAt: r.created_at as string,
+    resolvedAt: (r.resolved_at as string) ?? null,
   };
 }
 

@@ -39,6 +39,7 @@ import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
 import { ReportsScreen } from '../features/manager/screens/ReportsScreen';
 import { QuotationScreen } from '../features/quotation/screens/QuotationScreen';
 import { LeaveScreen } from '../features/leave/screens/LeaveScreen';
+import { AllocationRequestsScreen } from '../features/allocations/screens/AllocationRequestsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -145,6 +146,7 @@ export const router = createBrowserRouter([
       { path: 'sales/enquiries/new', element: <AddEnquiryScreen /> },
       { path: 'sales/complaints', element: <ComplaintsScreen /> },
       { path: 'sales/company-leads', element: <CompanyLeadsScreen /> },
+      { path: 'sales/allocations', element: <AllocationRequestsScreen /> },
       { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },
       { path: 'office/myday', element: <MyDayScreen /> },

@@ -1,8 +1,9 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
 import {
+  mapAllocationRequestRow,
   mapAttendanceRow,
   mapChatMessageRow,
   mapComplaintRow,
@@ -190,6 +191,19 @@ export interface DataSource {
     list(): Promise<LeaveRequest[]>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
     decide(id: string, approve: boolean, decidedBy: string, decidedByName: string): Promise<LeaveRequest>;
+  };
+  // Real table `allocation_requests` -- same manager/elias/emmanuel gate
+  // as Plot Inventory (alloc_sel/alloc_upd, confirmed live). list()
+  // naturally self-scopes in live mode (own rows, or every row for that
+  // roster); demo mode replicates the same scoping client-side from the
+  // explicit viewerKey/viewerRole, matching the contractRequests pattern.
+  // allocate() is manager/elias/emmanuel-only in practice, gated client-
+  // side (RLS also permits an agent's own-row UPDATE, for agent_seen
+  // marking in the real app -- not built here).
+  allocationRequests: {
+    list(viewerKey: string, viewerRole: string): Promise<AllocationRequest[]>;
+    create(agentKey: string, agentName: string, input: NewAllocationRequest): Promise<AllocationRequest>;
+    allocate(id: string, plotNumber: string, note: string | undefined, allocatedBy: string): Promise<AllocationRequest>;
   };
   // Real table `attendance_log` (confirmed live, currently 0 production
   // rows), one row per (staff_key, work_date) enforced by a real unique
@@ -695,6 +709,46 @@ function createDemoDataSource(): DataSource {
         if (index === -1) throw new Error('Leave request not found');
         const updated: LeaveRequest = { ...db.leaveRequests[index], status: approve ? 'approved' : 'declined', decidedAt: new Date().toISOString(), decidedBy, decidedByName };
         db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+    },
+    allocationRequests: {
+      async list(viewerKey, viewerRole) {
+        const db = demoLoad();
+        const canSeeAll = viewerRole === 'manager' || ['elias', 'emmanuel'].includes(viewerKey);
+        return db.allocationRequests.filter((r) => canSeeAll || r.agentKey === viewerKey);
+      },
+      async create(agentKey, agentName, input) {
+        const db = demoLoad();
+        const lead = db.leads.find((l) => l.id === input.leadId && l.agent === agentKey);
+        if (!lead) throw new Error("Pick one of your own leads");
+        const request: AllocationRequest = {
+          id: Math.random().toString(36).slice(2, 10),
+          leadId: lead.id,
+          clientName: lead.name,
+          agentKey,
+          agentName,
+          percentPaid: lead.grandTotal > 0 ? Math.round((lead.amtPaid / lead.grandTotal) * 1000) / 10 : null,
+          grandTotal: lead.grandTotal,
+          amtPaid: lead.amtPaid,
+          status: 'Pending',
+          plotNumber: null,
+          note: null,
+          allocatedBy: null,
+          createdAt: new Date().toISOString(),
+          resolvedAt: null,
+        };
+        db.allocationRequests.push(request);
+        demoSave();
+        return request;
+      },
+      async allocate(id, plotNumber, note, allocatedBy) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = { ...db.allocationRequests[index], status: 'Allocated', plotNumber, note: note ?? null, allocatedBy, resolvedAt: new Date().toISOString() };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
         demoSave();
         return updated;
       },
@@ -1430,6 +1484,50 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
+      },
+    },
+    allocationRequests: {
+      async list() {
+        // Unfiltered on purpose -- alloc_sel RLS already scopes this
+        // correctly per real session (own rows, or every row for manager/
+        // elias/emmanuel). viewerKey/viewerRole are unused here, kept only
+        // so the interface matches demo mode's explicit scoping.
+        const { data, error } = await requireClient().from('allocation_requests').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAllocationRequestRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data: leadRow, error: leadError } = await requireClient().from('leads').select('name,grand_total,amt_paid').eq('id', input.leadId).eq('agent_key', agentKey).single();
+        if (leadError) throw leadError;
+        const grandTotal = Number(leadRow.grand_total ?? 0);
+        const amtPaid = Number(leadRow.amt_paid ?? 0);
+        const { data, error } = await requireClient()
+          .from('allocation_requests')
+          .insert({
+            lead_id: input.leadId,
+            client_name: leadRow.name,
+            agent_key: agentKey,
+            agent_name: agentName,
+            percent_paid: grandTotal > 0 ? Math.round((amtPaid / grandTotal) * 1000) / 10 : null,
+            grand_total: grandTotal,
+            amt_paid: amtPaid,
+            status: 'Pending',
+            agent_seen: true,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAllocationRequestRow(data);
+      },
+      async allocate(id, plotNumber, note, allocatedBy) {
+        const { data, error } = await requireClient()
+          .from('allocation_requests')
+          .update({ status: 'Allocated', plot_number: plotNumber, note: note ?? null, allocated_by: allocatedBy, resolved_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAllocationRequestRow(data);
       },
     },
     attendance: {

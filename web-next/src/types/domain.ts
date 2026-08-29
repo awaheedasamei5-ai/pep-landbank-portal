@@ -753,3 +753,36 @@ export interface NewLeaveRequest {
   dates: string[];
   letterText?: string;
 }
+
+// Real table `allocation_requests` (confirmed live), same manager/elias/
+// emmanuel gate as Plot Inventory (alloc_sel/alloc_upd -- an agent can
+// also see and (per RLS) update their own row, used in the real app for
+// agent_seen marking, not built here). The real trigger for one of these
+// existing is server-side (the approve_payment RPC conditionally creates
+// one once a lead crosses ~30% paid -- deliberately not replicated
+// client-side, see Payment's comment in source.ts), so this models a
+// manual "request allocation for one of my leads" flow instead -- an
+// honest simplification, not a guess at the real automatic trigger.
+// suggested_plots (staff pre-narrowing candidates before allocating),
+// flagging (a dispute/hold state), and the "Awaiting Authorization"
+// intermediate status are all out of scope -- just Pending -> Allocated.
+export interface AllocationRequest {
+  id: string;
+  leadId: string;
+  clientName: string;
+  agentKey: string;
+  agentName: string | null;
+  percentPaid: number | null;
+  grandTotal: number | null;
+  amtPaid: number | null;
+  status: 'Pending' | 'Allocated';
+  plotNumber: string | null;
+  note: string | null;
+  allocatedBy: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface NewAllocationRequest {
+  leadId: string;
+}

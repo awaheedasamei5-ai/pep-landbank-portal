@@ -19,6 +19,9 @@ export function SalesDeskScreen() {
     ...(hasPlotAccess
       ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
       : []),
+    ...(hasPlotAccess
+      ? [{ key: 'allocations', label: 'Allocations', sub: 'Request & confirm plot allocations', color: 'orange', glyph: '📐', onOpen: () => navigate('/app/sales/allocations') } satisfies TileItem]
+      : []),
     { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', glyph: '📍', onOpen: () => navigate('/app/sales/sitevisits') },
     { key: 'enquiry', label: 'Client enquiry', sub: 'Log what prospects ask about', color: 'blue', glyph: '❓', onOpen: () => navigate('/app/sales/enquiries') },
     { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', glyph: '🎁', onOpen: () => navigate('/app/sales/referrals') },
