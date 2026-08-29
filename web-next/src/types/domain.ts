@@ -413,3 +413,56 @@ export interface SveSubmissionInput {
   purchaseIntent?: string;
   additionalComments?: string;
 }
+
+// Staff-side records for the SAME site_visit_experience_invites/
+// _submissions tables the public form (SveFeedbackScreen) writes to via
+// RPC. These, by contrast, ARE staff-authenticated reads/writes -- real
+// RLS confirmed live restricts them to manager + the 'elias'/'emmanuel'/
+// 'elizabeth' allowlist, same shape as site_visits itself, so a screen
+// built on these is gated the same way Plot Inventory is gated. `token`
+// is deliberately left server-generated (the column's real default is
+// encode(gen_random_bytes(24),'hex')) rather than client-generated, to
+// keep using Postgres's crypto-strength randomness rather than
+// reinventing it in JS.
+export interface SveInviteRecord {
+  id: string;
+  siteVisitId: string | null;
+  token: string;
+  clientName: string | null;
+  clientContact: string | null;
+  sentAt: string | null;
+  sentVia: string | null;
+  sentBy: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+}
+
+export interface SveSubmissionRecord {
+  id: string;
+  inviteId: string | null;
+  fullName: string;
+  phone: string;
+  siteVisited: string | null;
+  visitDate: string | null;
+  journeyRating: string | null;
+  siteManagerName: string | null;
+  relationshipRating: number | null;
+  handlingFeedback: string | null;
+  siteDescriptionRating: string | null;
+  belowExpectationReason: string | null;
+  overallRating: number | null;
+  npsScore: number | null;
+  improvementSuggestions: string | null;
+  purchaseIntent: string | null;
+  additionalComments: string | null;
+  createdAt: string;
+}
+
+// A site visit joined with its invite/submission status, if any --
+// computed client-side (no RPC needed here, this is a normal
+// authenticated staff read across 3 tables RLS already scopes correctly).
+export interface SveVisitStatus {
+  siteVisit: SiteVisit;
+  invite: SveInviteRecord | null;
+  submission: SveSubmissionRecord | null;
+}

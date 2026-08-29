@@ -23,6 +23,7 @@ import { MemosScreen } from '../features/memos/screens/MemosScreen';
 import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
 import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
+import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -126,6 +127,17 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="agent">
             <AddSiteVisitScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        // Coarse role gate matches every other Sales Desk route; the
+        // finer manager/elias/emmanuel/elizabeth-only restriction lives
+        // in SveManagementScreen itself, same pattern as Plot Inventory.
+        path: 'sales/sitevisits/experience',
+        element: (
+          <RequireRole role="agent">
+            <SveManagementScreen />
           </RequireRole>
         ),
       },

@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -207,6 +207,44 @@ export function mapMemoRecipientRow(r: Record<string, unknown>): MemoRecipient {
     staffKey: r.staff_key as string,
     staffName: r.staff_name as string,
     read: !!r.read,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapSveInviteRow(r: Record<string, unknown>): SveInviteRecord {
+  return {
+    id: r.id as string,
+    siteVisitId: (r.site_visit_id as string) ?? null,
+    token: r.token as string,
+    clientName: (r.client_name as string) ?? null,
+    clientContact: (r.client_contact as string) ?? null,
+    sentAt: (r.sent_at as string) ?? null,
+    sentVia: (r.sent_via as string) ?? null,
+    sentBy: (r.sent_by as string) ?? null,
+    submittedAt: (r.submitted_at as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapSveSubmissionRow(r: Record<string, unknown>): SveSubmissionRecord {
+  return {
+    id: r.id as string,
+    inviteId: (r.invite_id as string) ?? null,
+    fullName: r.full_name as string,
+    phone: r.phone as string,
+    siteVisited: (r.site_visited as string) ?? null,
+    visitDate: (r.visit_date as string) ?? null,
+    journeyRating: (r.journey_rating as string) ?? null,
+    siteManagerName: (r.site_manager_name as string) ?? null,
+    relationshipRating: r.relationship_rating == null ? null : Number(r.relationship_rating),
+    handlingFeedback: (r.handling_feedback as string) ?? null,
+    siteDescriptionRating: (r.site_description_rating as string) ?? null,
+    belowExpectationReason: (r.below_expectation_reason as string) ?? null,
+    overallRating: r.overall_rating == null ? null : Number(r.overall_rating),
+    npsScore: r.nps_score == null ? null : Number(r.nps_score),
+    improvementSuggestions: (r.improvement_suggestions as string) ?? null,
+    purchaseIntent: (r.purchase_intent as string) ?? null,
+    additionalComments: (r.additional_comments as string) ?? null,
     createdAt: r.created_at as string,
   };
 }

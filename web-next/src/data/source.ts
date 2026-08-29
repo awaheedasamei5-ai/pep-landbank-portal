@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -13,6 +13,8 @@ import {
   mapReferralRow,
   mapScheduleItemRow,
   mapSiteVisitRow,
+  mapSveInviteRow,
+  mapSveSubmissionRow,
   mapStreakRow,
   mapConfigRow,
   domainStatusToDb,
@@ -137,6 +139,20 @@ export interface DataSource {
   // SELECT every row -- a real unfiltered query, not client-side illusion.
   manager: {
     overview(): Promise<ManagerOverview>;
+  };
+  // Staff-authenticated side of Site Visit Experience (distinct from the
+  // public RPC-based data/sveClient.ts a visitor uses). Real RLS
+  // (confirmed live) restricts these tables to manager + the 'elias'/
+  // 'emmanuel'/'elizabeth' allowlist -- same shape as site_visits itself
+  // -- so listVisitsWithStatus() intentionally does an UNFILTERED query
+  // against site_visits/invites/submissions, relying on RLS itself to
+  // scope what comes back rather than an agent_key filter (which
+  // wouldn't make sense here: this screen is for staff who can already
+  // see every visit, not "my own"). token is server-generated (real
+  // column default), never passed in from the client.
+  sve: {
+    listVisitsWithStatus(): Promise<SveVisitStatus[]>;
+    createInvite(siteVisitId: string, clientName: string, clientContact: string, sentBy: string): Promise<SveInviteRecord>;
   };
 }
 
@@ -514,6 +530,34 @@ function createDemoDataSource(): DataSource {
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
         };
+      },
+    },
+    sve: {
+      async listVisitsWithStatus() {
+        const db = demoLoad();
+        return db.siteVisits.map((siteVisit) => {
+          const invite = db.sveInvites.find((i) => i.siteVisitId === siteVisit.id) ?? null;
+          const submission = invite ? (db.sveSubmissions.find((s) => s.inviteId === invite.id) ?? null) : null;
+          return { siteVisit, invite, submission };
+        });
+      },
+      async createInvite(siteVisitId, clientName, clientContact, sentBy) {
+        const db = demoLoad();
+        const invite: SveInviteRecord = {
+          id: Math.random().toString(36).slice(2, 10),
+          siteVisitId,
+          token: Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10),
+          clientName,
+          clientContact,
+          sentAt: new Date().toISOString(),
+          sentVia: 'link',
+          sentBy,
+          submittedAt: null,
+          createdAt: new Date().toISOString(),
+        };
+        db.sveInvites.push(invite);
+        demoSave();
+        return invite;
       },
     },
   };
@@ -931,6 +975,44 @@ function createLiveDataSource(): DataSource {
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
         };
+      },
+    },
+    sve: {
+      async listVisitsWithStatus() {
+        const client = requireClient();
+        const [visitsRes, invitesRes, submissionsRes] = await Promise.all([
+          client.from('site_visits').select('*').order('visit_date', { ascending: false }),
+          client.from('site_visit_experience_invites').select('*'),
+          client.from('site_visit_experience_submissions').select('*'),
+        ]);
+        if (visitsRes.error) throw visitsRes.error;
+        if (invitesRes.error) throw invitesRes.error;
+        if (submissionsRes.error) throw submissionsRes.error;
+
+        const invites = (invitesRes.data ?? []).map(mapSveInviteRow);
+        const submissions = (submissionsRes.data ?? []).map(mapSveSubmissionRow);
+
+        return (visitsRes.data ?? []).map(mapSiteVisitRow).map((siteVisit) => {
+          const invite = invites.find((i) => i.siteVisitId === siteVisit.id) ?? null;
+          const submission = invite ? (submissions.find((s) => s.inviteId === invite.id) ?? null) : null;
+          return { siteVisit, invite, submission };
+        });
+      },
+      async createInvite(siteVisitId, clientName, clientContact, sentBy) {
+        const { data, error } = await requireClient()
+          .from('site_visit_experience_invites')
+          .insert({
+            site_visit_id: siteVisitId,
+            client_name: clientName,
+            client_contact: clientContact,
+            sent_at: new Date().toISOString(),
+            sent_via: 'link',
+            sent_by: sentBy,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapSveInviteRow(data);
       },
     },
   };

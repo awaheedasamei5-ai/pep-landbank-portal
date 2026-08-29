@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, StreakRow } from '../../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -27,9 +27,11 @@ export interface DemoDb {
   // KPI has real demo data to aggregate, matching production's real
   // complaints.status column (confirmed live: default 'Open').
   complaints: { status: string }[];
+  sveInvites: SveInviteRecord[];
+  sveSubmissions: SveSubmissionRecord[];
 }
 
-const DEMO_VERSION = 8;
+const DEMO_VERSION = 9;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

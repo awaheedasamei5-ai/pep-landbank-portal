@@ -131,6 +131,48 @@ export function seedDemo(): DemoDb {
     },
   ];
 
+  // Mercy's visit has a closed-loop invite+submission (demonstrates the
+  // full cycle); Abena's visit deliberately has no invite yet, so the
+  // demo's "Send invite" action always has something real to exercise.
+  const sveInviteId = uid();
+  const sveInvites: DemoDb['sveInvites'] = [
+    {
+      id: sveInviteId,
+      siteVisitId: siteVisits[0].id,
+      token: 'demo-token-' + sveInviteId,
+      clientName: 'Mercy Owusu',
+      clientContact: '0240758072',
+      sentAt: isoPlusDays(t, -11),
+      sentVia: 'link',
+      sentBy: AGENT_KEY,
+      submittedAt: isoPlusDays(t, -10),
+      createdAt: isoPlusDays(t, -11),
+    },
+  ];
+
+  const sveSubmissions: DemoDb['sveSubmissions'] = [
+    {
+      id: uid(),
+      inviteId: sveInviteId,
+      fullName: 'Mercy Owusu',
+      phone: '0240758072',
+      siteVisited: 'Royal Palm Enclave',
+      visitDate: siteVisits[0].visitDate,
+      journeyRating: 'Excellent',
+      siteManagerName: 'Elias Torgbuivi',
+      relationshipRating: 5,
+      handlingFeedback: 'Elias was very patient and answered every question clearly.',
+      siteDescriptionRating: 'Met expectations',
+      belowExpectationReason: null,
+      overallRating: 5,
+      npsScore: 9,
+      improvementSuggestions: 'Maybe provide a printed site map to take home.',
+      purchaseIntent: 'need more time',
+      additionalComments: 'Really enjoyed the visit, discussing with my spouse before committing.',
+      createdAt: isoPlusDays(t, -10),
+    },
+  ];
+
   // referrerLeadId deliberately points at one of the leads above -- matches
   // the real RLS shape (an agent only ever sees a referral whose
   // referrer_lead_id belongs to one of their own leads), so the demo
@@ -265,7 +307,7 @@ export function seedDemo(): DemoDb {
 
   const complaints: DemoDb['complaints'] = [{ status: 'Open' }, { status: 'Resolved' }];
 
-  return { version: 8, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints };
+  return { version: 9, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

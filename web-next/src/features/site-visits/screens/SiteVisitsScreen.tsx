@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import type { SiteVisit } from '../../../types/domain';
 import { useSiteVisits } from '../hooks/useSiteVisits';
 import styles from './SiteVisitsScreen.module.css';
@@ -25,6 +26,8 @@ const DETAIL_FIELDS: { key: keyof SiteVisit; label: string }[] = [
 // styled as a meaningful multi-state tracker yet.
 export function SiteVisitsScreen() {
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
+  const hasSveAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel' || profile.key === 'elizabeth');
   const { data: visits, isLoading } = useSiteVisits();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -43,6 +46,11 @@ export function SiteVisitsScreen() {
         <div>
           <h1 className={styles.title}>Site visits</h1>
           <p className={styles.sub}>{visits?.length ?? 0} logged</p>
+          {hasSveAccess && (
+            <button type="button" onClick={() => navigate('/app/sales/sitevisits/experience')} style={{ background: 'none', border: 'none', color: 'var(--gold)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 4 }}>
+              Experience feedback →
+            </button>
+          )}
         </div>
         <button type="button" className={styles.addBtn} onClick={() => navigate('/app/sales/sitevisits/new')}>
           + Log visit
