@@ -24,7 +24,8 @@ import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
 import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
 import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
-import { StubScreen } from '../shared/ui/StubScreen';
+import { ChatScreen } from '../features/chat/screens/ChatScreen';
+import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -213,7 +214,8 @@ export const router = createBrowserRouter([
           </RequireRole>
         ),
       },
-      { path: 'chat', element: <StubScreen title="Chat" /> },
+      { path: 'chat', element: <ChatScreen /> },
+      { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },
     ],
   },

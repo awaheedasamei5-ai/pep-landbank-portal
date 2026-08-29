@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, ChatMessage, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -246,6 +246,24 @@ export function mapSveSubmissionRow(r: Record<string, unknown>): SveSubmissionRe
     purchaseIntent: (r.purchase_intent as string) ?? null,
     additionalComments: (r.additional_comments as string) ?? null,
     createdAt: r.created_at as string,
+  };
+}
+
+export function mapChatMessageRow(r: Record<string, unknown>): ChatMessage {
+  return {
+    id: r.id as string,
+    senderKey: r.sender_key as string,
+    senderName: r.sender_name as string,
+    recipientKey: (r.recipient_key as string) ?? null,
+    body: r.body as string,
+    createdAt: r.created_at as string,
+    read: !!r.read,
+    attachmentData: (r.attachment_data as string) ?? null,
+    attachmentType: (r.attachment_type as string) ?? null,
+    attachmentName: (r.attachment_name as string) ?? null,
+    kind: (r.kind as string) ?? null,
+    refType: (r.ref_type as string) ?? null,
+    refId: (r.ref_id as string) ?? null,
   };
 }
 

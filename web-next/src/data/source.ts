@@ -1,9 +1,10 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
 import {
   mapAttendanceRow,
+  mapChatMessageRow,
   mapEnquiryRow,
   mapLeadRow,
   mapMemoRow,
@@ -153,6 +154,17 @@ export interface DataSource {
   sve: {
     listVisitsWithStatus(): Promise<SveVisitStatus[]>;
     createInvite(siteVisitId: string, clientName: string, clientContact: string, sentBy: string): Promise<SveInviteRecord>;
+  };
+  // Real table `messages` -- strictly 1:1 staff-to-staff, kind IS NULL
+  // rows only (the same table also carries system notifications with a
+  // real `kind` set, deliberately left alone here). See the ChatMessage
+  // type's comment in types/domain.ts for the read-receipt RLS fix
+  // (messages_upd_recipient) applied this session.
+  chat: {
+    listConversations(myKey: string): Promise<ChatConversation[]>;
+    listThread(myKey: string, otherKey: string): Promise<ChatMessage[]>;
+    send(myKey: string, myName: string, otherKey: string, body: string): Promise<ChatMessage>;
+    markThreadRead(myKey: string, otherKey: string): Promise<void>;
   };
 }
 
@@ -558,6 +570,66 @@ function createDemoDataSource(): DataSource {
         db.sveInvites.push(invite);
         demoSave();
         return invite;
+      },
+    },
+    chat: {
+      async listConversations(myKey) {
+        const db = demoLoad();
+        const mine = db.chatMessages.filter((m) => !m.kind && (m.senderKey === myKey || m.recipientKey === myKey));
+        const byOther = new Map<string, ChatMessage[]>();
+        for (const m of mine) {
+          const other = m.senderKey === myKey ? (m.recipientKey ?? '') : m.senderKey;
+          if (!other) continue;
+          const arr = byOther.get(other) ?? [];
+          arr.push(m);
+          byOther.set(other, arr);
+        }
+        return [...byOther.entries()]
+          .map(([otherKey, msgs]) => {
+            const sorted = [...msgs].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+            const staffMatch = DEMO_STAFF.find((s) => s.key === otherKey);
+            const fromTheirOwnMessage = msgs.find((m) => m.senderKey === otherKey)?.senderName;
+            return {
+              otherKey,
+              otherName: staffMatch?.name ?? fromTheirOwnMessage ?? otherKey,
+              lastMessage: sorted[0] ?? null,
+              unreadCount: msgs.filter((m) => m.recipientKey === myKey && !m.read).length,
+            };
+          })
+          .sort((a, b) => ((a.lastMessage?.createdAt ?? '') < (b.lastMessage?.createdAt ?? '') ? 1 : -1));
+      },
+      async listThread(myKey, otherKey) {
+        return demoLoad()
+          .chatMessages.filter((m) => !m.kind && ((m.senderKey === myKey && m.recipientKey === otherKey) || (m.senderKey === otherKey && m.recipientKey === myKey)))
+          .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+      },
+      async send(myKey, myName, otherKey, body) {
+        const db = demoLoad();
+        const message: ChatMessage = {
+          id: Math.random().toString(36).slice(2, 10),
+          senderKey: myKey,
+          senderName: myName,
+          recipientKey: otherKey,
+          body,
+          createdAt: new Date().toISOString(),
+          read: false,
+          attachmentData: null,
+          attachmentType: null,
+          attachmentName: null,
+          kind: null,
+          refType: null,
+          refId: null,
+        };
+        db.chatMessages.push(message);
+        demoSave();
+        return message;
+      },
+      async markThreadRead(myKey, otherKey) {
+        const db = demoLoad();
+        for (const m of db.chatMessages) {
+          if (m.recipientKey === myKey && m.senderKey === otherKey && !m.read) m.read = true;
+        }
+        demoSave();
       },
     },
   };
@@ -1013,6 +1085,61 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapSveInviteRow(data);
+      },
+    },
+    chat: {
+      async listConversations(myKey) {
+        const client = requireClient();
+        const [messagesRes, staffRes] = await Promise.all([
+          client.from('messages').select('*').is('kind', null).or(`sender_key.eq.${myKey},recipient_key.eq.${myKey}`).order('created_at', { ascending: false }),
+          client.from('profiles').select('agent_key,name,role,email').eq('active', true),
+        ]);
+        if (messagesRes.error) throw messagesRes.error;
+        if (staffRes.error) throw staffRes.error;
+
+        const staff = (staffRes.data ?? []).map(mapProfileRow);
+        const mine = (messagesRes.data ?? []).map(mapChatMessageRow);
+        const byOther = new Map<string, ChatMessage[]>();
+        for (const m of mine) {
+          const other = m.senderKey === myKey ? (m.recipientKey ?? '') : m.senderKey;
+          if (!other) continue;
+          const arr = byOther.get(other) ?? [];
+          arr.push(m);
+          byOther.set(other, arr);
+        }
+        return [...byOther.entries()].map(([otherKey, msgs]) => {
+          const staffMatch = staff.find((s) => s.key === otherKey);
+          const fromTheirOwnMessage = msgs.find((m) => m.senderKey === otherKey)?.senderName;
+          return {
+            otherKey,
+            otherName: staffMatch?.name ?? fromTheirOwnMessage ?? otherKey,
+            lastMessage: msgs[0] ?? null,
+            unreadCount: msgs.filter((m) => m.recipientKey === myKey && !m.read).length,
+          };
+        });
+      },
+      async listThread(myKey, otherKey) {
+        const { data, error } = await requireClient()
+          .from('messages')
+          .select('*')
+          .is('kind', null)
+          .or(`and(sender_key.eq.${myKey},recipient_key.eq.${otherKey}),and(sender_key.eq.${otherKey},recipient_key.eq.${myKey})`)
+          .order('created_at', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapChatMessageRow);
+      },
+      async send(myKey, myName, otherKey, body) {
+        const { data, error } = await requireClient()
+          .from('messages')
+          .insert({ sender_key: myKey, sender_name: myName, recipient_key: otherKey, body })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapChatMessageRow(data);
+      },
+      async markThreadRead(myKey, otherKey) {
+        const { error } = await requireClient().from('messages').update({ read: true }).eq('recipient_key', myKey).eq('sender_key', otherKey).eq('read', false);
+        if (error) throw error;
       },
     },
   };

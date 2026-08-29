@@ -307,7 +307,58 @@ export function seedDemo(): DemoDb {
 
   const complaints: DemoDb['complaints'] = [{ status: 'Open' }, { status: 'Resolved' }];
 
-  return { version: 9, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions };
+  // A short, realistic 1:1 thread with 'management' -- deliberately not
+  // fully read (last inbound message unread) so the conversation list's
+  // unread badge has something real to show immediately.
+  const chatMessages: DemoDb['chatMessages'] = [
+    {
+      id: uid(),
+      senderKey: 'management',
+      senderName: 'Management',
+      recipientKey: AGENT_KEY,
+      body: 'Morning! Can you confirm the Royal Palm Enclave site visits for this week?',
+      createdAt: isoPlusDays(t, -1) + 'T09:02:00.000Z',
+      read: true,
+      attachmentData: null,
+      attachmentType: null,
+      attachmentName: null,
+      kind: null,
+      refType: null,
+      refId: null,
+    },
+    {
+      id: uid(),
+      senderKey: AGENT_KEY,
+      senderName: 'Elias Torgbuivi',
+      recipientKey: 'management',
+      body: 'Yes, Mercy and Abena are both confirmed. Sending the schedule now.',
+      createdAt: isoPlusDays(t, -1) + 'T09:05:00.000Z',
+      read: true,
+      attachmentData: null,
+      attachmentType: null,
+      attachmentName: null,
+      kind: null,
+      refType: null,
+      refId: null,
+    },
+    {
+      id: uid(),
+      senderKey: 'management',
+      senderName: 'Management',
+      recipientKey: AGENT_KEY,
+      body: "Great, thanks. Let me know how it goes -- don't forget to log the site visit afterward.",
+      createdAt: isoPlusDays(t, 0) + 'T08:30:00.000Z',
+      read: false,
+      attachmentData: null,
+      attachmentType: null,
+      attachmentName: null,
+      kind: null,
+      refType: null,
+      refId: null,
+    },
+  ];
+
+  return { version: 10, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

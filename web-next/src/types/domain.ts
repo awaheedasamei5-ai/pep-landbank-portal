@@ -466,3 +466,40 @@ export interface SveVisitStatus {
   invite: SveInviteRecord | null;
   submission: SveSubmissionRecord | null;
 }
+
+// Real table `messages` (confirmed live) -- strictly 1:1 staff-to-staff,
+// no group/company-wide channel. This same table doubles as a generic
+// staff-notification bus in production (schedule invites, allocation
+// PDFs, critical alerts all insert here with `kind` set); web-next's
+// Chat only ever reads/writes rows where kind IS NULL, leaving
+// notification-kind rows alone entirely -- not because they're unsafe to
+// touch, but because surfacing them as "chat" would misrepresent what
+// they are. Already in the `supabase_realtime` publication on both
+// staging and production (confirmed live) -- no migration needed for
+// realtime delivery itself. A real gap WAS found and fixed with the
+// user's approval: no UPDATE RLS policy existed at all (read-receipt
+// marking was silently a no-op under RLS, in index.html too, not just
+// here) -- messages_upd_recipient was added to both projects this
+// session, scoped to `recipient_key = my_key()`.
+export interface ChatMessage {
+  id: string;
+  senderKey: string;
+  senderName: string;
+  recipientKey: string | null;
+  body: string;
+  createdAt: string;
+  read: boolean;
+  attachmentData: string | null;
+  attachmentType: string | null;
+  attachmentName: string | null;
+  kind: string | null;
+  refType: string | null;
+  refId: string | null;
+}
+
+export interface ChatConversation {
+  otherKey: string;
+  otherName: string;
+  lastMessage: ChatMessage | null;
+  unreadCount: number;
+}

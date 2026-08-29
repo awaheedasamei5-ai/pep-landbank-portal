@@ -1,4 +1,4 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
+import type { AttendanceRecord, ChatMessage, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -29,9 +29,12 @@ export interface DemoDb {
   complaints: { status: string }[];
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
+  // kind is always null here -- this demo store never simulates the
+  // notification-bus side of the real `messages` table, only plain chat.
+  chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 9;
+const DEMO_VERSION = 10;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;
