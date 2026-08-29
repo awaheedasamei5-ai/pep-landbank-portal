@@ -29,6 +29,12 @@ export function seedDemo(): DemoDb {
     { id: uid(), agent: 'emmanuel', name: 'Efua Ansah', contact: '0248877665', date: isoPlusDays(t, -60), plotType: 'Full Plot', noPlots: 2, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 120000, grandTotal: 120000, stage: '4' },
     { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '3 Months', amtPaid: 16000, grandTotal: 48000, stage: '2A' },
     { id: uid(), agent: 'elizabeth', name: 'Ama Serwaa', contact: '0201998877', date: isoPlusDays(t, -33), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 60000, stage: 'Lost' },
+    // 'company' -- clients who came to the company directly, not through a
+    // specific agent (real agent_key='company' pattern, confirmed live).
+    // Appended at the end so existing leads[N] index references elsewhere
+    // in this file (Commission's seed) stay correct.
+    { id: uid(), agent: 'company', name: 'Nana Yeboah', contact: '0244009988', date: isoPlusDays(t, -3), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 0, grandTotal: 60000, stage: '1', leadSource: 'Facebook' },
+    { id: uid(), agent: 'company', name: 'Adjoa Frimpong', contact: '0559112233', date: isoPlusDays(t, -8), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 48000, stage: '1' },
   ];
 
   const payments: DemoDb['payments'] = [
@@ -441,7 +447,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 15, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, sveInvites, sveSubmissions, chatMessages };
+  return { version: 16, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

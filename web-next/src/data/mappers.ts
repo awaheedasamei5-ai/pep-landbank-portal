@@ -25,6 +25,8 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     grandTotal: Number(r.grand_total ?? 0),
     stage: (r.stage as Lead['stage']) ?? '1',
     notes: (r.notes as string) ?? undefined,
+    leadSource: (r.lead_source as string) ?? null,
+    bannerId: (r.banner_id as string) ?? null,
   };
 }
 

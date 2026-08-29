@@ -64,6 +64,14 @@ export interface DataSource {
     listAll(): Promise<Lead[]>;
     create(agentKey: string, input: NewLead): Promise<Lead>;
     get(agentKey: string, id: string): Promise<Lead | undefined>;
+    // Real RLS carve-out `leads_upd_company` (confirmed live): manager or
+    // elias/emmanuel/elizabeth can UPDATE a lead ONLY when its agent_key is
+    // literally 'company' -- clients who came to the company directly, not
+    // through a specific agent, sit in this shared pool until assigned.
+    // Same gate as Plot Inventory (canViewClientDatabase() in index.html).
+    listCompany(): Promise<Lead[]>;
+    assign(id: string, agentKey: string): Promise<Lead>;
+    setSource(id: string, source: string): Promise<Lead>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
   // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
@@ -277,6 +285,33 @@ function createDemoDataSource(): DataSource {
       },
       async get(agentKey, id) {
         return demoLoad().leads.find((l) => l.agent === agentKey && l.id === id);
+      },
+      async listCompany() {
+        return demoLoad().leads.filter((l) => l.agent === 'company');
+      },
+      async assign(id, agentKey) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        // Immutable update -- assigning removes this lead from the
+        // Company Leads list (agent no longer 'company'), the exact shape
+        // that bit contractRequests.fulfil()/payments.approve() before
+        // (see their comments): mutating in place there let the query
+        // cache pick up the change before the invalidated refetch ran,
+        // leaving the list one render behind.
+        const updated: Lead = { ...db.leads[index], agent: agentKey };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async setSource(id, source) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        const updated: Lead = { ...db.leads[index], leadSource: source };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+        return updated;
       },
     },
     payments: {
@@ -930,6 +965,21 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('leads').select('*').order('name');
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
+      },
+      async listCompany() {
+        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', 'company').order('date_added', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapLeadRow);
+      },
+      async assign(id, agentKey) {
+        const { data, error } = await requireClient().from('leads').update({ agent_key: agentKey }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
+      async setSource(id, source) {
+        const { data, error } = await requireClient().from('leads').update({ lead_source: source }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
       },
     },
     payments: {

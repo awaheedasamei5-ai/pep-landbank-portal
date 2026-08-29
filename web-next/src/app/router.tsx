@@ -33,6 +33,7 @@ import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen
 import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
+import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -114,6 +115,7 @@ export const router = createBrowserRouter([
       { path: 'sales/enquiries', element: <EnquiriesScreen /> },
       { path: 'sales/enquiries/new', element: <AddEnquiryScreen /> },
       { path: 'sales/complaints', element: <ComplaintsScreen /> },
+      { path: 'sales/company-leads', element: <CompanyLeadsScreen /> },
       { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },
       { path: 'office/myday', element: <MyDayScreen /> },

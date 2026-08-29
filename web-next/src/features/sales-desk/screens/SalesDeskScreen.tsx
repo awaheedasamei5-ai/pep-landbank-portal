@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useCanManageCompanyLeads } from '../../company-leads/hooks/useCompanyLeads';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 
 // Port of salesDeskGroupsForAgent()'s items (index.html:8843-8860) --
@@ -10,6 +11,7 @@ export function SalesDeskScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
   const hasPlotAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
+  const canManageCompanyLeads = useCanManageCompanyLeads();
 
   const items: TileItem[] = [
     { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', glyph: '📈', onOpen: () => navigate('/app/sales/pipeline') },
@@ -21,6 +23,9 @@ export function SalesDeskScreen() {
     { key: 'enquiry', label: 'Client enquiry', sub: 'Log what prospects ask about', color: 'blue', glyph: '❓', onOpen: () => navigate('/app/sales/enquiries') },
     { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', glyph: '🎁', onOpen: () => navigate('/app/sales/referrals') },
     { key: 'complaints', label: 'Complaints', sub: 'Log & resolve client issues', color: 'red', glyph: '⚠️', onOpen: () => navigate('/app/sales/complaints') },
+    ...(canManageCompanyLeads
+      ? [{ key: 'companyleads', label: 'Company Leads', sub: 'Leads shared company-wide, not tied to one agent', color: 'purple', glyph: '🏢', onOpen: () => navigate('/app/sales/company-leads') } satisfies TileItem]
+      : []),
   ];
 
   return (

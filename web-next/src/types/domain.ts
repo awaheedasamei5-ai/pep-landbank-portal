@@ -31,6 +31,13 @@ export interface Lead {
   grandTotal: number;
   stage: Stage;
   notes?: string;
+  // Real columns `lead_source`/`banner_id` (confirmed live) -- optional
+  // since only Company Leads currently sets them; every other lead has
+  // both null. bannerId stays a dormant pass-through here (Banner
+  // Tracking, the feature that gives it meaning, isn't built in web-next
+  // yet), same treatment Complaints gave its unused source/sentiment.
+  leadSource?: string | null;
+  bannerId?: string | null;
 }
 
 export interface NewLead {
