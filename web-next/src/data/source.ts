@@ -1,8 +1,8 @@
-import type { Config, Enquiry, Lead, NewEnquiry, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, NewEnquiry, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapEnquiryRow, mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import { mapAttendanceRow, mapEnquiryRow, mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -62,6 +62,19 @@ export interface DataSource {
   enquiries: {
     listForAgent(agentKey: string): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
+  };
+  // Real table `attendance_log` (confirmed live, currently 0 production
+  // rows), one row per (staff_key, work_date) enforced by a real unique
+  // index. No RPC exists -- signIn/signOut here do the "does today's row
+  // exist" / "is sign_out_at already set" checks the app itself must make
+  // instead of relying on a server-side function. See AttendanceRecord's
+  // comment in types/domain.ts for why late/off-site are self-reported
+  // rather than computed.
+  attendance: {
+    today(staffKey: string): Promise<AttendanceRecord | null>;
+    history(staffKey: string, days: number): Promise<AttendanceRecord[]>;
+    signIn(staffKey: string, staffName: string, input: SignInInput): Promise<AttendanceRecord>;
+    signOut(staffKey: string, id: string, input: SignOutInput): Promise<AttendanceRecord>;
   };
 }
 
@@ -268,6 +281,63 @@ function createDemoDataSource(): DataSource {
         db.enquiries.push(enquiry);
         demoSave();
         return enquiry;
+      },
+    },
+    attendance: {
+      async today(staffKey) {
+        const workDate = new Date().toISOString().slice(0, 10);
+        return demoLoad().attendance.find((a) => a.staffKey === staffKey && a.workDate === workDate) ?? null;
+      },
+      async history(staffKey, days) {
+        const from = new Date();
+        from.setDate(from.getDate() - days);
+        const fromIso = from.toISOString().slice(0, 10);
+        return demoLoad()
+          .attendance.filter((a) => a.staffKey === staffKey && a.workDate >= fromIso)
+          .sort((a, b) => (a.workDate < b.workDate ? 1 : -1));
+      },
+      async signIn(staffKey, staffName, input) {
+        const workDate = new Date().toISOString().slice(0, 10);
+        const db = demoLoad();
+        if (db.attendance.some((a) => a.staffKey === staffKey && a.workDate === workDate)) {
+          throw new Error("You've already signed in today");
+        }
+        const record: AttendanceRecord = {
+          id: Math.random().toString(36).slice(2, 10),
+          staffKey,
+          staffName,
+          workDate,
+          signInAt: new Date().toISOString(),
+          signInLat: input.lat ?? null,
+          signInLng: input.lng ?? null,
+          signOutAt: null,
+          signOutLat: null,
+          signOutLng: null,
+          notes: null,
+          createdAt: new Date().toISOString(),
+          lateReason: input.late ? (input.lateReason ?? null) : null,
+          signInReason: input.offSite ? (input.reason ?? null) : null,
+          signOutReason: null,
+          isOffSiteIn: input.offSite ?? false,
+          isOffSiteOut: null,
+          signInPhoto: null,
+        };
+        db.attendance.push(record);
+        demoSave();
+        return record;
+      },
+      async signOut(staffKey, id, input) {
+        const db = demoLoad();
+        const record = db.attendance.find((a) => a.id === id && a.staffKey === staffKey);
+        if (!record) throw new Error('Sign in first before signing out');
+        if (record.signOutAt) throw new Error("You've already signed out today");
+        record.signOutAt = new Date().toISOString();
+        record.signOutLat = input.lat ?? null;
+        record.signOutLng = input.lng ?? null;
+        record.isOffSiteOut = input.offSite ?? false;
+        record.signOutReason = input.offSite ? (input.reason ?? null) : null;
+        demoSave();
+        return record;
       },
     },
   };
@@ -492,6 +562,72 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapEnquiryRow(data);
+      },
+    },
+    attendance: {
+      async today(staffKey) {
+        const workDate = new Date().toISOString().slice(0, 10);
+        const { data, error } = await requireClient().from('attendance_log').select('*').eq('staff_key', staffKey).eq('work_date', workDate).maybeSingle();
+        if (error) throw error;
+        return data ? mapAttendanceRow(data) : null;
+      },
+      async history(staffKey, days) {
+        const from = new Date();
+        from.setDate(from.getDate() - days);
+        const fromIso = from.toISOString().slice(0, 10);
+        const { data, error } = await requireClient()
+          .from('attendance_log')
+          .select('*')
+          .eq('staff_key', staffKey)
+          .gte('work_date', fromIso)
+          .order('work_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceRow);
+      },
+      async signIn(staffKey, staffName, input) {
+        const client = requireClient();
+        const workDate = new Date().toISOString().slice(0, 10);
+        const { data: existing, error: existingError } = await client.from('attendance_log').select('id').eq('staff_key', staffKey).eq('work_date', workDate).maybeSingle();
+        if (existingError) throw existingError;
+        if (existing) throw new Error("You've already signed in today");
+        const { data, error } = await client
+          .from('attendance_log')
+          .insert({
+            staff_key: staffKey,
+            staff_name: staffName,
+            work_date: workDate,
+            sign_in_at: new Date().toISOString(),
+            sign_in_lat: input.lat ?? null,
+            sign_in_lng: input.lng ?? null,
+            is_off_site_in: input.offSite ?? false,
+            sign_in_reason: input.offSite ? (input.reason ?? null) : null,
+            late_reason: input.late ? (input.lateReason ?? null) : null,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceRow(data);
+      },
+      async signOut(staffKey, id, input) {
+        const client = requireClient();
+        const { data: existing, error: existingError } = await client.from('attendance_log').select('sign_out_at').eq('id', id).eq('staff_key', staffKey).single();
+        if (existingError) throw existingError;
+        if (existing.sign_out_at) throw new Error("You've already signed out today");
+        const { data, error } = await client
+          .from('attendance_log')
+          .update({
+            sign_out_at: new Date().toISOString(),
+            sign_out_lat: input.lat ?? null,
+            sign_out_lng: input.lng ?? null,
+            is_off_site_out: input.offSite ?? false,
+            sign_out_reason: input.offSite ? (input.reason ?? null) : null,
+          })
+          .eq('id', id)
+          .eq('staff_key', staffKey)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceRow(data);
       },
     },
   };

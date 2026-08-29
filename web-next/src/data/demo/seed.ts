@@ -169,7 +169,38 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 5, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries };
+  // Production's real attendance_log table has 0 rows today (confirmed
+  // live -- a genuinely unused-so-far feature) so there's no real shape to
+  // match beyond the schema itself. Seeding a small past history only --
+  // deliberately nothing for *today*, so the demo's Sign In flow always
+  // starts fresh on a new session, matching how a real staff member's day
+  // actually begins.
+  const attendance: DemoDb['attendance'] = [];
+  for (let i = 1; i <= 3; i++) {
+    const day = isoPlusDays(t, -i);
+    attendance.push({
+      id: uid(),
+      staffKey: AGENT_KEY,
+      staffName: 'Elias Torgbuivi',
+      workDate: day,
+      signInAt: `${day}T08:05:00.000Z`,
+      signInLat: 5.6037,
+      signInLng: -0.187,
+      signOutAt: `${day}T17:12:00.000Z`,
+      signOutLat: 5.6037,
+      signOutLng: -0.187,
+      notes: null,
+      createdAt: `${day}T08:05:00.000Z`,
+      lateReason: null,
+      signInReason: null,
+      signOutReason: null,
+      isOffSiteIn: false,
+      isOffSiteOut: false,
+      signInPhoto: null,
+    });
+  }
+
+  return { version: 6, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

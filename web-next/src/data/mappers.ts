@@ -1,4 +1,4 @@
-import type { Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
+import type { AttendanceRecord, Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -148,6 +148,29 @@ export function mapEnquiryRow(r: Record<string, unknown>): Enquiry {
     follow: (r.follow as string) ?? null,
     followDate: (r.follow_date as string) ?? null,
     createdAt: r.created_at as string,
+  };
+}
+
+export function mapAttendanceRow(r: Record<string, unknown>): AttendanceRecord {
+  return {
+    id: r.id as string,
+    staffKey: r.staff_key as string,
+    staffName: (r.staff_name as string) ?? null,
+    workDate: r.work_date as string,
+    signInAt: (r.sign_in_at as string) ?? null,
+    signInLat: r.sign_in_lat == null ? null : Number(r.sign_in_lat),
+    signInLng: r.sign_in_lng == null ? null : Number(r.sign_in_lng),
+    signOutAt: (r.sign_out_at as string) ?? null,
+    signOutLat: r.sign_out_lat == null ? null : Number(r.sign_out_lat),
+    signOutLng: r.sign_out_lng == null ? null : Number(r.sign_out_lng),
+    notes: (r.notes as string) ?? null,
+    createdAt: r.created_at as string,
+    lateReason: (r.late_reason as string) ?? null,
+    signInReason: (r.sign_in_reason as string) ?? null,
+    signOutReason: (r.sign_out_reason as string) ?? null,
+    isOffSiteIn: r.is_off_site_in == null ? null : !!r.is_off_site_in,
+    isOffSiteOut: r.is_off_site_out == null ? null : !!r.is_off_site_out,
+    signInPhoto: (r.sign_in_photo as string) ?? null,
   };
 }
 

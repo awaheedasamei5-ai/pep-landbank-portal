@@ -257,3 +257,55 @@ export interface NewEnquiry {
   follow?: string;
   followDate?: string;
 }
+
+// Real table `attendance_log` (confirmed live, 17 columns) -- currently 0
+// rows in production, a genuinely unused-so-far feature, not a guess.
+// Exactly ONE row per (staff_key, work_date), enforced by a real unique
+// index -- sign-in creates the row, sign-out is an UPDATE to the same row,
+// never a second row. RLS: staff insert/select/update their own
+// (staff_key = my_key()), manager sees/edits all, only manager deletes --
+// same shape as site_visits. No RPC exists (no clock_in()/clock_out()) --
+// the app itself must check "does today's row already exist" before
+// inserting, and "is sign_out_at already set" before updating, since the
+// unique index would otherwise surface as a raw constraint-violation error.
+// There's also no shift-start-time or office-geofence-radius config
+// anywhere in the schema -- late/off-site are real columns but nothing
+// computes them automatically, so they're self-reported (a checkbox +
+// reason), not derived from geolocation math that isn't backed by any
+// real reference point.
+export interface AttendanceRecord {
+  id: string;
+  staffKey: string;
+  staffName: string | null;
+  workDate: string;
+  signInAt: string | null;
+  signInLat: number | null;
+  signInLng: number | null;
+  signOutAt: string | null;
+  signOutLat: number | null;
+  signOutLng: number | null;
+  notes: string | null;
+  createdAt: string;
+  lateReason: string | null;
+  signInReason: string | null;
+  signOutReason: string | null;
+  isOffSiteIn: boolean | null;
+  isOffSiteOut: boolean | null;
+  signInPhoto: string | null;
+}
+
+export interface SignInInput {
+  lat?: number;
+  lng?: number;
+  offSite?: boolean;
+  reason?: string;
+  late?: boolean;
+  lateReason?: string;
+}
+
+export interface SignOutInput {
+  lat?: number;
+  lng?: number;
+  offSite?: boolean;
+  reason?: string;
+}

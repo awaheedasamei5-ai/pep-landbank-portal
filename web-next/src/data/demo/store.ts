@@ -1,4 +1,4 @@
-import type { Config, Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, SiteVisit, StreakRow } from '../../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, SiteVisit, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -19,9 +19,10 @@ export interface DemoDb {
   siteVisits: SiteVisit[];
   referrals: Referral[];
   enquiries: Enquiry[];
+  attendance: AttendanceRecord[];
 }
 
-const DEMO_VERSION = 5;
+const DEMO_VERSION = 6;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;
