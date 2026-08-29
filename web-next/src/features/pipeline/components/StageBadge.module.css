@@ -6,7 +6,7 @@
   font-weight: 700;
   letter-spacing: .02em;
 }
-.lost { background: rgba(180, 71, 47, .12); color: var(--danger); }
-.paid { background: rgba(22, 163, 74, .12); color: var(--ok); }
-.mid { background: rgba(184, 121, 30, .12); color: var(--warn); }
-.early { background: rgba(2, 132, 199, .12); color: var(--info); }
+.lost { background: rgb(180 71 47 / 12%); color: var(--danger); }
+.paid { background: rgb(22 163 74 / 12%); color: var(--ok); }
+.mid { background: rgb(184 121 30 / 12%); color: var(--warn); }
+.early { background: rgb(2 132 199 / 12%); color: var(--info); }

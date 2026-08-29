@@ -9,6 +9,7 @@
   padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
   z-index: 50;
 }
+
 .tab {
   flex: 1;
   display: flex;
@@ -23,6 +24,7 @@
   padding: 4px 2px;
   cursor: pointer;
 }
+
 .tab.on {
   color: var(--green);
 }

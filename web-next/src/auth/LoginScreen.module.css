@@ -6,6 +6,7 @@
   background: linear-gradient(180deg, var(--ink) 0%, var(--green) 60%, var(--leaf) 100%);
   padding: var(--sp-5);
 }
+
 .card {
   width: 100%;
   max-width: 380px;
@@ -15,17 +16,20 @@
   box-shadow: var(--shadow-lg);
   text-align: center;
 }
+
 .title {
   font-weight: var(--fw-bold);
   font-size: var(--fs-2xl);
   color: var(--text);
   margin: 0 0 var(--sp-1);
 }
+
 .sub {
   color: var(--muted);
   font-size: var(--fs-sm);
   margin: 0 0 var(--sp-5);
 }
+
 .btn {
   display: block;
   width: 100%;
@@ -37,11 +41,13 @@
   cursor: pointer;
   margin-bottom: var(--sp-3);
 }
+
 .btnAgent {
   composes: btn;
   background: var(--green);
   color: #fff;
 }
+
 .btnManager {
   composes: btn;
   background: var(--paper);

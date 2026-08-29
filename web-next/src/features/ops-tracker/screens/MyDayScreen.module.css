@@ -3,6 +3,7 @@
 .sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
 .addRow { display: flex; gap: 8px; margin-bottom: 18px; }
 .input { flex: 1; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; }
+
 .addBtn {
   background: var(--green);
   color: #fff;
@@ -13,6 +14,7 @@
   cursor: pointer;
 }
 .addBtn:disabled { opacity: .6; cursor: default; }
+
 .row {
   display: flex;
   align-items: center;
@@ -23,6 +25,7 @@
   padding: 13px 14px;
   margin-bottom: 8px;
 }
+
 .check {
   width: 24px;
   height: 24px;
@@ -37,6 +40,7 @@
   color: transparent;
   font-size: 13px;
 }
+
 .checkDone {
   composes: check;
   background: var(--ok);

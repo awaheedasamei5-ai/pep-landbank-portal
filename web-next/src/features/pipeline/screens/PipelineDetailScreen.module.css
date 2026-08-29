@@ -1,5 +1,6 @@
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
 .head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+
 .avatar {
   width: 46px;
   height: 46px;
@@ -17,6 +18,7 @@
 .name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
 .meta { color: var(--muted); font-size: 12.5px; margin: 2px 0 0; }
 .pillsWrap { margin-bottom: 20px; }
+
 .section {
   background: var(--card);
   border: 1px solid var(--line);
@@ -28,6 +30,7 @@
 .field { margin-bottom: 12px; }
 .label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 .input { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; }
+
 .btn {
   width: 100%;
   padding: 12px;

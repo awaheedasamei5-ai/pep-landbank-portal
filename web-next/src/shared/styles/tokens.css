@@ -1,4 +1,4 @@
-/* Ported verbatim from index.html's <style> block (:root, body.dark, and the
+/* Ported verbatim from index.html's \3c style> block (:root, body.dark, and the
    streak-milestone skin overrides) -- same token NAMES and VALUES, so any
    component styled against these matches production exactly. Do not rename
    or re-value without also updating index.html, until cutover. */
@@ -6,13 +6,13 @@
   --user-font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --ink: #1E1B4B; --ink2: #312E81; --green: #4F46E5; --green2: #6366F1; --leaf: #818CF8;
   --gold: #7C3AED; --gold2: #A78BFA; --premium: #C9A227; --premium2: #E8C766;
-  --paper: #F5F5FB; --card: #FFFFFF; --line: #E5E4F0;
+  --paper: #F5F5FB; --card: #FFF; --line: #E5E4F0;
   --text: #1B1A33; --muted: #68678A; --danger: #B4472F; --warn: #B8791E; --info: #0284C7; --ok: #16A34A;
-  --shadow: 0 1px 2px rgba(30,27,75,.06), 0 10px 28px rgba(30,27,75,.08);
-  --shadow-lg: 0 18px 44px rgba(30,27,75,.18);
-  --glow-lime: 0 0 0 1px rgba(79,70,229,.18), 0 8px 24px rgba(79,70,229,.14);
-  --glow-blue: 0 0 0 1px rgba(129,140,248,.18), 0 8px 24px rgba(129,140,248,.14);
-  --glass: rgba(255,255,255,.68);
+  --shadow: 0 1px 2px rgb(30 27 75 / 6%), 0 10px 28px rgb(30 27 75 / 8%);
+  --shadow-lg: 0 18px 44px rgb(30 27 75 / 18%);
+  --glow-lime: 0 0 0 1px rgb(79 70 229 / 18%), 0 8px 24px rgb(79 70 229 / 14%);
+  --glow-blue: 0 0 0 1px rgb(129 140 248 / 18%), 0 8px 24px rgb(129 140 248 / 14%);
+  --glass: rgb(255 255 255 / 68%);
   --wave: linear-gradient(180deg,#0B0A1F 0%,#1E1B4B 32%,#4F46E5 58%,#A78BFA 78%,#F5F5FB 100%);
   --r: 20px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
@@ -20,17 +20,19 @@
   --fs-xs: 12px; --fs-sm: 13.5px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 22px; --fs-2xl: 28px;
   --fw-reg: 500; --fw-semi: 700; --fw-bold: 800;
 }
+
 body.dark {
   --paper: #120F26; --card: #211D4A; --line: #332F5E; --text: #ECEAF9; --muted: #9C97C4;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
-  --shadow-lg: 0 18px 44px rgba(0,0,0,.5);
-  --glass: rgba(33,29,74,.7);
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 28px rgb(0 0 0 / 35%);
+  --shadow-lg: 0 18px 44px rgb(0 0 0 / 50%);
+  --glass: rgb(33 29 74 / 70%);
 }
 body[data-skin="sunset"] { --ink: #7C2D12; --ink2: #9A3412; --green: #EA580C; --green2: #F97316; --leaf: #FB923C; --gold: #DC2626; --gold2: #F87171; }
 body[data-skin="emerald"] { --ink: #064E3B; --ink2: #065F46; --green: #059669; --green2: #10B981; --leaf: #34D399; --gold: #0D9488; --gold2: #2DD4BF; }
 body[data-skin="royal"] { --ink: #3B0764; --ink2: #581C87; --green: #7C2D92; --green2: #9333EA; --leaf: #C084FC; --gold: #B45309; --gold2: #F59E0B; }
 
 *, *::before, *::after { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: var(--user-font-family);

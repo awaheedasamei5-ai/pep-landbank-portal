@@ -10,9 +10,11 @@ desktop.ini
 *.log
 npm-debug.log*
 
-# Environment / secrets (none used here, but just in case)
+# Environment / secrets (none used here, but just in case). *.example files
+# are safe, secret-free templates meant to be committed -- un-ignore those.
 .env
 .env.*
+!.env.*.example
 
 # Capacitor mobile wrapper (Phase 4) -- node_modules and native build output
 # are regenerated from package.json + www/, never hand-edited, so they don't
