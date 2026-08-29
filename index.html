@@ -512,6 +512,15 @@ a{color:var(--green2)}
 .kpi.green .kpi-ic{background:rgba(255,255,255,.25)}
 .kpi.green .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
 .kpi.green .kpi-delta.up,.kpi.green .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
+/* Fourth accent (Phase 7) -- none of hero/gold/green fit an "Overdue" card
+   semantically, same reasoning as .statCard.red in the Phase S dashboard pass. */
+.kpi.red{background:linear-gradient(150deg,#E0836A,var(--danger));border-color:transparent;color:#fff}
+.kpi.red .kpi-label{color:rgba(255,255,255,.75)}
+.kpi.red .v{color:#fff}
+.kpi.red .kpi-caption{color:rgba(255,255,255,.65)}
+.kpi.red .kpi-ic{background:rgba(255,255,255,.25)}
+.kpi.red .kpi-expand{background:rgba(255,255,255,.2);color:#fff}
+.kpi.red .kpi-delta.up,.kpi.red .kpi-delta.down{background:rgba(255,255,255,.22);color:#fff}
 /* Same full-colour recipe, extended to the dashboard's second-row stat/chart
    cards (Phase S) -- these stayed flat white while the KPI row above them
    already got the colour treatment, reading as unfinished rather than
@@ -8510,6 +8519,35 @@ function dutySparklineCardHtml(title,series,color){
     ${svgBarChart(series,dayLabels,{width:220,height:110,color,gap:.4})}
   </div>`;
 }
+// Same card shape as dutySparklineCardHtml, generalized to any label set --
+// used for the manager's per-staff workload breakdown (Phase 7) instead of
+// a fixed Sun-Sat week axis.
+function dutyLabeledBarCardHtml(title,labels,series,color){
+  const total=series.reduce((a,b)=>a+b,0);
+  return `<div class="dutySparkCard">
+    <div class="mini" style="font-weight:700">${esc(title)}</div>
+    <div style="font-size:22px;font-weight:800;margin:2px 0 4px">${total}</div>
+    ${svgBarChart(series,labels,{width:220,height:110,color,gap:.4})}
+  </div>`;
+}
+// Manager-only: open + overdue task count per staff member, so workload
+// distribution is visible without leaving the Tasks tab. Only counts real
+// current-state tasks (not period-scoped, same reasoning as
+// computeDutiesSummary's Open/Overdue).
+function dutiesStaffBreakdownHtml(tasks){
+  const rows=STAFF_LIST.map(s=>{
+    const mine=tasks.filter(t=>t.assignedTo===s.key);
+    const open=mine.filter(t=>t.status==='Open'||t.status==='In Progress'||t.status==='Blocked'||t.status==='Awaiting Approval').length;
+    const overdue=mine.filter(t=>t.dueDate&&t.dueDate<today()&&t.status!=='Done'&&t.status!=='Cancelled').length;
+    return {name:(s.name||'').split(' ')[0]||s.key,open,overdue};
+  }).filter(r=>r.open>0); // only staff carrying any open work -- keeps labels legible in a narrow chart
+  if(!rows.length) return '';
+  const labels=rows.map(r=>r.name);
+  return `<div class="dutySparkRow">
+    ${dutyLabeledBarCardHtml('Open by staff',labels,rows.map(r=>r.open),'#4F46E5')}
+    ${dutyLabeledBarCardHtml('Overdue by staff',labels,rows.map(r=>r.overdue),'#DC2626')}
+  </div>`;
+}
 /* ---- lightweight dependency-free charts ---- */
 function svgLineChart(values,labels,opts={}){
   const w=opts.width||600,h=opts.height||170,pad=30;
@@ -11828,15 +11866,23 @@ let dutiesCatFilter='';
 let dutiesStatusFilter='';
 function daysBetween(a,b){ const d1=new Date(a),d2=new Date(b); if(isNaN(d1)||isNaN(d2)) return null; return Math.max(0,Math.round((d2-d1)/86400000)); }
 function taskDaysOpen(t){ const end=t.completedAt||new Date().toISOString(); return daysBetween(t.createdAt,end); }
-function computeDutiesSummary(tasks){
+// range (optional, {from,to}) scopes only Completed/Avg-days-to-close --
+// Open/Overdue are always current-state counts (unaffected by period,
+// since "how many things are open right now" isn't meaningful re-scoped to
+// a past week). Backward compatible: every existing caller passes no range
+// and gets the exact same all-time behavior as before.
+function computeDutiesSummary(tasks,range){
   const open=tasks.filter(t=>t.status==='Open'||t.status==='In Progress'||t.status==='Blocked'||t.status==='Awaiting Approval');
   const overdue=open.filter(t=>t.dueDate&&t.dueDate<today());
-  const done=tasks.filter(t=>t.status==='Done'&&t.completedAt);
+  let done=tasks.filter(t=>t.status==='Done'&&t.completedAt);
+  if(range) done=done.filter(t=>{ const d=(t.completedAt||'').slice(0,10); return d>=range.from&&d<=range.to; });
   const avgDays=done.length?Math.round(done.reduce((s,t)=>s+(daysBetween(t.createdAt,t.completedAt)||0),0)/done.length):null;
   return {openCount:open.length,overdueCount:overdue.length,doneCount:done.length,avgDaysToClose:avgDays};
 }
 /* ================= TO-DO LIST (time-boxed personal planner, w/ alarms) ================= */
 let DUTIES_TAB='myday';
+let DUTIES_PERIOD='all'; // scopes Completed/Avg-days-to-close only, see computeDutiesSummary
+let DUTIES_GROUPED=false; // flat rowcard list (false) vs status-grouped sections (true)
 let MONTH_CURSOR=today().slice(0,7);
 let MYDAY_DATE=today();
 let TODO_LOADED=false, TODO_LIST=[], TODO_DATE='';
@@ -12679,7 +12725,8 @@ async function viewDuties(){
   const mine=all.filter(t=>t.assignedTo===PROFILE.key);
   const byMe=all.filter(t=>t.assignedBy===PROFILE.key&&t.assignedTo!==PROFILE.key);
   const isMgr=PROFILE.role==='manager';
-  const teamSummary=computeDutiesSummary(isMgr?all:mine);
+  const dutiesRange=DUTIES_PERIOD==='all'?null:reportPeriodRange(DUTIES_PERIOD);
+  const teamSummary=computeDutiesSummary(isMgr?all:mine,dutiesRange);
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Operations Tracker</h2><p>${isMgr?'Every task, who owns it, and how long it’s been open':'Your tasks, and anything you’ve assigned or been escalated'}</p></div></div>
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${DUTIES_TAB==='myday'?'on':''}" data-dutiestab="myday">My Day</button>
@@ -12693,7 +12740,8 @@ async function viewDuties(){
   <div id="dutiesMonthBody" class="${DUTIES_TAB==='month'?'':'hidden'}"><div class="skel" style="height:280px;border-radius:16px"></div></div>
   <div id="dutiesTasksBody" class="${DUTIES_TAB==='tasks'?'':'hidden'}">
   <div id="dutiesRequestsInbox"></div>
-  <div class="kpis">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}${kpi('Avg days to close',teamSummary.avgDaysToClose!=null?teamSummary.avgDaysToClose:'—')}</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">${['all','week','month','year'].map(k=>`<button class="chip ${DUTIES_PERIOD===k?'on':''}" data-dutiesperiod="${k}">${k==='all'?'All time':k==='week'?'This week':k==='month'?'This month':'This year'}</button>`).join('')}</div>
+  <div class="kpis">${kpi('Open',teamSummary.openCount,'hero')}${kpi('Overdue',teamSummary.overdueCount,'red')}${kpi('Completed',teamSummary.doneCount,'green')}${kpi('Avg days to close',teamSummary.avgDaysToClose!=null?teamSummary.avgDaysToClose:'—','gold')}</div>
   ${(()=>{ const totalTasks=teamSummary.openCount+teamSummary.doneCount; const donePct=totalTasks?Math.round(teamSummary.doneCount/totalTasks*100):0;
     return `<div class="rowcard chartCard" style="display:flex;align-items:center;gap:18px;padding:18px;margin-bottom:18px">
       ${progressRing(donePct,donePct>=70?'#4F46E5':'#F59E0B',80)}
@@ -12703,10 +12751,13 @@ async function viewDuties(){
     const opened=days.map(k=>scope.filter(t=>(t.createdAt||'').slice(0,10)===k).length);
     const done=days.map(k=>scope.filter(t=>(t.completedAt||'').slice(0,10)===k).length);
     return `<div class="dutySparkRow">${dutySparklineCardHtml('Opened this week',opened,'#4F46E5')}${dutySparklineCardHtml('Completed this week',done,'#22C55E')}</div>`; })()}
+  ${isMgr?dutiesStaffBreakdownHtml(all):''}
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button class="chip ${dutiesFilter==='mine'?'on':''}" data-dutiesfilter="mine">Mine (${mine.length})</button><button class="chip ${dutiesFilter==='byme'?'on':''}" data-dutiesfilter="byme">Assigned by me (${byMe.length})</button>${isMgr?`<button class="chip ${dutiesFilter==='all'?'on':''}" data-dutiesfilter="all">Team (${all.length})</button>`:''}</div>
   <div class="searchbar" style="margin-bottom:10px"><input id="dutiesSearchInput" placeholder="Filter by name or title…" value="${esc(dutiesSearch)}"/>
   <select id="dutiesCatSelect"><option value="">All categories</option>${TASK_CATEGORIES.map(c=>`<option value="${esc(c)}" ${c===dutiesCatFilter?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
-  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">${TASK_STATUSES.map(s=>`<button class="chip ${dutiesStatusFilter===s?'on':''}" data-dutiesstatus="${esc(s)}">${esc(s)}</button>`).join('')}${dutiesStatusFilter?`<button class="chip" data-dutiesstatus="">✕ Clear status</button>`:''}</div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">${TASK_STATUSES.map(s=>`<button class="chip ${dutiesStatusFilter===s?'on':''}" data-dutiesstatus="${esc(s)}">${esc(s)}</button>`).join('')}${dutiesStatusFilter?`<button class="chip" data-dutiesstatus="">✕ Clear status</button>`:''}
+    <button class="chip" id="dutiesGroupToggle" style="margin-left:auto">${DUTIES_GROUPED?'☰ Flat list':'▤ Group by status'}</button>
+  </div>
   <div class="list" id="dutiesList"></div>
   </div>
   <div id="dutiesTodoBody" class="${DUTIES_TAB==='todo'?'':'hidden'}"><div class="skel" style="height:80px;border-radius:16px"></div></div>
@@ -12847,14 +12898,32 @@ function paintDuties(){
     <div class="foot"><span class="chip" style="pointer-events:none">Open →</span></div>
   </div>`;};
   const addCard=`<button type="button" class="dutyAddCard" id="newTaskBtn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Add task</button>`;
-  document.getElementById('dutiesList').innerHTML=(list.length?list.map(rowOf).join(''):emptyState(ic.grid,'Nothing here','Try adjusting your filters, or assign a task to get started.'))+addCard;
+  let bodyHtml;
+  if(!list.length){
+    bodyHtml=emptyState(ic.grid,'Nothing here','Try adjusting your filters, or assign a task to get started.');
+  }else if(DUTIES_GROUPED){
+    // Status-grouped sections instead of one flat list -- real scanability
+    // for a manager triaging a big board, matching how Linear/Trello-style
+    // task trackers group by column rather than one long feed.
+    bodyHtml=TASK_STATUSES.map(s=>{
+      const rows=list.filter(t=>t.status===s);
+      if(!rows.length) return '';
+      return `<div class="sectitle" style="margin-top:16px"><h3>${esc(s)}</h3><span class="cnt">${rows.length}</span></div>${rows.map(rowOf).join('')}`;
+    }).join('');
+  }else{
+    bodyHtml=list.map(rowOf).join('');
+  }
+  document.getElementById('dutiesList').innerHTML=bodyHtml+addCard;
   bindDutiesRowCtrls();
 }
 function bindDutiesCtrls(){
   document.querySelectorAll('[data-dutiesfilter]').forEach(b=>b.onclick=()=>{ dutiesFilter=b.dataset.dutiesfilter; viewDuties(); });
   document.querySelectorAll('[data-dutiesstatus]').forEach(b=>b.onclick=()=>{ dutiesStatusFilter=b.dataset.dutiesstatus; viewDuties(); });
+  document.querySelectorAll('[data-dutiesperiod]').forEach(b=>b.onclick=()=>{ DUTIES_PERIOD=b.dataset.dutiesperiod; viewDuties(); });
   document.getElementById('dutiesSearchInput').oninput=debounce(e=>{ dutiesSearch=e.target.value; paintDuties(); });
   document.getElementById('dutiesCatSelect').onchange=e=>{ dutiesCatFilter=e.target.value; paintDuties(); };
+  const groupBtn=document.getElementById('dutiesGroupToggle');
+  if(groupBtn) groupBtn.onclick=()=>{ DUTIES_GROUPED=!DUTIES_GROUPED; groupBtn.textContent=DUTIES_GROUPED?'☰ Flat list':'▤ Group by status'; paintDuties(); };
 }
 function bindDutiesRowCtrls(){
   document.querySelectorAll('[data-taskopen]').forEach(b=>b.onclick=()=>route('taskDetail',b.dataset.taskopen));
