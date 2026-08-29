@@ -786,3 +786,23 @@ export interface AllocationRequest {
 export interface NewAllocationRequest {
   leadId: string;
 }
+
+// Real table `notes` (confirmed live): a private per-staff scratchpad.
+// notes_sel lets a manager also SELECT anyone's notes (a real, if unusual,
+// oversight allowance -- not built into the UI here, this screen only
+// ever queries/mutates the caller's own), but INSERT/UPDATE/DELETE are
+// strictly owner-only. Full CRUD, no scoped-down subset needed -- this is
+// genuinely as simple as the real feature itself.
+export interface Note {
+  id: string;
+  ownerKey: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewNote {
+  title: string;
+  body: string;
+}

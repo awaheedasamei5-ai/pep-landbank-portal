@@ -476,6 +476,19 @@ export function seedDemo(): DemoDb {
     },
   ];
 
+  // Private per-staff scratchpad -- one real note, not fictional filler.
+  const notesTimestamp = `${t}T09:15:00.000Z`;
+  const notes: DemoDb['notes'] = [
+    {
+      id: uid(),
+      ownerKey: AGENT_KEY,
+      title: 'Follow-up call script',
+      body: 'Lead with the current promo, confirm site visit availability before quoting a price.',
+      createdAt: isoPlusDays(t, -4) + 'T09:15:00.000Z',
+      updatedAt: notesTimestamp,
+    },
+  ];
+
   // A short, realistic 1:1 thread with 'management' -- deliberately not
   // fully read (last inbound message unread) so the conversation list's
   // unread badge has something real to show immediately.
@@ -527,7 +540,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 20, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 21, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

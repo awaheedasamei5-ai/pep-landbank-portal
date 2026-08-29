@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -13,6 +13,7 @@ import {
   mapLeadRow,
   mapLeaveRequestRow,
   mapMemoRow,
+  mapNoteRow,
   mapPaymentRow,
   mapPlotRow,
   mapProfileRow,
@@ -204,6 +205,16 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<AllocationRequest[]>;
     create(agentKey: string, agentName: string, input: NewAllocationRequest): Promise<AllocationRequest>;
     allocate(id: string, plotNumber: string, note: string | undefined, allocatedBy: string): Promise<AllocationRequest>;
+  };
+  // Real table `notes` -- a private per-staff scratchpad. notes_sel also
+  // lets a manager SELECT anyone's notes (confirmed live), not used here --
+  // this always scopes to the caller's own via ownerKey, matching every
+  // real write policy (INSERT/UPDATE/DELETE are all strictly owner-only).
+  notes: {
+    listForOwner(ownerKey: string): Promise<Note[]>;
+    create(ownerKey: string, input: NewNote): Promise<Note>;
+    update(id: string, input: NewNote): Promise<Note>;
+    remove(id: string): Promise<void>;
   };
   // Real table `attendance_log` (confirmed live, currently 0 production
   // rows), one row per (staff_key, work_date) enforced by a real unique
@@ -751,6 +762,35 @@ function createDemoDataSource(): DataSource {
         db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
         demoSave();
         return updated;
+      },
+    },
+    notes: {
+      async listForOwner(ownerKey) {
+        return demoLoad()
+          .notes.filter((n) => n.ownerKey === ownerKey)
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      },
+      async create(ownerKey, input) {
+        const now = new Date().toISOString();
+        const note: Note = { id: Math.random().toString(36).slice(2, 10), ownerKey, title: input.title, body: input.body, createdAt: now, updatedAt: now };
+        const db = demoLoad();
+        db.notes.push(note);
+        demoSave();
+        return note;
+      },
+      async update(id, input) {
+        const db = demoLoad();
+        const index = db.notes.findIndex((n) => n.id === id);
+        if (index === -1) throw new Error('Note not found');
+        const updated: Note = { ...db.notes[index], title: input.title, body: input.body, updatedAt: new Date().toISOString() };
+        db.notes = [...db.notes.slice(0, index), updated, ...db.notes.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.notes = db.notes.filter((n) => n.id !== id);
+        demoSave();
       },
     },
     attendance: {
@@ -1528,6 +1568,27 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
+      },
+    },
+    notes: {
+      async listForOwner(ownerKey) {
+        const { data, error } = await requireClient().from('notes').select('*').eq('owner_key', ownerKey).order('updated_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapNoteRow);
+      },
+      async create(ownerKey, input) {
+        const { data, error } = await requireClient().from('notes').insert({ owner_key: ownerKey, title: input.title, body: input.body }).select().single();
+        if (error) throw error;
+        return mapNoteRow(data);
+      },
+      async update(id, input) {
+        const { data, error } = await requireClient().from('notes').update({ title: input.title, body: input.body, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapNoteRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('notes').delete().eq('id', id);
+        if (error) throw error;
       },
     },
     attendance: {

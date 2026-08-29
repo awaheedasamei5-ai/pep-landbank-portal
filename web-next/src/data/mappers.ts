@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -345,6 +345,17 @@ export function mapAllocationRequestRow(r: Record<string, unknown>): AllocationR
     allocatedBy: (r.allocated_by as string) ?? null,
     createdAt: r.created_at as string,
     resolvedAt: (r.resolved_at as string) ?? null,
+  };
+}
+
+export function mapNoteRow(r: Record<string, unknown>): Note {
+  return {
+    id: r.id as string,
+    ownerKey: r.owner_key as string,
+    title: (r.title as string) ?? '',
+    body: (r.body as string) ?? '',
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
   };
 }
 
