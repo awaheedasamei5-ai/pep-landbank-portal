@@ -5544,7 +5544,8 @@ async function apiLoadAllocations(){
       percent:r.percent_paid,grandTotal:r.grand_total,amtPaid:r.amt_paid,status:r.status,plotNumber:r.plot_number,
       suggestedPlots:r.suggested_plots,note:r.note,allocatedBy:r.allocated_by,agentSeen:r.agent_seen,createdAt:(r.created_at||'').slice(0,16).replace('T',' '),
       resolvedAt:r.resolved_at?(r.resolved_at||'').slice(0,16).replace('T',' '):null,
-      flagReason:r.flag_reason,flaggedBy:r.flagged_by,flaggedAt:r.flagged_at?(r.flagged_at||'').slice(0,16).replace('T',' '):null}));
+      flagReason:r.flag_reason,flaggedBy:r.flagged_by,flaggedAt:r.flagged_at?(r.flagged_at||'').slice(0,16).replace('T',' '):null,
+      history:r.history||[]}));
   }catch(e){ return []; }
 }
 /* ================= PUSH NOTIFICATIONS (native app only, no-op on the web) =================
@@ -6461,17 +6462,23 @@ async function apiResolveAllocationFlag(id){
   const {error}=await sb.from('allocation_requests').update({flag_reason:null,flagged_by:null,flagged_at:null}).eq('id',id);
   if(error) throw error;
 }
+// One shared shape for every allocation audit-trail entry -- mirrors exactly
+// what the server-side RPCs (confirm_allocation/revert_allocation/
+// edit_allocated_plot/reset_allocation_for_plot) append to the `history`
+// jsonb column, so DEMO_MODE's local mutations produce an identical shape.
+function allocHistoryEvent(type,extra){ return {type,at:new Date().toISOString(),by:PROFILE.name,...(extra||{})}; }
 async function apiInsertAllocationRequest(lead,percent){
   const row={leadId:lead.id,clientName:lead.name,agentKey:PROFILE.key,agentName:PROFILE.name,percent,
     grandTotal:computeLead(lead).grand,amtPaid:num(lead.amtPaid),status:'Pending',agentSeen:false};
-  if(DEMO_MODE){ const d=await demoLoad(); const rec={id:uid(),...row,createdAt:today()+' '+nowTime()};
+  const initialHistory=[allocHistoryEvent('requested',{percent})];
+  if(DEMO_MODE){ const d=await demoLoad(); const rec={id:uid(),...row,createdAt:today()+' '+nowTime(),history:initialHistory};
     d.allocations=d.allocations||[]; d.allocations.unshift(rec); await demoSave(); return rec; }
   try{ const {data,error}=await sb.from('allocation_requests').insert({lead_id:row.leadId,client_name:row.clientName,
     agent_key:row.agentKey,agent_name:row.agentName,percent_paid:row.percent,grand_total:row.grandTotal,amt_paid:row.amtPaid,
-    status:'Pending',agent_seen:false}).select().single(); if(error) throw error;
+    status:'Pending',agent_seen:false,history:initialHistory}).select().single(); if(error) throw error;
     return {id:data.id,leadId:data.lead_id,clientName:data.client_name,agentKey:data.agent_key,agentName:data.agent_name,
       percent:data.percent_paid,grandTotal:data.grand_total,amtPaid:data.amt_paid,status:data.status,agentSeen:false,
-      createdAt:(data.created_at||'').slice(0,16).replace('T',' ')};
+      createdAt:(data.created_at||'').slice(0,16).replace('T',' '),history:data.history||initialHistory};
   }catch(e){ return null; } // table not set up yet
 }
 async function apiSuggestAllocationPlots(id,plotsList){
@@ -6480,18 +6487,48 @@ async function apiSuggestAllocationPlots(id,plotsList){
   const {error}=await sb.from('allocation_requests').update({status:'Awaiting Authorization',suggested_plots:plotsList.join(',')}).eq('id',id);
   if(error) throw error;
 }
-async function apiResolveAllocation(id,plotNumber,note){
+// eventType lets the caller distinguish a first-time allocation ('allocated')
+// from a reassignment ('reassigned') in the audit trail -- both go through
+// this one function in DEMO_MODE (the live path uses the separate
+// confirm_allocation/edit_allocated_plot RPCs, which log their own events).
+async function apiResolveAllocation(id,plotNumber,note,eventType){
   const nowIso=new Date().toISOString();
+  const evt=allocHistoryEvent(eventType||'allocated',{plotNumber,note});
   if(DEMO_MODE){ const d=await demoLoad(); const a=(d.allocations||[]).find(x=>x.id===id);
-    if(a){ a.status='Allocated'; a.plotNumber=plotNumber; a.note=note; a.allocatedBy=PROFILE.name; a.resolvedAt=nowIso.slice(0,16).replace('T',' '); } await demoSave(); return; }
+    if(a){ a.status='Allocated'; a.plotNumber=plotNumber; a.note=note; a.allocatedBy=PROFILE.name; a.resolvedAt=nowIso.slice(0,16).replace('T',' ');
+      a.history=(a.history||[]).concat(evt); } await demoSave(); return; }
   const {error}=await sb.from('allocation_requests').update({status:'Allocated',plot_number:plotNumber,note,allocated_by:PROFILE.name,resolved_at:nowIso}).eq('id',id);
-  if(error) throw error;
+  if(error) throw error; // note: live confirm/edit flows go through confirm_allocation/edit_allocated_plot RPCs, not this function
 }
 async function apiRevertAllocation(id){
   if(DEMO_MODE){ const d=await demoLoad(); const a=(d.allocations||[]).find(x=>x.id===id);
-    if(a){ a.status='Pending'; a.plotNumber=''; a.note=''; a.allocatedBy=''; } await demoSave(); return; }
+    if(a){ const evt=allocHistoryEvent('reverted',{plotNumber:a.plotNumber});
+      a.status='Pending'; a.plotNumber=''; a.note=''; a.allocatedBy=''; a.resolvedAt=null; a.history=(a.history||[]).concat(evt); } await demoSave(); return; }
   const {error}=await sb.from('allocation_requests').update({status:'Pending',plot_number:null,note:null,allocated_by:null,resolved_at:null}).eq('id',id);
   if(error) throw error;
+}
+// Cascades a plot deletion/status-change (Plot Inventory side) back to any
+// allocation row that referenced it, so the client returns to the Pending
+// queue instead of being stuck showing "Allocated" against a plot that no
+// longer exists or no longer qualifies. Returns the list of reset allocations
+// (id/leadId/clientName) so the caller can sync DB.allocations + notify.
+async function apiResetAllocationForPlot(plotNumber,reason){
+  if(!plotNumber) return [];
+  if(DEMO_MODE){
+    const d=await demoLoad(); const reset=[];
+    (d.allocations||[]).forEach(a=>{
+      if(a.status==='Allocated' && String(a.plotNumber||'').split(',').map(s=>s.trim().toLowerCase()).includes(plotNumber.toLowerCase())){
+        const evt=allocHistoryEvent('reset',{plotNumber:a.plotNumber,reason});
+        a.status='Pending'; a.plotNumber=''; a.note=''; a.allocatedBy=''; a.resolvedAt=null; a.history=(a.history||[]).concat(evt);
+        reset.push({id:a.id,leadId:a.leadId,clientName:a.clientName});
+      }
+    });
+    if(reset.length) await demoSave();
+    return reset;
+  }
+  const {data,error}=await sb.rpc('reset_allocation_for_plot',{p_plot_number:plotNumber,p_reason:reason||null});
+  if(error) throw error;
+  return (data&&data.reset)||[];
 }
 async function apiDeleteAllocation(id){
   if(DEMO_MODE){ const d=await demoLoad(); d.allocations=(d.allocations||[]).filter(x=>x.id!==id); await demoSave(); return; }
@@ -7495,7 +7532,7 @@ function mapAllocationRow(r){
     percent:r.percent_paid,grandTotal:r.grand_total,amtPaid:r.amt_paid,status:r.status,agentSeen:r.agent_seen,
     createdAt:(r.created_at||'').slice(0,16).replace('T',' '),plotNumber:r.plot_number,note:r.note,
     allocatedBy:r.allocated_by,resolvedAt:(r.resolved_at||'').slice(0,16).replace('T',' '),suggestedPlots:r.suggested_plots,
-    flagReason:r.flag_reason,flaggedBy:r.flagged_by,flaggedAt:r.flagged_at};
+    flagReason:r.flag_reason,flaggedBy:r.flagged_by,flaggedAt:r.flagged_at,history:r.history||[]};
 }
 let ALLOCATIONS_LIVE_CHANNEL=null;
 function ensureAllocationsLiveSubscribed(){
@@ -10755,6 +10792,28 @@ async function submitBulkPlots(){
   }
   plotBulkOpen=false; toast(added+' plot(s) added'+(skipped?', '+skipped+' skipped (already existed)':'')); refreshPlotsView();
 }
+// Shared by both edit and delete below: if a plot stops being 'Allocated'
+// from the Plot Inventory side, any allocation_requests row still pointing
+// at it is stuck showing "Allocated" against a plot that no longer
+// qualifies -- the client silently never returns to the Allocation Request
+// queue. This resets those rows back to Pending (and logs the reset in the
+// allocation's own audit trail) so the client reappears where staff expect.
+async function cascadePlotNoLongerAllocated(plotNumber,reason){
+  try{
+    const reset=await apiResetAllocationForPlot(plotNumber,reason);
+    if(reset && reset.length){
+      reset.forEach(r=>{ const a=(DB.allocations||[]).find(x=>x.id===r.id);
+        if(!a) return;
+        Object.assign(a,{status:'Pending',plotNumber:'',note:'',allocatedBy:'',resolvedAt:null});
+        // DEMO_MODE already pushed this event by reference inside
+        // apiResetAllocationForPlot (same shared cached object) -- only mirror
+        // it here for the live path, same reasoning as the other 3 handlers.
+        if(!DEMO_MODE) a.history=(a.history||[]).concat({type:'reset',plotNumber,reason,by:PROFILE.name,at:new Date().toISOString()});
+      });
+      toast(reset.length+' client'+(reset.length===1?'':'s')+' returned to the Allocation Request queue');
+    }
+  }catch(e){} // non-fatal -- the plot edit/delete itself already succeeded
+}
 async function savePlotDetail(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   const btn=document.getElementById('savePlot'); btn.disabled=true; btn.textContent='Saving…';
@@ -10766,14 +10825,17 @@ async function savePlotDetail(){
     const changes=[]; if(patch.status!==before.status) changes.push('status: '+before.status+' → '+patch.status);
     if(num(patch.price)!==num(before.price)) changes.push('price: '+ghs(num(before.price))+' → '+ghs(num(patch.price)));
     addActivity('Plot '+p.plotNumber,'Plot edited',changes.length?changes.join(' · '):'Details updated','by '+PROFILE.name,'',null);
+    if(before.status==='Allocated' && patch.status!=='Allocated') await cascadePlotNoLongerAllocated(p.plotNumber,'Plot status changed to '+patch.status);
   }
   catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
 }
 async function deleteSelectedPlot(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
   if(!confirm('Remove plot '+p.plotNumber+' from inventory?')) return;
-  try{ await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView();
+  try{ const wasAllocated=p.status==='Allocated';
+    await apiDeletePlot(p.id); DB.plots=DB.plots.filter(x=>x.id!==p.id); selectedPlotId=null; toast('Plot removed'); refreshPlotsView();
     addActivity('Plot '+p.plotNumber,'Plot deleted','Removed from inventory by '+PROFILE.name,'','',null);
+    if(wasAllocated) await cascadePlotNoLongerAllocated(p.plotNumber,'Plot removed from inventory');
   }
   catch(e){ toast('Delete failed'); }
 }
@@ -13278,7 +13340,13 @@ function bindAllocationAwaitingCtrls(a,wrap){
           const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
           if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
         });
+        // The RPC already wrote this event server-side (confirm_allocation) --
+        // mirror it into the in-memory copy since, unlike DEMO_MODE (which
+        // mutates the same cached object by reference), a live RPC's response
+        // doesn't carry the updated history array back to the client.
+        a.history=(a.history||[]).concat({type:'allocated',plotNumber:r.plot_number,note:r.note,by:r.allocated_by,at:r.resolved_at});
       }
+      addActivity(a.clientName,'Plot allocated','Plot '+plot+' allocated by '+PROFILE.name,'','',null);
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocated','Plot '+plot+' has been allocated to you. Log in to view the details and download your allocation confirmation.').catch(()=>{}); }
       toast('Allocation confirmed — '+a.agentName+' will see it on their dashboard');
       wrap.innerHTML=renderAllocationDone(a); bindAllocationDoneCtrls(a);
@@ -13293,6 +13361,7 @@ function bindAllocationDoneCtrls(a){
   wrap.querySelectorAll('[data-undoalloc]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Undo this allocation? Plot '+a.plotNumber+' goes back to Available and this request returns to Pending so you can pick a different plot.')) return;
     b.disabled=true; b.textContent='Undoing…';
+    const revertedPlot=a.plotNumber;
     try{
       if(DEMO_MODE){ await vacatePlotForAllocation(a); await apiRevertAllocation(a.id); }
       else{
@@ -13303,8 +13372,12 @@ function bindAllocationDoneCtrls(a){
         // confirmation.
         const {data:r,error}=await sb.rpc('revert_allocation',{p_allocation_id:a.id}); if(error) throw error;
         if(r.plot){ const pIdx=DB.plots.findIndex(x=>x.id===r.plot.id); if(pIdx>=0) Object.assign(DB.plots[pIdx],{status:r.plot.status,clientName:r.plot.clientName,clientContact:r.plot.clientContact,agentKey:r.plot.agentKey}); }
+        // Mirror the event the RPC already wrote server-side (see the confirm
+        // handler above for why this is live-only, not DEMO_MODE too).
+        a.history=(a.history||[]).concat({type:'reverted',plotNumber:revertedPlot,by:PROFILE.name,at:new Date().toISOString()});
       }
-      Object.assign(a,{status:'Pending',plotNumber:'',note:'',allocatedBy:''});
+      Object.assign(a,{status:'Pending',plotNumber:'',note:'',allocatedBy:'',resolvedAt:null});
+      addActivity(a.clientName,'Allocation reverted','Plot '+revertedPlot+' allocation undone by '+PROFILE.name,'','',null);
       toast('Allocation undone — back in Pending'); selectedAllocId=null;
       PROFILE.role==='manager'?managerView():viewAllocations();
     }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Mistake? Undo — send back to Pending'; }
@@ -13347,7 +13420,7 @@ function openEditAllocatedPlotModal(a){
       const oldPlotNumber=a.plotNumber;
       if(DEMO_MODE){
         await vacatePlotForAllocation(a);
-        await apiResolveAllocation(a.id,newPlot,a.note||'');
+        await apiResolveAllocation(a.id,newPlot,a.note||'','reassigned');
         if(canManagePlots()){
           if(conflict){ await apiUpdatePlot(conflict.id,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); Object.assign(conflict,{status:'Allocated',clientName:a.clientName,agentKey:a.agentKey}); }
           else{ const newPlotRec=await apiInsertPlot({site:PLOT_SITE,plotNumber:newPlot,plotType:'Full Plot',status:'Allocated',
@@ -13373,8 +13446,12 @@ function openEditAllocatedPlotModal(a){
           const pIdx=DB.plots.findIndex(x=>x.id===plotObj.id||x.plotNumber.toLowerCase()===plotObj.plotNumber.toLowerCase());
           if(pIdx>=0) Object.assign(DB.plots[pIdx],plotObj); else DB.plots.unshift(plotObj);
         });
+        // Mirror the event edit_allocated_plot already wrote server-side (see
+        // the confirm handler above for why this is live-only, not DEMO_MODE).
+        a.history=(a.history||[]).concat({type:'reassigned',fromPlot:oldPlotNumber,toPlot:newPlot,by:PROFILE.name,at:new Date().toISOString()});
       }
       Object.assign(a,{plotNumber:newPlot});
+      addActivity(a.clientName,'Allocation reassigned','Plot '+(oldPlotNumber||'—')+' → '+newPlot+' by '+PROFILE.name,'','',null);
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocation updated','Your allocated plot is now '+newPlot+'. Log in to view the details.').catch(()=>{}); }
       toast('Allocation updated — now Plot '+newPlot); ov.remove();
       PROFILE.role==='manager'?managerView():viewAllocations();
@@ -13458,9 +13535,28 @@ async function formCustomer(arg){
       detail:r.requestedByName||r.requestedBy?('By '+(r.requestedByName||r.requestedBy)):''}); });
   mPlotReqs.forEach(r=>{ events.push({date:(r.createdAt||'').slice(0,10),type:'Plot request',label:'Additional plot requested'+(r.status==='pending'?' · pending':' · '+(r.status||'')),icon:ic.plotrequest||ic.doc,cls:'lime',
       detail:(r.plotType||'')+(r.noPlots?' ×'+r.noPlots:'')}); });
+  // Real audit trail (allocation_requests.history, Phase 1 of the 2026-08-29
+  // batch) -- every allocate/revert/reassign/reset shows up as its own dated
+  // entry instead of re-deriving at most 2 synthetic events from the row's
+  // current flat fields, which used to make a reversal (and any reallocation
+  // after it) invisible here. Rows written before this column existed have
+  // an empty history array -- fall back to the old 2-event derivation for those.
   mAllocs.forEach(a=>{
-    events.push({date:(a.createdAt||'').slice(0,10),type:'Allocation',label:'Allocation requested ('+(a.percent!=null?a.percent+'% paid':'')+')',icon:ic.allocation||ic.doc,cls:'gold',detail:a.note||''});
-    if(a.status==='Allocated' && a.resolvedAt) events.push({date:(a.resolvedAt||'').slice(0,10),type:'Allocation',label:'Plot allocated'+(a.plotNumber?' · '+a.plotNumber:''),icon:ic.allocation||ic.doc,cls:'green',detail:''});
+    const hist=(a.history&&a.history.length)?a.history:[
+      {type:'requested',at:a.createdAt,percent:a.percent},
+      ...(a.status==='Allocated'&&a.resolvedAt?[{type:'allocated',at:a.resolvedAt,plotNumber:a.plotNumber}]:[])
+    ];
+    hist.forEach(h=>{
+      const date=(h.at||a.createdAt||'').slice(0,10);
+      let label,cls;
+      if(h.type==='requested'){ label='Allocation requested'+((h.percent!=null?h.percent:a.percent)!=null?(' ('+(h.percent!=null?h.percent:a.percent)+'% paid)'):''); cls='amber'; }
+      else if(h.type==='allocated'){ label='Plot allocated'+(h.plotNumber?' · '+h.plotNumber:''); cls='green'; }
+      else if(h.type==='reverted'){ label='Allocation reverted'+(h.plotNumber?' · '+h.plotNumber+' freed':''); cls='red'; }
+      else if(h.type==='reassigned'){ label='Plot reassigned'+(h.fromPlot?' · '+h.fromPlot:'')+(h.toPlot?' → '+h.toPlot:''); cls='blue'; }
+      else if(h.type==='reset'){ label='Allocation reset — plot no longer available'+(h.plotNumber?' · '+h.plotNumber:'')+(h.reason?' ('+h.reason+')':''); cls='red'; }
+      else { label='Allocation update'; cls='grey'; }
+      events.push({date,type:'Allocation',label,icon:ic.allocation||ic.doc,cls,detail:h.by?('by '+h.by):(h.note||a.note||'')});
+    });
   });
   events.sort((x,y)=>(y.date||'').localeCompare(x.date||''));
 
