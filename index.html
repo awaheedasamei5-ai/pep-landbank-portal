@@ -571,10 +571,23 @@ a{color:var(--green2)}
    them. Pure CSS (opposite-phased animation-delay on an identical keyframe),
    no JS interval to clean up. */
 .streakMoodStack{position:relative;min-height:48px;min-width:210px}
-.streakMoodPane{display:flex;align-items:center;gap:14px;position:absolute;inset:0;animation:streakMoodFade 10s ease-in-out infinite}
-.streakMoodPane.paneB{animation-delay:-5s}
+.streakMoodPane{display:flex;align-items:center;gap:14px;position:absolute;inset:0;animation:streakMoodFade 16s ease-in-out infinite}
+.streakMoodPane.paneB{animation-delay:-8s}
 @keyframes streakMoodFade{0%,42%{opacity:1}50%,92%{opacity:0}100%{opacity:1}}
-.streakEmoji{font-size:40px;line-height:1;flex:0 0 auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.25))}
+/* Real motion, not a static glyph -- each mood/risk icon is now a Fluent
+   Emoji 3D render (github.com/microsoft/fluentui-emoji, MIT) instead of one
+   flat character, with a continuous float+tilt+breathe loop so it reads as
+   genuinely alive rather than a picture standing in for an emoji. The
+   crossfade above was slowed from 10s to 16s (same phase relationship,
+   -8s = half cycle) so it doesn't compete with this now-busier motion. */
+.streakEmoji3d{width:44px;height:44px;flex:0 0 auto;display:block;filter:drop-shadow(0 6px 10px rgba(0,0,0,.22));
+  animation:streakEmoji3dMotion 3.2s ease-in-out infinite}
+@keyframes streakEmoji3dMotion{
+  0%,100%{transform:translateY(0) rotate(0deg) scale(1)}
+  25%{transform:translateY(-4px) rotate(-4deg) scale(1.03)}
+  50%{transform:translateY(-7px) rotate(0deg) scale(1.06)}
+  75%{transform:translateY(-4px) rotate(4deg) scale(1.03)}
+}
 .streakNum{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace}
 .streakLbl{font-size:12.5px;opacity:.92;margin-top:2px;font-weight:600}
 .streakWeekRow{display:flex;justify-content:space-between;gap:6px}
@@ -592,7 +605,7 @@ a{color:var(--green2)}
   .streakCard{padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:24px}
   .streakCardTop{margin-bottom:0;flex:0 0 auto}
   .streakMoodStack{min-width:250px;min-height:58px}
-  .streakEmoji{font-size:48px}
+  .streakEmoji3d{width:52px;height:52px}
   .streakNum{font-size:22px}
   .streakWeekRow{flex:0 0 auto;gap:10px}
   .streakWeekDay{flex:0 0 auto}
@@ -10010,6 +10023,26 @@ function computeRunningStreakLength(history){
   for(const r of rows){ if(r.dayMet) len++; else break; }
   return len;
 }
+// The real per-agent specifics behind the "Pipeline critical" style labels --
+// which used to be one of three canned strings with no names, counts, or
+// reasons attached. Every field here is a genuine computed signal, not a
+// category, so riskMoodLabel() below can say exactly what's actually wrong.
+function computeAgentActivitySignals(agentKey){
+  const thisMonth=today().slice(0,7);
+  const myLeads=(DB.leads||[]).filter(l=>l.agent===agentKey);
+  const lastLeadDate=myLeads.map(l=>l.date).filter(Boolean).sort().pop();
+  const daysSinceLastLead=lastLeadDate?daysSince(lastLeadDate):null;
+  const myVisits=(DB.sitevisits||[]).filter(v=>v.agentKey===agentKey);
+  const lastVisitDate=myVisits.map(v=>v.date).filter(Boolean).sort().pop();
+  const daysSinceLastSiteVisit=lastVisitDate?daysSince(lastVisitDate):null;
+  // "Hasn't paid yet this month" specifically -- distinct from arrears (money
+  // owed from EARLIER months, already surfaced elsewhere by getMonthlyPlanClients).
+  const monthlyPlanClients=getMonthlyPlanClients(myLeads).filter(l=>l.__sched.expectedThisMonth>0);
+  const unpaidThisMonth=monthlyPlanClients.filter(l=>!(DB.payments||[]).some(p=>p.leadId===l.id&&(p.date||'').slice(0,7)===thisMonth));
+  const closedThisMonth=myLeads.filter(l=>isFullyPaid(l)&&monthKey(l.date)===thisMonth).length;
+  return {daysSinceLastLead,daysSinceLastSiteVisit,
+    unpaidThisMonthCount:unpaidThisMonth.length,unpaidThisMonthNames:unpaidThisMonth.map(l=>l.name),closedThisMonth};
+}
 function computeMonthlyRisk(){
   const d=new Date(today()+'T00:00:00');
   const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
@@ -10028,20 +10061,20 @@ function computeMonthlyRisk(){
 // broken) -- one lookup table so a future custom emoji/asset set is a
 // one-line swap here, not a rebuild.
 const STREAK_MOOD={
-  dull:{emoji:'😴',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
-  danger:{emoji:'😰',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:"Don't let it break!"},
+  dull:{emoji:'😴',img:'./emoji3d/sleeping_face.png',bg:'linear-gradient(135deg,#64748B,#475569)',label:"Log today's to-do to wake me up"},
+  danger:{emoji:'😰',img:'./emoji3d/anxious_face.png',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:"Don't let it break!"},
   // Distinct from 'zero' (never started, or broken days ago) -- this fires
   // for exactly one day, the day a real streak (3+ days) just died, so the
   // mood actually matches what happened instead of looking identical to
   // someone who simply never got going.
-  justBroken:{emoji:'💔',bg:'linear-gradient(135deg,#B91C1C,#78350F)',label:'Streak broken — start a new one today'},
-  zero:{emoji:'🙂',bg:'linear-gradient(135deg,#7C3AED,#5B21B6)',label:"Let's start a streak"},
-  building:{emoji:'😊',bg:'linear-gradient(135deg,#2563EB,#1D4ED8)',label:'Keep it going'},
-  solid:{emoji:'🔥',bg:'linear-gradient(135deg,#F59E0B,#D97706)',label:'On fire'},
+  justBroken:{emoji:'💔',img:'./emoji3d/broken_heart.png',bg:'linear-gradient(135deg,#B91C1C,#78350F)',label:'Streak broken — start a new one today'},
+  zero:{emoji:'🙂',img:'./emoji3d/slightly_smiling.png',bg:'linear-gradient(135deg,#7C3AED,#5B21B6)',label:"Let's start a streak"},
+  building:{emoji:'😊',img:'./emoji3d/smiling_eyes.png',bg:'linear-gradient(135deg,#2563EB,#1D4ED8)',label:'Keep it going'},
+  solid:{emoji:'🔥',img:'./emoji3d/fire.png',bg:'linear-gradient(135deg,#F59E0B,#D97706)',label:'On fire'},
   // Distinct from generic 'legendary'/'solid' -- this month's collected is
   // this agent's best month ever, regardless of exactly how long the streak is.
-  bestMonth:{emoji:'🏆',bg:'linear-gradient(135deg,#EAB308,#B45309)',label:'Best month yet — keep it up'},
-  legendary:{emoji:'🤩',bg:'linear-gradient(135deg,#EAB308,#7C3AED)',label:'Legendary'}
+  bestMonth:{emoji:'🏆',img:'./emoji3d/trophy.png',bg:'linear-gradient(135deg,#EAB308,#B45309)',label:'Best month yet — keep it up'},
+  legendary:{emoji:'🤩',img:'./emoji3d/star_struck.png',bg:'linear-gradient(135deg,#EAB308,#7C3AED)',label:'Legendary'}
 };
 function computeStreakMoodKey(streakLen,todayMet,monthRiskTier,justBrokeStreak,isBestMonthEver){
   const nowHHMM=new Date().toISOString().slice(11,16);
@@ -10078,9 +10111,10 @@ async function evaluateMyStreak(){
     const priorStreakLen=computeRunningStreakLength(history.filter(r=>r.date!==today()));
     const justBrokeStreak=priorStreakLen>=3 && streakLen===0;
     const risk=computeMonthlyRisk();
+    const signals=computeAgentActivitySignals(PROFILE.key);
     const isBestMonthEver=isBestCollectedMonthEver();
     const moodKey=computeStreakMoodKey(streakLen,todoLogged,risk.tier,justBrokeStreak,isBestMonthEver);
-    MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,moodKey,mood:STREAK_MOOD[moodKey],history};
+    MY_STREAK={streakLen,todoLogged,leadAdded,siteVisitBooked,risk,signals,moodKey,mood:STREAK_MOOD[moodKey],history};
     checkSkinMilestones(streakLen).catch(()=>{});
     return MY_STREAK;
   }catch(e){ return null; }
@@ -10104,7 +10138,28 @@ function streakWeekRowHtml(history){
 // mood, the card now shows BOTH, crossfading between them on a loop (pure
 // CSS animation, see @keyframes streakMoodFade -- no JS timer to leak).
 const RISK_MOOD_EMOJI={'on track':'💪','at risk':'😬','critical':'🥵'};
-function riskMoodLabel(risk){
+const RISK_MOOD_IMG={'on track':'./emoji3d/flexed_biceps.png','at risk':'./emoji3d/grimacing_face.png','critical':'./emoji3d/hot_face.png'};
+// Most urgent real signal wins over the generic on-pace/falling-behind copy --
+// financial risk (money actually owed this month) outranks activity gaps,
+// which outrank "nothing closed yet" since that alone isn't necessarily bad
+// early in the month. Falls back to the old 3-string set only when nothing
+// specific applies (a genuinely quiet, on-track month).
+function riskMoodLabel(risk,signals){
+  if(signals){
+    if(signals.unpaidThisMonthCount>0){
+      const n=signals.unpaidThisMonthCount;
+      return n+' monthly-plan client'+(n===1?'':'s')+" haven't paid yet this month";
+    }
+    if(signals.daysSinceLastLead!=null && signals.daysSinceLastLead>=2){
+      return 'No new lead logged in '+signals.daysSinceLastLead+' day'+(signals.daysSinceLastLead===1?'':'s');
+    }
+    if(signals.daysSinceLastSiteVisit!=null && signals.daysSinceLastSiteVisit>=5){
+      return 'No site visit filled in '+signals.daysSinceLastSiteVisit+' days';
+    }
+    if(signals.closedThisMonth===0 && risk.tier!=='on track'){
+      return "You haven't sold yet this month";
+    }
+  }
   if(risk.tier==='on track') return 'On pace to hit this month\'s target';
   if(risk.tier==='at risk') return 'Falling behind this month\'s target';
   return risk.daysLeft+' day'+(risk.daysLeft===1?'':'s')+' left — act now';
@@ -10116,12 +10171,12 @@ function streakWidgetHtml(streak,clickable){
     <div class="streakCardTop">
       <div class="streakMoodStack">
         <div class="streakMoodPane paneA">
-          <div class="streakEmoji">${m.emoji}</div>
+          <img class="streakEmoji3d" src="${m.img}" alt="${m.emoji}" draggable="false"/>
           <div><div class="streakNum">🔥 ${streak.streakLen} day${streak.streakLen===1?'':'s'}</div><div class="streakLbl">${esc(m.label)}</div></div>
         </div>
         <div class="streakMoodPane paneB">
-          <div class="streakEmoji">${RISK_MOOD_EMOJI[streak.risk.tier]}</div>
-          <div><div class="streakNum">Pipeline: ${esc(streak.risk.tier)}</div><div class="streakLbl">${esc(riskMoodLabel(streak.risk))}</div></div>
+          <img class="streakEmoji3d" src="${RISK_MOOD_IMG[streak.risk.tier]}" alt="${RISK_MOOD_EMOJI[streak.risk.tier]}" draggable="false"/>
+          <div><div class="streakNum">Pipeline: ${esc(streak.risk.tier)}</div><div class="streakLbl">${esc(riskMoodLabel(streak.risk,streak.signals))}</div></div>
         </div>
       </div>
     </div>
