@@ -1,6 +1,6 @@
-import type { AttendanceRecord, Config, Enquiry, Lead, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
+import type { AttendanceRecord, Config, Enquiry, Lead, ManagerOverview, Memo, NewEnquiry, NewLead, NewMemo, NewReferral, NewSiteVisit, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
-import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
+import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
 import {
   mapAttendanceRow,
@@ -131,6 +131,12 @@ export interface DataSource {
     send(id: string): Promise<Memo>;
     markRead(item: ReceivedMemo): Promise<void>;
     remove(id: string): Promise<void>;
+  };
+  // Company-wide aggregation for Manager Home. Confirmed live: leads_sel/
+  // payments_sel/complaints_sel RLS all let a real manager-role session
+  // SELECT every row -- a real unfiltered query, not client-side illusion.
+  manager: {
+    overview(): Promise<ManagerOverview>;
   };
 }
 
@@ -474,6 +480,40 @@ function createDemoDataSource(): DataSource {
         db.memos = db.memos.filter((m) => m.id !== id);
         db.memoRecipients = db.memoRecipients.filter((r) => r.memoId !== id);
         demoSave();
+      },
+    },
+    manager: {
+      async overview() {
+        const db = demoLoad();
+        const leads = db.leads;
+        const pipelineValue = leads.reduce((s, l) => s + l.grandTotal, 0);
+        const collected = leads.reduce((s, l) => s + l.amtPaid, 0);
+        const stageFunnel = STAGES.map((stage) => ({ stage, count: leads.filter((l) => l.stage === stage).length }));
+
+        const byAgentMap = new Map<string, { key: string; name: string; leadCount: number; value: number }>();
+        for (const l of leads) {
+          const match = DEMO_STAFF.find((s) => s.key === l.agent);
+          const name = match?.name ?? l.agent;
+          const existing = byAgentMap.get(l.agent);
+          if (existing) {
+            existing.leadCount += 1;
+            existing.value += l.grandTotal;
+          } else {
+            byAgentMap.set(l.agent, { key: l.agent, name, leadCount: 1, value: l.grandTotal });
+          }
+        }
+
+        return {
+          totalLeads: leads.length,
+          pipelineValue,
+          collected,
+          outstanding: Math.max(pipelineValue - collected, 0),
+          fullyPaidCount: leads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal).length,
+          openComplaints: db.complaints.filter((c) => c.status !== 'Resolved').length,
+          siteVisitsCount: db.siteVisits.length,
+          stageFunnel,
+          byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
+        };
       },
     },
   };
@@ -845,6 +885,52 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('memos').delete().eq('id', id).select('id');
         if (error) throw error;
         if (!data || data.length === 0) throw new Error('You can only delete memos you sent (or ask a manager to).');
+      },
+    },
+    manager: {
+      async overview() {
+        const client = requireClient();
+        const [leadsRes, complaintsRes, visitsRes, staffRes] = await Promise.all([
+          client.from('leads').select('*'),
+          client.from('complaints').select('status'),
+          client.from('site_visits').select('id'),
+          client.from('profiles').select('agent_key,name,role,email').eq('active', true),
+        ]);
+        if (leadsRes.error) throw leadsRes.error;
+        if (complaintsRes.error) throw complaintsRes.error;
+        if (visitsRes.error) throw visitsRes.error;
+        if (staffRes.error) throw staffRes.error;
+
+        const leads = (leadsRes.data ?? []).map(mapLeadRow);
+        const staff = (staffRes.data ?? []).map(mapProfileRow);
+        const pipelineValue = leads.reduce((s, l) => s + l.grandTotal, 0);
+        const collected = leads.reduce((s, l) => s + l.amtPaid, 0);
+        const stageFunnel = STAGES.map((stage) => ({ stage, count: leads.filter((l) => l.stage === stage).length }));
+
+        const byAgentMap = new Map<string, { key: string; name: string; leadCount: number; value: number }>();
+        for (const l of leads) {
+          const match = staff.find((s) => s.key === l.agent);
+          const name = match?.name ?? l.agent;
+          const existing = byAgentMap.get(l.agent);
+          if (existing) {
+            existing.leadCount += 1;
+            existing.value += l.grandTotal;
+          } else {
+            byAgentMap.set(l.agent, { key: l.agent, name, leadCount: 1, value: l.grandTotal });
+          }
+        }
+
+        return {
+          totalLeads: leads.length,
+          pipelineValue,
+          collected,
+          outstanding: Math.max(pipelineValue - collected, 0),
+          fullyPaidCount: leads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal).length,
+          openComplaints: (complaintsRes.data ?? []).filter((c) => c.status !== 'Resolved').length,
+          siteVisitsCount: (visitsRes.data ?? []).length,
+          stageFunnel,
+          byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
+        };
       },
     },
   };

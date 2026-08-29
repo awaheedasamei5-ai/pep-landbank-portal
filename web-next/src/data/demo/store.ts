@@ -22,9 +22,14 @@ export interface DemoDb {
   attendance: AttendanceRecord[];
   memos: Memo[];
   memoRecipients: MemoRecipient[];
+  // Minimal shape (status only) -- no full Complaints feature/screen
+  // exists yet, this exists purely so Manager Home's "open complaints"
+  // KPI has real demo data to aggregate, matching production's real
+  // complaints.status column (confirmed live: default 'Open').
+  complaints: { status: string }[];
 }
 
-const DEMO_VERSION = 7;
+const DEMO_VERSION = 8;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

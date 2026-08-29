@@ -20,6 +20,14 @@ export function seedDemo(): DemoDb {
     { id: uid(), agent: AGENT_KEY, name: 'Mercy Owusu', contact: '0240758072', date: isoPlusDays(t, -18), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 24000, grandTotal: 48000, stage: '2B' },
     { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 60000, grandTotal: 60000, stage: '4' },
     { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1' },
+    // Other agents' leads -- not visible to the logged-in demo agent's own
+    // screens (listForAgent still filters correctly), only exist so
+    // Manager Home's company-wide overview has real multi-agent shape to
+    // aggregate instead of a single flat bar.
+    { id: uid(), agent: 'emmanuel', name: 'Yaw Sarpong', contact: '0271122334', date: isoPlusDays(t, -25), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: '9 Months', amtPaid: 45000, grandTotal: 60000, stage: '3' },
+    { id: uid(), agent: 'emmanuel', name: 'Efua Ansah', contact: '0248877665', date: isoPlusDays(t, -60), plotType: 'Full Plot', noPlots: 2, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 120000, grandTotal: 120000, stage: '4' },
+    { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '3 Months', amtPaid: 16000, grandTotal: 48000, stage: '2A' },
+    { id: uid(), agent: 'elizabeth', name: 'Ama Serwaa', contact: '0201998877', date: isoPlusDays(t, -33), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 60000, stage: 'Lost' },
   ];
 
   const payments: DemoDb['payments'] = [
@@ -255,7 +263,9 @@ export function seedDemo(): DemoDb {
     { id: uid(), memoId: sentMemoId, staffKey: 'emmanuel', staffName: 'Emmanuel Owusu', read: false, createdAt: isoPlusDays(t, -7) },
   ];
 
-  return { version: 7, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients };
+  const complaints: DemoDb['complaints'] = [{ status: 'Open' }, { status: 'Resolved' }];
+
+  return { version: 8, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

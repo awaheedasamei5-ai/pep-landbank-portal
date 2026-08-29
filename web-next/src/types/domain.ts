@@ -353,3 +353,22 @@ export interface NewMemo {
   status: 'draft' | 'sent';
   cc?: { key: string; name: string }[];
 }
+
+// Company-wide aggregation for Manager Home -- confirmed live (2026-08-29)
+// that `leads`/`payments`/`complaints` RLS all let a real manager-role
+// session SELECT every row (leads_sel/payments_sel/complaints_sel), so
+// this is a real unfiltered query, not a client-side illusion. Computed
+// from `leads` alone (amtPaid/grandTotal per row) rather than also
+// summing `payments` separately -- same computation "My pipeline"
+// already uses, just company-wide instead of one agent's rows.
+export interface ManagerOverview {
+  totalLeads: number;
+  pipelineValue: number;
+  collected: number;
+  outstanding: number;
+  fullyPaidCount: number;
+  openComplaints: number;
+  siteVisitsCount: number;
+  stageFunnel: { stage: Stage; count: number }[];
+  byAgent: { key: string; name: string; leadCount: number; value: number }[];
+}
