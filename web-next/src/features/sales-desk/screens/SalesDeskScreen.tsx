@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 
 // Port of salesDeskGroupsForAgent()'s items (index.html:8843-8860) --
@@ -7,9 +8,14 @@ import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 // plan's phase-by-phase scoping instead of building all of Sales Desk at once.
 export function SalesDeskScreen() {
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
+  const hasPlotAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
 
   const items: TileItem[] = [
     { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', glyph: '📈', onOpen: () => navigate('/app/sales/pipeline') },
+    ...(hasPlotAccess
+      ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
+      : []),
     { key: 'sitevisit', label: 'Site visit', sub: 'Coming in a later phase', color: 'teal', glyph: '📍' },
     { key: 'enquiry', label: 'Client enquiry', sub: 'Coming in a later phase', color: 'blue', glyph: '❓' },
     { key: 'referrals', label: 'Referrals', sub: 'Coming in a later phase', color: 'orange', glyph: '🎁' },

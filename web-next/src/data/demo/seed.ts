@@ -49,7 +49,21 @@ export function seedDemo(): DemoDb {
     targets: { [AGENT_KEY]: 600000 },
   };
 
-  return { version: 1, leads, payments, scheduleItems, streaks, config };
+  // Real access to this resource is manager + elias/emmanuel-only (RLS
+  // confirmed live) -- AGENT_KEY here already being 'elias' matches that.
+  // Includes one half-plot subdivision (parentPlotId), the real pattern
+  // production's split_plot_for_half_sale() function creates.
+  const wholePlotId = uid();
+  const plots: DemoDb['plots'] = [
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Sold', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Reserved', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null },
+    { id: wholePlotId, site: 'Royal Palm Enclave', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Reserved', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
+  ];
+
+  return { version: 2, leads, payments, scheduleItems, streaks, config, plots };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

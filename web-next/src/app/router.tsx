@@ -10,6 +10,7 @@ import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
 import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetailScreen';
 import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
+import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -73,6 +74,19 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="agent">
             <PipelineDetailScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        // Coarse role gate matches every other Sales Desk route; the finer
+        // manager/elias/emmanuel-only restriction (mirroring real production
+        // RLS on `plots`) lives in usePlots()'s `enabled` check, so a
+        // different agent reaching this URL directly sees an empty,
+        // permanently-loading-free screen rather than a route bounce.
+        path: 'sales/plots',
+        element: (
+          <RequireRole role="agent">
+            <PlotInventoryScreen />
           </RequireRole>
         ),
       },

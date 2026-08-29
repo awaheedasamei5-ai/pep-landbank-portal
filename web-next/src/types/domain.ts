@@ -75,3 +75,25 @@ export interface Config {
   targetPlotsPerMonth: number;
   targets: Record<string, number>;
 }
+
+export type PlotStatus = 'Available' | 'Reserved' | 'Sold';
+export type PlotUnitKind = 'whole' | 'half';
+
+// Real RLS on this table (confirmed live) restricts read/write to manager
+// or specifically the 'elias'/'emmanuel' staff keys -- not every agent.
+// This screen should only ever be reachable by those roles/keys, matching
+// how Sales Desk gates it.
+export interface Plot {
+  id: string;
+  site: string;
+  plotNumber: string;
+  plotType: PlotType;
+  status: PlotStatus;
+  price: number | null;
+  clientName: string | null;
+  clientContact: string | null;
+  agentKey: string | null;
+  notes: string | null;
+  unitKind: PlotUnitKind;
+  parentPlotId: string | null;
+}

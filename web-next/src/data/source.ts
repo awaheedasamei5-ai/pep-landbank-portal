@@ -1,8 +1,8 @@
-import type { Config, Lead, NewLead, Payment, ScheduleItem, ScheduleItemStatus, StreakRow } from '../types/domain';
+import type { Config, Lead, NewLead, Payment, Plot, ScheduleItem, ScheduleItemStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapLeadRow, mapPaymentRow, mapScheduleItemRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import { mapLeadRow, mapPaymentRow, mapPlotRow, mapScheduleItemRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -30,6 +30,12 @@ export interface DataSource {
   };
   config: {
     get(): Promise<Config>;
+  };
+  // Real RLS restricts this to manager + specifically the 'elias'/
+  // 'emmanuel' staff keys (confirmed live) -- not every agent. Callers
+  // must gate visibility accordingly, not rely on this returning empty.
+  plots: {
+    list(): Promise<Plot[]>;
   };
 }
 
@@ -135,6 +141,11 @@ function createDemoDataSource(): DataSource {
     config: {
       async get() {
         return demoLoad().config;
+      },
+    },
+    plots: {
+      async list() {
+        return demoLoad().plots;
       },
     },
   };
@@ -255,6 +266,13 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('app_config').select('*').eq('id', 1).single();
         if (error) throw error;
         return mapConfigRow(data);
+      },
+    },
+    plots: {
+      async list() {
+        const { data, error } = await requireClient().from('plots').select('*').order('site').order('plot_number');
+        if (error) throw error;
+        return (data ?? []).map(mapPlotRow);
       },
     },
   };

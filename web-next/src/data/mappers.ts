@@ -1,4 +1,4 @@
-import type { Lead, Payment, ScheduleItem, ScheduleItemStatus, StreakRow, Config } from '../types/domain';
+import type { Lead, Payment, Plot, ScheduleItem, ScheduleItemStatus, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -62,6 +62,23 @@ export function mapStreakRow(r: Record<string, unknown>): StreakRow {
     staffKey: r.staff_key as string,
     date: r.streak_date as string,
     dayMet: !!r.streak_day_met,
+  };
+}
+
+export function mapPlotRow(r: Record<string, unknown>): Plot {
+  return {
+    id: r.id as string,
+    site: r.site as string,
+    plotNumber: r.plot_number as string,
+    plotType: (r.plot_type as Plot['plotType']) ?? 'Full Plot',
+    status: (r.status as Plot['status']) ?? 'Available',
+    price: r.price == null ? null : Number(r.price),
+    clientName: (r.client_name as string) ?? null,
+    clientContact: (r.client_contact as string) ?? null,
+    agentKey: (r.agent_key as string) ?? null,
+    notes: (r.notes as string) ?? null,
+    unitKind: (r.unit_kind as Plot['unitKind']) ?? 'whole',
+    parentPlotId: (r.parent_plot_id as string) ?? null,
   };
 }
 
