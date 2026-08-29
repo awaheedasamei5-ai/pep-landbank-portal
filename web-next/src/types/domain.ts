@@ -669,3 +669,32 @@ export interface ComplaintUpdate {
   priority?: string;
   owner?: string;
 }
+
+// Real table `contract_requests` (confirmed live) -- any signed-in staff
+// member can request a contract be drafted for a lead; only Management or
+// the 'elizabeth' key (RLS-confirmed, same special-key pattern as Plot
+// Inventory's elias/emmanuel) can mark one fulfilled. Actually generating
+// the contract-of-sale PDF itself (index.html's buildContractOfSalePDF(),
+// a long legal document template) is a separate, much larger undertaking
+// deliberately out of scope here -- this models the real request/fulfil
+// workflow only. `source`/`clientAddress`/`clientKyc` exist on the real
+// table for the client-portal self-service flow (a client requesting their
+// own contract) -- dormant in this staff-only first cut, same treatment
+// Complaints gave its unused source/sentiment columns.
+export interface ContractRequest {
+  id: string;
+  leadId: string;
+  clientName: string;
+  requestedBy: string;
+  requestedByName: string;
+  note: string | null;
+  status: 'pending' | 'fulfilled';
+  createdAt: string;
+  fulfilledAt: string | null;
+}
+
+export interface NewContractRequest {
+  leadId: string;
+  clientName: string;
+  note?: string;
+}

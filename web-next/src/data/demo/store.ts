@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatMessage, Complaint, Config, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
+import type { AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, Memo, MemoRecipient, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -23,6 +23,7 @@ export interface DemoDb {
   memos: Memo[];
   memoRecipients: MemoRecipient[];
   complaints: Complaint[];
+  contractRequests: ContractRequest[];
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
   // kind is always null here -- this demo store never simulates the
@@ -30,7 +31,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 14;
+const DEMO_VERSION = 15;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

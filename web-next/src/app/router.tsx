@@ -32,6 +32,7 @@ import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintS
 import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen';
 import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
+import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -122,6 +123,7 @@ export const router = createBrowserRouter([
       // Finer manager/'elias'-only restriction lives in LogPaymentScreen
       // itself (useCanLogPayments), matching real payments_ins RLS.
       { path: 'office/payments', element: <LogPaymentScreen /> },
+      { path: 'office/contracts', element: <ContractRequestsScreen /> },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },

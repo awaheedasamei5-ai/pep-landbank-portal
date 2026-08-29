@@ -1,4 +1,4 @@
-import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Enquiry, Lead, LeaderboardRow, ManagerOverview, Memo, NewComplaint, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, ManagerOverview, Memo, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewMemo, NewPaymentEntry, NewReferral, NewSiteVisit, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -6,6 +6,7 @@ import {
   mapAttendanceRow,
   mapChatMessageRow,
   mapComplaintRow,
+  mapContractRequestRow,
   mapEnquiryRow,
   mapLeaderboardRawRow,
   mapLeadRow,
@@ -139,6 +140,18 @@ export interface DataSource {
     listForAgent(agentKey: string): Promise<Complaint[]>;
     create(agentKey: string, agentName: string, input: NewComplaint): Promise<Complaint>;
     update(id: string, patch: ComplaintUpdate): Promise<Complaint>;
+  };
+  // Real table `contract_requests` (confirmed live). RLS SELECT is
+  // `requested_by = my_key() OR manager OR elizabeth` -- so an unfiltered
+  // list() naturally scopes itself correctly per viewer in live mode (RLS
+  // does the real work); demo mode has no RLS, so it replicates the same
+  // scoping client-side from the explicit viewerKey/viewerRole passed in.
+  // fulfil() is manager/elizabeth-only (contract_requests_upd), matching
+  // the special-key pattern Plot Inventory already uses for elias/emmanuel.
+  contractRequests: {
+    list(viewerKey: string, viewerRole: string): Promise<ContractRequest[]>;
+    create(agentKey: string, agentName: string, input: NewContractRequest): Promise<ContractRequest>;
+    fulfil(id: string): Promise<ContractRequest>;
   };
   // Real table `attendance_log` (confirmed live, currently 0 production
   // rows), one row per (staff_key, work_date) enforced by a real unique
@@ -303,34 +316,38 @@ function createDemoDataSource(): DataSource {
       },
       async approve(paymentId, decidedBy, decidedByName) {
         const db = demoLoad();
-        const payment = db.payments.find((p) => p.id === paymentId);
-        if (!payment) throw new Error('Payment not found');
-        if (payment.status !== 'pending') throw new Error('This payment is no longer pending');
-        payment.status = 'approved';
-        payment.decidedBy = decidedBy;
-        payment.decidedByName = decidedByName;
-        payment.decidedAt = new Date().toISOString();
-        const lead = db.leads.find((l) => l.id === payment.leadId);
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        if (db.payments[index].status !== 'pending') throw new Error('This payment is no longer pending');
+        // Immutable update (new object + new array), same fix as
+        // contractRequests.fulfil() -- mutating in place here let the
+        // query cache pick up 'approved' before the invalidated refetch
+        // ran, leaving the Pending Approvals list one render behind.
+        const decidedAt = new Date().toISOString();
+        const updated = { ...db.payments[index], status: 'approved' as const, decidedBy, decidedByName, decidedAt };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
+        const leadIndex = db.leads.findIndex((l) => l.id === updated.leadId);
         let newAmtPaid = 0;
         let newBalance = 0;
-        if (lead) {
-          lead.amtPaid += payment.amount;
-          lead.stage = deriveStageFromPayment(lead.amtPaid, lead.grandTotal);
-          newAmtPaid = lead.amtPaid;
-          newBalance = Math.max(lead.grandTotal - lead.amtPaid, 0);
+        if (leadIndex !== -1) {
+          const amtPaid = db.leads[leadIndex].amtPaid + updated.amount;
+          const stage = deriveStageFromPayment(amtPaid, db.leads[leadIndex].grandTotal);
+          const updatedLead = { ...db.leads[leadIndex], amtPaid, stage };
+          db.leads = [...db.leads.slice(0, leadIndex), updatedLead, ...db.leads.slice(leadIndex + 1)];
+          newAmtPaid = amtPaid;
+          newBalance = Math.max(updatedLead.grandTotal - amtPaid, 0);
         }
         demoSave();
         return { decidedBy, decidedByName, newAmtPaid, newBalance };
       },
       async decline(paymentId, decidedBy, decidedByName) {
         const db = demoLoad();
-        const payment = db.payments.find((p) => p.id === paymentId);
-        if (!payment) throw new Error('Payment not found');
-        if (payment.status !== 'pending') throw new Error('This payment is no longer pending');
-        payment.status = 'declined';
-        payment.decidedBy = decidedBy;
-        payment.decidedByName = decidedByName;
-        payment.decidedAt = new Date().toISOString();
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        if (db.payments[index].status !== 'pending') throw new Error('This payment is no longer pending');
+        const decidedAt = new Date().toISOString();
+        const updated = { ...db.payments[index], status: 'declined' as const, decidedBy, decidedByName, decidedAt };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
         demoSave();
       },
     },
@@ -510,6 +527,49 @@ function createDemoDataSource(): DataSource {
         Object.assign(complaint, patch);
         demoSave();
         return complaint;
+      },
+    },
+    contractRequests: {
+      async list(viewerKey, viewerRole) {
+        const db = demoLoad();
+        const canSeeAll = viewerRole === 'manager' || viewerKey === 'elizabeth';
+        return db.contractRequests.filter((r) => canSeeAll || r.requestedBy === viewerKey);
+      },
+      async create(agentKey, agentName, input) {
+        const request: ContractRequest = {
+          id: Math.random().toString(36).slice(2, 10),
+          leadId: input.leadId,
+          clientName: input.clientName,
+          requestedBy: agentKey,
+          requestedByName: agentName,
+          note: input.note ?? null,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          fulfilledAt: null,
+        };
+        const db = demoLoad();
+        db.contractRequests.push(request);
+        demoSave();
+        return request;
+      },
+      async fulfil(id) {
+        const db = demoLoad();
+        const index = db.contractRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Contract request not found');
+        // Builds a NEW object/array rather than mutating in place -- an
+        // earlier version mutated the existing object directly, which (via
+        // TanStack Query's structural-sharing/reference-equality checks)
+        // let the query cache silently pick up the new status before the
+        // refetch it was invalidated for ever ran, leaving a real observed
+        // bug: the row's own re-render showed "Fulfilled" correctly, but
+        // the LIST-level pending/fulfilled grouping one level up never
+        // re-rendered, since React Query saw "no change" in the refetch.
+        // Always returning fresh references here makes a real query-cache
+        // update happen, not just a lucky same-tick mutation.
+        const updated: ContractRequest = { ...db.contractRequests[index], status: 'fulfilled', fulfilledAt: new Date().toISOString() };
+        db.contractRequests = [...db.contractRequests.slice(0, index), updated, ...db.contractRequests.slice(index + 1)];
+        demoSave();
+        return updated;
       },
     },
     attendance: {
@@ -1121,6 +1181,38 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapComplaintRow(data);
+      },
+    },
+    contractRequests: {
+      async list() {
+        // Unfiltered on purpose -- contract_requests_sel RLS already scopes
+        // this correctly per real session (own requests, or every request
+        // for manager/elizabeth). viewerKey/viewerRole are unused here,
+        // kept only so the interface matches demo mode's explicit scoping.
+        const { data, error } = await requireClient().from('contract_requests').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractRequestRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data, error } = await requireClient()
+          .from('contract_requests')
+          .insert({
+            lead_id: input.leadId,
+            client_name: input.clientName,
+            requested_by: agentKey,
+            requested_by_name: agentName,
+            note: input.note ?? null,
+            source: 'staff',
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractRequestRow(data);
+      },
+      async fulfil(id) {
+        const { data, error } = await requireClient().from('contract_requests').update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapContractRequestRow(data);
       },
     },
     attendance: {

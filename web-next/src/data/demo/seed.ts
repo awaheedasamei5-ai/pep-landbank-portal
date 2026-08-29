@@ -360,6 +360,36 @@ export function seedDemo(): DemoDb {
     },
   ];
 
+  // Real workflow: any staff can request, only Management/elizabeth fulfil.
+  // One still-pending (elias's fully-paid client, the realistic trigger for
+  // a contract request) and one already fulfilled on another agent's lead,
+  // so Management's view has real multi-agent shape to show, not a single
+  // flat row.
+  const contractRequests: DemoDb['contractRequests'] = [
+    {
+      id: uid(),
+      leadId: leads[1].id,
+      clientName: leads[1].name,
+      requestedBy: AGENT_KEY,
+      requestedByName: 'Elias Torgbuivi',
+      note: 'Fully paid as of today, client wants to sign this week if possible.',
+      status: 'pending',
+      createdAt: isoPlusDays(t, -1),
+      fulfilledAt: null,
+    },
+    {
+      id: uid(),
+      leadId: leads[4].id,
+      clientName: leads[4].name,
+      requestedBy: 'emmanuel',
+      requestedByName: 'Emmanuel Owusu',
+      note: null,
+      status: 'fulfilled',
+      createdAt: isoPlusDays(t, -14),
+      fulfilledAt: isoPlusDays(t, -12),
+    },
+  ];
+
   // A short, realistic 1:1 thread with 'management' -- deliberately not
   // fully read (last inbound message unread) so the conversation list's
   // unread badge has something real to show immediately.
@@ -411,7 +441,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 14, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, sveInvites, sveSubmissions, chatMessages };
+  return { version: 15, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };
