@@ -1,0 +1,36 @@
+// Direct ports of index.html's small formatting/date helpers -- same
+// behavior, so any future side-by-side comparison against the production
+// card matches exactly.
+
+export function num(x: unknown): number {
+  const n = typeof x === 'number' ? x : parseFloat(String(x));
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function ghs(x: unknown): string {
+  return 'GHS ' + num(x).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+export function today(): string {
+  return isoDateOnly(new Date());
+}
+
+export function isoDateOnly(d: Date): string {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+export function isoPlusDays(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return isoDateOnly(d);
+}
+
+export function monthKey(iso: string | undefined): string {
+  return (iso || '').slice(0, 7);
+}
+
+export function daysSince(iso: string): number {
+  const then = new Date(iso + 'T00:00:00').getTime();
+  const now = new Date(today() + 'T00:00:00').getTime();
+  return Math.round((now - then) / 86400000);
+}

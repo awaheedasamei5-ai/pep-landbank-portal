@@ -1,0 +1,35 @@
+/* Port of index.html's .pipePillStrip/.pipePill (index.html:1165-1175). */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .strip { grid-template-columns: repeat(4, 1fr); }
+}
+.pill {
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 800;
+  font-size: 24px;
+}
+.valueMoney {
+  font-size: 18px;
+  line-height: 1.2;
+}
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .9;
+  margin-top: 2px;
+}
+.blue { background: linear-gradient(150deg, #60A5FA, #2563EB); }
+.orange { background: linear-gradient(150deg, #FDBA74, #EA580C); }
+.gold { background: linear-gradient(150deg, #FCD34D, #B45309); }
+.green { background: linear-gradient(150deg, #6EE7B7, #059669); }
+.red { background: linear-gradient(150deg, #F87171, #B91C1C); }

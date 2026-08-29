@@ -1,0 +1,151 @@
+/* Exact port of index.html:570-641 (.streakCard and friends) -- same
+   selectors (module-scoped), same values, same crossfade technique
+   (layered opacity + animation-delay phase offset). */
+.card {
+  border-radius: 20px;
+  padding: 22px 22px 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 14px 32px -12px rgba(0, 0, 0, .35);
+}
+.bgLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  animation: moodFade 16s ease-in-out infinite;
+}
+.artLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.artPane {
+  position: absolute;
+  right: -4px;
+  bottom: -6px;
+  width: 54%;
+  height: 104%;
+  animation: moodFade 16s ease-in-out infinite;
+}
+.artImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom right;
+  display: block;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, .4));
+}
+.content {
+  position: relative;
+  z-index: 1;
+  padding-right: 50%;
+}
+.cardTop {
+  margin-bottom: 18px;
+}
+.moodStack {
+  position: relative;
+  min-width: 0;
+  display: grid;
+}
+.moodPane {
+  grid-area: 1 / 1;
+  animation: moodFade 16s ease-in-out infinite;
+}
+@keyframes moodFade {
+  0%, 42% { opacity: 1; }
+  50%, 92% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.eyebrow {
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .7;
+  font-weight: 700;
+}
+.num {
+  font-size: 19px;
+  font-weight: 800;
+  font-family: 'IBM Plex Mono', monospace;
+  margin-top: 3px;
+}
+.lbl {
+  font-size: 12.5px;
+  opacity: .92;
+  margin-top: 5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.weekRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.weekDay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+.weekLbl {
+  font-size: 9.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .75;
+  font-weight: 700;
+}
+.weekMark {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+.weekMarkMet {
+  background: rgba(255, 255, 255, .92);
+  color: #166534;
+}
+.weekMarkFuture {
+  background: rgba(255, 255, 255, .1);
+  opacity: .5;
+}
+.riskRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .22);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .95;
+}
+.riskDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.ok { background: #4ADE80; }
+.warn { background: #FBBF24; }
+.dgr { background: #F87171; }
+
+/* Declared last, deliberately: .bgLayer/.artPane/.moodPane above each set
+   the full `animation` shorthand (which resets animation-delay to its
+   default), so at equal specificity a `.bgB{animation-delay:...}` rule
+   declared earlier in the file would get silently clobbered by whichever
+   of those three base rules happens to come later in source order. Keeping
+   this rule last guarantees it always wins, matching the effect the
+   original index.html got via compound selectors (.streakBgLayer.bgB
+   etc.) instead. */
+.bgB {
+  animation-delay: -8s;
+}
