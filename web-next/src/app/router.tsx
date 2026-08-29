@@ -11,6 +11,7 @@ import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetai
 import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
+import { ClientDatabaseScreen } from '../features/clients/screens/ClientDatabaseScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -87,6 +88,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="agent">
             <PlotInventoryScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'sales/clients',
+        element: (
+          <RequireRole role="agent">
+            <ClientDatabaseScreen />
           </RequireRole>
         ),
       },

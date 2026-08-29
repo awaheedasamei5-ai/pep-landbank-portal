@@ -97,3 +97,19 @@ export interface Plot {
   unitKind: PlotUnitKind;
   parentPlotId: string | null;
 }
+
+// Not a real table -- there is no clients master table in production (confirmed
+// live: client_portal_access only covers clients with a portal PIN, ~9 of 105
+// real leads, and is a login record, not a client roster). A Client is a
+// client-side aggregation over `leads`, grouped the same way production's own
+// RLS matches a client to their records: normalized lower/trim(name) + last-9-
+// digits(contact). See features/clients/lib/groupClients.ts.
+export interface Client {
+  name: string;
+  contact: string;
+  leadIds: string[];
+  leadCount: number;
+  totalValue: number;
+  totalPaid: number;
+  latestDate: string;
+}

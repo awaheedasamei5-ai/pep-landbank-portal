@@ -13,6 +13,7 @@ export function SalesDeskScreen() {
 
   const items: TileItem[] = [
     { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', glyph: '📈', onOpen: () => navigate('/app/sales/pipeline') },
+    { key: 'clients', label: 'Client Database', sub: 'Search & browse by client', color: 'blue', glyph: '🗂️', onOpen: () => navigate('/app/sales/clients') },
     ...(hasPlotAccess
       ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
       : []),
