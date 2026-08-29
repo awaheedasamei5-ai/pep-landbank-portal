@@ -18,7 +18,7 @@ export function SalesDeskScreen() {
       ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
       : []),
     { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', glyph: '📍', onOpen: () => navigate('/app/sales/sitevisits') },
-    { key: 'enquiry', label: 'Client enquiry', sub: 'Coming in a later phase', color: 'blue', glyph: '❓' },
+    { key: 'enquiry', label: 'Client enquiry', sub: 'Log what prospects ask about', color: 'blue', glyph: '❓', onOpen: () => navigate('/app/sales/enquiries') },
     { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', glyph: '🎁', onOpen: () => navigate('/app/sales/referrals') },
   ];
 

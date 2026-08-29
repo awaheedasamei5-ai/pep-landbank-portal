@@ -1,8 +1,8 @@
-import type { Config, Lead, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
+import type { Config, Enquiry, Lead, NewEnquiry, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import { mapEnquiryRow, mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -56,6 +56,12 @@ export interface DataSource {
   referrals: {
     listForAgent(agentKey: string): Promise<Referral[]>;
     create(agentKey: string, input: NewReferral): Promise<Referral>;
+  };
+  // Agent-scoped via agent_key exactly like leads/site_visits (confirmed
+  // live) -- straightforward, unlike referrals' lead-linked scoping.
+  enquiries: {
+    listForAgent(agentKey: string): Promise<Enquiry[]>;
+    create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
   };
 }
 
@@ -236,6 +242,32 @@ function createDemoDataSource(): DataSource {
         db.referrals.push(referral);
         demoSave();
         return referral;
+      },
+    },
+    enquiries: {
+      async listForAgent(agentKey) {
+        return demoLoad().enquiries.filter((e) => e.agentKey === agentKey);
+      },
+      async create(agentKey, agentName, input) {
+        const enquiry: Enquiry = {
+          id: Math.random().toString(36).slice(2, 10),
+          agentKey,
+          agentName,
+          name: input.name,
+          contact: input.contact,
+          location: input.location ?? null,
+          types: input.types && input.types.length > 0 ? input.types.join(',') : null,
+          plot: input.plot ?? null,
+          source: input.source ?? null,
+          details: input.details ?? null,
+          follow: input.follow ?? null,
+          followDate: input.followDate ?? null,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.enquiries.push(enquiry);
+        demoSave();
+        return enquiry;
       },
     },
   };
@@ -432,6 +464,34 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapReferralRow(data);
+      },
+    },
+    enquiries: {
+      async listForAgent(agentKey) {
+        const { data, error } = await requireClient().from('enquiries').select('*').eq('agent_key', agentKey).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapEnquiryRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data, error } = await requireClient()
+          .from('enquiries')
+          .insert({
+            agent_key: agentKey,
+            agent_name: agentName,
+            name: input.name,
+            contact: input.contact,
+            location: input.location ?? null,
+            types: input.types && input.types.length > 0 ? input.types.join(',') : null,
+            plot: input.plot ?? null,
+            source: input.source ?? null,
+            details: input.details ?? null,
+            follow: input.follow ?? null,
+            follow_date: input.followDate ?? null,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapEnquiryRow(data);
       },
     },
   };

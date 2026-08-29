@@ -1,4 +1,4 @@
-import type { Lead, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
+import type { Enquiry, Lead, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow, Config } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -130,6 +130,24 @@ export function mapReferralRow(r: Record<string, unknown>): Referral {
     createdAt: r.created_at as string,
     clearedAt: (r.cleared_at as string) ?? null,
     archived: !!r.archived,
+  };
+}
+
+export function mapEnquiryRow(r: Record<string, unknown>): Enquiry {
+  return {
+    id: r.id as string,
+    agentKey: r.agent_key as string,
+    agentName: (r.agent_name as string) ?? null,
+    name: (r.name as string) ?? null,
+    contact: (r.contact as string) ?? null,
+    location: (r.location as string) ?? null,
+    types: (r.types as string) ?? null,
+    plot: (r.plot as string) ?? null,
+    source: (r.source as string) ?? null,
+    details: (r.details as string) ?? null,
+    follow: (r.follow as string) ?? null,
+    followDate: (r.follow_date as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

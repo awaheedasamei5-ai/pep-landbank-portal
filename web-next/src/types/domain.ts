@@ -219,3 +219,41 @@ export interface NewReferral {
   referredLocation?: string;
   referredNoPlots?: number;
 }
+
+// Real table (confirmed live, 13 columns, 2 real rows), agent-scoped via
+// agent_key exactly like site_visits/leads. No status/owner/resolution
+// fields exist here (unlike the structurally similar but purpose-different
+// `complaints` table, which has a real ticket workflow) -- this is a
+// contact-log shape: `follow`/`followDate` is the only follow-up
+// mechanism, both free text/nullable, not a worked queue. `types` is a
+// real comma-joined free-text column in production (not an array or
+// enum), e.g. "Plot Availability,Site Visit,Price" -- modelled as a plain
+// string here and split/joined at the UI layer to match the real shape
+// exactly rather than inventing a differently-typed column.
+export interface Enquiry {
+  id: string;
+  agentKey: string;
+  agentName: string | null;
+  name: string | null;
+  contact: string | null;
+  location: string | null;
+  types: string | null;
+  plot: string | null;
+  source: string | null;
+  details: string | null;
+  follow: string | null;
+  followDate: string | null;
+  createdAt: string;
+}
+
+export interface NewEnquiry {
+  name: string;
+  contact: string;
+  location?: string;
+  types?: string[];
+  plot?: string;
+  source?: string;
+  details?: string;
+  follow?: string;
+  followDate?: string;
+}

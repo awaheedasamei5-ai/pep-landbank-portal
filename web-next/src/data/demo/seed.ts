@@ -148,7 +148,28 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 4, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals };
+  // Matches real production's actual shape (confirmed live): `types` is a
+  // real comma-joined free-text column, not an array/enum; `follow` is a
+  // free-text "Yes"/"No", not a boolean.
+  const enquiries: DemoDb['enquiries'] = [
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      name: 'Justice Amankwah',
+      contact: '0533284707',
+      location: null,
+      types: 'Plot Availability,Site Visit,Price',
+      plot: 'Half Plot',
+      source: 'Phone Call',
+      details: 'Wants to know availability, price, and site visit days',
+      follow: 'Yes',
+      followDate: isoPlusDays(t, 2),
+      createdAt: isoPlusDays(t, -1),
+    },
+  ];
+
+  return { version: 5, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };
