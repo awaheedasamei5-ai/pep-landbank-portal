@@ -76,3 +76,16 @@
 .table tr:last-child td { border-bottom: none; }
 
 .fullPaymentNote { color: var(--muted); font-size: 12.5px; text-align: center; padding: 12px 0; }
+
+.btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.btn:disabled { opacity: .6; cursor: default; }

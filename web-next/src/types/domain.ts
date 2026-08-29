@@ -171,6 +171,12 @@ export interface Config {
   quoteFooterAddress: string;
   receiptThanksText: string;
   receiptLogoImage: string | null;
+  // Real columns quote_doc_type_text/quote_notes_text/quote_land_note_text
+  // (confirmed live) -- quoteNotesText is newline-separated, numbered
+  // automatically on the rendered PDF.
+  quoteDocTypeText: string;
+  quoteNotesText: string;
+  quoteLandNoteText: string;
 }
 
 // One payment's contribution to an agent's personal commission, and what it

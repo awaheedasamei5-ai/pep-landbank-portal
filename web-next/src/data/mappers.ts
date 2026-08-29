@@ -402,6 +402,9 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     quoteFooterAddress: (r.quote_footer_address as string) ?? '',
     receiptThanksText: (r.receipt_thanks_text as string) ?? 'Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.',
     receiptLogoImage: (r.receipt_logo_image as string) ?? null,
+    quoteDocTypeText: (r.quote_doc_type_text as string) ?? 'Quotation with Payment Plan Schedule',
+    quoteNotesText: (r.quote_notes_text as string) ?? '',
+    quoteLandNoteText: (r.quote_land_note_text as string) ?? '',
   };
 }
 

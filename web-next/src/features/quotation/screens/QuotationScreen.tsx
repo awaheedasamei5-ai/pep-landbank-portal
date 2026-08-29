@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ghs } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
 import { computeQuotationTotals, type PaymentPlanKey } from '../lib/quotationLogic';
 import type { PlotType } from '../../../types/domain';
 import styles from './QuotationScreen.module.css';
@@ -22,6 +23,11 @@ export function QuotationScreen() {
   const [plotType, setPlotType] = useState<PlotType>('Full Plot');
   const [noPlots, setNoPlots] = useState(1);
   const [plan, setPlan] = useState<PaymentPlanKey>('12 Months');
+  const [clientName, setClientName] = useState('');
+  const [clientContact, setClientContact] = useState('');
+  const [clientAddress, setClientAddress] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const downloadPdf = useDownloadQuotationPdf();
 
   const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan) : null;
 
@@ -59,6 +65,27 @@ export function QuotationScreen() {
               </option>
             ))}
           </select>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.field}>
+          <label className={styles.label}>Customer name</label>
+          <input className={styles.input} type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Required to download a PDF" />
+        </div>
+        <div className={styles.grid2}>
+          <div className={styles.field}>
+            <label className={styles.label}>Contact / phone</label>
+            <input className={styles.input} type="text" value={clientContact} onChange={(e) => setClientContact(e.target.value)} />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Email</label>
+            <input className={styles.input} type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
+          </div>
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Address</label>
+          <input className={styles.input} type="text" value={clientAddress} onChange={(e) => setClientAddress(e.target.value)} />
         </div>
       </div>
 
@@ -107,6 +134,23 @@ export function QuotationScreen() {
           ) : (
             <p className={styles.fullPaymentNote}>Full Payment &mdash; the whole grand total is due at once, no installment schedule.</p>
           )}
+
+          <button
+            type="button"
+            className={styles.btn}
+            disabled={!clientName.trim() || downloadPdf.isPending}
+            onClick={() =>
+              config &&
+              downloadPdf.mutate({
+                totals,
+                noPlots,
+                client: { name: clientName.trim(), contact: clientContact.trim(), address: clientAddress.trim(), email: clientEmail.trim() },
+                config,
+              })
+            }
+          >
+            {downloadPdf.isPending ? 'Generating…' : '⬇ Download PDF'}
+          </button>
         </>
       )}
     </div>

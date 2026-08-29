@@ -90,6 +90,10 @@ export function seedDemo(): DemoDb {
     quoteFooterAddress: 'First Floor Alex Nerda Building. Nungua Nautical Beach Road Drive',
     receiptThanksText: 'Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.',
     receiptLogoImage: null,
+    quoteDocTypeText: 'Quotation with Payment Plan Schedule',
+    quoteNotesText:
+      'Kindly make all payments by cheque or transfer to Trulander JSF Ltd.\nQuotation and offer is valid for 10 days only.\nKindly ensure all payments are receipted with Trulander receipts.\nBank Details: Ecobank Account No. 1441002259946, Spintex Branch.\nKindly note all payments shall be latest by the 27th of each month.\nWe accept either post-dated cheques or standing orders for credit payment.',
+    quoteLandNoteText: 'We offer to deliver all Land Indentures and Certified Site plan within 3 weeks after Full payment',
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -550,7 +554,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 22, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 23, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };
