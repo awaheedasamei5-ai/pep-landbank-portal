@@ -105,6 +105,11 @@ export interface DataSource {
   };
   config: {
     get(): Promise<Config>;
+    // Real p_config_upd RLS (confirmed live): manager only. Partial --
+    // only writes the fields the caller actually passes, leaving every
+    // other real app_config column (quotation text, pricing, targets,
+    // etc. -- all out of scope here) untouched.
+    update(patch: Partial<Pick<Config, 'leaderboardWeights' | 'commissionFullCap' | 'commissionHalfCap' | 'commissionPoolPerPlot'>>): Promise<Config>;
   };
   // Real RLS restricts this to manager + specifically the 'elias'/
   // 'emmanuel' staff keys (confirmed live) -- not every agent. Callers
@@ -425,6 +430,12 @@ function createDemoDataSource(): DataSource {
     config: {
       async get() {
         return demoLoad().config;
+      },
+      async update(patch) {
+        const db = demoLoad();
+        db.config = { ...db.config, ...patch };
+        demoSave();
+        return db.config;
       },
     },
     plots: {
@@ -1085,6 +1096,16 @@ function createLiveDataSource(): DataSource {
     config: {
       async get() {
         const { data, error } = await requireClient().from('app_config').select('*').eq('id', 1).single();
+        if (error) throw error;
+        return mapConfigRow(data);
+      },
+      async update(patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if (patch.leaderboardWeights !== undefined) dbPatch.leaderboard_weights = patch.leaderboardWeights;
+        if (patch.commissionFullCap !== undefined) dbPatch.commission_full_cap = patch.commissionFullCap;
+        if (patch.commissionHalfCap !== undefined) dbPatch.commission_half_cap = patch.commissionHalfCap;
+        if (patch.commissionPoolPerPlot !== undefined) dbPatch.commission_pool_per_plot = patch.commissionPoolPerPlot;
+        const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
       },

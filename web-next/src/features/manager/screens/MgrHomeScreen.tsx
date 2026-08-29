@@ -38,6 +38,9 @@ export function MgrHomeScreen() {
           <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/commission')}>
             💰 Commission
           </button>
+          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/settings')}>
+            ⚙ Settings
+          </button>
         </div>
       </div>
 

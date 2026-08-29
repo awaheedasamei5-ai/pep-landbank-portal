@@ -34,6 +34,7 @@ import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
+import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -83,6 +84,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <CommissionScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/settings',
+        element: (
+          <RequireRole role="manager">
+            <SettingsScreen />
           </RequireRole>
         ),
       },
