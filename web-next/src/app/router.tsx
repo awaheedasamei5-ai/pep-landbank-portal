@@ -21,6 +21,7 @@ import { AddEnquiryScreen } from '../features/enquiries/screens/AddEnquiryScreen
 import { AttendanceScreen } from '../features/attendance/screens/AttendanceScreen';
 import { MemosScreen } from '../features/memos/screens/MemosScreen';
 import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
+import { MoreScreen } from '../features/more/screens/MoreScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
 // Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
@@ -197,7 +198,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'chat', element: <StubScreen title="Chat" /> },
-      { path: 'more', element: <StubScreen title="More" /> },
+      { path: 'more', element: <MoreScreen /> },
     ],
   },
 ]);
