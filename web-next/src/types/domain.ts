@@ -173,3 +173,49 @@ export interface NewSiteVisit {
   accompanied?: string;
   notes?: string;
 }
+
+// Real table (confirmed live, 15 columns, 1 real row). CONFIRMED LIVE BUG
+// (2026-08-29, see project-referral-integrity-bug memory): the real UPDATE
+// RLS policy (referrals_upd_staff) has no WITH CHECK clause tying a status
+// change to a real referred lead / 30% deposit -- only the safe
+// clear_referral() RPC enforces that, and RLS doesn't force callers through
+// it. The one real production row was cleared bypassing that RPC (its
+// referred_lead_id is null, which the RPC would have rejected).
+// Deliberate scope boundary because of this: this app never calls a direct
+// UPDATE on referrals' status. There is no "mark cleared" UI here at all --
+// read-only list + create only, same discipline as leaving live payment
+// recording unwired. A future clear/payout screen must call clear_referral()
+// exclusively, never .update().
+//
+// RLS also means an agent only ever sees referrals whose referrer_lead_id
+// points at one of their OWN leads (or is staff/manager) -- there is no
+// agent_key column on this table at all. So the create flow requires
+// picking one of the agent's own existing leads as the referrer, both to
+// satisfy that real constraint and so the agent can see their own referral
+// again afterward.
+export interface Referral {
+  id: string;
+  referrerLeadId: string | null;
+  referrerName: string;
+  referrerContact: string | null;
+  referredName: string;
+  referredContact: string;
+  referredLocation: string | null;
+  referredNoPlots: number;
+  referredLeadId: string | null;
+  status: string;
+  pointsAwarded: number;
+  source: string;
+  createdByKey: string | null;
+  createdAt: string;
+  clearedAt: string | null;
+  archived: boolean;
+}
+
+export interface NewReferral {
+  referrerLeadId: string;
+  referredName: string;
+  referredContact: string;
+  referredLocation?: string;
+  referredNoPlots?: number;
+}

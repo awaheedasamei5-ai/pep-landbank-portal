@@ -19,7 +19,7 @@ export function SalesDeskScreen() {
       : []),
     { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', glyph: '📍', onOpen: () => navigate('/app/sales/sitevisits') },
     { key: 'enquiry', label: 'Client enquiry', sub: 'Coming in a later phase', color: 'blue', glyph: '❓' },
-    { key: 'referrals', label: 'Referrals', sub: 'Coming in a later phase', color: 'orange', glyph: '🎁' },
+    { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', glyph: '🎁', onOpen: () => navigate('/app/sales/referrals') },
   ];
 
   return (

@@ -1,4 +1,4 @@
-import type { Config, Lead, Payment, Plot, ScheduleItem, SiteVisit, StreakRow } from '../../types/domain';
+import type { Config, Lead, Payment, Plot, Referral, ScheduleItem, SiteVisit, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -17,9 +17,10 @@ export interface DemoDb {
   config: Config;
   plots: Plot[];
   siteVisits: SiteVisit[];
+  referrals: Referral[];
 }
 
-const DEMO_VERSION = 3;
+const DEMO_VERSION = 4;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

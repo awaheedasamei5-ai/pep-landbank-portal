@@ -1,8 +1,8 @@
-import type { Config, Lead, NewLead, NewSiteVisit, Payment, Plot, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
+import type { Config, Lead, NewLead, NewReferral, NewSiteVisit, Payment, Plot, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
-import { mapLeadRow, mapPaymentRow, mapPlotRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
+import { mapLeadRow, mapPaymentRow, mapPlotRow, mapReferralRow, mapScheduleItemRow, mapSiteVisitRow, mapStreakRow, mapConfigRow, domainStatusToDb } from './mappers';
 
 // Swappable data-source seam -- every feature hook calls through this, never
 // branching on demo-vs-live itself (mirrors index.html's api*() functions,
@@ -45,6 +45,17 @@ export interface DataSource {
   siteVisits: {
     listForAgent(agentKey: string): Promise<SiteVisit[]>;
     create(agentKey: string, agentName: string, input: NewSiteVisit): Promise<SiteVisit>;
+  };
+  // Deliberately read-only-plus-create: no "mark cleared"/payout method
+  // exists on this interface at all. See the Referral type's comment in
+  // types/domain.ts -- real RLS lets a raw UPDATE bypass the one safe
+  // clear_referral() RPC, and this app never touches that path.
+  // listForAgent replicates, client-side for demo mode, the exact same
+  // scoping the real RLS policy applies live: visible only if
+  // referrer_lead_id points at one of the agent's own leads.
+  referrals: {
+    listForAgent(agentKey: string): Promise<Referral[]>;
+    create(agentKey: string, input: NewReferral): Promise<Referral>;
   };
 }
 
@@ -193,6 +204,38 @@ function createDemoDataSource(): DataSource {
         db.siteVisits.push(visit);
         demoSave();
         return visit;
+      },
+    },
+    referrals: {
+      async listForAgent(agentKey) {
+        const db = demoLoad();
+        return db.referrals.filter((r) => r.referrerLeadId && db.leads.some((l) => l.id === r.referrerLeadId && l.agent === agentKey));
+      },
+      async create(agentKey, input) {
+        const db = demoLoad();
+        const referrerLead = db.leads.find((l) => l.id === input.referrerLeadId && l.agent === agentKey);
+        if (!referrerLead) throw new Error('Pick one of your own leads as the referrer');
+        const referral: Referral = {
+          id: Math.random().toString(36).slice(2, 10),
+          referrerLeadId: referrerLead.id,
+          referrerName: referrerLead.name,
+          referrerContact: referrerLead.contact,
+          referredName: input.referredName,
+          referredContact: input.referredContact,
+          referredLocation: input.referredLocation ?? null,
+          referredNoPlots: input.referredNoPlots ?? 1,
+          referredLeadId: null,
+          status: 'Pending',
+          pointsAwarded: 0,
+          source: 'staff',
+          createdByKey: agentKey,
+          createdAt: new Date().toISOString(),
+          clearedAt: null,
+          archived: false,
+        };
+        db.referrals.push(referral);
+        demoSave();
+        return referral;
       },
     },
   };
@@ -357,6 +400,38 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapSiteVisitRow(data);
+      },
+    },
+    referrals: {
+      // No agent_key column exists on this table -- RLS itself already
+      // restricts a non-staff caller to rows whose referrer_lead_id
+      // belongs to one of their own leads, so a plain select('*') is
+      // correct here, not a gap. See the Referral type's comment.
+      async listForAgent() {
+        const { data, error } = await requireClient().from('referrals').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapReferralRow);
+      },
+      async create(agentKey, input) {
+        const client = requireClient();
+        const { data: lead, error: leadError } = await client.from('leads').select('name,contact').eq('id', input.referrerLeadId).eq('agent_key', agentKey).single();
+        if (leadError) throw leadError;
+        const { data, error } = await client
+          .from('referrals')
+          .insert({
+            referrer_lead_id: input.referrerLeadId,
+            referrer_name: lead.name,
+            referrer_contact: lead.contact,
+            referred_name: input.referredName,
+            referred_contact: input.referredContact,
+            referred_location: input.referredLocation ?? null,
+            referred_no_plots: input.referredNoPlots ?? 1,
+            created_by_key: agentKey,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapReferralRow(data);
       },
     },
   };

@@ -123,7 +123,32 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 3, leads, payments, scheduleItems, streaks, config, plots, siteVisits };
+  // referrerLeadId deliberately points at one of the leads above -- matches
+  // the real RLS shape (an agent only ever sees a referral whose
+  // referrer_lead_id belongs to one of their own leads), so the demo
+  // listForAgent() filter behaves identically to production.
+  const referrals: DemoDb['referrals'] = [
+    {
+      id: uid(),
+      referrerLeadId: leads[0].id,
+      referrerName: leads[0].name,
+      referrerContact: leads[0].contact,
+      referredName: 'Yaw Danso',
+      referredContact: '0247001122',
+      referredLocation: 'Tema',
+      referredNoPlots: 1,
+      referredLeadId: null,
+      status: 'Pending',
+      pointsAwarded: 0,
+      source: 'staff',
+      createdByKey: AGENT_KEY,
+      createdAt: isoPlusDays(t, -6),
+      clearedAt: null,
+      archived: false,
+    },
+  ];
+
+  return { version: 4, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };
