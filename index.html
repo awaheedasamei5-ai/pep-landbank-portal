@@ -591,11 +591,9 @@ a{color:var(--green2)}
 .streakArtImg{width:100%;height:100%;object-fit:contain;object-position:bottom right;display:block;filter:drop-shadow(0 10px 22px rgba(0,0,0,.4))}
 .streakContent{position:relative;z-index:1;padding-right:42%}
 /* The pipeline pet's "severe" band reuses the same worried pose as
-   "moderate" but escalates through the deeper red background, the corner
-   badge and more urgent copy -- the GIF itself (already animated by the
-   user) is never transformed or distorted. */
-.streakPetBadge{position:absolute;bottom:2%;left:-8px;width:15%;max-width:34px;min-width:22px;aspect-ratio:1;border-radius:50%;
-  box-shadow:0 3px 8px rgba(0,0,0,.4);animation:ringPulse 1.6s ease-in-out infinite}
+   "moderate" but escalates through the deeper red background and more
+   urgent copy alone -- the GIF itself (already animated by the user) is
+   never transformed or distorted. */
 .clientMoodCard{border-radius:20px;padding:16px 18px;color:#fff;display:flex;align-items:center;gap:14px;margin-bottom:18px;box-shadow:0 14px 32px -12px rgba(0,0,0,.3);animation:fadeUp .4s ease both}
 .clientMoodEmoji{font-size:34px;line-height:1;flex:0 0 auto}
 .clientMoodState{font-weight:800;font-size:15px}
@@ -10274,7 +10272,7 @@ const PIPELINE_PET={
   pet_happy:{img:'./pet/pet_happy.gif',bg:'linear-gradient(135deg,#34D399,#059669)',label:'AHEAD OF PACE',color:'#4ADE80',dotClass:'ok'},
   pet_neutral:{img:'./pet/pet_neutral.gif',bg:'linear-gradient(135deg,#3B82F6,#1D4ED8)',label:'ON PACE',color:'#93C5FD',dotClass:'ok'},
   pet_worried_moderate:{img:'./pet/pet_worried.gif',bg:'linear-gradient(135deg,#F59E0B,#B45309)',label:'BEHIND PACE',color:'#FBBF24',dotClass:'warn'},
-  pet_worried_severe:{img:'./pet/pet_worried.gif',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:'CRITICAL',color:'#F87171',dotClass:'dgr',badge:'./pet/hot_overwhelmed.gif'}
+  pet_worried_severe:{img:'./pet/pet_worried.gif',bg:'linear-gradient(135deg,#DC2626,#7F1D1D)',label:'CRITICAL',color:'#F87171',dotClass:'dgr'}
 };
 function pipelinePetDisplay(petMood){
   const k=petMood.key==='pet_worried'?('pet_worried_'+(petMood.severity||'moderate')):petMood.key;
@@ -10445,6 +10443,20 @@ function riskMoodLabel(risk,signals){
   if(risk.tier==='at risk') return 'Falling behind this month\'s target';
   return risk.daysLeft+' day'+(risk.daysLeft===1?'':'s')+' left — act now';
 }
+// Brief skeleton shown in .heroStreakSlot while evaluateMyStreak() is still
+// resolving (MY_STREAK starts null) -- pet_small.gif's simpler, smaller
+// character fits a loading moment better than any of the full mood/pet
+// poses. Sales-side only, same as every other pet_* asset.
+function streakLoadingHtml(){
+  return `<div class="streakCard">
+    <div class="streakBgLayer bgA" style="background:linear-gradient(135deg,#64748B,#475569)"></div>
+    <div class="streakArtLayer"><div class="streakArtPane paneA" style="opacity:1"><img class="streakArtImg" src="./pet/pet_small.gif" alt="" draggable="false"/></div></div>
+    <div class="streakContent">
+      <div class="streakEyebrow">Pipeline status</div>
+      <div class="streakNum">Loading…</div>
+    </div>
+  </div>`;
+}
 function streakWidgetHtml(streak,clickable){
   if(!streak) return '';
   const m=streak.mood;
@@ -10469,7 +10481,6 @@ function streakWidgetHtml(streak,clickable){
       <div class="streakArtPane paneA"><img class="streakArtImg" src="${m.img}" alt="${m.emoji}" draggable="false"/></div>
       <div class="streakArtPane paneB">
         <img class="streakArtImg${severe?' severe':''}" src="${pet.img}" alt="pipeline mood" draggable="false"/>
-        ${pet.badge?`<img class="streakPetBadge" src="${pet.badge}" alt="" draggable="false"/>`:''}
       </div>
     </div>
     <div class="streakContent">
@@ -10563,7 +10574,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
           <div class="heroChip" id="heroQuoteChip"><div class="l">Documents</div><div class="v" style="font-size:13px">Request quotation →</div></div>
         </div>
       </div>
-      ${MY_STREAK?`<div class="heroStreakSlot">${streakWidgetHtml(MY_STREAK,true)}</div>`:''}
+      <div class="heroStreakSlot">${MY_STREAK?streakWidgetHtml(MY_STREAK,true):streakLoadingHtml()}</div>
     </div>
   </div>
   <div class="dashFlow">
