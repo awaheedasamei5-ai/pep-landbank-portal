@@ -23,8 +23,8 @@ export const useSessionStore = create<SessionState>()(
           demoMode: true,
           profile:
             role === 'manager'
-              ? { key: 'management', name: 'Management', role: 'manager' }
-              : { key: 'elias', name: 'Elias Torgbuivi', role: 'agent' },
+              ? { key: 'management', name: 'Management', role: 'manager', active: true }
+              : { key: 'elias', name: 'Elias Torgbuivi', role: 'agent', active: true },
         }),
       logout: () => set({ profile: null }),
     }),

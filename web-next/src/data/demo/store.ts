@@ -24,6 +24,11 @@ export interface DemoDb {
   memoRecipients: MemoRecipient[];
   complaints: Complaint[];
   contractRequests: ContractRequest[];
+  // Keyed by staff key -- only staff whose active status has been toggled
+  // away from DEMO_STAFF's own default show up here. Kept separate from
+  // DEMO_STAFF (a static, code-defined roster) since DEMO_STAFF isn't
+  // itself persisted/reseedable data.
+  staffActiveOverrides: Record<string, boolean>;
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
   // kind is always null here -- this demo store never simulates the
@@ -31,7 +36,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 16;
+const DEMO_VERSION = 17;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

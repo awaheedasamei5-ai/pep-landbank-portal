@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import type { Config, LeaderboardWeights } from '../../../types/domain';
 import { useConfig, useUpdateConfig } from '../hooks/useConfigSettings';
 import styles from './SettingsScreen.module.css';
@@ -8,11 +9,15 @@ import styles from './SettingsScreen.module.css';
 // confirmed manager-only. Closes the loop on the Leaderboard and
 // Commission screens shipped earlier, which read these same fields but
 // had no way for a manager to actually change them. Every other real
-// settings area (Quotation text, full Pricing & Targets, Staff roster,
-// Company/Achievement/Referral settings, Backup/System/Audit) is
-// deliberately out of scope for this first cut -- a much larger hub in
-// index.html (mgrSettingsHubHtml), not something to half-build here.
+// settings area (Quotation text, full Pricing & Targets, Company/
+// Achievement/Referral settings, Backup/System/Audit) is deliberately
+// out of scope for this first cut -- a much larger hub in index.html
+// (mgrSettingsHubHtml), not something to half-build here. Team roster
+// (activate/deactivate) lives at its own route, linked below, since it
+// has real content of its own rather than fitting this screen's
+// edit-a-number-and-save shape.
 export function SettingsScreen() {
+  const navigate = useNavigate();
   const { data: config, isLoading } = useConfig();
 
   return (
@@ -20,6 +25,10 @@ export function SettingsScreen() {
       <div className={styles.eyebrow}>Management</div>
       <h1 className={styles.title}>Settings</h1>
       <p className={styles.sub}>Leaderboard points formula & the commission engine</p>
+
+      <button type="button" className={styles.teamLink} onClick={() => navigate('/app/mgr/team')}>
+        👥 Team roster &mdash; activate / deactivate staff
+      </button>
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {config && <SettingsForm config={config} />}

@@ -9,6 +9,11 @@ export interface Profile {
   name: string;
   role: Role;
   email?: string;
+  // Real column `active` (confirmed live, all 7 real staff currently
+  // true) -- deactivating blocks sign-in but keeps historical leads/
+  // stats intact everywhere (index.html's own comment on this exact
+  // toggle). Defaults true since older mapped call sites never needed it.
+  active: boolean;
 }
 
 export type PlotType = 'Full Plot' | 'Half Plot';

@@ -4,6 +4,22 @@
 .title { font-size: 22px; margin: 4px 0 0; }
 .sub { color: var(--muted); margin: 6px 0 20px; font-size: 13px; }
 
+.teamLink {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
 .sectionCard {
   background: var(--card);
   border: 1px solid var(--line);

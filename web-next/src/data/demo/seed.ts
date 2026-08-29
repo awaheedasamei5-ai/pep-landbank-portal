@@ -447,7 +447,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 16, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, sveInvites, sveSubmissions, chatMessages };
+  return { version: 17, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

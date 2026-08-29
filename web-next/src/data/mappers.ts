@@ -190,6 +190,7 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
     name: r.name as string,
     role: (r.role as Profile['role']) ?? 'agent',
     email: (r.email as string) ?? undefined,
+    active: (r.active as boolean) ?? true,
   };
 }
 

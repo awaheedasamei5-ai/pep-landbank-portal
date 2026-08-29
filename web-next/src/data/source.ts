@@ -29,10 +29,14 @@ import {
 // repeatedly across plots/site_visits/complaints RLS policies
 // ('elias','emmanuel','elizabeth' + a manager), not invented.
 const DEMO_STAFF: Profile[] = [
-  { key: 'management', name: 'Management', role: 'manager' },
-  { key: 'elias', name: 'Elias Torgbuivi', role: 'agent' },
-  { key: 'emmanuel', name: 'Emmanuel Owusu', role: 'agent' },
-  { key: 'elizabeth', name: 'Elizabeth Misiame', role: 'agent' },
+  { key: 'management', name: 'Management', role: 'manager', email: 'management@landbankghana.com', active: true },
+  { key: 'elias', name: 'Elias Torgbuivi', role: 'agent', email: 'opsofficer@landbankghana.com', active: true },
+  { key: 'emmanuel', name: 'Emmanuel Owusu', role: 'agent', email: 'operations@landbankghana.com', active: true },
+  { key: 'elizabeth', name: 'Elizabeth Misiame', role: 'agent', email: 'executiveassistant@landbankghana.com', active: true },
+  // Deactivated on purpose -- gives the Team Roster screen's toggle a real
+  // "reactivate" case to test, not just always-active rows. Key matches
+  // production's real 'adams' staff member (confirmed live).
+  { key: 'adams', name: 'Adams', role: 'agent', email: 'digitalopsofficer@landbankghana.com', active: false },
 ];
 
 // A memo a staff member "received" either because they're the primary
@@ -184,6 +188,19 @@ export interface DataSource {
   // see every profile, so this is a plain unfiltered list.
   staff: {
     list(): Promise<Profile[]>;
+    // Unfiltered version of list() (which only returns active=true) --
+    // the Team Roster screen needs deactivated staff visible too, to
+    // reactivate them. Real p_profiles_sel RLS lets any authenticated
+    // staff member see every profile regardless of active status.
+    listAll(): Promise<Profile[]>;
+    // Real p_profiles_upd RLS (confirmed live): own row OR manager --
+    // matches index.html's own comment that deactivating blocks sign-in
+    // but keeps historical leads/stats intact everywhere, including the
+    // Leaderboard. Real account CREATION (index.html's create-employee
+    // Edge Function, which provisions a real Supabase Auth user) is
+    // deliberately out of scope -- not something to wire up and exercise
+    // in a demo/testing pass.
+    setActive(key: string, active: boolean): Promise<Profile>;
   };
   // Real tables `memos` + `memo_recipients` -- see the Memo type's comment
   // in types/domain.ts for the RLS/draft/CC shape. delete() throws if
@@ -677,7 +694,20 @@ function createDemoDataSource(): DataSource {
     },
     staff: {
       async list() {
-        return DEMO_STAFF;
+        const overrides = demoLoad().staffActiveOverrides;
+        return DEMO_STAFF.map((s) => (s.key in overrides ? { ...s, active: overrides[s.key] } : s)).filter((s) => s.active);
+      },
+      async listAll() {
+        const overrides = demoLoad().staffActiveOverrides;
+        return DEMO_STAFF.map((s) => (s.key in overrides ? { ...s, active: overrides[s.key] } : s));
+      },
+      async setActive(key, active) {
+        const db = demoLoad();
+        db.staffActiveOverrides = { ...db.staffActiveOverrides, [key]: active };
+        demoSave();
+        const staff = DEMO_STAFF.find((s) => s.key === key);
+        if (!staff) throw new Error('Staff not found');
+        return { ...staff, active };
       },
     },
     memos: {
@@ -1354,9 +1384,19 @@ function createLiveDataSource(): DataSource {
     },
     staff: {
       async list() {
-        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email').eq('active', true);
+        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active').eq('active', true);
         if (error) throw error;
         return (data ?? []).map(mapProfileRow);
+      },
+      async listAll() {
+        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active');
+        if (error) throw error;
+        return (data ?? []).map(mapProfileRow);
+      },
+      async setActive(key, active) {
+        const { data, error } = await requireClient().from('profiles').update({ active }).eq('agent_key', key).select().single();
+        if (error) throw error;
+        return mapProfileRow(data);
       },
     },
     memos: {
