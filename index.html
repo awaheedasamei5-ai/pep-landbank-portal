@@ -8882,17 +8882,6 @@ function mgrAppRoute(key){
   else if(key==='Quotation') openQuotationRequest();
   else route('mgrTabView',key);
 }
-function mgrAppGridHtml(items){
-  return items.map(a=>`<button class="appGridIcon" data-moreapp="${esc(a.key)}"><span class="appGridGlyph">${fic(a.fic)}${appGridBadgeHtml(a.badgeKind,a.badgeCountKey)}</span><span class="appGridLabel">${esc(a.label)}</span></button>`).join('');
-}
-// Same tiles as mgrAppGridHtml, but broken into labelled clusters of related apps
-// instead of one long undifferentiated grid -- groups with no visible items (role
-// gating emptied them out) are skipped rather than showing an empty heading.
-function groupedAppGridHtml(groups){
-  return groups.filter(g=>g.items.length).map(g=>`
-    <div class="appGridGroupLabel">${esc(g.title)}</div>
-    <div class="appGrid">${g.items.map(a=>`<button class="appGridIcon" data-moreapp="${esc(a.key)}"><span class="appGridGlyph">${fic(a.fic)}${appGridBadgeHtml(a.badgeKind,a.badgeCountKey)}</span><span class="appGridLabel">${esc(a.label)}</span></button>`).join('')}</div>`).join('');
-}
 const VAULT_ICONS={'Documents':'📁','Operations':'🗂️','Money':'💰','Insights':'📊','My pipeline':'📈','Client touchpoints':'🤝','Inventory & records':'🏘️','Leads & referrals':'🎯','Pricing & money':'💳','Team & company':'🏢','System':'⚙️','Documents & tools':'🧰','Referrals':'🎁','Client':'👤','Plot & pricing':'📐','Deposit & schedule':'💳','Stage & follow-up':'📌','Documentation & allocation':'📋','Payment history':'🧾','Contract':'📄','Danger zone':'⚠️'};
 // A vault is a collapsed <details> card -- tap it and the apps inside expand in
 // place. Cuts a 13-tile flat grid down to 4 tiles up front, instead of just
@@ -8937,12 +8926,6 @@ function bindVaultAccordion(container,hubId){
         VAULT_OPEN_STATE[hubId]=null;
       }
     });
-  });
-}
-function bindMgrAppGrid(grid,items){
-  grid.querySelectorAll('[data-moreapp]').forEach(b=>{
-    const item=items.find(a=>a.key===b.dataset.moreapp);
-    b.onclick=()=>{ if(item&&item.badgeKind) apiMarkKindRead(item.badgeKind).then(refreshAllBadges); if(item&&item.badgeCountKey&&DB.badgeCounts){ DB.badgeCounts[item.badgeCountKey]=0; refreshAllBadges(); } mgrAppRoute(b.dataset.moreapp); };
   });
 }
 // Replaces the old separate CRM Tools / Plot Inventory tabs with one Sales Desk hub,
@@ -9035,7 +9018,15 @@ const TILE_DESC={
   'Expenses':'Submit or approve a company expense',
   'Commission':'Review commission earned across the team',
   'Reports':'Company-wide performance reports and exports',
-  'Leaderboard':'See how every agent is ranking this month'
+  'Leaderboard':'See how every agent is ranking this month',
+  'Smart Insights':'Personalized nudges and performance insights',
+  'Portfolio':'Your achievements, skins, and unlocked rewards',
+  'Document Vault':'Every file you’ve generated or downloaded',
+  'Settings':'Manage your account and preferences',
+  'Data Check':'Spot leads missing a next action, contact, or plot details',
+  'Analytics':'Deeper performance analytics across the team',
+  'Report Archive':'Past generated reports, saved for later',
+  'News & Announcements':'Company news and announcements'
 };
 function flatTileSectionsHtml(groups,agentShaped){
   return groups.filter(g=>g.items.length).map((g,i)=>{
@@ -9076,6 +9067,11 @@ function viewManagementHub(){
   <div id="managementHubGrid">${tileGridHtml(items)}</div>`;
   bindTileGrid(document.getElementById('managementHubGrid'),items);
 }
+// Premium UI rebuild -- More now shares the same flat colorful tile-section
+// design as Sales Desk/Office Desk (flatTileSectionsHtml/tileGridHtml)
+// instead of the older collapsed-accordion vault grid. Same underlying
+// item/group data as before, just the newer HTML shell + bindTileGrid,
+// so More finally matches the rest of the app's nav surfaces.
 function viewMore(){
   V.innerHTML=`<div class="pagehead"><div><h2>More</h2><p>Additional tools and settings</p></div></div>
   <div id="moreGrid"></div>`;
@@ -9087,29 +9083,23 @@ function viewMore(){
       {title:'Insights & data',items:['Data Check','Analytics','Reports','Report Archive','News','Insights'].map(byKey).filter(Boolean)},
       {title:'Tools',items:['Settings','Downloads'].map(byKey).filter(Boolean)}
     ];
-    const items=groups.flatMap(g=>g.items);
-    grid.innerHTML=vaultGridHtml(groups,{openFirst:true,hubId:'moreMgr'});
-    bindMgrAppGrid(grid,items);
-    bindVaultAccordion(grid,'moreMgr');
+    grid.innerHTML=flatTileSectionsHtml(groups,false);
+    bindTileGrid(grid,groups.flatMap(g=>g.items).map(a=>({mgrKey:a.key,badgeKind:a.badgeKind,badgeCountKey:a.badgeCountKey})));
   } else {
     const items=[
-      {key:'insights',fic:'target',label:'Smart Insights'},
-      {key:'portfolio',fic:'leaderboard',label:'Portfolio',badgeCountKey:'achievements'},
-      {key:'downloads',fic:'downloads',label:'Document Vault'},
-      {key:'sms',fic:'sms',label:'SMS'},
-      {key:'account',fic:'settings',label:'Settings'}
+      {r:'insights',fic:'target',label:'Smart Insights'},
+      {r:'portfolio',fic:'leaderboard',label:'Portfolio',badgeCountKey:'achievements'},
+      {r:'downloads',fic:'downloads',label:'Document Vault'},
+      {r:'sms',fic:'sms',label:'SMS'},
+      {r:'account',fic:'settings',label:'Settings'}
     ];
-    const byKey=k=>items.find(a=>a.key===k);
+    const byKey=k=>items.find(a=>a.r===k);
     const groups=[
       {title:'Insights',items:['insights','portfolio'].map(byKey).filter(Boolean)},
       {title:'Documents & tools',items:['downloads','sms','account'].map(byKey).filter(Boolean)}
     ];
-    grid.innerHTML=vaultGridHtml(groups,{openFirst:true,hubId:'moreAgent'});
-    bindVaultAccordion(grid,'moreAgent');
-    grid.querySelectorAll('[data-moreapp]').forEach(b=>{
-      const item=items.find(a=>a.key===b.dataset.moreapp);
-      b.onclick=()=>{ if(item&&item.badgeKind) apiMarkKindRead(item.badgeKind).then(refreshAllBadges); if(item&&item.badgeCountKey&&DB.badgeCounts){ DB.badgeCounts[item.badgeCountKey]=0; refreshAllBadges(); } route(b.dataset.moreapp); };
-    });
+    grid.innerHTML=flatTileSectionsHtml(groups,true);
+    bindTileGrid(grid,groups.flatMap(g=>g.items));
   }
 }
 let downloadsKindFilter='';
