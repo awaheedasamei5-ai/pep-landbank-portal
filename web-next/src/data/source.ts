@@ -101,6 +101,14 @@ export interface DataSource {
     create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
     approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
     decline(paymentId: string, decidedBy: string, decidedByName: string, reason?: string): Promise<void>;
+    // Real SECURITY DEFINER RPC `ensure_receipt_number` (confirmed live,
+    // authenticated-only -- staging had this over-permissively granted to
+    // anon too, fixed to match production, same drift class as
+    // leaderboard_rows earlier). Mints a permanent receipt number the
+    // first time anyone requests one for a payment (logged to
+    // receipt_log, an insert-only audit trail) and returns the same
+    // number on every later call for that payment -- never a new one.
+    ensureReceiptNumber(paymentId: string): Promise<string>;
   };
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
@@ -452,6 +460,20 @@ function createDemoDataSource(): DataSource {
         const updated = { ...db.payments[index], status: 'declined' as const, decidedBy, decidedByName, decidedAt };
         db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
         demoSave();
+      },
+      async ensureReceiptNumber(paymentId) {
+        const db = demoLoad();
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        const existing = db.payments[index].receiptNumber;
+        if (existing) return existing;
+        // Matches index.html's own DEMO_MODE fallback exactly:
+        // 'RCT-'+String(paymentId).slice(0,6).toUpperCase().
+        const number = `RCT-${paymentId.slice(0, 6).toUpperCase()}`;
+        const updated = { ...db.payments[index], receiptNumber: number };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
+        demoSave();
+        return number;
       },
     },
     scheduleItems: {
@@ -1243,6 +1265,11 @@ function createLiveDataSource(): DataSource {
       async decline(paymentId, _decidedBy, _decidedByName, reason) {
         const { error } = await requireClient().rpc('decline_payment', { p_payment_id: paymentId, p_reason: reason ?? null });
         if (error) throw error;
+      },
+      async ensureReceiptNumber(paymentId) {
+        const { data, error } = await requireClient().rpc('ensure_receipt_number', { p_payment_id: paymentId, p_channel: 'download' });
+        if (error) throw error;
+        return data as string;
       },
     },
     scheduleItems: {

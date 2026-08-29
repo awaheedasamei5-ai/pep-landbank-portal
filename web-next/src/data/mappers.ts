@@ -394,6 +394,14 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     int6: Number(r.int_6 ?? 1500),
     int9: Number(r.int_9 ?? 2250),
     int12: Number(r.int_12 ?? 3000),
+    quoteCompanyName: (r.quote_company_name as string) ?? 'Trulander JSF Limited',
+    quoteSiteName: (r.quote_site_name as string) ?? '',
+    companyPhone: (r.company_phone as string) ?? '',
+    companyEmail: (r.company_email as string) ?? '',
+    companyTin: (r.company_tin as string) ?? '',
+    quoteFooterAddress: (r.quote_footer_address as string) ?? '',
+    receiptThanksText: (r.receipt_thanks_text as string) ?? 'Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.',
+    receiptLogoImage: (r.receipt_logo_image as string) ?? null,
   };
 }
 

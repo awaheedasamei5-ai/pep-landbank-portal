@@ -4,6 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
+import { useDownloadReceipt } from '../../payments/hooks/useReceipt';
 import { StageBadge } from '../components/StageBadge';
 import { useLead } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
@@ -28,6 +29,7 @@ export function PipelineDetailScreen() {
   const { data: lead, isLoading } = useLead(id ?? '');
   const { data: payments } = usePayments();
   const createPayment = useCreatePayment();
+  const downloadReceipt = useDownloadReceipt();
   const [amount, setAmount] = useState('');
 
   if (isLoading) return <div className={styles.wrap}>Loading…</div>;
@@ -92,17 +94,32 @@ export function PipelineDetailScreen() {
         <h2 className={styles.sectionTitle}>Payment history</h2>
         <div className={styles.history}>
           {leadPayments.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No individual payments logged yet — only a starting total.</p>}
-          {leadPayments.map((p) => (
-            <div className={styles.historyRow} key={p.id}>
-              <span>
-                {p.date}
-                {p.status && p.status !== 'approved' && (
-                  <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: p.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>{p.status === 'pending' ? '· awaiting approval' : '· declined'}</span>
-                )}
-              </span>
-              <span style={{ fontWeight: 700, color: p.status === 'declined' ? 'var(--muted)' : 'var(--ok)' }}>+{ghs(p.amount)}</span>
-            </div>
-          ))}
+          {leadPayments.map((p) => {
+            const isApproved = !p.status || p.status === 'approved';
+            return (
+              <div className={styles.historyRow} key={p.id}>
+                <span>
+                  {p.date}
+                  {p.status && p.status !== 'approved' && (
+                    <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: p.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>{p.status === 'pending' ? '· awaiting approval' : '· declined'}</span>
+                  )}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {isApproved && (
+                    <button
+                      type="button"
+                      onClick={() => downloadReceipt.mutate({ payment: p, lead })}
+                      disabled={downloadReceipt.isPending}
+                      style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 999, padding: '4px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' }}
+                    >
+                      ⬇ Receipt
+                    </button>
+                  )}
+                  <span style={{ fontWeight: 700, color: p.status === 'declined' ? 'var(--muted)' : 'var(--ok)' }}>+{ghs(p.amount)}</span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

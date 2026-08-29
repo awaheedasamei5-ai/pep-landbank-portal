@@ -80,6 +80,16 @@ export function seedDemo(): DemoDb {
     int6: 1500,
     int9: 2250,
     int12: 3000,
+    // Real production values (confirmed live) -- phone/email/tin are
+    // genuinely empty in production today, not a demo-only gap.
+    quoteCompanyName: 'Trulander JSF Limited',
+    quoteSiteName: 'P.O Box CO3644, Tema, Accra-Ghana',
+    companyPhone: '',
+    companyEmail: '',
+    companyTin: '',
+    quoteFooterAddress: 'First Floor Alex Nerda Building. Nungua Nautical Beach Road Drive',
+    receiptThanksText: 'Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.',
+    receiptLogoImage: null,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -540,7 +550,7 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 21, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  return { version: 22, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

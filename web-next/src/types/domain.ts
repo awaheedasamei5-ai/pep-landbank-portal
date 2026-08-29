@@ -158,6 +158,19 @@ export interface Config {
   int6: number;
   int9: number;
   int12: number;
+  // Real columns quote_company_name/quote_site_name/company_phone/
+  // company_email/company_tin/quote_footer_address/receipt_thanks_text/
+  // receipt_logo_image (confirmed live) -- company identity shown on
+  // quotations and payment receipts. phone/email/tin are empty strings in
+  // real production today (never filled in), not a gap in this port.
+  quoteCompanyName: string;
+  quoteSiteName: string;
+  companyPhone: string;
+  companyEmail: string;
+  companyTin: string;
+  quoteFooterAddress: string;
+  receiptThanksText: string;
+  receiptLogoImage: string | null;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
