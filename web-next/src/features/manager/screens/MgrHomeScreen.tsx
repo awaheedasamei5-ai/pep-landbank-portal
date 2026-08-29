@@ -41,6 +41,9 @@ export function MgrHomeScreen() {
           <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/settings')}>
             ⚙ Settings
           </button>
+          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/reports')}>
+            📊 Reports
+          </button>
         </div>
       </div>
 

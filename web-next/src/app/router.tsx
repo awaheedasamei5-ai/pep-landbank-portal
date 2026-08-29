@@ -36,6 +36,7 @@ import { ContractRequestsScreen } from '../features/contracts/screens/ContractRe
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
 import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
+import { ReportsScreen } from '../features/manager/screens/ReportsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -101,6 +102,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <TeamRosterScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/reports',
+        element: (
+          <RequireRole role="manager">
+            <ReportsScreen />
           </RequireRole>
         ),
       },

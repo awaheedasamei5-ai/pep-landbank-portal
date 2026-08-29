@@ -128,6 +128,10 @@ export interface DataSource {
   // not derived from agent_key at write time).
   siteVisits: {
     listForAgent(agentKey: string): Promise<SiteVisit[]>;
+    // Unfiltered -- Reports' company-wide CSV export. Real site_visits_sel
+    // RLS already lets a manager SELECT every row (sve.listVisitsWithStatus
+    // below already relies on this same fact for the SVE staff screen).
+    listAll(): Promise<SiteVisit[]>;
     create(agentKey: string, agentName: string, input: NewSiteVisit): Promise<SiteVisit>;
   };
   // Deliberately read-only-plus-create: no "mark cleared"/payout method
@@ -145,6 +149,7 @@ export interface DataSource {
   // live) -- straightforward, unlike referrals' lead-linked scoping.
   enquiries: {
     listForAgent(agentKey: string): Promise<Enquiry[]>;
+    listAll(): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
   };
   // Agent-scoped via agent_key exactly like enquiries -- but unlike
@@ -155,6 +160,7 @@ export interface DataSource {
   // workflow, not an inconsistency.
   complaints: {
     listForAgent(agentKey: string): Promise<Complaint[]>;
+    listAll(): Promise<Complaint[]>;
     create(agentKey: string, agentName: string, input: NewComplaint): Promise<Complaint>;
     update(id: string, patch: ComplaintUpdate): Promise<Complaint>;
   };
@@ -464,6 +470,9 @@ function createDemoDataSource(): DataSource {
       async listForAgent(agentKey) {
         return demoLoad().siteVisits.filter((v) => v.agentKey === agentKey);
       },
+      async listAll() {
+        return demoLoad().siteVisits;
+      },
       async create(agentKey, agentName, input) {
         const visit: SiteVisit = {
           id: Math.random().toString(36).slice(2, 10),
@@ -534,6 +543,9 @@ function createDemoDataSource(): DataSource {
       async listForAgent(agentKey) {
         return demoLoad().enquiries.filter((e) => e.agentKey === agentKey);
       },
+      async listAll() {
+        return demoLoad().enquiries;
+      },
       async create(agentKey, agentName, input) {
         const enquiry: Enquiry = {
           id: Math.random().toString(36).slice(2, 10),
@@ -559,6 +571,9 @@ function createDemoDataSource(): DataSource {
     complaints: {
       async listForAgent(agentKey) {
         return demoLoad().complaints.filter((c) => c.agentKey === agentKey);
+      },
+      async listAll() {
+        return demoLoad().complaints;
       },
       async create(agentKey, agentName, input) {
         const complaint: Complaint = {
@@ -1153,6 +1168,11 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
+      async listAll() {
+        const { data, error } = await requireClient().from('site_visits').select('*').order('visit_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapSiteVisitRow);
+      },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
           .from('site_visits')
@@ -1222,6 +1242,11 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapEnquiryRow);
       },
+      async listAll() {
+        const { data, error } = await requireClient().from('enquiries').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapEnquiryRow);
+      },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
           .from('enquiries')
@@ -1247,6 +1272,11 @@ function createLiveDataSource(): DataSource {
     complaints: {
       async listForAgent(agentKey) {
         const { data, error } = await requireClient().from('complaints').select('*').eq('agent_key', agentKey).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapComplaintRow);
+      },
+      async listAll() {
+        const { data, error } = await requireClient().from('complaints').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapComplaintRow);
       },
