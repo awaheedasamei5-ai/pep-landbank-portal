@@ -22,15 +22,19 @@ import { AttendanceScreen } from '../features/attendance/screens/AttendanceScree
 import { MemosScreen } from '../features/memos/screens/MemosScreen';
 import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
+import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
 import { StubScreen } from '../shared/ui/StubScreen';
 
-// Phase 1: two disjoint trees exist in spirit (public vs authenticated) --
-// only the authenticated /app/* tree is built out; the public SVE-form/
-// widget routes are deferred to a later phase. base:'./' in vite.config.ts
-// means the eventual cutover basename gets set here once decided.
+// Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
+// and a small public tree (/visit-feedback/:token -- the Site Visit
+// Experience form, no session at all). base:'./' in vite.config.ts means
+// the eventual cutover basename gets set here once decided.
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/login" replace /> },
   { path: '/login', element: <LoginScreen /> },
+  // Public, unauthenticated -- no RequireAuth wrapper. See the
+  // SiteVisitInvite type's comment in types/domain.ts.
+  { path: '/visit-feedback/:token', element: <SveFeedbackScreen /> },
   {
     path: '/app',
     element: (

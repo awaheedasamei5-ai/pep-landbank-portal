@@ -372,3 +372,44 @@ export interface ManagerOverview {
   stageFunnel: { stage: Stage; count: number }[];
   byAgent: { key: string; name: string; leadCount: number; value: number }[];
 }
+
+// Public, unauthenticated Site Visit Experience feedback form -- a
+// genuinely different access pattern from everything else in this app.
+// Confirmed live (2026-08-29) that RLS on the underlying tables is
+// closed to `anon` entirely (no token-based bypass existed), so this
+// goes through two new SECURITY DEFINER RPCs
+// (get_site_visit_invite/submit_site_visit_experience) added to BOTH
+// production and staging this session -- deliberately narrow (a token
+// lookup and one validated insert) rather than opening the tables
+// themselves to anon, which would make invite tokens enumerable via a
+// broad SELECT policy. See data/sveClient.ts, not data/source.ts --
+// this never goes through the demo/live DataSource seam because a
+// public visitor has no session/profile for demoMode to key off of.
+export interface SiteVisitInvite {
+  inviteId: string;
+  clientName: string | null;
+  site: string | null;
+  plot: string | null;
+  visitDate: string | null;
+  alreadySubmitted: boolean;
+}
+
+export type SveSubmitResult = 'ok' | 'already_submitted' | 'not_found';
+
+export interface SveSubmissionInput {
+  fullName: string;
+  phone: string;
+  siteVisited?: string;
+  visitDate?: string;
+  journeyRating?: string;
+  siteManagerName?: string;
+  relationshipRating?: number;
+  handlingFeedback?: string;
+  siteDescriptionRating?: string;
+  belowExpectationReason?: string;
+  overallRating?: number;
+  npsScore?: number;
+  improvementSuggestions?: string;
+  purchaseIntent?: string;
+  additionalComments?: string;
+}
