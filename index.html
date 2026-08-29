@@ -2248,6 +2248,24 @@ async function apiUpdateSignature(dataUrlOrNull){
   PROFILE.signature_data=dataUrlOrNull;
   const mine=(DB.profiles||[]).find(p=>p.id===USER.id); if(mine) mine.signature_data=dataUrlOrNull;
 }
+// Persistent per-staff token for the personalized public widget
+// (public-widget.html?agent=<token> -> the public-stats Edge Function's v2
+// branch). Minted once, on demand, the first time someone opens Profile and
+// asks for their link -- not pre-generated for everyone, since most staff
+// will never use it.
+async function apiGetOrCreateWidgetToken(){
+  if(DEMO_MODE) return 'demo-'+PROFILE.key; // preview only -- not a real, working token
+  if(PROFILE.widget_token) return PROFILE.widget_token;
+  const token=(crypto&&crypto.randomUUID)?crypto.randomUUID().replace(/-/g,''):(uid()+uid());
+  const {data,error}=await sb.from('profiles').update({widget_token:token}).eq('id',USER.id).select('widget_token').single();
+  if(error) throw error;
+  PROFILE.widget_token=data.widget_token;
+  const mine=(DB.profiles||[]).find(p=>p.id===USER.id); if(mine) mine.widget_token=data.widget_token;
+  return PROFILE.widget_token;
+}
+function widgetEmbedUrl(token){
+  return location.origin+location.pathname.replace(/[^/]*$/,'')+'public-widget.html?agent='+encodeURIComponent(token);
+}
 /* Looks up a staff member's saved signature (by agent_key) from whatever profiles
    are already loaded -- works for any staff session since profiles are readable
    company-wide, which is what lets the system stamp an approver's signature into a
@@ -15961,7 +15979,18 @@ function formProfile(){
     ${fld('Address','<input id="ad_address" placeholder="Street, city" value="'+esc(mp.address||'')+'"/>')}
     ${fld('ID number','<input id="ad_idnumber" placeholder="Ghana Card / Voter ID / Passport no." value="'+esc(mp.id_number||'')+'"/>')}
     <div class="formactions"><button class="btn primary" id="saveAboutMeBtn">Save my details</button></div>
-  </div>`; })()}`;
+  </div>`; })()}
+  ${settingsSectionHead('grid','Your live widget','embed on your own page')}
+  <div class="formwrap">
+    <p class="mini" style="margin:-2px 0 12px">A small live card of your own activity -- your current streak, this week's site visits, your pipeline -- you can embed on your own website, bio link, or anywhere else you post. It only ever shows YOUR numbers, never anyone else's. This is a web embed link, not something that appears in your phone's own Widgets picker.</p>
+    <div id="widgetLinkWrap">${PROFILE.widget_token?`
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="widgetLinkInput" readonly value="${esc(widgetEmbedUrl(PROFILE.widget_token))}" style="flex:1;min-width:200px;padding:10px 14px;border:1.5px solid var(--line);border-radius:100px;background:var(--paper);font-size:12px;font-family:'IBM Plex Mono',monospace"/>
+        <button class="chip" id="copyWidgetLinkBtn">Copy link</button>
+      </div>`:`
+      <button class="btn primary" id="genWidgetLinkBtn">Generate my widget link</button>`}
+    </div>
+  </div>`;
   const avInput=document.getElementById('avatarInput');
   avInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
     const b64=await openAvatarCropper(file);
@@ -15989,6 +16018,18 @@ function formProfile(){
   };
   document.getElementById('saveContactBtn').onclick=saveAccountContact;
   document.getElementById('saveAboutMeBtn').onclick=saveAccountAboutMe;
+  const genBtn=document.getElementById('genWidgetLinkBtn');
+  if(genBtn) genBtn.onclick=async()=>{
+    genBtn.disabled=true; genBtn.textContent='Generating…';
+    try{ await apiGetOrCreateWidgetToken(); formProfile(); }
+    catch(err){ toast('Could not generate link: '+(err.message||err)); genBtn.disabled=false; genBtn.textContent='Generate my widget link'; }
+  };
+  const copyBtn=document.getElementById('copyWidgetLinkBtn');
+  if(copyBtn) copyBtn.onclick=async()=>{
+    const inp=document.getElementById('widgetLinkInput');
+    try{ await navigator.clipboard.writeText(inp.value); toast('Link copied'); }
+    catch(e){ inp.select(); document.execCommand('copy'); toast('Link copied'); }
+  };
 }
 function formAccount(){
   const homeRoute = PROFILE.role==='manager' ? 'mgr' : 'home';
