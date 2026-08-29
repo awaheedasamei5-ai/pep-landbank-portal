@@ -1352,8 +1352,16 @@ body.dark .achEarned{color:#E8C158}
    viewport, which is what read as "text spilling out of the placeholder" and the
    page wobbling while scrolling on narrow screens. */
 input[type="file"]{max-width:100%;box-sizing:border-box}
-.dayGridWrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:16px;touch-action:pan-y}
+.dayGridWrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:16px;touch-action:pan-y;position:relative}
 .dayGrid{display:grid;min-width:100%}
+/* touch-action stays pan-y (see the comment above .league-wrap, ~line 1512):
+   without it, a vertical swipe starting over this wide grid gets captured as
+   an attempt to pan it sideways instead of scrolling the page. Unlike
+   Leaderboard, this had no tap-arrow fallback at all -- add the same one. */
+.dayGridScrollBtn{display:none;position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:30px;height:30px;border-radius:100px;
+  border:1px solid var(--line);background:var(--card);color:var(--text);align-items:center;justify-content:center;box-shadow:var(--shadow);cursor:pointer}
+.dayGridScrollBtn.left{left:6px} .dayGridScrollBtn.right{right:6px}
+@media(max-width:680px){ .dayGridScrollBtn.show{display:flex} }
 .dayGridStaffHead{padding:8px 10px;font-size:11.5px;font-weight:800;color:var(--text);text-align:center;border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card)}
 .dayGridHourCol{border-bottom:1px solid var(--line)}
 .dayGridHourLabel{font-size:9.5px;color:var(--muted);text-align:right;padding:2px 6px 0 0;box-sizing:border-box;border-top:1px solid var(--line)}
@@ -1569,6 +1577,19 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
 .league-table .lg-rank{font-size:17px;text-align:center;width:50px}
 .league-table .lg-name{font-weight:600;color:var(--ink)}
 .league-table .lg-strong{color:#8A6E12;font-weight:700}
+/* Same "N-column table can't fit a phone" transform as .svaTable (see its own
+   comment, ~line 376) -- 12 columns is unreadable squished into 375-430px
+   even with the tap-arrow scroll, so it becomes one card per agent instead. */
+@media(max-width:430px){
+  .league-wrap{overflow-x:visible}
+  .leagueScrollBtn{display:none!important}
+  .league-table{min-width:0!important}
+  .league-table thead{display:none}
+  .league-table tbody tr{display:block;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+  .league-table tbody tr td{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border:none;text-align:right;white-space:normal}
+  .league-table tbody tr td[data-label]::before{content:attr(data-label);font-weight:700;color:var(--muted);font-size:11px;text-align:left;flex:1}
+  .league-table .lg-rank{width:auto;text-align:right}
+}
 .team-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
 .team-row:last-child{border-bottom:none}
 .team-row .ti{display:flex;align-items:center;gap:11px}
@@ -12264,7 +12285,10 @@ function scheduleBlockHtml(item,color,hasConflict,draggable){
 function renderDayGrid(staffList,itemsByStaffKey,showHeader,draggable){
   const totalH=(DAYGRID_END_HOUR-DAYGRID_START_HOUR)*DAYGRID_ROW_PX;
   const cols=staffList.length||1;
-  return `<div class="dayGridWrap"><div class="dayGrid" style="grid-template-columns:40px repeat(${cols},minmax(120px,1fr))">
+  return `<div class="dayGridWrap">
+    <button class="dayGridScrollBtn left" data-daygridscroll="left" aria-label="Scroll left">‹</button>
+    <button class="dayGridScrollBtn right" data-daygridscroll="right" aria-label="Scroll right">›</button>
+    <div class="dayGrid" style="grid-template-columns:40px repeat(${cols},minmax(120px,1fr))">
     ${showHeader?`<div class="dayGridStaffHead"></div>${staffList.map(s=>`<div class="dayGridStaffHead">${esc(s.name)}</div>`).join('')}`:''}
     <div class="dayGridHourCol">${dayGridHourRailHtml()}</div>
     ${staffList.map((s,i)=>{
@@ -12280,6 +12304,26 @@ function renderDayGrid(staffList,itemsByStaffKey,showHeader,draggable){
       </div>`;
     }).join('')}
   </div></div>`;
+}
+// Same tap-arrow fallback Leaderboard already has for its own touch-action:pan-y
+// table wrapper (see the comment on .league-wrap CSS) -- Ops Today had the same
+// restriction with no way at all to reach staff columns past the fold on mobile.
+// Binds every .dayGridWrap currently in the DOM (there's normally just one).
+function bindDayGridScrollBtns(){
+  document.querySelectorAll('.dayGridWrap').forEach(wrap=>{
+    const btnL=wrap.querySelector('[data-daygridscroll="left"]'), btnR=wrap.querySelector('[data-daygridscroll="right"]');
+    if(!btnL||!btnR) return;
+    const refresh=()=>{
+      const overflowing=wrap.scrollWidth>wrap.clientWidth+2;
+      btnL.classList.toggle('show',overflowing&&wrap.scrollLeft>4);
+      btnR.classList.toggle('show',overflowing&&wrap.scrollLeft<wrap.scrollWidth-wrap.clientWidth-4);
+    };
+    btnL.onclick=e=>{ e.stopPropagation(); wrap.scrollBy({left:-160,behavior:'smooth'}); };
+    btnR.onclick=e=>{ e.stopPropagation(); wrap.scrollBy({left:160,behavior:'smooth'}); };
+    wrap.addEventListener('scroll',refresh);
+    window.addEventListener('resize',refresh);
+    refresh();
+  });
 }
 // Pointer-based drag (not native HTML5 drag-and-drop, which has poor touch
 // support) -- vertical-only, within the single day column, snapped to 5-minute
@@ -12622,6 +12666,7 @@ async function paintMyDayTab(){
     const it=blocks.find(b=>b.id===el.dataset.daygridopen); if(it) toast(it.startTime+'–'+it.endTime+' · '+it.title);
   });
   bindDayGridDrag(body,blocks,date,()=>paintMyDayTab());
+  bindDayGridScrollBtns();
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
 }
 // Team -- manager-only free/busy view across every staff member for the
@@ -12649,6 +12694,7 @@ async function paintTeamTab(){
     const it=blocks.find(b=>b.id===el.dataset.daygridopen); if(it) toast((it.assignedToName||'')+' · '+it.startTime+'–'+it.endTime+' · '+it.title);
   });
   document.querySelectorAll('[data-taskopen]').forEach(el=>el.onclick=()=>route('taskDetail',el.dataset.taskopen));
+  bindDayGridScrollBtns();
 }
 // Manager-only, on-demand branded PDF for Operations -- same period-picker shape
 // as Management Reports (reportPeriodRange is shared, not duplicated).
@@ -18904,7 +18950,8 @@ async function paintMgrOpsToday(){
   body.innerHTML=`<div class="kpis" style="margin-bottom:12px">${kpi('Open',teamSummary.openCount)}${kpi('Overdue',teamSummary.overdueCount)}${kpi('Completed',teamSummary.doneCount)}</div>
   ${renderDayGrid(STAFF_LIST,byStaff,true)}`;
   document.querySelectorAll('#mgrOpsToday [data-daygridopen]').forEach(el=>el.onclick=()=>route('duties'));
-  const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')) route('duties'); });
+  const grid=document.getElementById('mgrOpsToday'); if(grid) grid.querySelector('.dayGridWrap')?.addEventListener('click',e=>{ if(!e.target.closest('[data-daygridopen]')&&!e.target.closest('[data-daygridscroll]')) route('duties'); });
+  bindDayGridScrollBtns();
 }
 // Team-wide streak visibility for Management -- who's kept today's habit
 // going vs who hasn't logged a to-do yet, same signal MY_STREAK uses for an
@@ -19313,19 +19360,23 @@ function mgrLeaderboard(){
 
   const medalColors=['#D4A72C','#9AA5B1','#B87333'];
   const medal=(i)=> i<3?`<span style="width:17px;height:17px;display:inline-flex;color:${medalColors[i]}">${ic.medal}</span>`:(i+1);
+  // data-label feeds the @media(max-width:430px) stacked-card transform on
+  // .league-table (same content:attr(data-label) technique .svaTable already
+  // uses) -- a 12-column table can't fit a phone screen even with the tap-
+  // arrow scroll fallback, so below 430px it becomes one card per agent instead.
   const rowsHtml=rows.map((r,i)=>`<tr class="${i===0?'lg-first':''} lg-clickable" data-leagueagent="${esc(r.key)}">
-    <td class="lg-rank">${medal(i)}</td>
-    <td class="lg-name">${esc(r.name)}</td>
-    <td class="mono lg-strong">${r.points}</td>
-    <td class="mono">${ghs(r.totalCollected)}</td>
-    <td class="mono">${ghs(r.avgMonthly)}</td>
-    <td class="mono">${r.siteVisits}</td>
-    <td class="mono">${r.dealsClosedYear}</td>
-    <td class="mono">${r.winRate}%</td>
-    <td class="mono">${r.tasksCompleted}</td>
-    <td class="mono">${r.todosCompleted}</td>
-    <td class="mono">${r.workloadVolume}</td>
-    <td><span class="tag ${r.health.cls}">${r.health.label}</span></td>
+    <td class="lg-rank" data-label="Rank">${medal(i)}</td>
+    <td class="lg-name" data-label="Agent">${esc(r.name)}</td>
+    <td class="mono lg-strong" data-label="Points">${r.points}</td>
+    <td class="mono" data-label="Total Collected">${ghs(r.totalCollected)}</td>
+    <td class="mono" data-label="Avg Monthly">${ghs(r.avgMonthly)}</td>
+    <td class="mono" data-label="Site Visits">${r.siteVisits}</td>
+    <td class="mono" data-label="Deals Closed (${slYear})">${r.dealsClosedYear}</td>
+    <td class="mono" data-label="Win Rate">${r.winRate}%</td>
+    <td class="mono" data-label="Tasks Done (90d)">${r.tasksCompleted}</td>
+    <td class="mono" data-label="To-Dos Done (90d)">${r.todosCompleted}</td>
+    <td class="mono" data-label="Workload">${r.workloadVolume}</td>
+    <td data-label="Pipeline"><span class="tag ${r.health.cls}">${r.health.label}</span></td>
   </tr>`).join('');
 
   const combinedMonthVals=months.map((mk,i)=>rows.reduce((s,r)=>s+r.monthVals[i],0));
