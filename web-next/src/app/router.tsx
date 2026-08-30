@@ -39,6 +39,7 @@ import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
 import { ReportsScreen } from '../features/manager/screens/ReportsScreen';
 import { QuotationScreen } from '../features/quotation/screens/QuotationScreen';
+import { TechnicalQuotationScreen } from '../features/quotation/screens/TechnicalQuotationScreen';
 import { LeaveScreen } from '../features/leave/screens/LeaveScreen';
 import { AllocationRequestsScreen } from '../features/allocations/screens/AllocationRequestsScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
@@ -164,6 +165,7 @@ export const router = createBrowserRouter([
       // real contracts_ins RLS.
       { path: 'office/contracts/generate', element: <ContractGeneratorScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
+      { path: 'office/quotation/technical', element: <TechnicalQuotationScreen /> },
       { path: 'office/leave', element: <LeaveScreen /> },
       { path: 'office/notes', element: <NotesScreen /> },
       { path: 'chat', element: <ChatScreen /> },

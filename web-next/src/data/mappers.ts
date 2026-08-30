@@ -418,6 +418,10 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     contractTerms: (r.contract_terms as string) ?? '',
     contractCoverImage: (r.contract_cover_image as string) ?? null,
     contractWordmarkImage: (r.contract_wordmark_image as string) ?? null,
+    techFullPlotLengthFt: Number(r.tech_full_plot_length_ft ?? 70),
+    techFullPlotWidthFt: Number(r.tech_full_plot_width_ft ?? 100),
+    techHalfPlotLengthFt: Number(r.tech_half_plot_length_ft ?? 50),
+    techHalfPlotWidthFt: Number(r.tech_half_plot_width_ft ?? 70),
   };
 }
 

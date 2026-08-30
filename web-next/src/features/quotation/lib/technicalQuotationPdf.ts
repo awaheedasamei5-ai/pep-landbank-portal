@@ -1,132 +1,88 @@
 import { jsPDF } from 'jspdf';
 import { ghs, today } from '../../../shared/lib/format';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
+import { greenBar, greenTable, kv, quoteBg, QGREEN_DARK, QGREEN_LIGHT, QRED, type QuotationClientInfo } from './quotationPdf';
 import type { Config } from '../../../types/domain';
-import type { QuotationTotals } from './quotationLogic';
+import type { TechnicalQuotationTotals } from './quotationLogic';
 
-// Port of index.html's buildQuotationPDF()/pdfQuoteBg()/pdfKV()/
-// pdfGreenBar()/pdfGreenTable() (index.html:15811-16951) -- same green/
-// dark-green branded layout: pale-green page background, Trulander logo +
-// company name/address header, a two-column KV grid (customer details on
-// the left, plot/pricing on the right), a dark-green stat bar (Total/
-// Deposit/Balance/Monthly Due), a striped payment schedule table, numbered
-// notes, and an offer-acceptance section. Signature stamping is left out,
-// same reasoning as the payment receipt -- no staff signature capture UI
-// exists yet, and the real code already guards it with `if(preparerSig)`.
-// Exported so technicalQuotationPdf.ts can reuse the exact same green-
-// branded skeleton (header/KV grid/stat bar/schedule table) rather than
-// duplicating it -- both PDFs are meant to read as one continuous
-// document family, per the real app's own "must match our current PDF
-// template layout and branding styling" requirement for Technical
-// Quotation.
-export const QGREEN_DARK: [number, number, number] = [13, 77, 45];
-export const QGREEN_LABEL: [number, number, number] = [21, 110, 64];
-export const QGREEN_LIGHT: [number, number, number] = [224, 238, 220];
-export const QGREEN_BG: [number, number, number] = [238, 244, 235];
-export const QRED: [number, number, number] = [196, 42, 30];
-const QCOL_FRACS = [0, 0.2, 0.48, 0.74, 1];
-
-export function quoteBg(doc: jsPDF, pageW: number, pageH: number) {
-  doc.setFillColor(...QGREEN_BG);
-  doc.rect(0, 0, pageW, pageH, 'F');
+// Faithful port of index.html's buildTechnicalQuotationPDF() (index.html:
+// 16952-17047+) -- "same header/branding/payment-plan-schedule/notes/
+// signature skeleton as buildQuotationPDF (per spec: must match our
+// current PDF template layout and branding styling)" per the real code's
+// own comment, with a geometry line-item breakdown table (pdfLineItemTable,
+// index.html:15888-15909) in place of the flat plot-price KV rows.
+function sqft(x: number): string {
+  return x.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' sq ft';
 }
 
-export function kv(doc: jsPDF, x: number, y: number, label: string, value: string, valueColor: [number, number, number] | null, maxWidth: number | null): number {
-  const labelText = `${String(label).replace(/:\s*$/, '')}:`;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...QGREEN_LABEL);
-  doc.text(labelText, x, y);
-  const gap = doc.getTextWidth(labelText) + 1.6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  if (valueColor) doc.setTextColor(...valueColor);
-  else doc.setTextColor(20, 20, 20);
-  const valueW = maxWidth ? Math.max(maxWidth - gap, 22) : null;
-  const lines: string[] = valueW ? doc.splitTextToSize(String(value), valueW) : [String(value)];
-  doc.text(lines, x + gap, y);
-  doc.setTextColor(20, 20, 20);
-  return lines.length;
+function ghsPerSqft(x: number): string {
+  return 'GHS ' + x.toLocaleString('en-US', { maximumFractionDigits: 4 }) + '/sq.ft';
 }
 
-export function greenBar(doc: jsPDF, y: number, pageW: number, items: { label: string; value: string; color?: [number, number, number] }[]): number {
-  const barH = 13;
+interface LineItem {
+  label: string;
+  value: string;
+  bold?: boolean;
+}
+
+// Same green-header/striped-row visual language as greenTable so it reads
+// as one continuous branded document rather than a bolted-on section.
+function lineItemTable(doc: jsPDF, y: number, pageW: number, pageH: number, rows: LineItem[]): number {
+  const usableW = pageW - 24;
+  const labelX = 12 + 3;
+  const valueRightX = pageW - 12;
+  const rowH = 6.2;
   doc.setFillColor(...QGREEN_DARK);
-  doc.rect(12, y, pageW - 24, barH, 'F');
-  const usableW = pageW - 24;
-  const fracs = items.length === 4 ? QCOL_FRACS : items.map((_, i) => i / items.length).concat([1]);
-  items.forEach((it, i) => {
-    const x = 12 + usableW * fracs[i] + (i === 0 ? 3 : 0);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.4);
-    doc.setTextColor(220, 232, 224);
-    doc.text(it.label.toUpperCase(), x, y + 5);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    if (it.color) doc.setTextColor(...it.color);
-    else doc.setTextColor(255, 255, 255);
-    doc.text(it.value, x, y + 10.5);
-  });
-  doc.setTextColor(20, 20, 20);
-  return y + barH + 6;
-}
-
-export function greenTable(doc: jsPDF, y: number, pageW: number, rows: { month: number; opening: number; payment: number; closing: number }[]): number {
-  const usableW = pageW - 24;
-  const colX = [12 + usableW * QCOL_FRACS[0], 12 + usableW * QCOL_FRACS[1], 12 + usableW * QCOL_FRACS[2], 12 + usableW * QCOL_FRACS[3]];
-  const rowH = 5.6;
-  const drawHeader = (yy: number) => {
-    doc.setFillColor(...QGREEN_DARK);
-    doc.rect(12, yy, usableW, rowH, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.8);
-    doc.setTextColor(255, 255, 255);
-    doc.text('MONTH', colX[0] + 3, yy + 3.9);
-    doc.text('OPENING BALANCE', colX[1], yy + 3.9);
-    doc.text('MONTHLY PAYMENT', colX[2], yy + 3.9);
-    doc.text('CLOSING BALANCE', colX[3], yy + 3.9);
-  };
-  drawHeader(y);
+  doc.rect(12, y, usableW, rowH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(255, 255, 255);
+  doc.text('ITEM', labelX, y + 4.1);
+  doc.text('AREA (SQ FT)', valueRightX, y + 4.1, { align: 'right' });
   y += rowH;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.6);
   rows.forEach((r, i) => {
-    if (y > 280) {
+    if (y > 270) {
       doc.addPage();
-      quoteBg(doc, pageW, 297);
+      quoteBg(doc, pageW, pageH);
       y = 16;
-      drawHeader(y);
-      y += rowH;
     }
-    if (i % 2 === 1) {
+    if (r.bold) {
       doc.setFillColor(...QGREEN_LIGHT);
       doc.rect(12, y, usableW, rowH, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      if (i % 2 === 1) {
+        doc.setFillColor(248, 250, 247);
+        doc.rect(12, y, usableW, rowH, 'F');
+      }
     }
     doc.setTextColor(20, 20, 20);
-    doc.text(String(r.month), colX[0] + 3, y + 3.9);
-    doc.text(ghs(r.opening), colX[1], y + 3.9);
-    doc.text(ghs(r.payment), colX[2], y + 3.9);
-    doc.text(ghs(r.closing), colX[3], y + 3.9);
-    y += rowH;
+    const lines: string[] = doc.splitTextToSize(r.label, usableW - 40);
+    doc.text(lines, labelX, y + 4.1);
+    doc.text(r.value, valueRightX, y + 4.1, { align: 'right' });
+    y += Math.max(rowH, lines.length * 4.2 + 2);
   });
   return y + 5;
 }
 
-export interface QuotationClientInfo {
-  name: string;
-  contact?: string;
-  address?: string;
-  email?: string;
-}
-
-export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: QuotationClientInfo, config: Config, logoDataUri: string | null, preparedByName: string, preparerSignature: string | null): jsPDF {
+export function buildTechnicalQuotationPdf(
+  q: TechnicalQuotationTotals,
+  client: QuotationClientInfo,
+  config: Config,
+  logoDataUri: string | null,
+  preparedByName: string,
+  preparerSignature: string | null,
+): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const dateStr = new Date().toLocaleDateString();
   const siteName = config.quoteSiteName || 'P.O Box CO3644, Tema, Accra-Ghana';
   const companyName = config.quoteCompanyName || 'Trulander JSF Limited';
-  const docType = config.quoteDocTypeText || 'Quotation with Payment Plan Schedule';
+  const docType = 'Technical Quotation — Custom Land Area Pricing';
   quoteBg(doc, pageW, pageH);
 
   if (logoDataUri) {
@@ -168,11 +124,9 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
   const rightRows: [string, string, [number, number, number] | null][] = [
     ['Date:', dateStr, null],
     ['Credit Period months', q.planMonths ? String(q.planMonths) : '—', QRED],
-    ['No of Plots', String(noPlots), QRED],
-    ['Original Plot Price', ghs(q.listTotal / noPlots), null],
-    ['Discount', ghs((q.discountTotal || 0) / noPlots), null],
-    ['Interest', ghs((q.interestTotal || 0) / noPlots), null],
-    ['Cost with Interest', ghs((q.net + q.interestTotal) / noPlots), null],
+    ['Combined Total Area', sqft(q.totalArea), null],
+    ['Dynamic Rate', ghsPerSqft(q.rate), null],
+    ['Interest', ghs(q.interestTotal || 0), null],
     ['Total', ghs(q.grand), null],
   ];
   let ly = y;
@@ -185,7 +139,28 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
     const n = kv(doc, rightX, ry, r[0], r[1], r[2], rightColWidth);
     ry += n > 1 ? n * 4.6 + 4.5 : 8.6;
   });
-  y = Math.max(ly, ry) + 5;
+  y = Math.max(ly, ry) + 7;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(20, 20, 20);
+  doc.text('Land Area Breakdown', 14, y);
+  y += 5;
+  const items: LineItem[] = [];
+  if (q.fullCount) items.push({ label: `Standard Full Plot (${config.techFullPlotLengthFt}×${config.techFullPlotWidthFt} ft) × ${q.fullCount}`, value: sqft(q.fullArea) });
+  if (q.halfCount) items.push({ label: `Standard Half Plot (${config.techHalfPlotLengthFt}×${config.techHalfPlotWidthFt} ft) × ${q.halfCount}`, value: sqft(q.halfArea) });
+  (q.customLots || []).forEach((lot, i) => {
+    const dims = lot.shape === 'trapezoidal' ? `Trapezoidal, sides ${Number(lot.a) || 0}/${Number(lot.b) || 0} ft, height ${Number(lot.h) || 0} ft` : `Rectangular, ${Number(lot.len) || 0}×${Number(lot.wid) || 0} ft`;
+    items.push({ label: `Custom Plot ${i + 1} (${dims})`, value: sqft(q.customAreas[i]) });
+  });
+  items.push({ label: 'Combined Total Area', value: sqft(q.totalArea), bold: true });
+  y = lineItemTable(doc, y, pageW, pageH, items);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(20, 20, 20);
+  doc.text('Dynamic Rate: ' + ghsPerSqft(q.rate), 14, y);
+  doc.text('Final Total Amount: ' + ghs(q.net), pageW - 12, y, { align: 'right' });
+  y += 8;
 
   if (q.planMonths) {
     y = greenBar(doc, y, pageW, [
@@ -244,10 +219,6 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
     quoteBg(doc, pageW, pageH);
     y = 20;
   }
-  // Prepared-by signoff -- whoever's signed in and generating this quote,
-  // stamped with their own saved signature (same per-staff signature used
-  // on the payment receipt and leave letter), so every quotation carries a
-  // genuine personal signoff rather than just a name printed in text.
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(20, 20, 20);
@@ -286,6 +257,6 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
   return doc;
 }
 
-export function quotationFilename(clientName: string): string {
-  return `Quotation_${clientName.replace(/\s+/g, '_')}_${today()}.pdf`;
+export function technicalQuotationFilename(clientName: string): string {
+  return `TechnicalQuotation_${clientName.replace(/\s+/g, '_')}_${today()}.pdf`;
 }

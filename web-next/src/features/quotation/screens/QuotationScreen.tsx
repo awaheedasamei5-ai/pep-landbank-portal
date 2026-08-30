@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
@@ -36,6 +37,12 @@ export function QuotationScreen() {
       <div className={styles.eyebrow}>Standard Quotation</div>
       <h1 className={styles.title}>Quotation calculator</h1>
       <p className={styles.sub}>Live pricing &mdash; nothing saved, nothing sent. Full or Half Plot(s) at the standard list price.</p>
+      <p className={styles.sub} style={{ marginTop: -12 }}>
+        Custom or irregular plots?{' '}
+        <Link to="/app/office/quotation/technical" style={{ color: 'var(--green)', fontWeight: 700 }}>
+          Try Technical Quotation →
+        </Link>
+      </p>
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
 

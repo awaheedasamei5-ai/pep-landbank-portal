@@ -121,3 +121,81 @@ export function computeLeadQuotationTotals(config: Config, lead: Lead): Quotatio
   }
   return { listTotal: gross, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule };
 }
+
+// ---- Technical Quotation: geometry-driven pricing -----------------------
+// Ported from index.html's techBaseAreaSqft()/techHalfAreaSqft()/
+// techPricePerSqft()/techCustomLotArea()/computeTechnicalQuotationTotals()
+// (index.html:2682-2689, 16623-16640) -- pricing is driven purely by
+// combined area (standard plots at their configured baseline size, plus
+// any custom/irregular lots via rectangular or trapezoidal formulas)
+// times one dynamic GHS/sqft rate, always derived from config.fullPrice /
+// baseline area -- never a hardcoded rate. Interest scales the same way
+// Standard Quotation's does (a flat per-full-plot-equivalent figure),
+// using area/baseArea as the continuous "plot equivalent" in place of a
+// discrete plot count, since a custom lot has no natural plot count.
+export type TechLotShape = 'rectangular' | 'trapezoidal';
+
+export interface TechLot {
+  shape: TechLotShape;
+  len: number | '';
+  wid: number | '';
+  a: number | '';
+  b: number | '';
+  h: number | '';
+}
+
+export function techBaseAreaSqft(config: Config): number {
+  return config.techFullPlotLengthFt * config.techFullPlotWidthFt;
+}
+
+export function techHalfAreaSqft(config: Config): number {
+  return config.techHalfPlotLengthFt * config.techHalfPlotWidthFt;
+}
+
+export function techPricePerSqft(config: Config): number {
+  const a = techBaseAreaSqft(config);
+  return a > 0 ? config.fullPrice / a : 0;
+}
+
+export function techCustomLotArea(lot: TechLot): number {
+  if (!lot) return 0;
+  if (lot.shape === 'trapezoidal') return Math.max(0, (((Number(lot.a) || 0) + (Number(lot.b) || 0)) / 2) * (Number(lot.h) || 0));
+  return Math.max(0, (Number(lot.len) || 0) * (Number(lot.wid) || 0));
+}
+
+export interface TechnicalQuotationTotals {
+  rate: number;
+  fullCount: number;
+  halfCount: number;
+  fullArea: number;
+  halfArea: number;
+  customLots: TechLot[];
+  customAreas: number[];
+  customArea: number;
+  totalArea: number;
+  net: number;
+  interestTotal: number;
+  grand: number;
+  planMonths: number;
+  deposit: number;
+  balance: number;
+  monthlyDue: number;
+  schedule: InstallmentScheduleRow[];
+}
+
+export function computeTechnicalQuotationTotals(config: Config, fullCount: number, halfCount: number, customLots: TechLot[], plan: PaymentPlanKey, depositPctOverride: number | null): TechnicalQuotationTotals {
+  const rate = techPricePerSqft(config);
+  const baseArea = techBaseAreaSqft(config);
+  const fullArea = baseArea * fullCount;
+  const halfArea = techHalfAreaSqft(config) * halfCount;
+  const customAreas = customLots.map(techCustomLotArea);
+  const customArea = customAreas.reduce((s, a) => s + a, 0);
+  const totalArea = fullArea + halfArea + customArea;
+  const net = Math.round(totalArea * rate);
+  const eq = baseArea > 0 ? totalArea / baseArea : 0;
+  const interestTotal = Math.round(interestFor(config, plan) * eq);
+  const planMonths = PLAN_MONTHS[plan] ?? 0;
+  const depositPct = depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : QUOTE_DEPOSIT_PCT;
+  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct);
+  return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule };
+}

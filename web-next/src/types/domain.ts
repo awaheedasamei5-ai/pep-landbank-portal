@@ -226,6 +226,17 @@ export interface Config {
   contractTerms: string;
   contractCoverImage: string | null;
   contractWordmarkImage: string | null;
+  // Real columns tech_full_plot_length_ft/tech_full_plot_width_ft/
+  // tech_half_plot_length_ft/tech_half_plot_width_ft (confirmed live,
+  // production values 70x100 / 50x70 -- same baseline dimensions
+  // contractAcres() derives its 0.1607/0.0804 acre-per-plot figures
+  // from). Technical Quotation's GHS/sqft rate is always full_price /
+  // (techFullPlotLengthFt * techFullPlotWidthFt), never hardcoded, so a
+  // pricing or standard-size change updates the rate system-wide.
+  techFullPlotLengthFt: number;
+  techFullPlotWidthFt: number;
+  techHalfPlotLengthFt: number;
+  techHalfPlotWidthFt: number;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
