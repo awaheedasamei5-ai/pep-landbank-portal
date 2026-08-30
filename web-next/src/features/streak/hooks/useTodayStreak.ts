@@ -17,9 +17,11 @@ import {
 } from '../lib/moodLogic';
 
 // React-Query port of index.html's evaluateMyStreak() (index.html:10379-10400).
-// Streak-continuity writes (apiUpsertMyStreakToday) are out of scope for
-// Phase 1 -- this reads demo-seeded history/leads/payments/todos and derives
-// the same MY_STREAK shape, but doesn't persist a "today" row back yet.
+// V2 adds the real write-back the old app always did (apiUpsertMyStreakToday)
+// and Phase 1 explicitly deferred: today's row is now genuinely persisted via
+// ds.streaks.markToday() on every read, same as the original. What's
+// deliberately different from the original is what that write is allowed to
+// do to the headline number -- see the comment on computeRunningStreakLength.
 export interface TodayStreak {
   streakLen: number;
   moodKey: string;
@@ -41,28 +43,35 @@ export function useTodayStreak() {
     enabled: !!agentKey && profile?.role === 'agent',
     queryFn: async () => {
       const ds = getDataSource(demoMode);
-      const [leads, payments, todayTodos, history, config] = await Promise.all([
+      const t = today();
+      const [leads, payments, todayTodos, siteVisits, config] = await Promise.all([
         ds.leads.listForAgent(agentKey),
         ds.payments.listForAgent(agentKey),
-        ds.scheduleItems.listForAgentOnDate(agentKey, today()),
-        ds.streaks.history(agentKey, 60),
+        ds.scheduleItems.listForAgentOnDate(agentKey, t),
+        ds.siteVisits.listForAgent(agentKey),
         ds.config.get(),
       ]);
 
-      const streakLen = computeRunningStreakLength(history, config.workEndTime);
-      const priorStreakLen = computeRunningStreakLength(
-        history.filter((r) => r.date !== today()),
-        config.workEndTime,
-      );
-      const justBrokeStreak = priorStreakLen >= 3 && streakLen === 0;
+      // todayMet mirrors index.html's todoLogged flag: >=1 todo logged today,
+      // regardless of completion. leadAdded/siteVisitBooked are recorded for
+      // the same reasons the old app tracked them (activity signal, not
+      // streak-breaking on their own -- only todoLogged decides dayMet).
+      const todayMet = todayTodos.length > 0;
+      const leadAdded = leads.some((l) => l.date === t);
+      const siteVisitBooked = siteVisits.some((v) => v.visitDate === t);
+      await ds.streaks.markToday(agentKey, { todoLogged: todayMet, leadAdded, siteVisitBooked });
+      const history = await ds.streaks.history(agentKey, 60);
+
+      // streakLen never counts today (see computeRunningStreakLength), so it
+      // already reads as "the streak as of yesterday" -- a break happening
+      // TODAY (today unmet, once computeStreakMoodKey's own deadline check
+      // allows it) shows as 'justBroken' precisely when that prior streak was
+      // real (>=3), not a separate "before vs after" comparison.
+      const streakLen = computeRunningStreakLength(history);
+      const justBrokeStreak = streakLen >= 3 && !todayMet;
       const risk = computeMonthlyRisk(leads, agentKey, config);
       const isBestMonthEver = isBestCollectedMonthEver(payments, agentKey);
       const todayProgress = computeTodayTodoProgress(todayTodos);
-      // todayMet mirrors index.html's todoLogged flag (>=1 todo logged today,
-      // regardless of completion) -- approximated here from the same
-      // schedule_items query since Phase 1 doesn't yet write a live
-      // staff_streaks "today" row to read back.
-      const todayMet = todayTodos.length > 0;
 
       const moodKey = computeStreakMoodKey(streakLen, todayMet, risk.tier, justBrokeStreak, isBestMonthEver, todayProgress, config.workEndTime);
       const petMood = computePipelinePetMood(payments, agentKey, config);

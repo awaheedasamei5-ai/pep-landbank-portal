@@ -1,0 +1,108 @@
+/* First real full-screen modal in web-next -- ported values from
+   index.html's .successCard/.successCheckWrap/.achUnlockWrap family
+   (index.html:1568-1585), no history-stack entry needed: this is a
+   transient, self-dismissing celebration (tap anywhere or "Nice!" to
+   close), not a navigable screen -- matching the original's own
+   behavior (openAchievementUnlockModal never touched history either). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgb(10 12 26 / 62%);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn .2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.card {
+  width: min(340px, 100%);
+  background: var(--c-card);
+  border-radius: var(--r-lg);
+  padding: 40px 24px 28px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.badgeWrap {
+  width: 92px;
+  height: 92px;
+  position: relative;
+  margin: 0 auto 20px;
+}
+
+.burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 220%;
+  height: 220%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.badge {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E8C766, var(--c-accent));
+  box-shadow: 0 10px 30px rgb(201 162 39 / 40%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  position: relative;
+  z-index: 1;
+  animation: pop .45s var(--ease-spring) both, glow 1.8s ease-in-out .5s 2;
+}
+
+@keyframes pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 10px 30px rgb(201 162 39 / 40%); }
+  50% { box-shadow: 0 10px 40px rgb(201 162 39 / 70%); }
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  font-size: 19px;
+  color: var(--c-text);
+  margin-bottom: 8px;
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--c-muted);
+  line-height: 1.55;
+  margin-bottom: 22px;
+}
+
+.closeBtn {
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: var(--c-ink);
+  color: #fff;
+  font-weight: var(--fw-semi);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  opacity: .92;
+}

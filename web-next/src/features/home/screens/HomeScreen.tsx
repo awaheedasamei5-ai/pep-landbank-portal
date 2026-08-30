@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { usePipelineSummary } from '../../pipeline/hooks/usePipelineSummary';
 import { useTodayStreak } from '../../streak/hooks/useTodayStreak';
-import { StreakCard } from '../../streak/components/StreakCard';
+import { StreakCard, StreakCardSkeleton } from '../../streak/components/StreakCard';
 import { HeroCard } from '../components/HeroCard';
 import { TodayTasksCard } from '../components/TodayTasksCard';
 import { useMyCommission } from '../../commission/hooks/useMyCommission';
@@ -20,7 +20,7 @@ export function HomeScreen() {
   return (
     <div style={{ padding: '20px 16px 90px' }}>
       <HeroCard greetName={firstName} pipelineValue={pipeline.data?.pipelineValue ?? 0} myCommission={commission.data?.total} onCommissionClick={() => navigate('/app/commission')}>
-        {streak.data && <StreakCard streak={streak.data} />}
+        {streak.data ? <StreakCard streak={streak.data} /> : streak.isLoading ? <StreakCardSkeleton /> : null}
       </HeroCard>
       <TodayTasksCard />
     </div>

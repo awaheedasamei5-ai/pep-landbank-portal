@@ -6,13 +6,19 @@ import { monthKey, num, today } from '../../../shared/lib/format';
 // so this logic is trivially unit-testable and has zero dependency on the
 // DataSource/React layers above it.
 
-export function computeRunningStreakLength(history: StreakRow[], workEndTime: string): number {
-  const nowHHMM = new Date().toISOString().slice(11, 16);
-  const deadlinePassed = nowHHMM > (workEndTime || '17:00');
+// V2 change from the old app's version (index.html:10196-10205): the headline
+// number now NEVER counts today, met or not. The old app included today the
+// moment its row was marked met, so finishing your to-do list at 10am could
+// jump the count mid-day -- explicitly called out as wrong ("shouldn't read
+// day two... until the next day"). Today's completion still shows (see
+// STREAK_MOOD's todayProgress states below), just not as a number that moves
+// before the day is actually over. The count only grows once today's row has
+// aged into yesterday on the next read.
+export function computeRunningStreakLength(history: StreakRow[]): number {
   const t = today();
-  const todayRow = history.find((r) => r.date === t);
-  let rows = [...history].sort((a, b) => b.date.localeCompare(a.date));
-  if (todayRow && !todayRow.dayMet && !deadlinePassed) rows = rows.filter((r) => r.date !== t);
+  const rows = [...history]
+    .filter((r) => r.date !== t)
+    .sort((a, b) => b.date.localeCompare(a.date));
   let len = 0;
   for (const r of rows) {
     if (r.dayMet) len++;

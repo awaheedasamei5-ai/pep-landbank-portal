@@ -3,6 +3,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useTodayTodos, useCreateTodo, useUpdateTodoStatus } from '../hooks/useTodayTodos';
 import { useColleagueAvailability } from '../hooks/useColleagueAvailability';
+import { DayClearedCelebration } from '../../streak/components/DayClearedCelebration';
 import { today } from '../../../shared/lib/format';
 import styles from './MyDayScreen.module.css';
 
@@ -23,6 +24,7 @@ export function MyDayScreen() {
   const [title, setTitle] = useState('');
   const [assignTo, setAssignTo] = useState('');
   const [justAssigned, setJustAssigned] = useState<string | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
 
   const colleagues = (staff ?? []).filter((s) => s.key !== profile?.key);
   const selectedColleague = colleagues.find((c) => c.key === assignTo);
@@ -38,11 +40,19 @@ export function MyDayScreen() {
     setAssignTo('');
   }
 
-  function toggle(id: string, currentlyDone: boolean) {
-    updateStatus.mutate({ id, status: currentlyDone ? 'open' : 'closed' });
-  }
-
   const active = (todos ?? []).filter((t) => t.status !== 'rescheduled');
+
+  function toggle(id: string, currentlyDone: boolean) {
+    const status = currentlyDone ? 'open' : 'closed';
+    // Fires the confetti celebration exactly once, on the action that
+    // actually clears the last remaining open item -- not on every render
+    // where the list happens to already be empty (e.g. nothing logged yet).
+    if (status === 'closed') {
+      const remainingOpen = active.filter((t) => t.id !== id && t.status === 'open').length;
+      if (remainingOpen === 0) setCelebrate(true);
+    }
+    updateStatus.mutate({ id, status });
+  }
 
   return (
     <div className={styles.wrap}>
@@ -107,6 +117,7 @@ export function MyDayScreen() {
         );
       })}
       {active.length === 0 && !isLoading && <p className={styles.empty}>Nothing logged for today yet — add your first to-do above.</p>}
+      {celebrate && <DayClearedCelebration onClose={() => setCelebrate(false)} />}
     </div>
   );
 }

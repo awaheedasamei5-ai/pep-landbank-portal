@@ -59,3 +59,30 @@ export function StreakCard({ streak }: { streak: TodayStreak }) {
     </div>
   );
 }
+
+// Port of streakLoadingHtml() (index.html:10447-10459) -- the old app's own
+// comment called pet_small.gif a better fit for "a loading moment" than any
+// of the full mood poses, but web-next never actually had a loading state
+// here: HomeScreen only ever rendered {streak.data && <StreakCard .../>},
+// so the card was simply absent (a layout jump) while the query ran. This
+// fills that real gap with the asset that was always meant for it.
+export function StreakCardSkeleton() {
+  return (
+    <div className={styles.card}>
+      <div className={styles.bgLayer} style={{ background: 'linear-gradient(135deg,#64748B,#475569)', animation: 'none' }} />
+      <div className={styles.artLayer}>
+        <div className={styles.artPane} style={{ animation: 'none' }}>
+          <img className={styles.artImg} src="/pet/pet_small.gif" alt="" draggable={false} />
+        </div>
+      </div>
+      <div className={styles.content}>
+        <div className={styles.cardTop}>
+          <div className={styles.moodPane} style={{ animation: 'none' }}>
+            <div className={styles.eyebrow}>Pipeline status</div>
+            <div className={styles.num}>Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -2,6 +2,7 @@ import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
+import { today } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import {
   mapAllocationRequestRow,
@@ -133,6 +134,13 @@ export interface DataSource {
   };
   streaks: {
     history(staffKey: string, days: number): Promise<StreakRow[]>;
+    // Real write-back, ported from apiUpsertMyStreakToday (index.html:10168-
+    // 10180) -- Phase 1 shipped read-only. dayMet is todoLogged alone
+    // (leadAdded/siteVisitBooked are recorded as activity signal only, they
+    // don't independently keep a streak alive), and this always targets
+    // TODAY's row -- see computeRunningStreakLength for why writing it can't
+    // move the headline number until the day actually rolls over.
+    markToday(staffKey: string, patch: { todoLogged: boolean; leadAdded: boolean; siteVisitBooked: boolean }): Promise<StreakRow>;
   };
   config: {
     get(): Promise<Config>;
@@ -542,6 +550,15 @@ function createDemoDataSource(): DataSource {
         from.setDate(from.getDate() - days);
         const fromIso = from.toISOString().slice(0, 10);
         return demoLoad().streaks.filter((s) => s.staffKey === staffKey && s.date >= fromIso);
+      },
+      async markToday(staffKey, patch) {
+        const db = demoLoad();
+        const t = today();
+        const row: StreakRow = { staffKey, date: t, dayMet: !!patch.todoLogged };
+        const exists = db.streaks.some((s) => s.staffKey === staffKey && s.date === t);
+        db.streaks = exists ? db.streaks.map((s) => (s.staffKey === staffKey && s.date === t ? row : s)) : [...db.streaks, row];
+        demoSave();
+        return row;
       },
     },
     config: {
@@ -1367,6 +1384,28 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('staff_streaks').select('*').eq('staff_key', staffKey).gte('streak_date', fromIso);
         if (error) throw error;
         return (data ?? []).map(mapStreakRow);
+      },
+      async markToday(staffKey, patch) {
+        const t = today();
+        const dayMet = !!patch.todoLogged;
+        const { data, error } = await requireClient()
+          .from('staff_streaks')
+          .upsert(
+            {
+              staff_key: staffKey,
+              streak_date: t,
+              todo_logged_by_deadline: !!patch.todoLogged,
+              lead_added: !!patch.leadAdded,
+              site_visit_booked: !!patch.siteVisitBooked,
+              streak_day_met: dayMet,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'staff_key,streak_date' },
+          )
+          .select()
+          .single();
+        if (error) throw error;
+        return mapStreakRow(data);
       },
     },
     config: {
