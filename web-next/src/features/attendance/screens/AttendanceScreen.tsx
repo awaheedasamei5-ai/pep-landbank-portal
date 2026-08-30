@@ -92,11 +92,17 @@ export function AttendanceScreen() {
       <p className={styles.sub}>Sign in when you start work, sign out when you're done.</p>
 
       <div className={styles.clockCard}>
-        <button type="button" className={`${styles.clockCircle} ${styles[`phase_${clockPhase}`]}`} onClick={handleCircleClick} disabled={isPending || clockPhase === 'done'}>
-          <span className={styles.clockCircleTime}>{clockPhase === 'in' ? nowLabel : circleLabel}</span>
-          <span className={styles.clockCircleLabel}>{clockPhase === 'in' ? circleLabel : circleSub}</span>
-        </button>
-        {clockPhase !== 'in' && <div className={styles.clockCaption}>{circleSub}</div>}
+        {isLoading ? (
+          <div className={`${styles.clockCircle} ${styles.phase_loading}`}>
+            <span className={styles.clockCircleLabel}>Loading…</span>
+          </div>
+        ) : (
+          <button type="button" className={`${styles.clockCircle} ${styles[`phase_${clockPhase}`]}`} onClick={handleCircleClick} disabled={isPending || clockPhase === 'done'}>
+            <span className={styles.clockCircleTime}>{clockPhase === 'in' ? nowLabel : circleLabel}</span>
+            <span className={styles.clockCircleLabel}>{clockPhase === 'in' ? circleLabel : circleSub}</span>
+          </button>
+        )}
+        {!isLoading && clockPhase !== 'in' && <div className={styles.clockCaption}>{circleSub}</div>}
 
         {showForm === 'in' && (
           <div className={styles.form}>

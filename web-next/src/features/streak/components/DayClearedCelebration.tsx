@@ -11,10 +11,7 @@ export function DayClearedCelebration({ onClose }: { onClose: () => void }) {
   return (
     <div className={styles.overlay} onClick={onClose} role="presentation">
       <div className={styles.card} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Today's to-do list cleared">
-        <div className={styles.badgeWrap}>
-          <img className={styles.burst} src="/pet/party_burst.gif" alt="" draggable={false} />
-          <div className={styles.badge}>🎉</div>
-        </div>
+        <img className={styles.burst} src="/pet/party_burst.gif" alt="" draggable={false} />
         <div className={styles.title}>Today's list, cleared!</div>
         <div className={styles.sub}>Every to-do you logged today is done. That's the day's work — see you tomorrow.</div>
         <button type="button" className={styles.closeBtn} onClick={onClose}>

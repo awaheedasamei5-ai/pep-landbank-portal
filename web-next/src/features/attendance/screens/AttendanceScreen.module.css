@@ -48,6 +48,12 @@
   opacity: .82;
 }
 
+.phase_loading {
+  background: var(--c-line);
+  color: var(--c-muted);
+  box-shadow: none;
+}
+
 .clockCircleTime {
   font-family: var(--font-mono);
   font-weight: 800;
