@@ -155,11 +155,11 @@ export function seedDemo(): DemoDb {
   // production's split_plot_for_half_sale() function creates.
   const wholePlotId = uid();
   const plots: DemoDb['plots'] = [
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Sold', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Reserved', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Allocated', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Running Search', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
     { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null },
     { id: wholePlotId, site: 'Royal Palm Enclave', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Reserved', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
+    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Allocated', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
     { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
   ];
 
@@ -522,8 +522,13 @@ export function seedDemo(): DemoDb {
       amtPaid: leads[0].amtPaid,
       status: 'Pending',
       plotNumber: null,
+      suggestedPlots: null,
       note: null,
       allocatedBy: null,
+      flagReason: null,
+      flaggedBy: null,
+      flaggedAt: null,
+      history: [{ type: 'requested', at: isoPlusDays(t, -2), by: 'Elias Torgbuivi' }],
       createdAt: isoPlusDays(t, -2),
       resolvedAt: null,
     },
@@ -538,8 +543,16 @@ export function seedDemo(): DemoDb {
       amtPaid: leads[1].amtPaid,
       status: 'Allocated',
       plotNumber: 'A-14',
+      suggestedPlots: 'A-14',
       note: 'Corner plot, confirmed with client on-site.',
       allocatedBy: 'Management',
+      flagReason: null,
+      flaggedBy: null,
+      flaggedAt: null,
+      history: [
+        { type: 'requested', at: isoPlusDays(t, -6), by: 'Elias Torgbuivi' },
+        { type: 'allocated', plotNumber: 'A-14', note: 'Corner plot, confirmed with client on-site.', by: 'Management', at: isoPlusDays(t, -4) },
+      ],
       createdAt: isoPlusDays(t, -6),
       resolvedAt: isoPlusDays(t, -4),
     },
@@ -612,7 +625,7 @@ export function seedDemo(): DemoDb {
   const contracts: DemoDb['contracts'] = [];
 
   return {
-    version: 28,
+    version: 29,
     leads,
     payments,
     scheduleItems,

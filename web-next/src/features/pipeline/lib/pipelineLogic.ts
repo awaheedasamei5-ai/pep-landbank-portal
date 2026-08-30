@@ -1,4 +1,4 @@
-import type { Stage } from '../../../types/domain';
+import type { PlotType, Stage } from '../../../types/domain';
 
 // Ports of index.html's stage constants/derivation (index.html:2541,
 // 2846-2854, 17138-17139). Pricing here is deliberately simplified to
@@ -29,4 +29,20 @@ export function deriveStageFromPayment(paid: number, grand: number): Stage {
 
 export function computeGrandTotal(unitPrice: number, noPlots: number): number {
   return unitPrice * noPlots;
+}
+
+// Ported from index.html's allocationUnitsNeeded() (index.html:2660-2675) --
+// breaks a lead's plotType+noPlots into the real physical units Allocations
+// needs to hand over, e.g. 1.5 Full Plot -> ['Full Plot','Half Plot']. Uses
+// the same full-plot-equivalence (1 for Full, 0.5 for Half) the pricing
+// engine already uses, not a new invented concept.
+export function allocationUnitsNeeded(plotType: PlotType, noPlots: number): PlotType[] {
+  const eqPerUnit = plotType === 'Half Plot' ? 0.5 : 1;
+  const eq = eqPerUnit * (noPlots || 1);
+  const wholeCount = Math.floor(eq + 1e-9);
+  const hasHalf = eq - wholeCount >= 0.5 - 1e-9;
+  const units: PlotType[] = [];
+  for (let i = 0; i < wholeCount; i++) units.push('Full Plot');
+  if (hasHalf) units.push('Half Plot');
+  return units.length ? units : ['Full Plot'];
 }

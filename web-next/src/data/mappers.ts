@@ -349,8 +349,13 @@ export function mapAllocationRequestRow(r: Record<string, unknown>): AllocationR
     amtPaid: r.amt_paid != null ? Number(r.amt_paid) : null,
     status: (r.status as AllocationRequest['status']) ?? 'Pending',
     plotNumber: (r.plot_number as string) ?? null,
+    suggestedPlots: (r.suggested_plots as string) ?? null,
     note: (r.note as string) ?? null,
     allocatedBy: (r.allocated_by as string) ?? null,
+    flagReason: (r.flag_reason as string) ?? null,
+    flaggedBy: (r.flagged_by as string) ?? null,
+    flaggedAt: (r.flagged_at as string) ?? null,
+    history: Array.isArray(r.history) ? (r.history as AllocationRequest['history']) : [],
     createdAt: r.created_at as string,
     resolvedAt: (r.resolved_at as string) ?? null,
   };

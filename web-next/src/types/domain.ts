@@ -318,7 +318,14 @@ export interface LeaderboardRow {
   points: number;
 }
 
-export type PlotStatus = 'Available' | 'Reserved' | 'Sold';
+// Corrected against the real live vocabulary (index.html's own PLOT_STATUSES
+// + the Subdivided status split_plot_for_half_sale sets) -- confirmed via a
+// live `select distinct status from plots` on staging, which returned
+// 'Available'/'Allocated'/'Running Search' (a prior version of this type had
+// invented 'Reserved'/'Sold', which never actually occur in real data and
+// silently broke status counts/badges for every real Allocated/Running
+// Search plot).
+export type PlotStatus = 'Available' | 'Running Search' | 'Allocated' | 'Subdivided';
 export type PlotUnitKind = 'whole' | 'half';
 
 // Real RLS on this table (confirmed live) restricts read/write to manager
@@ -338,6 +345,28 @@ export interface Plot {
   notes: string | null;
   unitKind: PlotUnitKind;
   parentPlotId: string | null;
+}
+
+export interface NewPlot {
+  site: string;
+  plotNumber: string;
+  plotType: PlotType;
+  status: PlotStatus;
+  price?: number | null;
+  clientName?: string | null;
+  clientContact?: string | null;
+  agentKey?: string | null;
+  notes?: string | null;
+}
+
+export interface PlotUpdate {
+  status?: PlotStatus;
+  plotType?: PlotType;
+  price?: number | null;
+  clientName?: string | null;
+  clientContact?: string | null;
+  agentKey?: string | null;
+  notes?: string | null;
 }
 
 // Not a real table -- there is no clients master table in production (confirmed
@@ -893,6 +922,21 @@ export interface NewLeaveRequest {
 // suggested_plots (staff pre-narrowing candidates before allocating),
 // flagging (a dispute/hold state), and the "Awaiting Authorization"
 // intermediate status are all out of scope -- just Pending -> Allocated.
+export interface AllocationHistoryEvent {
+  type: string;
+  at: string;
+  by: string;
+  [key: string]: unknown;
+}
+
+// Real 3-stage workflow confirmed via the actual confirm_allocation/
+// edit_allocated_plot/revert_allocation/delete_allocation RPCs on production
+// (staging never had them until this pass -- ported verbatim): Pending ->
+// (staff suggest 1-3 candidate plots, real inventory validated) Awaiting
+// Authorization -> (Management signs off physically, staff confirm) ->
+// Allocated, which is the point the RPC finally syncs the real `plots` row
+// (status/client/agent). A bare status update alone was a real gap -- it
+// never touched plots at all before this pass.
 export interface AllocationRequest {
   id: string;
   leadId: string;
@@ -902,10 +946,15 @@ export interface AllocationRequest {
   percentPaid: number | null;
   grandTotal: number | null;
   amtPaid: number | null;
-  status: 'Pending' | 'Allocated';
+  status: 'Pending' | 'Awaiting Authorization' | 'Allocated';
   plotNumber: string | null;
+  suggestedPlots: string | null;
   note: string | null;
   allocatedBy: string | null;
+  flagReason: string | null;
+  flaggedBy: string | null;
+  flaggedAt: string | null;
+  history: AllocationHistoryEvent[];
   createdAt: string;
   resolvedAt: string | null;
 }

@@ -32,12 +32,83 @@ export function useCreateAllocationRequest() {
   });
 }
 
-export function useAllocatePlot() {
+export function useSuggestAllocationPlots() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, plotNumbers }: { id: string; plotNumbers: string[] }) => getDataSource(demoMode).allocationRequests.suggest(id, plotNumbers),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Real SECURITY DEFINER confirm_allocation RPC also syncs the `plots` table
+// -- invalidating both queries here (not just allocationRequests) is what
+// makes a freshly-Allocated plot disappear from Plot Inventory's Available
+// count without a manual refresh.
+export function useConfirmAllocation() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, plotNumber, note }: { id: string; plotNumber: string; note?: string }) => getDataSource(demoMode).allocationRequests.allocate(id, plotNumber, note, profile?.name ?? ''),
+    mutationFn: ({ id, plotNumber, note }: { id: string; plotNumber: string; note?: string }) => getDataSource(demoMode).allocationRequests.confirm(id, plotNumber, note, profile?.name ?? ''),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useRevertAllocation() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.revert(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useEditAllocatedPlot() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, newPlotNumber }: { id: string; newPlotNumber: string }) => getDataSource(demoMode).allocationRequests.editPlot(id, newPlotNumber),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useDeleteAllocationRequest() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useFlagAllocation() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).allocationRequests.flag(id, reason, profile?.name ?? ''),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+export function useResolveAllocationFlag() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.resolveFlag(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
   });
 }

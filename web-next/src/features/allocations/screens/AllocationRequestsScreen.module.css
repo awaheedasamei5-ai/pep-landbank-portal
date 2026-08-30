@@ -169,3 +169,46 @@
   font-size: 11.5px;
   cursor: pointer;
 }
+
+.dangerBtn {
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-danger-bg);
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  font-weight: 700;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.flagBanner {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-line);
+  color: var(--c-danger);
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail { margin-top: 10px; }
+
+.suggestForm { display: flex; flex-direction: column; }
+
+.fieldLabel { font-size: 11.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; display: block; }
+.fieldHint { font-size: 11.5px; margin-top: 4px; font-weight: 600; }
+.helpText { font-size: 12.5px; color: var(--c-muted); margin: 0 0 10px; }
+.errorMsg { font-size: 12.5px; color: var(--c-danger); margin: 4px 0 0; }
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--c-line);
+  border-radius: 10px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}

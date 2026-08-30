@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -195,8 +195,20 @@ export interface DataSource {
   // Real RLS restricts this to manager + specifically the 'elias'/
   // 'emmanuel' staff keys (confirmed live) -- not every agent. Callers
   // must gate visibility accordingly, not rely on this returning empty.
+  // Real RLS (confirmed live: plots_sel/plots_ins/plots_upd/plots_del) is
+  // manager/elias/emmanuel only -- no plain agent can read this table at
+  // all. create/update/remove are plain table writes (apiInsertPlot/
+  // apiUpdatePlot/apiDeletePlot in index.html); split() calls the real
+  // split_plot_for_half_sale RPC (SECURITY DEFINER, same role gate) since
+  // it must atomically insert two child rows and flip the parent to
+  // Subdivided -- a client-side two-step insert+update could leave a plot
+  // half-split if the second call failed.
   plots: {
     list(): Promise<Plot[]>;
+    create(input: NewPlot): Promise<Plot>;
+    update(id: string, patch: PlotUpdate): Promise<Plot>;
+    remove(id: string): Promise<void>;
+    split(plotId: string): Promise<{ alreadySplit: boolean; plotA: Plot | null; plotB: Plot | null }>;
   };
   // Real RLS (confirmed live): agent sees/edits only their own visits
   // (agent_key = my_key()); manager + a small staff allowlist see all.
@@ -302,10 +314,26 @@ export interface DataSource {
   // allocate() is manager/elias/emmanuel-only in practice, gated client-
   // side (RLS also permits an agent's own-row UPDATE, for agent_seen
   // marking in the real app -- not built here).
+  // Real 3-stage workflow (confirmed live via the actual confirm_allocation/
+  // edit_allocated_plot/revert_allocation/delete_allocation RPCs, ported
+  // verbatim to staging for this pass, which never had them before): a bare
+  // status update from Pending straight to Allocated (the old shape of this
+  // interface) never touched the real `plots` table at all -- a genuine
+  // inventory-sync gap. suggest()/flag()/resolveFlag() stay plain table
+  // writes (alloc_upd RLS has no WITH CHECK restricting these columns,
+  // matching referrals.linkLead's reasoning); confirm/revert/editPlot/
+  // remove all go through the SECURITY DEFINER RPCs since those are the
+  // only path that also syncs `plots` atomically.
   allocationRequests: {
     list(viewerKey: string, viewerRole: string): Promise<AllocationRequest[]>;
     create(agentKey: string, agentName: string, input: NewAllocationRequest): Promise<AllocationRequest>;
-    allocate(id: string, plotNumber: string, note: string | undefined, allocatedBy: string): Promise<AllocationRequest>;
+    suggest(id: string, plotNumbers: string[]): Promise<AllocationRequest>;
+    confirm(id: string, plotNumber: string, note: string | undefined, confirmedBy: string): Promise<AllocationRequest>;
+    revert(id: string): Promise<AllocationRequest>;
+    editPlot(id: string, newPlotNumber: string): Promise<AllocationRequest>;
+    remove(id: string): Promise<void>;
+    flag(id: string, reason: string, flaggedBy: string): Promise<AllocationRequest>;
+    resolveFlag(id: string): Promise<AllocationRequest>;
   };
   // Real table `notes` -- a private per-staff scratchpad. notes_sel also
   // lets a manager SELECT anyone's notes (confirmed live), not used here --
@@ -665,6 +693,60 @@ function createDemoDataSource(): DataSource {
       async list() {
         return demoLoad().plots;
       },
+      async create(input) {
+        const db = demoLoad();
+        const plot: Plot = {
+          id: crypto.randomUUID(),
+          site: input.site,
+          plotNumber: input.plotNumber,
+          plotType: input.plotType,
+          status: input.status,
+          price: input.price ?? null,
+          clientName: input.clientName ?? null,
+          clientContact: input.clientContact ?? null,
+          agentKey: input.agentKey ?? null,
+          notes: input.notes ?? null,
+          unitKind: 'whole',
+          parentPlotId: null,
+        };
+        db.plots = [plot, ...db.plots];
+        demoSave();
+        return plot;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        db.plots = db.plots.map((p) => (p.id === id ? { ...p, ...patch } : p));
+        demoSave();
+        const updated = db.plots.find((p) => p.id === id);
+        if (!updated) throw new Error('Plot not found');
+        return updated;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.plots = db.plots.filter((p) => p.id !== id);
+        demoSave();
+      },
+      async split(plotId) {
+        const db = demoLoad();
+        const p = db.plots.find((x) => x.id === plotId);
+        if (!p) throw new Error('Plot not found');
+        if (p.status === 'Subdivided') {
+          const kids = db.plots.filter((x) => x.parentPlotId === plotId);
+          const plotA = kids.find((k) => k.plotNumber === p.plotNumber + 'a') ?? null;
+          const plotB = kids.find((k) => k.plotNumber === p.plotNumber + 'b') ?? null;
+          if (plotA && plotB) return { alreadySplit: true, plotA, plotB };
+          throw new Error('Plot is marked Subdivided but its children could not be found');
+        }
+        if (p.plotType !== 'Full Plot') throw new Error('Only a Full Plot can be split into halves');
+        if (p.status !== 'Available') throw new Error(`Only an Available plot can be split (current status: ${p.status})`);
+        if (p.unitKind === 'half' || p.parentPlotId) throw new Error('This plot is already a half-unit and cannot be split further');
+        const half = p.price != null ? p.price / 2 : null;
+        const plotA: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'a', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id };
+        const plotB: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'b', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id };
+        db.plots = [plotB, plotA, ...db.plots.map((x) => (x.id === plotId ? { ...x, status: 'Subdivided' as const } : x))];
+        demoSave();
+        return { alreadySplit: false, plotA, plotB };
+      },
     },
     siteVisits: {
       async listForAgent(agentKey) {
@@ -946,8 +1028,13 @@ function createDemoDataSource(): DataSource {
           amtPaid: lead.amtPaid,
           status: 'Pending',
           plotNumber: null,
+          suggestedPlots: null,
           note: null,
           allocatedBy: null,
+          flagReason: null,
+          flaggedBy: null,
+          flaggedAt: null,
+          history: [{ type: 'requested', at: new Date().toISOString(), by: agentName }],
           createdAt: new Date().toISOString(),
           resolvedAt: null,
         };
@@ -955,11 +1042,107 @@ function createDemoDataSource(): DataSource {
         demoSave();
         return request;
       },
-      async allocate(id, plotNumber, note, allocatedBy) {
+      async suggest(id, plotNumbers) {
+        const db = demoLoad();
+        for (const pn of plotNumbers) {
+          const p = db.plots.find((x) => x.plotNumber.toLowerCase() === pn.toLowerCase());
+          if (p && p.status === 'Allocated') throw new Error(`Plot ${pn} has already been allocated${p.clientName ? ` to ${p.clientName}` : ''}`);
+          if (p && p.status === 'Subdivided') throw new Error(`Plot ${pn} has been split into halves -- pick ${pn}a or ${pn}b instead`);
+        }
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = { ...db.allocationRequests[index], status: 'Awaiting Authorization', suggestedPlots: plotNumbers.join(',') };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async confirm(id, plotNumber, note, confirmedBy) {
         const db = demoLoad();
         const index = db.allocationRequests.findIndex((r) => r.id === id);
         if (index === -1) throw new Error('Allocation request not found');
-        const updated: AllocationRequest = { ...db.allocationRequests[index], status: 'Allocated', plotNumber, note: note ?? null, allocatedBy, resolvedAt: new Date().toISOString() };
+        const alloc = db.allocationRequests[index];
+        if (alloc.status !== 'Awaiting Authorization') throw new Error(`Allocation is not awaiting authorization (current status: ${alloc.status})`);
+        const plotNumbers = plotNumber
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        for (const pn of plotNumbers) {
+          const p = db.plots.find((x) => x.plotNumber.toLowerCase() === pn.toLowerCase());
+          if (p && p.status === 'Allocated') throw new Error(`Plot ${pn} has already been allocated${p.clientName ? ` to ${p.clientName}` : ''}`);
+          if (p && p.status === 'Subdivided') throw new Error(`Plot ${pn} has been split into halves -- pick ${pn}a or ${pn}b instead`);
+        }
+        const now = new Date().toISOString();
+        const event: AllocationHistoryEvent = { type: 'allocated', plotNumber, note: note ?? null, by: confirmedBy, at: now };
+        const updated: AllocationRequest = { ...alloc, status: 'Allocated', plotNumber, note: note ?? null, allocatedBy: confirmedBy, resolvedAt: now, history: [...alloc.history, event] };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        db.plots = db.plots.map((p) => (plotNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
+        for (const pn of plotNumbers) {
+          if (!db.plots.some((p) => p.plotNumber.toLowerCase() === pn.toLowerCase())) {
+            db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: pn, plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: 'Allocated via signed authorization', unitKind: 'whole', parentPlotId: null }, ...db.plots];
+          }
+        }
+        demoSave();
+        return updated;
+      },
+      async revert(id) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const alloc = db.allocationRequests[index];
+        if (alloc.status !== 'Allocated') throw new Error(`Allocation is not in Allocated status (current status: ${alloc.status})`);
+        const plotNumbers = (alloc.plotNumber ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+        db.plots = db.plots.map((p) => (plotNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) && p.status === 'Allocated' ? { ...p, status: 'Available' as const, clientName: null, clientContact: null, agentKey: null } : p));
+        const event: AllocationHistoryEvent = { type: 'reverted', plotNumber: alloc.plotNumber, by: alloc.allocatedBy ?? '', at: new Date().toISOString() };
+        const updated: AllocationRequest = { ...alloc, status: 'Pending', plotNumber: null, note: null, allocatedBy: null, resolvedAt: null, history: [...alloc.history, event] };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async editPlot(id, newPlotNumber) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const alloc = db.allocationRequests[index];
+        if (alloc.status !== 'Allocated') throw new Error(`Allocation is not in Allocated status (current status: ${alloc.status})`);
+        if (newPlotNumber.trim().toLowerCase() === (alloc.plotNumber ?? '').toLowerCase()) throw new Error('That is already the allocated plot');
+        const conflict = db.plots.find((p) => p.plotNumber.toLowerCase() === newPlotNumber.toLowerCase());
+        if (conflict && conflict.status === 'Allocated') throw new Error(`Plot ${newPlotNumber} is already allocated${conflict.clientName ? ` to ${conflict.clientName}` : ''}`);
+        const oldNumbers = (alloc.plotNumber ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+        db.plots = db.plots.map((p) => (oldNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) && p.status === 'Allocated' ? { ...p, status: 'Available' as const, clientName: null, clientContact: null, agentKey: null } : p));
+        if (conflict) {
+          db.plots = db.plots.map((p) => (p.id === conflict.id ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
+        } else {
+          db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: newPlotNumber.trim(), plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: `Reassigned from Plot ${alloc.plotNumber ?? '—'}`, unitKind: 'whole', parentPlotId: null }, ...db.plots];
+        }
+        const event: AllocationHistoryEvent = { type: 'reassigned', fromPlot: alloc.plotNumber, toPlot: newPlotNumber.trim(), by: alloc.allocatedBy ?? '', at: new Date().toISOString() };
+        const updated: AllocationRequest = { ...alloc, plotNumber: newPlotNumber.trim(), history: [...alloc.history, event] };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        const alloc = db.allocationRequests.find((r) => r.id === id);
+        if (!alloc) throw new Error('Allocation request not found');
+        const plotNumbers = (alloc.plotNumber ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+        db.plots = db.plots.map((p) => (plotNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) && p.status === 'Allocated' ? { ...p, status: 'Available' as const, clientName: null, clientContact: null, agentKey: null } : p));
+        db.allocationRequests = db.allocationRequests.filter((r) => r.id !== id);
+        demoSave();
+      },
+      async flag(id, reason, flaggedBy) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = { ...db.allocationRequests[index], flagReason: reason, flaggedBy, flaggedAt: new Date().toISOString() };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async resolveFlag(id) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = { ...db.allocationRequests[index], flagReason: null, flaggedBy: null, flaggedAt: null };
         db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
         demoSave();
         return updated;
@@ -1571,6 +1754,55 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapPlotRow);
       },
+      async create(input) {
+        const { data, error } = await requireClient()
+          .from('plots')
+          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapPlotRow(data);
+      },
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if ('status' in patch) dbPatch.status = patch.status;
+        if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
+        if ('price' in patch) dbPatch.price = patch.price;
+        if ('clientName' in patch) dbPatch.client_name = patch.clientName;
+        if ('clientContact' in patch) dbPatch.client_contact = patch.clientContact;
+        if ('agentKey' in patch) dbPatch.agent_key = patch.agentKey;
+        if ('notes' in patch) dbPatch.notes = patch.notes;
+        const { data, error } = await requireClient().from('plots').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapPlotRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('plots').delete().eq('id', id);
+        if (error) throw error;
+      },
+      async split(plotId) {
+        const { data, error } = await requireClient().rpc('split_plot_for_half_sale', { p_plot_id: plotId });
+        if (error) throw error;
+        const r = data as { alreadySplit: boolean; plotA: Record<string, unknown> | null; plotB: Record<string, unknown> | null };
+        const norm = (x: Record<string, unknown> | null): Plot | null =>
+          x
+            ? {
+                id: x.id as string,
+                plotNumber: x.plotNumber as string,
+                status: x.status as Plot['status'],
+                plotType: x.plotType as Plot['plotType'],
+                price: x.price == null ? null : Number(x.price),
+                site: '',
+                clientName: null,
+                clientContact: null,
+                agentKey: null,
+                notes: null,
+                unitKind: 'half',
+                parentPlotId: plotId,
+              }
+            : null;
+        return { alreadySplit: r.alreadySplit, plotA: norm(r.plotA), plotB: norm(r.plotB) };
+      },
     },
     siteVisits: {
       async listForAgent(agentKey) {
@@ -1852,13 +2084,55 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapAllocationRequestRow(data);
       },
-      async allocate(id, plotNumber, note, allocatedBy) {
+      async suggest(id, plotNumbers) {
         const { data, error } = await requireClient()
           .from('allocation_requests')
-          .update({ status: 'Allocated', plot_number: plotNumber, note: note ?? null, allocated_by: allocatedBy, resolved_at: new Date().toISOString() })
+          .update({ status: 'Awaiting Authorization', suggested_plots: plotNumbers.join(',') })
           .eq('id', id)
           .select()
           .single();
+        if (error) throw error;
+        return mapAllocationRequestRow(data);
+      },
+      // Real SECURITY DEFINER RPC -- one transaction that re-verifies the
+      // plot isn't already taken server-side (closing a race a client-side
+      // check can't catch) and syncs the real `plots` row, unlike the old
+      // bare .update() this replaces. confirmedBy is demo-only (the RPC
+      // derives the caller's name itself via auth.uid()), so it's not
+      // passed here -- fewer params than the interface is a valid
+      // structural implementation, same pattern list() above already uses.
+      async confirm(id, plotNumber, note) {
+        const { error } = await requireClient().rpc('confirm_allocation', { p_allocation_id: id, p_plot_number: plotNumber, p_note: note ?? null });
+        if (error) throw error;
+        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        if (selError) throw selError;
+        return mapAllocationRequestRow(data);
+      },
+      async revert(id) {
+        const { error } = await requireClient().rpc('revert_allocation', { p_allocation_id: id });
+        if (error) throw error;
+        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        if (selError) throw selError;
+        return mapAllocationRequestRow(data);
+      },
+      async editPlot(id, newPlotNumber) {
+        const { error } = await requireClient().rpc('edit_allocated_plot', { p_allocation_id: id, p_new_plot_number: newPlotNumber });
+        if (error) throw error;
+        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        if (selError) throw selError;
+        return mapAllocationRequestRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().rpc('delete_allocation', { p_allocation_id: id });
+        if (error) throw error;
+      },
+      async flag(id, reason, flaggedBy) {
+        const { data, error } = await requireClient().from('allocation_requests').update({ flag_reason: reason, flagged_by: flaggedBy, flagged_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapAllocationRequestRow(data);
+      },
+      async resolveFlag(id) {
+        const { data, error } = await requireClient().from('allocation_requests').update({ flag_reason: null, flagged_by: null, flagged_at: null }).eq('id', id).select().single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
       },
