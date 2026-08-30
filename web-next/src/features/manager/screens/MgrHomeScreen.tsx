@@ -15,7 +15,12 @@ const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[]
   { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
 ];
 
-const STAGE_COLORS: Record<string, string> = { '1': '#94A3B8', '2A': '#64748B', '2B': '#3B82F6', '3': '#F59E0B', '4': '#146C43', Lost: '#B0402C' };
+// A deliberate progression, not arbitrary category colors -- cool/faint
+// for a brand-new lead, warming toward the app's own gold accent as a
+// deal nears close, success green once it's actually closed. Pulled from
+// this app's own token palette (tokens.css), not a generic chart-library
+// default set.
+const STAGE_COLORS: Record<string, string> = { '1': 'var(--c-faint)', '2A': 'var(--c-info)', '2B': '#3D6FA8', '3': 'var(--c-accent)', '4': 'var(--c-success)', Lost: 'var(--c-danger)' };
 
 function initials(name: string): string {
   return name
@@ -94,7 +99,7 @@ export function MgrHomeScreen() {
               )}
             </div>
             <div className={styles.heroChart}>
-              <AreaChart values={trend} labels={monthLabels} color="var(--c-success)" height={72} />
+              <AreaChart values={trend} labels={monthLabels} color="var(--c-accent-soft)" height={90} />
             </div>
             <div className={styles.heroFootRow}>
               <div>
