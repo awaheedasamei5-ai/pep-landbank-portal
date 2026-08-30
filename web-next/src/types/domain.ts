@@ -600,6 +600,11 @@ export interface ManagerOverview {
   siteVisitsCount: number;
   stageFunnel: { stage: Stage; count: number }[];
   byAgent: { key: string; name: string; leadCount: number; value: number }[];
+  // Real amount collected per month, oldest to newest, for the trailing 6
+  // months including the current one -- feeds the KPI strip's sparkline.
+  // Always length 6 (zero-filled for months with no payments), never
+  // synthetic/interpolated data.
+  collectedTrend: number[];
 }
 
 // Public, unauthenticated Site Visit Experience feedback form -- a

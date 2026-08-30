@@ -2,7 +2,7 @@ import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
-import { today } from '../shared/lib/format';
+import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import {
   mapAllocationRequestRow,
@@ -34,6 +34,14 @@ import {
 // the real staff allowlist this session's schema research surfaced
 // repeatedly across plots/site_visits/complaints RLS policies
 // ('elias','emmanuel','elizabeth' + a manager), not invented.
+// Real amount collected per month, oldest-to-newest, trailing 6 months
+// including the current one -- zero-filled for months with no payments,
+// never interpolated. Feeds Manager Home's KPI sparkline.
+function computeMonthlyTrend(payments: Payment[]): number[] {
+  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(today().slice(0, 7), i - 5));
+  return months.map((mk) => payments.filter((p) => monthKey(p.date) === mk).reduce((s, p) => s + p.amount, 0));
+}
+
 const DEMO_STAFF: Profile[] = [
   { key: 'management', name: 'Management', role: 'manager', email: 'management@landbankghana.com', active: true },
   { key: 'elias', name: 'Elias Torgbuivi', role: 'agent', email: 'opsofficer@landbankghana.com', active: true },
@@ -1074,6 +1082,7 @@ function createDemoDataSource(): DataSource {
           siteVisitsCount: db.siteVisits.length,
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
+          collectedTrend: computeMonthlyTrend(db.payments),
         };
       },
       // No dedicated demo RPC to call -- this mirrors leaderboard_rows()'s
@@ -1899,16 +1908,19 @@ function createLiveDataSource(): DataSource {
     manager: {
       async overview() {
         const client = requireClient();
-        const [leadsRes, complaintsRes, visitsRes, staffRes] = await Promise.all([
+        const sixMonthsAgo = shiftMonth(today().slice(0, 7), -5) + '-01';
+        const [leadsRes, complaintsRes, visitsRes, staffRes, paymentsRes] = await Promise.all([
           client.from('leads').select('*'),
           client.from('complaints').select('status'),
           client.from('site_visits').select('id'),
           client.from('profiles').select('agent_key,name,role,email').eq('active', true),
+          client.from('payments').select('amount,payment_date').gte('payment_date', sixMonthsAgo),
         ]);
         if (leadsRes.error) throw leadsRes.error;
         if (complaintsRes.error) throw complaintsRes.error;
         if (visitsRes.error) throw visitsRes.error;
         if (staffRes.error) throw staffRes.error;
+        if (paymentsRes.error) throw paymentsRes.error;
 
         const leads = (leadsRes.data ?? []).map(mapLeadRow);
         const staff = (staffRes.data ?? []).map(mapProfileRow);
@@ -1939,6 +1951,7 @@ function createLiveDataSource(): DataSource {
           siteVisitsCount: (visitsRes.data ?? []).length,
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
+          collectedTrend: computeMonthlyTrend((paymentsRes.data ?? []).map((r) => ({ date: r.payment_date as string, amount: Number(r.amount ?? 0) }) as Payment)),
         };
       },
       async leaderboardRows(fromDate, toDate) {

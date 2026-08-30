@@ -16,6 +16,20 @@
   box-shadow: var(--shadow);
 }
 
+.topRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.spark {
+  color: #fff;
+  opacity: .85;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
 .value {
   font-family: 'IBM Plex Mono', monospace;
   font-weight: 800;

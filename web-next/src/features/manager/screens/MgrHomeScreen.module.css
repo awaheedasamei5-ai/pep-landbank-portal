@@ -6,6 +6,9 @@
 .headBtns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 
 .leaderboardBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   background: var(--card);
   border: 1px solid var(--line);
   color: var(--text);

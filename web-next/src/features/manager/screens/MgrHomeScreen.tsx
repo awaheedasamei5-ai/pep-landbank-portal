@@ -1,9 +1,17 @@
 import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
+import { Icon, type IconName } from '../../../shared/ui/Icon';
 import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useManagerOverview } from '../hooks/useManagerOverview';
 import styles from './MgrHomeScreen.module.css';
+
+const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[] = [
+  { key: 'leaderboard', label: 'Leaderboard', icon: 'trophy', path: '/app/mgr/leaderboard' },
+  { key: 'commission', label: 'Commission', icon: 'wallet', path: '/app/mgr/commission' },
+  { key: 'settings', label: 'Settings', icon: 'settings', path: '/app/mgr/settings' },
+  { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
+];
 
 const STAGE_COLORS: Record<string, string> = { '1': '#94A3B8', '2A': '#64748B', '2B': '#3B82F6', '3': '#F59E0B', '4': 'var(--ok)', Lost: '#EF4444' };
 
@@ -32,18 +40,12 @@ export function MgrHomeScreen() {
           <p className={styles.sub}>Live across every agent</p>
         </div>
         <div className={styles.headBtns}>
-          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/leaderboard')}>
-            🏆 Leaderboard
-          </button>
-          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/commission')}>
-            💰 Commission
-          </button>
-          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/settings')}>
-            ⚙ Settings
-          </button>
-          <button type="button" className={styles.leaderboardBtn} onClick={() => navigate('/app/mgr/reports')}>
-            📊 Reports
-          </button>
+          {HEAD_LINKS.map((l) => (
+            <button key={l.key} type="button" className={styles.leaderboardBtn} onClick={() => navigate(l.path)}>
+              <Icon name={l.icon} size={15} />
+              {l.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -61,7 +63,7 @@ export function MgrHomeScreen() {
           <div className={styles.pillsWrap}>
             <PipePillStrip>
               <PipePill tone="blue" value={ghs(data.pipelineValue)} label="Pipeline value" isMoney />
-              <PipePill tone="green" value={ghs(data.collected)} label="Collected" isMoney />
+              <PipePill tone="green" value={ghs(data.collected)} label="Collected" isMoney trend={data.collectedTrend} />
               <PipePill tone="gold" value={data.siteVisitsCount} label="Site visits logged" />
             </PipePillStrip>
           </div>

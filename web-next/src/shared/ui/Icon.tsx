@@ -32,7 +32,11 @@ export type IconName =
   | 'document'
   | 'calculator'
   | 'palm'
-  | 'notepad';
+  | 'notepad'
+  | 'trophy'
+  | 'wallet'
+  | 'settings'
+  | 'barChart';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -193,6 +197,45 @@ function IconInner({ name }: { name: IconName }) {
           <rect x={4.5} y={5} width={15} height={16} rx={1.5} stroke="currentColor" strokeWidth={1.8} fill="none" />
           <path d="M8.5 3.5v3M12 3.5v3M15.5 3.5v3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
           <path d="M8 12h8M8 15.5h8" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'trophy':
+      return (
+        <>
+          <path d="M7 4h10v5a5 5 0 01-10 0V4z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M7 5H4v2a3 3 0 003 3M17 5h3v2a3 3 0 01-3 3" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M12 14v3M9 20.5h6M9.5 20.5c0-2 .8-3 2.5-3.5 1.7.5 2.5 1.5 2.5 3.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'wallet':
+      return (
+        <>
+          <path d="M3.5 7.5a2 2 0 012-2h11a2 2 0 012 2v9a2 2 0 01-2 2h-11a2 2 0 01-2-2v-9z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M15 6.2L7.5 3 4 6.2" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <rect x={14} y={11} width={6} height={4} rx={1} stroke="currentColor" strokeWidth={1.6} fill="none" />
+          <circle cx={16.5} cy={13} r={0.7} fill="currentColor" />
+        </>
+      );
+    case 'settings':
+      return (
+        <>
+          <circle cx={12} cy={12} r={3} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path
+            d="M12 3.5v2.3M12 18.2v2.3M20.5 12h-2.3M5.8 12H3.5M17.7 6.3l-1.6 1.6M7.9 16.1l-1.6 1.6M17.7 17.7l-1.6-1.6M7.9 7.9L6.3 6.3"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </>
+      );
+    case 'barChart':
+      return (
+        <>
+          <path d="M4 19V5M4 19h16" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <rect x={6.5} y={13} width={3} height={6} rx={0.8} fill="currentColor" />
+          <rect x={11} y={9} width={3} height={10} rx={0.8} fill="currentColor" />
+          <rect x={15.5} y={6} width={3} height={13} rx={0.8} fill="currentColor" />
         </>
       );
   }
