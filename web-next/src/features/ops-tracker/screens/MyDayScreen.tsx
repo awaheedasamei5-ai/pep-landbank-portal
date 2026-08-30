@@ -5,7 +5,20 @@ import { useTodayTodos, useCreateTodo, useUpdateTodoStatus } from '../hooks/useT
 import { useColleagueAvailability } from '../hooks/useColleagueAvailability';
 import { DayClearedCelebration } from '../../streak/components/DayClearedCelebration';
 import { today } from '../../../shared/lib/format';
+import type { ScheduleItemStatus } from '../../../types/domain';
 import styles from './MyDayScreen.module.css';
+
+// Real kanban, not a decorative board -- these 4 columns are the actual
+// ScheduleItemStatus union (types/domain.ts), no invented lane that isn't
+// backed by a real, persisted status. Adapted from the task-board pattern
+// studied on Dribbble/Figma this session (columns of cards, a status chip
+// per card) onto the app's own token palette.
+const COLUMNS: { status: ScheduleItemStatus; label: string; color: string }[] = [
+  { status: 'open', label: 'Open', color: 'var(--c-info)' },
+  { status: 'rescheduled', label: 'Rescheduled', color: 'var(--c-warn)' },
+  { status: 'cancelled', label: 'Cancelled', color: 'var(--c-danger)' },
+  { status: 'closed', label: 'Closed', color: 'var(--c-success)' },
+];
 
 // Simplified port of paintMyDayTab()'s to-do side (index.html:13060-13082) --
 // a checklist for today only. The time-axis day grid, due-today tasks, and
@@ -40,15 +53,14 @@ export function MyDayScreen() {
     setAssignTo('');
   }
 
-  const active = (todos ?? []).filter((t) => t.status !== 'rescheduled');
+  const all = todos ?? [];
 
-  function toggle(id: string, currentlyDone: boolean) {
-    const status = currentlyDone ? 'open' : 'closed';
+  function changeStatus(id: string, status: ScheduleItemStatus) {
     // Fires the confetti celebration exactly once, on the action that
     // actually clears the last remaining open item -- not on every render
     // where the list happens to already be empty (e.g. nothing logged yet).
     if (status === 'closed') {
-      const remainingOpen = active.filter((t) => t.id !== id && t.status === 'open').length;
+      const remainingOpen = all.filter((t) => t.id !== id && t.status === 'open').length;
       if (remainingOpen === 0) setCelebrate(true);
     }
     updateStatus.mutate({ id, status });
@@ -105,18 +117,39 @@ export function MyDayScreen() {
       {justAssigned && <p className={styles.empty}>Assigned to {justAssigned} — it'll show up on their My Day, not yours.</p>}
 
       {isLoading && <p className={styles.empty}>Loading…</p>}
-      {active.map((t) => {
-        const done = t.status === 'closed';
-        return (
-          <div className={styles.row} key={t.id}>
-            <button type="button" className={done ? styles.checkDone : styles.check} onClick={() => toggle(t.id, done)} aria-label={done ? 'Mark not done' : 'Mark done'}>
-              {done ? '✓' : ''}
-            </button>
-            <span className={done ? styles.textDone : styles.text}>{t.title}</span>
-          </div>
-        );
-      })}
-      {active.length === 0 && !isLoading && <p className={styles.empty}>Nothing logged for today yet — add your first to-do above.</p>}
+      {!isLoading && all.length === 0 && <p className={styles.empty}>Nothing logged for today yet — add your first to-do above.</p>}
+
+      {!isLoading && all.length > 0 && (
+        <div className={styles.board}>
+          {COLUMNS.map((col) => {
+            const items = all.filter((t) => t.status === col.status);
+            return (
+              <div className={styles.column} key={col.status}>
+                <div className={styles.columnHead}>
+                  <span className={styles.columnDot} style={{ background: col.color }} />
+                  <span className={styles.columnLabel}>{col.label}</span>
+                  <span className={styles.columnCount}>{items.length}</span>
+                </div>
+                <div className={styles.columnBody}>
+                  {items.map((t) => (
+                    <div className={styles.card} key={t.id}>
+                      <div className={styles.cardTitle}>{t.title}</div>
+                      <select className={styles.cardMoveSelect} value={t.status} onChange={(e) => changeStatus(t.id, e.target.value as ScheduleItemStatus)} aria-label={`Move "${t.title}"`}>
+                        {COLUMNS.map((c) => (
+                          <option key={c.status} value={c.status}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                  {items.length === 0 && <div className={styles.columnEmpty}>Nothing here</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {celebrate && <DayClearedCelebration onClose={() => setCelebrate(false)} />}
     </div>
   );

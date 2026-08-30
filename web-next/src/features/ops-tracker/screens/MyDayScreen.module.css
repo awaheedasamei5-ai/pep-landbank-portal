@@ -15,41 +15,60 @@
 }
 .addBtn:disabled { opacity: .6; cursor: default; }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 13px 14px;
-  margin-bottom: 8px;
-}
-
-.check {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: none;
-  color: transparent;
-  font-size: 13px;
-}
-
-.checkDone {
-  composes: check;
-  background: var(--ok);
-  border-color: var(--ok);
-  color: #fff;
-}
-.text { font-size: 14px; color: var(--text); flex: 1; }
-.textDone { composes: text; text-decoration: line-through; color: var(--muted); }
 .empty { color: var(--muted); font-size: 13.5px; }
+
+/* Real kanban board -- 4 columns, one per actual ScheduleItemStatus value
+   (see MyDayScreen.tsx's own comment). Horizontally scrollable with snap
+   since 4 columns don't fit a phone width, matching how the reference
+   task-board app itself handles narrow lanes. */
+.board {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  margin: 0 -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.column {
+  flex: 0 0 auto;
+  width: 200px;
+  scroll-snap-align: start;
+  background: var(--c-paper);
+  border-radius: var(--r-md);
+  padding: 12px;
+}
+
+.columnHead { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; padding: 0 2px; }
+.columnDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.columnLabel { font-size: 12.5px; font-weight: 700; color: var(--c-text); flex: 1; }
+.columnCount { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--c-muted); background: var(--c-card); padding: 1px 7px; border-radius: 100px; }
+
+.columnBody { display: flex; flex-direction: column; gap: 8px; }
+.columnEmpty { font-size: 11.5px; color: var(--c-faint); text-align: center; padding: 14px 0; }
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  box-shadow: var(--shadow);
+}
+.cardTitle { font-size: 13px; font-weight: 600; color: var(--c-text); line-height: 1.4; margin-bottom: 8px; }
+
+.cardMoveSelect {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 7px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-family: inherit;
+}
 
 .assignRow { display: flex; align-items: center; gap: 8px; margin: -10px 0 14px; }
 .assignLabel { font-size: 12px; color: var(--muted); font-weight: 700; flex-shrink: 0; }
