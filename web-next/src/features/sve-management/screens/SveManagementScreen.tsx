@@ -3,6 +3,15 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useSendSveInvite, useSveVisits } from '../hooks/useSveManagement';
 import styles from './SveManagementScreen.module.css';
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 function inviteLink(token: string): string {
   return `${window.location.origin}/visit-feedback/${token}`;
 }
@@ -55,13 +64,14 @@ export function SveManagementScreen() {
       <h1 className={styles.title}>Site Visit Experience</h1>
       <p className={styles.sub}>Send a feedback link after a visit, review what clients said</p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {visits?.map(({ siteVisit, invite, submission }) => {
         const isOpen = expanded === siteVisit.id;
         return (
           <div className={styles.card} key={siteVisit.id}>
             <div className={styles.row}>
-              <div>
+              <span className={styles.avatar}>{initials(siteVisit.name)}</span>
+              <div className={styles.rowMain}>
                 <div className={styles.name}>{siteVisit.name}</div>
                 <div className={styles.meta}>
                   {siteVisit.site}
@@ -164,7 +174,7 @@ export function SveManagementScreen() {
           </div>
         );
       })}
-      {visits && visits.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No site visits logged yet.</p>}
+      {visits && visits.length === 0 && !isLoading && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
     </div>
   );
 }
