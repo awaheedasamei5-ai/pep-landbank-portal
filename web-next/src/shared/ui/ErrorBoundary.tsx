@@ -29,11 +29,11 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ padding: 32, textAlign: 'center', fontFamily: 'var(--user-font-family)' }}>
           <h1 style={{ fontSize: 20 }}>Something went wrong</h1>
-          <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>The error has been logged. Try reloading the page.</p>
+          <p style={{ color: 'var(--c-muted)', fontSize: 13.5 }}>The error has been logged. Try reloading the page.</p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            style={{ marginTop: 16, background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 100, padding: '10px 20px', fontWeight: 700, cursor: 'pointer' }}
+            style={{ marginTop: 16, background: 'var(--c-accent)', color: '#fff', border: 'none', borderRadius: 100, padding: '10px 20px', fontWeight: 700, cursor: 'pointer' }}
           >
             Reload
           </button>

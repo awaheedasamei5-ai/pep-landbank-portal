@@ -97,7 +97,7 @@ export function MemosScreen() {
             );
           })
         ) : (
-          <p style={{ color: 'var(--muted)' }}>Nothing received yet.</p>
+          <p style={{ color: 'var(--c-muted)' }}>Nothing received yet.</p>
         ))}
 
       {tab === 'sent' &&
@@ -127,7 +127,7 @@ export function MemosScreen() {
             );
           })
         ) : (
-          <p style={{ color: 'var(--muted)' }}>Nothing sent yet.</p>
+          <p style={{ color: 'var(--c-muted)' }}>Nothing sent yet.</p>
         ))}
 
       {tab === 'drafts' &&
@@ -160,7 +160,7 @@ export function MemosScreen() {
             );
           })
         ) : (
-          <p style={{ color: 'var(--muted)' }}>No drafts.</p>
+          <p style={{ color: 'var(--c-muted)' }}>No drafts.</p>
         ))}
     </div>
   );

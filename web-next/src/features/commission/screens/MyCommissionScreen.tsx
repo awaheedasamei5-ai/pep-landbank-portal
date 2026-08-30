@@ -42,8 +42,8 @@ export function MyCommissionScreen() {
       </p>
 
       <div className={styles.sectitle}>Which plots earned this</div>
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {data && data.rows.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>Nothing counted yet this month. Commission is calculated from approved payments logged this month against your clients.</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {data && data.rows.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>Nothing counted yet this month. Commission is calculated from approved payments logged this month against your clients.</p>}
       <div className={styles.list}>
         {data?.rows.map((r) => (
           <div className={styles.row} key={`${r.leadId}-${r.paymentDate}`}>

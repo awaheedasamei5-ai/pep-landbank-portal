@@ -34,8 +34,8 @@ export function NotesScreen() {
 
       {creating && <NewNoteForm onDone={() => setCreating(false)} />}
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {notes && notes.length === 0 && !isLoading && !creating && <p style={{ color: 'var(--muted)' }}>No notes yet.</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {notes && notes.length === 0 && !isLoading && !creating && <p style={{ color: 'var(--c-muted)' }}>No notes yet.</p>}
 
       <div className={styles.list}>
         {notes?.map((n) => (

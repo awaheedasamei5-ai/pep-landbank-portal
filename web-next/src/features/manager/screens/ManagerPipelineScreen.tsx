@@ -58,7 +58,7 @@ export function ManagerPipelineScreen() {
         ))}
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {filtered.map((l) => (
         <div className={styles.row} key={l.id} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)} role="button" tabIndex={0}>
           <div className={styles.rowMain}>
@@ -75,7 +75,7 @@ export function ManagerPipelineScreen() {
           </div>
         </div>
       ))}
-      {!isLoading && filtered.length === 0 && <p style={{ color: 'var(--muted)' }}>No leads match this filter.</p>}
+      {!isLoading && filtered.length === 0 && <p style={{ color: 'var(--c-muted)' }}>No leads match this filter.</p>}
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function TeamRosterScreen() {
       <h1 className={styles.title}>Team</h1>
       <p className={styles.sub}>{roster ? `${activeCount} active of ${roster.length}` : 'Deactivating blocks sign-in but keeps historical leads & stats intact everywhere.'}</p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       {/* Employee-card grid, adapted from the HR-admin-panel pattern studied
           on Dribbble/Figma this session (avatar + status badge + role +

@@ -58,7 +58,7 @@ export function TechnicalQuotationScreen() {
       <h1 className={styles.title}>Custom land area pricing</h1>
       <p className={styles.sub}>Standard plots plus any custom/irregular lots, all priced at one dynamic GHS/sq.ft rate &mdash; never a hardcoded figure.</p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       <div className={styles.card}>
         <div className={styles.field}>

@@ -37,7 +37,9 @@ export function ChatScreen() {
       <div className={styles.head}>
         <div>
           <h1 className={styles.title}>Chat</h1>
-          <p className={styles.sub}>{conversations?.length ?? 0} conversations</p>
+          <p className={styles.sub}>
+            {conversations?.length ?? 0} conversation{conversations?.length === 1 ? '' : 's'}
+          </p>
         </div>
         <button type="button" className={styles.newBtn} onClick={() => setPicking((p) => !p)}>
           + New chat
@@ -46,7 +48,7 @@ export function ChatScreen() {
 
       {picking && (
         <div className={styles.pickerCard}>
-          {pickable.length === 0 && <p style={{ color: 'var(--muted)', margin: '8px 12px', fontSize: 13 }}>Everyone's already in your conversation list.</p>}
+          {pickable.length === 0 && <p style={{ color: 'var(--c-muted)', margin: '8px 12px', fontSize: 13 }}>Everyone's already in your conversation list.</p>}
           {pickable.map((s) => (
             <button key={s.key} type="button" className={styles.pickerRow} onClick={() => navigate(`/app/chat/${s.key}`)}>
               {s.name} {s.role === 'manager' ? '(Management)' : ''}
@@ -55,7 +57,7 @@ export function ChatScreen() {
         </div>
       )}
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {conversations?.map((c) => (
         <div className={styles.row} key={c.otherKey} onClick={() => navigate(`/app/chat/${c.otherKey}`)} role="button" tabIndex={0}>
           <div className={styles.avatar}>{initials(c.otherName)}</div>
@@ -69,7 +71,7 @@ export function ChatScreen() {
           </div>
         </div>
       ))}
-      {conversations && conversations.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No conversations yet -- start one above.</p>}
+      {conversations && conversations.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>No conversations yet -- start one above.</p>}
     </div>
   );
 }

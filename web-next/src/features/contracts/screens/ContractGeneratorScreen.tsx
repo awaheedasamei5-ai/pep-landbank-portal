@@ -57,7 +57,7 @@ function ContractGeneratorInner() {
                 ))}
               </div>
             )}
-            {q && matches.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
+            {q && matches.length === 0 && <p style={{ color: 'var(--c-muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
           </>
         ) : (
           <SelectedLeadPreview lead={selectedLead} onChange={() => setSelectedLead(null)} />
@@ -65,8 +65,8 @@ function ContractGeneratorInner() {
       </div>
 
       <div className={styles.sectitle}>Previously generated</div>
-      {contractsLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {contracts && contracts.length === 0 && !contractsLoading && <p style={{ color: 'var(--muted)', fontSize: 12.5 }}>No contracts generated yet.</p>}
+      {contractsLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {contracts && contracts.length === 0 && !contractsLoading && <p style={{ color: 'var(--c-muted)', fontSize: 12.5 }}>No contracts generated yet.</p>}
       <div className={styles.list}>
         {contracts?.map((c) => (
           <div className={styles.row} key={c.id}>

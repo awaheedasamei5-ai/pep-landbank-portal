@@ -64,7 +64,7 @@ export function ReportsScreen() {
       <input className={styles.search} placeholder="Search a client by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
       {q && (
         <div className={styles.searchResults}>
-          {matches.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 12.5 }}>No matches. Try a different name or number.</p>}
+          {matches.length === 0 && <p style={{ color: 'var(--c-muted)', fontSize: 12.5 }}>No matches. Try a different name or number.</p>}
           {matches.map((l) => (
             <div className={styles.searchRow} key={l.id}>
               <div>

@@ -95,7 +95,7 @@ export function LeaveCalendar({
       </div>
       <div className={styles.legend}>
         <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--ink)' }} />
+          <i className={styles.legendSwatch} style={{ background: 'var(--c-ink)' }} />
           Selected
         </span>
         <span className={styles.legendItem}>
@@ -103,7 +103,7 @@ export function LeaveCalendar({
           Public holiday
         </span>
         <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--danger)', opacity: 0.6 }} />
+          <i className={styles.legendSwatch} style={{ background: 'var(--c-danger)', opacity: 0.6 }} />
           Taken / colleague&apos;s leave
         </span>
       </div>

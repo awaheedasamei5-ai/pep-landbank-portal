@@ -23,8 +23,8 @@ export function CompanyLeadsScreen() {
       <h1 className={styles.title}>Company Leads</h1>
       <p className={styles.sub}>Clients who came to the company directly -- assign each to an agent once you know who&apos;s handling them.</p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {leads && leads.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No company leads yet.</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {leads && leads.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>No company leads yet.</p>}
 
       <div className={styles.list}>
         {leads?.map((l) => (

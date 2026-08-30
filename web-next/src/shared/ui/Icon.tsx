@@ -38,7 +38,8 @@ export type IconName =
   | 'settings'
   | 'barChart'
   | 'chevronDown'
-  | 'search';
+  | 'search'
+  | 'team';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -247,6 +248,15 @@ function IconInner({ name }: { name: IconName }) {
         <>
           <circle cx={11} cy={11} r={6.5} stroke="currentColor" strokeWidth={1.8} fill="none" />
           <path d="M20 20l-4.3-4.3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'team':
+      return (
+        <>
+          <circle cx={9} cy={8} r={3} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M15.5 5.2a3 3 0 010 5.6" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M15 14.2c2.6.4 4.5 2.3 4.5 4.8" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
         </>
       );
   }

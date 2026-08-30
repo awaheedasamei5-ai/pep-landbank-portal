@@ -5,7 +5,9 @@
 .sub { color: var(--c-muted); margin: 6px 0 20px; font-size: 13px; }
 
 .teamLink {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   background: var(--c-card);

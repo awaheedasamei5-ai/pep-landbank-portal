@@ -39,12 +39,12 @@ export function QuotationScreen() {
       <p className={styles.sub}>Live pricing &mdash; nothing saved, nothing sent. Full or Half Plot(s) at the standard list price.</p>
       <p className={styles.sub} style={{ marginTop: -12 }}>
         Custom or irregular plots?{' '}
-        <Link to="/app/office/quotation/technical" style={{ color: 'var(--green)', fontWeight: 700 }}>
+        <Link to="/app/office/quotation/technical" style={{ color: 'var(--c-accent)', fontWeight: 700 }}>
           Try Technical Quotation →
         </Link>
       </p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       <div className={styles.card}>
         <div className={styles.grid2}>

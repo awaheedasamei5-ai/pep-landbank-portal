@@ -26,7 +26,7 @@ export function OfficeDeskScreen() {
   return (
     <div style={{ padding: '20px 16px 90px' }}>
       <h1 style={{ fontSize: 22, marginBottom: 4 }}>Office</h1>
-      <p style={{ color: 'var(--muted)', marginTop: 0, marginBottom: 20, fontSize: 13.5 }}>Documents, operations &amp; feedback</p>
+      <p style={{ color: 'var(--c-muted)', marginTop: 0, marginBottom: 20, fontSize: 13.5 }}>Documents, operations &amp; feedback</p>
       <TileGrid items={items} />
     </div>
   );

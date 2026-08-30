@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Config, LeaderboardWeights } from '../../../types/domain';
+import { Icon } from '../../../shared/ui/Icon';
 import { useConfig, useUpdateConfig } from '../hooks/useConfigSettings';
 import styles from './SettingsScreen.module.css';
 
@@ -27,10 +28,10 @@ export function SettingsScreen() {
       <p className={styles.sub}>Leaderboard points formula & the commission engine</p>
 
       <button type="button" className={styles.teamLink} onClick={() => navigate('/app/mgr/team')}>
-        👥 Team roster &mdash; activate / deactivate staff
+        <Icon name="team" size={18} /> Team roster &mdash; activate / deactivate staff
       </button>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {config && <SettingsForm config={config} />}
     </div>
   );

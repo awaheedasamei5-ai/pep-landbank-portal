@@ -45,9 +45,9 @@ export function LeaderboardScreen() {
         </select>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
-      {rows && rows.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No data yet.</p>}
+      {rows && rows.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>No data yet.</p>}
 
       {leader && (
         <div className={styles.leaderCard}>

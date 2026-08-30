@@ -44,8 +44,8 @@ export function LeaveScreen() {
 
       {showForm && <NewLeaveForm requests={requests ?? []} onDone={() => setShowForm(false)} />}
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No leave requests yet.</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>No leave requests yet.</p>}
 
       <div className={styles.list}>
         {sorted.map((r, i) => (
@@ -133,7 +133,7 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
       {config ? (
         <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={requests} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} />
       ) : (
-        <p style={{ color: 'var(--muted)' }}>Loading…</p>
+        <p style={{ color: 'var(--c-muted)' }}>Loading…</p>
       )}
       <textarea className={styles.textarea} placeholder="Reason (optional)" value={letterText} onChange={(e) => setLetterText(e.target.value)} />
       {error && <p className={styles.error}>{error}</p>}

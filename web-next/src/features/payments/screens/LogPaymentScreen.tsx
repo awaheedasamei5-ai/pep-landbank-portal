@@ -104,7 +104,7 @@ export function LogPaymentScreen() {
                 ))}
               </div>
             )}
-            {q && matches.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
+            {q && matches.length === 0 && <p style={{ color: 'var(--c-muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
           </>
         ) : (
           <>
@@ -161,8 +161,8 @@ export function LogPaymentScreen() {
       </div>
 
       <div className={styles.sectionTitle}>Pending approvals</div>
-      {pendingLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {pending && pending.length === 0 && !pendingLoading && <p style={{ color: 'var(--muted)' }}>Nothing pending.</p>}
+      {pendingLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {pending && pending.length === 0 && !pendingLoading && <p style={{ color: 'var(--c-muted)' }}>Nothing pending.</p>}
       {pending?.map((p) => (
         <PendingPaymentRow key={p.id} payment={p} lead={(leads ?? []).find((l) => l.id === p.leadId) ?? null} canDecide={profile?.role === 'manager'} />
       ))}

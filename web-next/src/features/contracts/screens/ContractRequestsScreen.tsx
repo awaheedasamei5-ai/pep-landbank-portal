@@ -41,7 +41,7 @@ export function ContractRequestsScreen() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {canFulfil && (
-            <button type="button" className={styles.addBtn} style={{ background: 'none', border: '1px solid var(--line)', color: 'var(--muted)' }} onClick={() => navigate('/app/office/contracts/generate')}>
+            <button type="button" className={styles.addBtn} style={{ background: 'none', border: '1px solid var(--c-line)', color: 'var(--c-muted)' }} onClick={() => navigate('/app/office/contracts/generate')}>
               📄 Generate
             </button>
           )}
@@ -53,8 +53,8 @@ export function ContractRequestsScreen() {
 
       {showForm && <NewRequestForm onDone={() => setShowForm(false)} />}
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No contract requests yet.</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--c-muted)' }}>No contract requests yet.</p>}
 
       <div className={styles.list}>
         {sorted.map((r, i) => (
@@ -102,7 +102,7 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
               ))}
             </div>
           )}
-          {q && matches.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
+          {q && matches.length === 0 && <p style={{ color: 'var(--c-muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
         </>
       ) : (
         <>

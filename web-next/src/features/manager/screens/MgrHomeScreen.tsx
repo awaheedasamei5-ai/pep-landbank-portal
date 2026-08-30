@@ -74,7 +74,7 @@ export function MgrHomeScreen() {
         </div>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {data && (
         <>
           <div className={styles.pillsWrap}>
@@ -129,7 +129,7 @@ export function MgrHomeScreen() {
 
           <div className={styles.sectitle}>By agent</div>
           <div className={styles.card}>
-            {data.byAgent.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No leads yet.</p>}
+            {data.byAgent.length === 0 && <p style={{ color: 'var(--c-muted)', margin: 0 }}>No leads yet.</p>}
             {data.byAgent.map((a) => (
               <button type="button" className={styles.agentRow} key={a.key} onClick={() => navigate(`/app/mgr/pipeline?agent=${encodeURIComponent(a.key)}`)}>
                 <span className={styles.agentAvatar}>{initials(a.name)}</span>

@@ -31,7 +31,7 @@ export function CommissionScreen() {
       </div>
       <p className={styles.payable}>Payable {payoutDate}</p>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       {data && (
         <>
