@@ -30,7 +30,7 @@ export function useDecideLeaveRequest() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, approve }: { id: string; approve: boolean }) => getDataSource(demoMode).leaveRequests.decide(id, approve, profile?.key ?? '', profile?.name ?? ''),
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) => getDataSource(demoMode).leaveRequests.decide(id, approve, profile?.key ?? '', profile?.name ?? '', profile?.signatureData ?? null),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
   });
 }

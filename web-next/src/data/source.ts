@@ -1,5 +1,6 @@
 import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
+import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
 import {
@@ -42,6 +43,12 @@ const DEMO_STAFF: Profile[] = [
   // production's real 'adams' staff member (confirmed live).
   { key: 'adams', name: 'Adams', role: 'agent', email: 'digitalopsofficer@landbankghana.com', active: false },
 ];
+
+function applyStaffOverrides(s: Profile, db: DemoDb): Profile {
+  const active = s.key in db.staffActiveOverrides ? db.staffActiveOverrides[s.key] : s.active;
+  const signatureData = db.staffSignatures[s.key] ?? null;
+  return { ...s, active, signatureData };
+}
 
 // A memo a staff member "received" either because they're the primary
 // to_key, or because they were CC'd via a memo_recipients row -- the two
@@ -210,7 +217,7 @@ export interface DataSource {
   leaveRequests: {
     list(): Promise<LeaveRequest[]>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
-    decide(id: string, approve: boolean, decidedBy: string, decidedByName: string): Promise<LeaveRequest>;
+    decide(id: string, approve: boolean, decidedBy: string, decidedByName: string, decidedSignature: string | null): Promise<LeaveRequest>;
   };
   // Real table `allocation_requests` -- same manager/elias/emmanuel gate
   // as Plot Inventory (alloc_sel/alloc_upd, confirmed live). list()
@@ -266,6 +273,12 @@ export interface DataSource {
     // deliberately out of scope -- not something to wire up and exercise
     // in a demo/testing pass.
     setActive(key: string, active: boolean): Promise<Profile>;
+    // Real column `signature_data` (confirmed live, text) -- a self-
+    // service upload in Settings, real p_profiles_upd RLS (own row OR
+    // manager) matches setActive's own-row-update shape exactly. Used to
+    // auto-stamp the signed-in staff member's own signature onto
+    // documents they generate/approve (index.html's getStaffSignature()).
+    updateSignature(key: string, dataUrl: string | null): Promise<Profile>;
   };
   // Real tables `memos` + `memo_recipients` -- see the Memo type's comment
   // in types/domain.ts for the RLS/draft/CC shape. delete() throws if
@@ -761,17 +774,18 @@ function createDemoDataSource(): DataSource {
           decidedAt: null,
           decidedBy: null,
           decidedByName: null,
+          decidedSignature: null,
         };
         const db = demoLoad();
         db.leaveRequests.push(request);
         demoSave();
         return request;
       },
-      async decide(id, approve, decidedBy, decidedByName) {
+      async decide(id, approve, decidedBy, decidedByName, decidedSignature) {
         const db = demoLoad();
         const index = db.leaveRequests.findIndex((r) => r.id === id);
         if (index === -1) throw new Error('Leave request not found');
-        const updated: LeaveRequest = { ...db.leaveRequests[index], status: approve ? 'approved' : 'declined', decidedAt: new Date().toISOString(), decidedBy, decidedByName };
+        const updated: LeaveRequest = { ...db.leaveRequests[index], status: approve ? 'approved' : 'declined', decidedAt: new Date().toISOString(), decidedBy, decidedByName, decidedSignature: approve ? decidedSignature : null };
         db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
         demoSave();
         return updated;
@@ -905,12 +919,12 @@ function createDemoDataSource(): DataSource {
     },
     staff: {
       async list() {
-        const overrides = demoLoad().staffActiveOverrides;
-        return DEMO_STAFF.map((s) => (s.key in overrides ? { ...s, active: overrides[s.key] } : s)).filter((s) => s.active);
+        const db = demoLoad();
+        return DEMO_STAFF.map((s) => applyStaffOverrides(s, db)).filter((s) => s.active);
       },
       async listAll() {
-        const overrides = demoLoad().staffActiveOverrides;
-        return DEMO_STAFF.map((s) => (s.key in overrides ? { ...s, active: overrides[s.key] } : s));
+        const db = demoLoad();
+        return DEMO_STAFF.map((s) => applyStaffOverrides(s, db));
       },
       async setActive(key, active) {
         const db = demoLoad();
@@ -918,7 +932,15 @@ function createDemoDataSource(): DataSource {
         demoSave();
         const staff = DEMO_STAFF.find((s) => s.key === key);
         if (!staff) throw new Error('Staff not found');
-        return { ...staff, active };
+        return applyStaffOverrides({ ...staff, active }, db);
+      },
+      async updateSignature(key, dataUrl) {
+        const db = demoLoad();
+        db.staffSignatures = { ...db.staffSignatures, [key]: dataUrl };
+        demoSave();
+        const staff = DEMO_STAFF.find((s) => s.key === key);
+        if (!staff) throw new Error('Staff not found');
+        return applyStaffOverrides(staff, db);
       },
     },
     memos: {
@@ -1589,10 +1611,10 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
-      async decide(id, approve, decidedBy, decidedByName) {
+      async decide(id, approve, decidedBy, decidedByName, decidedSignature) {
         const { data, error } = await requireClient()
           .from('leave_requests')
-          .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName })
+          .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName, decided_signature: approve ? decidedSignature : null })
           .eq('id', id)
           .select()
           .single();
@@ -1744,6 +1766,11 @@ function createLiveDataSource(): DataSource {
       },
       async setActive(key, active) {
         const { data, error } = await requireClient().from('profiles').update({ active }).eq('agent_key', key).select().single();
+        if (error) throw error;
+        return mapProfileRow(data);
+      },
+      async updateSignature(key, dataUrl) {
+        const { data, error } = await requireClient().from('profiles').update({ signature_data: dataUrl }).eq('agent_key', key).select().single();
         if (error) throw error;
         return mapProfileRow(data);
       },

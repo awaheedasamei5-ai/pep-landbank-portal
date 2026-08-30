@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { ghs, today } from '../../../shared/lib/format';
+import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import type { Config } from '../../../types/domain';
 import type { QuotationTotals } from './quotationLogic';
 
@@ -112,7 +113,7 @@ export interface QuotationClientInfo {
   email?: string;
 }
 
-export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: QuotationClientInfo, config: Config, logoDataUri: string | null): jsPDF {
+export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: QuotationClientInfo, config: Config, logoDataUri: string | null, preparedByName: string, preparerSignature: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -237,6 +238,20 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
     quoteBg(doc, pageW, pageH);
     y = 20;
   }
+  // Prepared-by signoff -- whoever's signed in and generating this quote,
+  // stamped with their own saved signature (same per-staff signature used
+  // on the payment receipt and leave letter), so every quotation carries a
+  // genuine personal signoff rather than just a name printed in text.
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text('Prepared by:', 14, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text(preparedByName, 45, y);
+  if (preparerSignature) pdfStampSignature(doc, 95, y - 9, 28, 12, preparerSignature);
+  y += 13;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(20, 20, 20);

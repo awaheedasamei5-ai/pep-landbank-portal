@@ -478,6 +478,7 @@ export function seedDemo(): DemoDb {
       decidedAt: null,
       decidedBy: null,
       decidedByName: null,
+      decidedSignature: null,
     },
     {
       id: uid(),
@@ -492,6 +493,7 @@ export function seedDemo(): DemoDb {
       decidedAt: isoPlusDays(t, -23),
       decidedBy: 'management',
       decidedByName: 'Management',
+      decidedSignature: null,
     },
   ];
 
@@ -601,7 +603,7 @@ export function seedDemo(): DemoDb {
 
   const contracts: DemoDb['contracts'] = [];
 
-  return { version: 24, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages, contracts };
+  return { version: 25, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, staffSignatures: {}, sveInvites, sveSubmissions, chatMessages, contracts };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

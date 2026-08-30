@@ -196,6 +196,7 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
     role: (r.role as Profile['role']) ?? 'agent',
     email: (r.email as string) ?? undefined,
     active: (r.active as boolean) ?? true,
+    signatureData: (r.signature_data as string) ?? null,
   };
 }
 
@@ -331,6 +332,7 @@ export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
     decidedAt: (r.decided_at as string) ?? null,
     decidedBy: (r.decided_by as string) ?? null,
     decidedByName: (r.decided_by_name as string) ?? null,
+    decidedSignature: (r.decided_signature as string) ?? null,
   };
 }
 

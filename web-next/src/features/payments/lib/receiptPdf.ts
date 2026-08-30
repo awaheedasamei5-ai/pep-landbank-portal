@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { ghs } from '../../../shared/lib/format';
+import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import type { Config, Lead, Payment } from '../../../types/domain';
 
 // Port of index.html's buildReceiptPDF()/pdfReceiptHeaderBand()/
@@ -7,11 +8,10 @@ import type { Config, Lead, Payment } from '../../../types/domain';
 // layout: full-width navy header band with a gold rule, bill-to/issued-by
 // two-column grid, a one-row payment-details table, a totals box (paid to
 // date / balance / PAID IN FULL), payment-info + notes columns, and a
-// signature line. Signature stamping (index.html's pdfStampSignature via
-// getStaffSignature()) is left out -- this app has no staff signature
-// capture UI yet, and the real receipt already renders correctly without
-// one (the real code guards it with `if(issuerSig)`, so omitting a
-// signature was already a valid, expected state, not a shortcut).
+// signature line. Whoever's issuing the receipt is stamped above the
+// "Authorized Signature" line with their own saved signature, if they
+// have one (guarded by `if(issuerSignature)`, same as the real code --
+// no signature is still a valid, correctly-rendered state).
 const INK: [number, number, number] = [11, 30, 61];
 const GOLD: [number, number, number] = [201, 162, 39];
 const GOLD2: [number, number, number] = [232, 199, 102];
@@ -69,9 +69,10 @@ export interface BuildReceiptParams {
   receiptNumber: string;
   config: Config;
   paidAsOf?: number;
+  issuerSignature?: string | null;
 }
 
-export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, config, paidAsOf }: BuildReceiptParams): jsPDF {
+export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, config, paidAsOf, issuerSignature }: BuildReceiptParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -228,6 +229,7 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   });
   y = Math.max(y + 4 * rowH, ny) + 6;
 
+  if (issuerSignature) pdfStampSignature(doc, L, y - 2, 40, 14, issuerSignature);
   doc.setDrawColor(...GOLD);
   doc.setLineWidth(0.6);
   doc.line(L, y, L + 65, y);

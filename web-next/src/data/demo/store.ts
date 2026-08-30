@@ -33,6 +33,10 @@ export interface DemoDb {
   // DEMO_STAFF (a static, code-defined roster) since DEMO_STAFF isn't
   // itself persisted/reseedable data.
   staffActiveOverrides: Record<string, boolean>;
+  // Keyed by staff key -- a self-service signature upload (Settings), same
+  // sparse-override treatment as staffActiveOverrides above. Most staff
+  // never upload one, so this only carries entries for those who have.
+  staffSignatures: Record<string, string | null>;
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
   // kind is always null here -- this demo store never simulates the
@@ -40,7 +44,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 24;
+const DEMO_VERSION = 25;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

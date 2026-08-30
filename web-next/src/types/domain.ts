@@ -14,6 +14,12 @@ export interface Profile {
   // stats intact everywhere (index.html's own comment on this exact
   // toggle). Defaults true since older mapped call sites never needed it.
   active: boolean;
+  // Real column `signature_data` (confirmed live, text) -- a small PNG
+  // data URI, uploaded once in Settings, used to auto-stamp the signed-in
+  // staff member's own signature onto documents they generate/approve
+  // (index.html's getStaffSignature()/pdfStampSignature()). Optional/null
+  // since most staff never upload one.
+  signatureData?: string | null;
 }
 
 export type PlotType = 'Full Plot' | 'Half Plot';
@@ -809,11 +815,12 @@ export interface Contract {
 // cross-staff "who's on leave" checks elsewhere in the app. UPDATE is own
 // row OR manager. Deliberately the request/decide subset of a much larger
 // real feature: the annual-calendar "planned" (private, not yet sent)
-// stage, emergency-leave, deduct-quota toggle, reschedule flow, and the
-// signature-on-approval requirement (index.html calls getStaffSignature(),
-// a per-staff digital signature file this app has no capture UI for yet)
-// are all out of scope -- every request here goes straight to 'pending',
-// and an approval leaves `decidedSignature` null rather than faking one.
+// stage, emergency-leave, deduct-quota toggle, reschedule flow, and
+// quota-remaining tracking (a whole separate calc engine) are all out of
+// scope. `decidedSignature` (real column `decided_signature`) is the
+// approving manager's own saved signature, stamped via
+// getStaffSignature(PROFILE.key) at decide-time -- null if they haven't
+// uploaded one in Settings yet, same as the real app.
 export interface LeaveRequest {
   id: string;
   agentKey: string;
@@ -827,6 +834,7 @@ export interface LeaveRequest {
   decidedAt: string | null;
   decidedBy: string | null;
   decidedByName: string | null;
+  decidedSignature: string | null;
 }
 
 export interface NewLeaveRequest {

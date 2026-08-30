@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { demoReset } from '../../../data/demo/store';
+import { useUpdateSignature } from '../hooks/useSignature';
 import styles from './MoreScreen.module.css';
 
 function initials(name: string): string {
@@ -21,7 +22,17 @@ export function MoreScreen() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const logout = useSessionStore((s) => s.logout);
+  const updateSignature = useUpdateSignature();
   const [confirmingReset, setConfirmingReset] = useState(false);
+
+  async function handleSignatureFile(file: File | null) {
+    try {
+      await updateSignature.mutateAsync(file);
+    } catch {
+      // A failed upload leaves the previous signature (or lack of one)
+      // untouched -- nothing further to reconcile client-side.
+    }
+  }
 
   function handleResetClick() {
     if (!confirmingReset) {
@@ -73,6 +84,24 @@ export function MoreScreen() {
             </div>
             <button type="button" className={`${styles.actionBtn} ${confirmingReset ? styles.warn : ''}`} onClick={handleResetClick}>
               {confirmingReset ? 'Confirm reset' : 'Reset'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.sectionTitle}>E-signature</div>
+      <div className={styles.card}>
+        <div className={styles.sigRow}>
+          <div className={styles.sigPreview}>{profile.signatureData ? <img src={profile.signatureData} alt="Your saved signature" /> : 'No signature yet'}</div>
+          <div className={styles.sigCol}>
+            <input className={styles.sigFileInput} type="file" accept="image/png,image/jpeg" disabled={updateSignature.isPending} onChange={(e) => handleSignatureFile(e.target.files?.[0] ?? null)} />
+            <div className={styles.sigHint}>PNG/JPEG, white or transparent background. Auto-signs your receipts, quotations &amp; approvals.</div>
+          </div>
+        </div>
+        {profile.signatureData && (
+          <div className={styles.sigRemoveRow}>
+            <button type="button" className={styles.sigRemoveBtn} disabled={updateSignature.isPending} onClick={() => handleSignatureFile(null)}>
+              Remove signature
             </button>
           </div>
         )}

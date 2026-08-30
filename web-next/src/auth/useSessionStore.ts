@@ -11,11 +11,15 @@ interface SessionState {
   profile: Profile | null;
   login(role: Role): void;
   logout(): void;
+  // Merges a partial update into the current session's profile -- used
+  // after a self-service edit (e.g. uploading a signature) so the change
+  // is reflected immediately without a full re-login/refetch.
+  setProfile(patch: Partial<Profile>): void;
 }
 
 export const useSessionStore = create<SessionState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       demoMode: true,
       profile: null,
       login: (role) =>
@@ -27,6 +31,11 @@ export const useSessionStore = create<SessionState>()(
               : { key: 'elias', name: 'Elias Torgbuivi', role: 'agent', active: true },
         }),
       logout: () => set({ profile: null }),
+      setProfile: (patch) => {
+        const current = get().profile;
+        if (!current) return;
+        set({ profile: { ...current, ...patch } });
+      },
     }),
     { name: 'pep_webnext_session' },
   ),
