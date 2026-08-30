@@ -33,7 +33,7 @@ export function useCreateTodo() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (title: string) => getDataSource(demoMode).scheduleItems.create(agentKey, today(), title),
+    mutationFn: ({ title, assignedTo }: { title: string; assignedTo?: string }) => getDataSource(demoMode).scheduleItems.create(agentKey, today(), title, assignedTo),
     onSuccess: () => invalidateAll(queryClient, agentKey),
   });
 }

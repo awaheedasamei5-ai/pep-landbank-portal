@@ -41,6 +41,14 @@ function systemPromptFor(kind: string): string | null {
         "Reference an actual number from the data (days, count, or a concrete next step) so it reads as genuinely aware of their situation. " +
         "No emoji, no hashtags, no quotation marks around your reply -- plain text only."
       );
+    case "colleague_availability":
+      return (
+        "You help staff at a Ghanaian land-sales agency called Palmstead decide whether it's a good idea to assign a task to a colleague on a given date. " +
+        "You'll receive one JSON object with the colleague's name, the target date, whether they're on approved or pending leave that day, and how many tasks they already have that day. " +
+        "Reply with ONE short, direct sentence (max 24 words) telling the user whether the colleague looks free, busy, or unavailable, and WHY, citing the actual leave status or task count given. " +
+        "If nothing in the data suggests a conflict, say plainly that they appear free -- don't invent caution that isn't in the data. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     default:
       return null;
   }

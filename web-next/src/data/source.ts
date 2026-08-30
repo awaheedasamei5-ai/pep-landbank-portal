@@ -120,7 +120,15 @@ export interface DataSource {
   };
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
-    create(agentKey: string, date: string, title: string): Promise<ScheduleItem>;
+    // assignedTo defaults to the creator (agentKey) when omitted, matching
+    // every existing call site's behavior exactly. When it's a different
+    // key, this is a real "assign a task to a colleague" write -- owner_key
+    // (the creator, real schedule_items_ins RLS: WITH CHECK owner_key =
+    // my_key(), confirmed live) always stays agentKey; only assigned_to
+    // changes, matching index.html's own owner/assignee split. The
+    // colleague's own listForAgentOnDate already filters by assigned_to
+    // (not owner_key), so this needs no read-side change at all.
+    create(agentKey: string, date: string, title: string, assignedTo?: string): Promise<ScheduleItem>;
     updateStatus(id: string, status: ScheduleItemStatus): Promise<ScheduleItem>;
   };
   streaks: {
@@ -504,12 +512,12 @@ function createDemoDataSource(): DataSource {
       async listForAgentOnDate(agentKey, date) {
         return demoLoad().scheduleItems.filter((s) => s.assignedTo === agentKey && s.date === date);
       },
-      async create(agentKey, date, title) {
+      async create(agentKey, date, title, assignedTo) {
         const item: ScheduleItem = {
           id: Math.random().toString(36).slice(2, 10),
           kind: 'todo',
           ownerKey: agentKey,
-          assignedTo: agentKey,
+          assignedTo: assignedTo ?? agentKey,
           date,
           status: 'open',
           title,
@@ -1331,10 +1339,10 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
-      async create(agentKey, date, title) {
+      async create(agentKey, date, title, assignedTo) {
         const { data, error } = await requireClient()
           .from('schedule_items')
-          .insert({ kind: 'todo', owner_key: agentKey, assigned_to: agentKey, item_date: date, title, status: 'open' })
+          .insert({ kind: 'todo', owner_key: agentKey, assigned_to: assignedTo ?? agentKey, item_date: date, title, status: 'open' })
           .select()
           .single();
         if (error) throw error;
