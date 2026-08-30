@@ -114,6 +114,17 @@ export interface DataSource {
   // API exists" finding -- both deliberately out of scope for this pass).
   payments: {
     listForAgent(agentKey: string): Promise<Payment[]>;
+    // Real bug found while testing the payment-receipt feature: Pipeline
+    // Update's payment history used listForAgent(viewerKey), so a manager
+    // opening an agent's lead (via Manager Home's drill-down or Company
+    // Pipeline) always saw "no payments" even when real ones existed --
+    // filtering by the VIEWER's own key, not the lead being looked at. No
+    // agent_key filter needed here: real payments_sel RLS already scopes
+    // a non-privileged caller to agent_key = my_key() on its own, so
+    // filtering by lead_id alone is correct for every caller, not just
+    // manager/allowlist staff (same reasoning that let useLead's fix work
+    // without a live-side query change either).
+    listForLead(leadId: string): Promise<Payment[]>;
     listPending(): Promise<Payment[]>;
     create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
     approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
@@ -126,6 +137,29 @@ export interface DataSource {
     // receipt_log, an insert-only audit trail) and returns the same
     // number on every later call for that payment -- never a new one.
     ensureReceiptNumber(paymentId: string): Promise<string>;
+    // Uploads a proof-of-payment photo to the private 'payment-proofs'
+    // Storage bucket and returns its storage path (stored on the payment
+    // row via receipt_proof_path, not the URL itself -- the bucket is
+    // private, a viewer resolves a signed URL client-side only when they
+    // actually need to see it). Demo mode has no real Storage, so it
+    // simulates this the same way signatureImage.ts does -- a downscaled
+    // canvas data URI stored directly as the "path", good enough to
+    // preview in-app, same honest demo/live boundary as every other
+    // Storage-backed feature here.
+    uploadProof(paymentId: string, agentKey: string, file: File): Promise<string>;
+    // Returns a signed URL (live) or the raw data URI (demo) for a
+    // receipt_proof_path value -- the one place that actually resolves
+    // the private path into something an <img> can render.
+    resolveProofUrl(path: string): Promise<string | null>;
+    // Generates the approved receipt PDF, uploads it to the private
+    // 'payment-receipts' bucket, and creates a receipt_share_links row --
+    // returns the token the /receipt/:token public page (via the
+    // get-receipt edge function) resolves into a signed download URL.
+    // Demo mode creates a real-shaped local token, but it will correctly
+    // never resolve on the public page (that page only ever talks to the
+    // real staging project, no demoMode concept at all) -- same
+    // documented demo/live boundary as SVE invites.
+    issueReceiptLink(paymentId: string, pdfBlob: Blob, createdBy: string): Promise<string>;
   };
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
@@ -459,6 +493,9 @@ function createDemoDataSource(): DataSource {
       async listForAgent(agentKey) {
         return demoLoad().payments.filter((p) => p.agentKey === agentKey);
       },
+      async listForLead(leadId) {
+        return demoLoad().payments.filter((p) => p.leadId === leadId);
+      },
       async listPending() {
         return demoLoad().payments.filter((p) => p.status === 'pending');
       },
@@ -539,6 +576,33 @@ function createDemoDataSource(): DataSource {
         db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
         demoSave();
         return number;
+      },
+      async uploadProof(paymentId, _agentKey, file) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const db = demoLoad();
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        const updated = { ...db.payments[index], receiptProofPath: dataUrl };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
+        demoSave();
+        return dataUrl;
+      },
+      async resolveProofUrl(path) {
+        // Demo's "path" already IS a data URI (see uploadProof above), so
+        // there's nothing to resolve -- just hand it back.
+        return path;
+      },
+      async issueReceiptLink(paymentId, _pdfBlob, _createdBy) {
+        const db = demoLoad();
+        const token = `demo-${Math.random().toString(36).slice(2, 12)}`;
+        db.receiptShareLinks = [...db.receiptShareLinks, { id: Math.random().toString(36).slice(2, 10), paymentId, token, createdAt: new Date().toISOString() }];
+        demoSave();
+        return token;
       },
     },
     scheduleItems: {
@@ -1333,6 +1397,11 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
+      async listForLead(leadId) {
+        const { data, error } = await requireClient().from('payments').select('*').eq('lead_id', leadId);
+        if (error) throw error;
+        return (data ?? []).map(mapPaymentRow);
+      },
       async listPending() {
         const { data, error } = await requireClient().from('payments').select('*').eq('status', 'pending').order('created_at', { ascending: false });
         if (error) throw error;
@@ -1394,6 +1463,31 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().rpc('ensure_receipt_number', { p_payment_id: paymentId, p_channel: 'download' });
         if (error) throw error;
         return data as string;
+      },
+      async uploadProof(paymentId, agentKey, file) {
+        const client = requireClient();
+        const ext = file.name.split('.').pop() || 'jpg';
+        const path = `${agentKey}/${paymentId}.${ext}`;
+        const { error: uploadError } = await client.storage.from('payment-proofs').upload(path, file, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { error: updError } = await client.from('payments').update({ receipt_proof_path: path }).eq('id', paymentId);
+        if (updError) throw updError;
+        return path;
+      },
+      async resolveProofUrl(path) {
+        if (path.startsWith('data:')) return path;
+        const { data, error } = await requireClient().storage.from('payment-proofs').createSignedUrl(path, 300);
+        if (error) throw error;
+        return data?.signedUrl ?? null;
+      },
+      async issueReceiptLink(paymentId, pdfBlob, createdBy) {
+        const client = requireClient();
+        const path = `${paymentId}/receipt-${Date.now()}.pdf`;
+        const { error: uploadError } = await client.storage.from('payment-receipts').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        if (uploadError) throw uploadError;
+        const { data, error } = await client.from('receipt_share_links').insert({ payment_id: paymentId, storage_path: path, created_by: createdBy }).select('token').single();
+        if (error) throw error;
+        return data.token as string;
       },
     },
     scheduleItems: {

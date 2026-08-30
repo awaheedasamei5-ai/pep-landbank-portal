@@ -42,9 +42,15 @@ export interface DemoDb {
   // kind is always null here -- this demo store never simulates the
   // notification-bus side of the real `messages` table, only plain chat.
   chatMessages: ChatMessage[];
+  // Real-shaped local tokens for the receipt-share-link flow, but these
+  // can never actually resolve on the public /receipt/:token page (that
+  // page only ever talks to the real staging project via the get-receipt
+  // edge function, no demoMode concept at all) -- same documented
+  // demo/live boundary already established for sveInvites above.
+  receiptShareLinks: { id: string; paymentId: string; token: string; createdAt: string }[];
 }
 
-const DEMO_VERSION = 27;
+const DEMO_VERSION = 28;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

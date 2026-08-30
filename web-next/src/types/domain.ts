@@ -120,6 +120,13 @@ export interface Payment {
   decidedByName?: string | null;
   decidedAt?: string | null;
   receiptNumber?: string | null;
+  // Real column receipt_proof_path (new this session) -- the storage path
+  // of a photo the logging agent attaches as proof, so a manager can
+  // visually compare it against the typed amount before approving. Path
+  // only, not a URL: the 'payment-proofs' Storage bucket is private, a
+  // caller resolves it to a signed URL client-side when they actually
+  // need to view it (see useProofImageUrl).
+  receiptProofPath?: string | null;
 }
 
 export interface NewPaymentEntry {
@@ -128,6 +135,7 @@ export interface NewPaymentEntry {
   paymentDate?: string;
   paymentMethod?: PaymentMethod;
   note?: string;
+  receiptProofPath?: string;
 }
 
 export interface PaymentDecisionResult {

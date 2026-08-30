@@ -79,3 +79,15 @@
 .approveBtn:disabled, .declineBtn:disabled { opacity: .6; cursor: default; }
 
 .reasonInput { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 12.5px; background: var(--paper); color: var(--text); }
+
+.fileInput { width: 100%; box-sizing: border-box; padding: 9px 0; font-size: 13px; color: var(--text); }
+.fileHint { font-size: 11.5px; color: var(--text); margin-top: 4px; font-weight: 600; }
+.fileHelp { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+.proofWrap { margin-top: 12px; }
+.proofLabel { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.proofImg { display: block; width: 100%; max-width: 260px; border-radius: 10px; border: 1px solid var(--line); cursor: zoom-in; }
+
+.linkRow { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.linkBtn { flex: 1; padding: 8px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--paper); color: var(--text); font-weight: 700; font-size: 12px; cursor: pointer; }
+.linkBtn:disabled { opacity: .6; cursor: default; }

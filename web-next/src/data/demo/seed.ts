@@ -611,7 +611,33 @@ export function seedDemo(): DemoDb {
 
   const contracts: DemoDb['contracts'] = [];
 
-  return { version: 27, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, staffSignatures: {}, sveInvites, sveSubmissions, chatMessages, contracts };
+  return {
+    version: 28,
+    leads,
+    payments,
+    scheduleItems,
+    streaks,
+    config,
+    plots,
+    siteVisits,
+    referrals,
+    enquiries,
+    attendance,
+    memos,
+    memoRecipients,
+    complaints,
+    contractRequests,
+    leaveRequests,
+    allocationRequests,
+    notes,
+    staffActiveOverrides: {},
+    staffSignatures: {},
+    sveInvites,
+    sveSubmissions,
+    chatMessages,
+    contracts,
+    receiptShareLinks: [],
+  };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

@@ -4,8 +4,9 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
-import type { Lead } from '../../../types/domain';
-import { useAllLeads, useApprovePayment, useCanLogPayments, useCreatePayment, useDeclinePayment, usePendingPayments } from '../hooks/useLogPayment';
+import type { Lead, Payment } from '../../../types/domain';
+import { useAllLeads, useApprovePayment, useCanLogPayments, useCreatePayment, useDeclinePayment, usePendingPayments, useUploadPaymentProof } from '../hooks/useLogPayment';
+import { useProofUrl } from '../hooks/useReceipt';
 import styles from './LogPaymentScreen.module.css';
 
 const PAYMENT_METHODS = ['Ecobank', 'Stanbic Bank', 'MTN MoMo', 'Vodafone Cash', 'Hubtel', 'Cash', 'Other'] as const;
@@ -28,10 +29,12 @@ export function LogPaymentScreen() {
   const { data: leads } = useAllLeads();
   const { data: pending, isLoading: pendingLoading } = usePendingPayments();
   const createPayment = useCreatePayment();
+  const uploadProof = useUploadPaymentProof();
 
   const [query, setQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [done, setDone] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
 
   const {
     register,
@@ -57,16 +60,23 @@ export function LogPaymentScreen() {
 
   async function onSubmit(values: FormOutput) {
     if (!selectedLead) return;
-    await createPayment.mutateAsync({
+    const payment = await createPayment.mutateAsync({
       input: { leadId: selectedLead.id, amount: values.amount, paymentDate: values.paymentDate, paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined, note: values.note },
       leadName: selectedLead.name,
       leadAgentKey: selectedLead.agent,
     });
+    // Uploaded as a separate step after the payment itself is created --
+    // a failed upload (bad connection, oversized photo) shouldn't lose the
+    // logged payment; management can still request the physical receipt.
+    if (proofFile) {
+      await uploadProof.mutateAsync({ paymentId: payment.id, file: proofFile }).catch(() => {});
+    }
     setDone(true);
     reset({ paymentDate: new Date().toISOString().slice(0, 10) });
     setTimeout(() => setDone(false), 2500);
     setSelectedLead(null);
     setQuery('');
+    setProofFile(null);
   }
 
   return (
@@ -135,6 +145,12 @@ export function LogPaymentScreen() {
                 <label className={styles.label}>Note</label>
                 <textarea className={styles.textarea} {...register('note')} />
               </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Receipt photo (optional)</label>
+                <input className={styles.fileInput} type="file" accept="image/*" capture="environment" onChange={(e) => setProofFile(e.target.files?.[0] ?? null)} />
+                {proofFile && <div className={styles.fileHint}>{proofFile.name}</div>}
+                <p className={styles.fileHelp}>Attach a photo of the physical receipt so Management can check it against the amount before approving.</p>
+              </div>
               <button type="submit" className={styles.submitBtn} disabled={createPayment.isPending}>
                 {createPayment.isPending ? 'Saving…' : done ? 'Saved ✓' : 'Save payment'}
               </button>
@@ -148,15 +164,17 @@ export function LogPaymentScreen() {
       {pendingLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {pending && pending.length === 0 && !pendingLoading && <p style={{ color: 'var(--muted)' }}>Nothing pending.</p>}
       {pending?.map((p) => (
-        <PendingPaymentRow key={p.id} paymentId={p.id} clientName={p.clientName ?? ''} amount={p.amount} date={p.date} note={p.note} canDecide={profile?.role === 'manager'} />
+        <PendingPaymentRow key={p.id} payment={p} lead={(leads ?? []).find((l) => l.id === p.leadId) ?? null} canDecide={profile?.role === 'manager'} />
       ))}
     </div>
   );
 }
 
-function PendingPaymentRow({ paymentId, clientName, amount, date, note, canDecide }: { paymentId: string; clientName: string; amount: number; date: string; note?: string | null; canDecide: boolean }) {
+function PendingPaymentRow({ payment, canDecide }: { payment: Payment; lead: Lead | null; canDecide: boolean }) {
+  const { id: paymentId, clientName, amount, date, note, receiptProofPath } = payment;
   const approve = useApprovePayment();
   const decline = useDeclinePayment();
+  const { data: proofUrl } = useProofUrl(receiptProofPath);
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -172,6 +190,14 @@ function PendingPaymentRow({ paymentId, clientName, amount, date, note, canDecid
         </div>
         <div className={styles.pendingAmount}>{ghs(amount)}</div>
       </div>
+      {proofUrl && (
+        <div className={styles.proofWrap}>
+          <div className={styles.proofLabel}>Attached receipt photo -- check it matches {ghs(amount)}</div>
+          <a href={proofUrl} target="_blank" rel="noreferrer">
+            <img className={styles.proofImg} src={proofUrl} alt="Attached receipt proof" />
+          </a>
+        </div>
+      )}
       {canDecide && !declining && (
         <div className={styles.pendingActions}>
           <button type="button" className={styles.approveBtn} disabled={approve.isPending} onClick={() => approve.mutate(paymentId)}>

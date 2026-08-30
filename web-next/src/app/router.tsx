@@ -23,6 +23,7 @@ import { MemosScreen } from '../features/memos/screens/MemosScreen';
 import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
 import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
+import { ReceiptDownloadScreen } from '../features/public/receipt/ReceiptDownloadScreen';
 import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
 import { ChatScreen } from '../features/chat/screens/ChatScreen';
 import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
@@ -55,6 +56,11 @@ export const router = createBrowserRouter([
   // Public, unauthenticated -- no RequireAuth wrapper. See the
   // SiteVisitInvite type's comment in types/domain.ts.
   { path: '/visit-feedback/:token', element: <SveFeedbackScreen /> },
+  // Public, unauthenticated -- the receipt link a client and their staff
+  // member in charge both receive after a payment is approved. See
+  // data/receiptClient.ts's comment for the get-receipt edge function
+  // this talks to.
+  { path: '/receipt/:token', element: <ReceiptDownloadScreen /> },
   {
     path: '/app',
     element: (

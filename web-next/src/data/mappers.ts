@@ -50,6 +50,7 @@ export function mapPaymentRow(r: Record<string, unknown>): Payment {
     decidedByName: (r.decided_by_name as string) ?? null,
     decidedAt: (r.decided_at as string) ?? null,
     receiptNumber: (r.receipt_number as string) ?? null,
+    receiptProofPath: (r.receipt_proof_path as string) ?? null,
   };
 }
 

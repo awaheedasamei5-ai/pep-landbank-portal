@@ -74,3 +74,18 @@ export function useDeclinePayment() {
     onSuccess: invalidate,
   });
 }
+
+// Uploads the agent's proof-of-payment photo -- called right after
+// useCreatePayment succeeds (needs the real payment id first), not
+// bundled into the same mutation, so a failed upload never blocks the
+// payment itself from being logged.
+export function useUploadPaymentProof() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const invalidate = useInvalidatePaymentEffects();
+
+  return useMutation({
+    mutationFn: ({ paymentId, file }: { paymentId: string; file: File }) => getDataSource(demoMode).payments.uploadProof(paymentId, profile?.key ?? '', file),
+    onSuccess: invalidate,
+  });
+}

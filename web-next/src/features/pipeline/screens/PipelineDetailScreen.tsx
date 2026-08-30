@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
 import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
-import { useDownloadReceipt } from '../../payments/hooks/useReceipt';
+import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
+import type { Payment } from '../../../types/domain';
 import { StageBadge } from '../components/StageBadge';
 import { useLead } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
@@ -26,13 +27,22 @@ export function PipelineDetailScreen() {
   const profile = useSessionStore((s) => s.profile);
   const canLog = useCanLogPayments();
   const { data: lead, isLoading } = useLead(id ?? '');
-  const { data: payments } = usePayments();
+  const { data: payments } = usePayments(id ?? '');
   const createPayment = useCreatePayment();
   const downloadReceipt = useDownloadReceipt();
+  const issueLink = useIssueReceiptLink();
   const [amount, setAmount] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (isLoading) return <div className={styles.wrap}>Loading…</div>;
   if (!lead) return <div className={styles.wrap}>Lead not found.</div>;
+
+  async function shareReceipt(payment: Payment) {
+    const link = await issueLink.mutateAsync({ payment, lead: lead ?? null });
+    await navigator.clipboard.writeText(link).catch(() => {});
+    setCopiedId(payment.id);
+    setTimeout(() => setCopiedId((cur) => (cur === payment.id ? null : cur)), 2500);
+  }
 
   const balance = Math.max(lead.grandTotal - lead.amtPaid, 0);
   const leadPayments = (payments ?? []).filter((p) => p.leadId === lead.id).sort((a, b) => b.date.localeCompare(a.date));
@@ -139,8 +149,19 @@ export function PipelineDetailScreen() {
                 </div>
                 <div className={styles.historyRight}>
                   {isApproved && (
-                    <button type="button" className={styles.receiptBtn} onClick={() => downloadReceipt.mutate({ payment: p, lead })} disabled={downloadReceipt.isPending}>
+                    <button type="button" className={styles.receiptBtn} onClick={() => downloadReceipt.mutate({ payment: p, lead })} disabled={downloadReceipt.isPending} title="Download receipt">
                       ⬇
+                    </button>
+                  )}
+                  {isApproved && (
+                    <button
+                      type="button"
+                      className={styles.receiptBtn}
+                      onClick={() => shareReceipt(p)}
+                      disabled={issueLink.isPending}
+                      title="Copy a link the client can open to view their receipt"
+                    >
+                      {copiedId === p.id ? '✓' : '🔗'}
                     </button>
                   )}
                   <span className={`${styles.historyAmt} ${!isApproved ? styles.historyAmtMuted : ''}`}>+{ghs(p.amount)}</span>
