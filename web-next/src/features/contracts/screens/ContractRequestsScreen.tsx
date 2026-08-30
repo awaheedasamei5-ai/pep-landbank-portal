@@ -2,8 +2,18 @@ import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useContractRequests, useCreateContractRequest, useCanFulfilContracts, useFulfilContractRequest } from '../hooks/useContractRequests';
+import { Icon } from '../../../shared/ui/Icon';
 import type { Lead, ContractRequest } from '../../../types/domain';
 import styles from './ContractRequestsScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 // Real table `contract_requests` (confirmed live): any signed-in staff can
 // request one against their own lead; only Management or the 'elizabeth'
@@ -41,8 +51,13 @@ export function ContractRequestsScreen() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           {canFulfil && (
-            <button type="button" className={styles.addBtn} style={{ background: 'none', border: '1px solid var(--c-line)', color: 'var(--c-muted)' }} onClick={() => navigate('/app/office/contracts/generate')}>
-              📄 Generate
+            <button
+              type="button"
+              className={styles.addBtn}
+              style={{ background: 'none', border: '1px solid var(--c-line)', color: 'var(--c-muted)', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={() => navigate('/app/office/contracts/generate')}
+            >
+              <Icon name="document" size={15} /> Generate
             </button>
           )}
           <button type="button" className={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
@@ -126,7 +141,8 @@ function RequestRow({ request, canFulfil }: { request: ContractRequest; canFulfi
   const fulfil = useFulfilContractRequest();
   return (
     <div className={styles.row}>
-      <div>
+      <span className={styles.avatar}>{initials(request.clientName)}</span>
+      <div className={styles.rowMain}>
         <div className={styles.name}>{request.clientName}</div>
         <div className={styles.meta}>
           Requested by {request.requestedByName} · {request.createdAt.slice(0, 10)}
