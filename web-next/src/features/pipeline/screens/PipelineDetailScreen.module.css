@@ -14,34 +14,116 @@
   font-size: 16px;
   flex: 0 0 auto;
 }
-.eyebrow { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
-.meta { color: var(--muted); font-size: 12.5px; margin: 2px 0 0; }
-.pillsWrap { margin-bottom: 20px; }
+.meta { color: var(--c-muted); font-size: 12.5px; margin: 2px 0 0; }
+
+/* Wallet-style balance card, adapted from a fintech-dashboard pattern
+   (hero balance + real progress bar) studied on Dribbble/Figma this
+   session -- replaces a flat 3-pill strip with something that actually
+   tells the collection-progress story at a glance. */
+.balanceCard {
+  background: linear-gradient(165deg, var(--c-ink) 0%, var(--c-ink-2) 100%);
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.balanceTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.balanceLabel { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
+.balanceValue { font-family: var(--font-mono); font-size: 26px; font-weight: 800; margin-top: 3px; }
+.balancePct { font-family: var(--font-mono); font-size: 15px; font-weight: 800; color: var(--c-accent-soft); flex-shrink: 0; }
+
+.balanceTrack { height: 8px; background: rgb(255 255 255 / 16%); border-radius: 100px; overflow: hidden; margin-top: 14px; }
+.balanceFill { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--c-accent-soft), var(--c-accent)); }
+
+.balanceFootRow { display: flex; gap: 22px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / 14%); }
+.balanceFootVal { font-family: var(--font-mono); font-weight: 800; font-size: 14px; }
+.balanceFootLbl { font-size: 10.5px; opacity: .72; margin-top: 1px; }
 
 .section {
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 16px;
   margin-bottom: 14px;
 }
 .sectionTitle { font-weight: 700; font-size: 13px; margin: 0 0 12px; }
+
+.quickRow { display: flex; gap: 7px; margin-bottom: 14px; }
+
+.quickChip {
+  flex: 1;
+  padding: 9px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.quickChipAmt { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--c-muted); }
+
 .field { margin-bottom: 12px; }
-.label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
-.input { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; }
+.label { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
+.input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--c-line); font-size: 14px; }
 
 .btn {
   width: 100%;
   padding: 12px;
   border-radius: var(--r-pill);
   border: none;
-  background: var(--gold);
+  background: var(--c-ink);
   color: #fff;
   font-weight: 700;
   cursor: pointer;
 }
 .btn:disabled { opacity: .6; cursor: default; }
-.history { font-size: 13px; }
-.historyRow { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.hint { font-size: 11.5px; color: var(--c-muted); margin-top: 8px; }
+.emptyMsg { color: var(--c-muted); margin: 0; font-size: 13px; }
+
+.history { display: flex; flex-direction: column; gap: 2px; }
+
+.historyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-line);
+}
 .historyRow:last-child { border-bottom: none; }
+
+.historyMain { display: flex; flex-direction: column; gap: 4px; }
+.historyDate { font-size: 13px; font-weight: 600; color: var(--c-text); }
+
+.statusPill { align-self: flex-start; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+.status_approved { background: var(--c-success-bg); color: var(--c-success); }
+.status_pending { background: var(--c-warn-bg); color: var(--c-warn); }
+.status_declined { background: var(--c-danger-bg); color: var(--c-danger); }
+
+.historyRight { display: flex; align-items: center; gap: 10px; }
+
+.receiptBtn {
+  background: none;
+  border: 1px solid var(--c-line);
+  border-radius: 100px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+.historyAmt { font-weight: 700; font-family: var(--font-mono); font-size: 13.5px; color: var(--c-success); }
+.historyAmtMuted { color: var(--c-muted); }
+
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; }

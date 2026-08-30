@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
-import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
 import { useDownloadReceipt } from '../../payments/hooks/useReceipt';
 import { StageBadge } from '../components/StageBadge';
@@ -52,6 +51,13 @@ export function PipelineDetailScreen() {
     setAmount('');
   }
 
+  const pctCollected = lead.grandTotal > 0 ? Math.min(100, Math.round((lead.amtPaid / lead.grandTotal) * 100)) : 0;
+  const quickAmounts = [
+    { label: '25%', value: Math.round(balance * 0.25) },
+    { label: '50%', value: Math.round(balance * 0.5) },
+    { label: 'Full balance', value: balance },
+  ].filter((q) => q.value > 0);
+
   return (
     <div className={styles.wrap}>
       <div className={styles.head}>
@@ -66,18 +72,46 @@ export function PipelineDetailScreen() {
         </div>
       </div>
 
-      <div className={styles.pillsWrap}>
-        <PipePillStrip>
-          <PipePill tone="blue" value={ghs(lead.grandTotal)} label="Pipeline value" isMoney />
-          <PipePill tone="green" value={ghs(lead.amtPaid)} label="Collected" isMoney />
-          <PipePill tone="gold" value={ghs(balance)} label="Balance" isMoney />
-        </PipePillStrip>
+      {/* Wallet-style balance card -- adapted from the fintech dashboard
+          pattern studied on Dribbble/Figma this session (a hero balance +
+          progress ring/bar, not a flat 3-pill strip). Real progress: the
+          actual amtPaid/grandTotal ratio, not decorative. */}
+      <div className={styles.balanceCard}>
+        <div className={styles.balanceTop}>
+          <div>
+            <div className={styles.balanceLabel}>Balance remaining</div>
+            <div className={styles.balanceValue}>{ghs(balance)}</div>
+          </div>
+          <div className={styles.balancePct}>{pctCollected}%</div>
+        </div>
+        <div className={styles.balanceTrack}>
+          <div className={styles.balanceFill} style={{ width: `${pctCollected}%` }} />
+        </div>
+        <div className={styles.balanceFootRow}>
+          <div>
+            <div className={styles.balanceFootVal}>{ghs(lead.grandTotal)}</div>
+            <div className={styles.balanceFootLbl}>Pipeline value</div>
+          </div>
+          <div>
+            <div className={styles.balanceFootVal}>{ghs(lead.amtPaid)}</div>
+            <div className={styles.balanceFootLbl}>Collected</div>
+          </div>
+        </div>
       </div>
 
       {canLog && (
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Log a payment</h2>
           <form onSubmit={submitPayment}>
+            {quickAmounts.length > 0 && (
+              <div className={styles.quickRow}>
+                {quickAmounts.map((q) => (
+                  <button type="button" key={q.label} className={styles.quickChip} onClick={() => setAmount(String(q.value))}>
+                    {q.label} <span className={styles.quickChipAmt}>{ghs(q.value)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={styles.field}>
               <label className={styles.label}>Amount (GHS)</label>
               <input className={styles.input} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
@@ -85,7 +119,7 @@ export function PipelineDetailScreen() {
             <button type="submit" className={styles.btn} disabled={createPayment.isPending || !amount}>
               {createPayment.isPending ? 'Saving…' : 'Save payment'}
             </button>
-            {profile?.role !== 'manager' && <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8 }}>This will be sent to Management for approval before it reflects on the balance.</p>}
+            {profile?.role !== 'manager' && <p className={styles.hint}>This will be sent to Management for approval before it reflects on the balance.</p>}
           </form>
         </div>
       )}
@@ -93,37 +127,31 @@ export function PipelineDetailScreen() {
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>Payment history</h2>
         <div className={styles.history}>
-          {leadPayments.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No individual payments logged yet — only a starting total.</p>}
+          {leadPayments.length === 0 && <p className={styles.emptyMsg}>No individual payments logged yet — only a starting total.</p>}
           {leadPayments.map((p) => {
-            const isApproved = !p.status || p.status === 'approved';
+            const status = p.status ?? 'approved';
+            const isApproved = status === 'approved';
             return (
               <div className={styles.historyRow} key={p.id}>
-                <span>
-                  {p.date}
-                  {p.status && p.status !== 'approved' && (
-                    <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: p.status === 'pending' ? 'var(--warn)' : 'var(--danger)' }}>{p.status === 'pending' ? '· awaiting approval' : '· declined'}</span>
-                  )}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className={styles.historyMain}>
+                  <div className={styles.historyDate}>{p.date}</div>
+                  <span className={`${styles.statusPill} ${styles[`status_${status}`]}`}>{status === 'approved' ? 'Successful' : status === 'pending' ? 'Awaiting approval' : 'Declined'}</span>
+                </div>
+                <div className={styles.historyRight}>
                   {isApproved && (
-                    <button
-                      type="button"
-                      onClick={() => downloadReceipt.mutate({ payment: p, lead })}
-                      disabled={downloadReceipt.isPending}
-                      style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 999, padding: '4px 10px', fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', cursor: 'pointer' }}
-                    >
-                      ⬇ Receipt
+                    <button type="button" className={styles.receiptBtn} onClick={() => downloadReceipt.mutate({ payment: p, lead })} disabled={downloadReceipt.isPending}>
+                      ⬇
                     </button>
                   )}
-                  <span style={{ fontWeight: 700, color: p.status === 'declined' ? 'var(--muted)' : 'var(--ok)' }}>+{ghs(p.amount)}</span>
-                </span>
+                  <span className={`${styles.historyAmt} ${!isApproved ? styles.historyAmtMuted : ''}`}>+{ghs(p.amount)}</span>
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      <button type="button" onClick={() => navigate('/app/sales/pipeline')} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontWeight: 700, cursor: 'pointer', padding: '8px 0' }}>
+      <button type="button" className={styles.backBtn} onClick={() => navigate('/app/sales/pipeline')}>
         ← Back
       </button>
     </div>
