@@ -49,6 +49,7 @@ import { ExpensesScreen } from '../features/expenses/screens/ExpensesScreen';
 import { SiteVisitAuthScreen } from '../features/site-visit-auth/screens/SiteVisitAuthScreen';
 import { DataCheckScreen } from '../features/data-check/screens/DataCheckScreen';
 import { AnalyticsScreen } from '../features/analytics/screens/AnalyticsScreen';
+import { StaffReportScreen } from '../features/staff-report/screens/StaffReportScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -199,6 +200,14 @@ export const router = createBrowserRouter([
       { path: 'office/banners', element: <BannerTrackingScreen /> },
       { path: 'office/expenses', element: <ExpensesScreen /> },
       { path: 'office/sitevisitauth', element: <SiteVisitAuthScreen /> },
+      {
+        path: 'office/staffreport',
+        element: (
+          <RequireRole role="manager">
+            <StaffReportScreen />
+          </RequireRole>
+        ),
+      },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },

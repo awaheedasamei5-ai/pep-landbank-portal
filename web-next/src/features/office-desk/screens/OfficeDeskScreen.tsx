@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router';
 import { useCanLogPayments } from '../../payments/hooks/useLogPayment';
 import { useCanManageExpenses } from '../../expenses/hooks/useFundRequests';
 import { useCanViewSiteVisitAuth } from '../../site-visit-auth/hooks/useSiteVisitAuth';
+import { useCanViewStaffReport } from '../../staff-report/hooks/useStaffReport';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 
 // Port of officeDeskGroups()'s items (index.html:8965-8994) -- "Operations
@@ -12,6 +13,7 @@ export function OfficeDeskScreen() {
   const canLogPayments = useCanLogPayments();
   const canManageExpenses = useCanManageExpenses();
   const canViewSiteVisitAuth = useCanViewSiteVisitAuth();
+  const canViewStaffReport = useCanViewStaffReport();
 
   const items: TileItem[] = [
     { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
@@ -30,6 +32,9 @@ export function OfficeDeskScreen() {
       : []),
     ...(canViewSiteVisitAuth
       ? [{ key: 'sitevisitauth', label: 'Site Visit Authorization', sub: "Daily logistics cost estimate & approval", color: 'teal', icon: 'ruler', onOpen: () => navigate('/app/office/sitevisitauth') } satisfies TileItem]
+      : []),
+    ...(canViewStaffReport
+      ? [{ key: 'staffreport', label: 'Staff Report', sub: 'One staff member across every app, or compare everyone', color: 'purple', icon: 'team', onOpen: () => navigate('/app/office/staffreport') } satisfies TileItem]
       : []),
   ];
 
