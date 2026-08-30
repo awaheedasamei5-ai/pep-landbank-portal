@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router';
 import { BottomNav } from '../shared/ui/BottomNav';
 import { useChatRealtime } from '../features/chat/hooks/useChat';
+import { useDashboardRealtime } from '../features/dashboard/hooks/useDashboardRealtime';
 
 // Authenticated shell -- 5-tab bottom nav + routed content, replaces the
 // single monolithic route() dispatcher's chrome (index.html's #app wrapper).
@@ -13,6 +14,7 @@ import { useChatRealtime } from '../features/chat/hooks/useChat';
 // than fighting two independent fixed-bottom elements.
 export function AppShell() {
   useChatRealtime();
+  useDashboardRealtime();
   const location = useLocation();
   const isChatThread = /^\/app\/chat\/.+/.test(location.pathname);
   return (

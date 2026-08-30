@@ -4,6 +4,7 @@ import { usePipelineSummary } from '../../pipeline/hooks/usePipelineSummary';
 import { useTodayStreak } from '../../streak/hooks/useTodayStreak';
 import { StreakCard } from '../../streak/components/StreakCard';
 import { HeroCard } from '../components/HeroCard';
+import { TodayTasksCard } from '../components/TodayTasksCard';
 import { useMyCommission } from '../../commission/hooks/useMyCommission';
 import { today } from '../../../shared/lib/format';
 
@@ -21,6 +22,7 @@ export function HomeScreen() {
       <HeroCard greetName={firstName} pipelineValue={pipeline.data?.pipelineValue ?? 0} myCommission={commission.data?.total} onCommissionClick={() => navigate('/app/commission')}>
         {streak.data && <StreakCard streak={streak.data} />}
       </HeroCard>
+      <TodayTasksCard />
     </div>
   );
 }

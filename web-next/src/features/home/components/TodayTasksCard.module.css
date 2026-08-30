@@ -1,0 +1,22 @@
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-top: 14px;
+}
+
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.title { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin: 0; }
+.liveDot { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; color: var(--c-success); text-transform: uppercase; letter-spacing: .04em; }
+.liveDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--c-success); animation: pulse 2s ease-in-out infinite; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: var(--paper); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.stat b { display: block; font-family: var(--font-mono); font-size: 19px; font-weight: 700; color: var(--ink); }
+.stat span { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+
+.link { display: block; text-align: center; margin-top: 12px; font-size: 12px; font-weight: 700; color: var(--c-accent); text-decoration: none; }
