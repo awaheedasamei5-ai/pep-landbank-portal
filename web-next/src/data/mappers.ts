@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -529,5 +529,17 @@ export function mapLeaderboardRawRow(r: Record<string, unknown>): Omit<Leaderboa
     todosCompleted: Number(r.todos_completed ?? 0),
     daysAttended: Number(r.days_attended ?? 0),
     onTimeDays: Number(r.on_time_days ?? 0),
+  };
+}
+
+export function mapDownloadRow(r: Record<string, unknown>): DownloadRecord {
+  return {
+    id: r.id as string,
+    userKey: r.user_key as string,
+    userName: r.user_name as string,
+    filename: r.filename as string,
+    kind: r.kind as string,
+    fileData: (r.file_data as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }

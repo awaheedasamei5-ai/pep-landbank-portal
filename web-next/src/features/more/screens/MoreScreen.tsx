@@ -109,6 +109,15 @@ export function MoreScreen() {
             Open
           </button>
         </div>
+        <div className={styles.row}>
+          <div>
+            <div className={styles.rowLabel}>Document Vault</div>
+            <div className={styles.rowSub}>{profile.role === 'manager' ? 'Every file downloaded by the team' : "Everything you've downloaded from this account"}</div>
+          </div>
+          <button type="button" className={styles.actionBtn} onClick={() => navigate('/app/vault')}>
+            Open
+          </button>
+        </div>
       </div>
 
       <div className={styles.sectionTitle}>E-signature</div>

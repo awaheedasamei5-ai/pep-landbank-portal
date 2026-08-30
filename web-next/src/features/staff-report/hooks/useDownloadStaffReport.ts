@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildStaffReportPdf, staffReportFilename } from '../lib/staffReportPdf';
 import type { ReportRange } from '../../manager/lib/managementReportLogic';
 import type { StaffSalesRow } from '../lib/staffReportLogic';
@@ -9,6 +10,7 @@ import type { StaffSalesRow } from '../lib/staffReportLogic';
 export function useDownloadStaffReport() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ rows, one, dayOfWeek, staffKey, range }: { rows: StaffSalesRow[]; one: StaffSalesRow | null; dayOfWeek: number[] | null; staffKey: string; range: ReportRange }) => {
       let logo: string | null = null;
@@ -18,7 +20,9 @@ export function useDownloadStaffReport() {
         // Missing logo shouldn't stop the report from generating.
       }
       const doc = buildStaffReportPdf(rows, one, dayOfWeek, staffKey, range, profile?.name ?? 'Management', config?.quoteCompanyName, logo);
-      doc.save(staffReportFilename(staffKey, range));
+      const filename = staffReportFilename(staffKey, range);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

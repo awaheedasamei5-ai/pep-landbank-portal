@@ -1,4 +1,4 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -14,6 +14,7 @@ import {
   mapComplaintRow,
   mapContractRequestRow,
   mapContractRow,
+  mapDownloadRow,
   mapEnquiryRow,
   mapLeaderboardRawRow,
   mapLeadRow,
@@ -366,6 +367,16 @@ export interface DataSource {
     getOrCreate(weekStart: string, visitDate: string): Promise<WeeklyVisitForm>;
     saveCosts(id: string, patch: WeeklyVisitFormCostPatch): Promise<WeeklyVisitForm>;
     finalize(id: string, approvedBy: string, approvedByName: string, signature: string | null): Promise<WeeklyVisitForm>;
+  };
+  // Real table `downloads` (confirmed live, both projects) -- every PDF/
+  // Excel report a staff member generates gets logged here with its full
+  // file data, so it can be re-opened later without regenerating it.
+  // Real RLS (downloads_sel, confirmed live): a manager sees every staff
+  // member's downloads, everyone else only their own -- list() needs no
+  // client-side filtering in live mode, RLS already does it.
+  downloads: {
+    list(viewerKey: string, viewerRole: string): Promise<DownloadRecord[]>;
+    log(userKey: string, userName: string, filename: string, kind: string, fileData: string | null): Promise<DownloadRecord>;
   };
   // Real column `leads.banner_id` -- how many real leads are attributed to
   // each banner, keyed by banner id. Confirmed live: `leads` RLS already
@@ -1227,6 +1238,20 @@ function createDemoDataSource(): DataSource {
         db.weeklyVisitForms = [...db.weeklyVisitForms.slice(0, index), updated, ...db.weeklyVisitForms.slice(index + 1)];
         demoSave();
         return updated;
+      },
+    },
+    downloads: {
+      async list(viewerKey, viewerRole) {
+        const db = demoLoad();
+        const canSeeAll = viewerRole === 'manager';
+        return (db.downloads ?? []).filter((d) => canSeeAll || d.userKey === viewerKey);
+      },
+      async log(userKey, userName, filename, kind, fileData) {
+        const db = demoLoad();
+        const rec: DownloadRecord = { id: crypto.randomUUID(), userKey, userName, filename, kind, fileData, createdAt: new Date().toISOString() };
+        db.downloads = [rec, ...(db.downloads ?? [])];
+        demoSave();
+        return rec;
       },
     },
     allocationRequests: {
@@ -2415,6 +2440,22 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapWeeklyVisitFormRow(data);
+      },
+    },
+    downloads: {
+      async list() {
+        // viewerKey/viewerRole unused here -- downloads_sel RLS already
+        // scopes this correctly per real session (own rows, or every row
+        // for manager), kept only so the interface matches demo mode's
+        // explicit scoping.
+        const { data, error } = await requireClient().from('downloads').select('id,user_key,user_name,filename,kind,created_at').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapDownloadRow);
+      },
+      async log(userKey, userName, filename, kind, fileData) {
+        const { data, error } = await requireClient().from('downloads').insert({ user_key: userKey, user_name: userName, filename, kind, file_data: fileData }).select().single();
+        if (error) throw error;
+        return mapDownloadRow(data);
       },
     },
     allocationRequests: {

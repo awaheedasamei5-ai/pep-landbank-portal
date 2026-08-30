@@ -1151,3 +1151,18 @@ export interface WeeklyVisitFormCostPatch {
   tntAct?: number;
   siteManagerName?: string | null;
 }
+
+// Real table `downloads` (confirmed live, both projects) -- every PDF/
+// Excel a staff member generates gets logged here with its full file
+// data (a base64 data URI), so it can be re-downloaded later without
+// regenerating it. Real RLS (confirmed live): a manager sees every
+// staff member's downloads, everyone else only their own.
+export interface DownloadRecord {
+  id: string;
+  userKey: string;
+  userName: string;
+  filename: string;
+  kind: string;
+  fileData: string | null;
+  createdAt: string;
+}

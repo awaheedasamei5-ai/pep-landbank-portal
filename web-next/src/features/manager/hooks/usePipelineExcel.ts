@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { downloadBlob } from '../../../shared/lib/download';
+import { downloadBlob, arrayBufferToDataUri } from '../../../shared/lib/download';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { today } from '../../../shared/lib/format';
 import { agentPipelineFilename, buildAgentPipelineExcel, buildMasterPipelineExcel, masterPipelineFilename } from '../lib/pipelineTemplateExcel';
 
@@ -24,6 +25,7 @@ export function usePipelineAgents() {
 
 export function useDownloadMasterPipeline() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async () => {
       const ds = getDataSource(demoMode);
@@ -31,7 +33,9 @@ export function useDownloadMasterPipeline() {
       const nameByKey = new Map(staff.map((s) => [s.key, s.name]));
       const tagged = leads.map((l) => ({ ...l, agentTag: nameByKey.get(l.agent) ?? l.agent }));
       const buffer = await buildMasterPipelineExcel(tagged);
-      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), masterPipelineFilename(today()));
+      const filename = masterPipelineFilename(today());
+      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
+      logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
       return tagged.length;
     },
   });
@@ -39,12 +43,15 @@ export function useDownloadMasterPipeline() {
 
 export function useDownloadAgentPipeline() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ agentKey, agentName }: { agentKey: string; agentName: string }) => {
       const leads = await getDataSource(demoMode).leads.listAll();
       const agentLeads = leads.filter((l) => l.agent === agentKey);
       const buffer = await buildAgentPipelineExcel(agentLeads);
-      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), agentPipelineFilename(agentName, today()));
+      const filename = agentPipelineFilename(agentName, today());
+      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
+      logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
       return agentLeads.length;
     },
   });

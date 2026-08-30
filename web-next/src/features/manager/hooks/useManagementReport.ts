@@ -3,6 +3,7 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from './useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { computeManagementReportData, priorPeriodRange, type ReportRange } from '../lib/managementReportLogic';
 import { buildManagementReportPdf, managementReportFilename } from '../lib/managementReportPdf';
 
@@ -14,6 +15,7 @@ export function useDownloadManagementReport() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ range, compare }: { range: ReportRange; compare: boolean }) => {
       const ds = getDataSource(demoMode);
@@ -44,7 +46,9 @@ export function useDownloadManagementReport() {
       }
 
       const doc = buildManagementReportPdf(range, data, prior, priorData, profile?.name ?? 'Management', config?.quoteCompanyName, logo);
-      doc.save(managementReportFilename(range));
+      const filename = managementReportFilename(range);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

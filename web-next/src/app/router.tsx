@@ -53,6 +53,7 @@ import { StaffReportScreen } from '../features/staff-report/screens/StaffReportS
 import { InsightsHubScreen } from '../features/manager/screens/InsightsHubScreen';
 import { SmartInsightsScreen } from '../features/smart-insights/screens/SmartInsightsScreen';
 import { InsightListScreen } from '../features/smart-insights/screens/InsightListScreen';
+import { DocumentVaultScreen } from '../features/document-vault/screens/DocumentVaultScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -225,6 +226,7 @@ export const router = createBrowserRouter([
       { path: 'data-check', element: <DataCheckScreen /> },
       { path: 'insights', element: <SmartInsightsScreen /> },
       { path: 'insights/:kind', element: <InsightListScreen /> },
+      { path: 'vault', element: <DocumentVaultScreen /> },
     ],
   },
 ]);

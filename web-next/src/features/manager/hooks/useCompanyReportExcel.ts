@@ -1,9 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { downloadBlob } from '../../../shared/lib/download';
+import { downloadBlob, arrayBufferToDataUri } from '../../../shared/lib/download';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildCompanyReportExcel, companyReportFilename } from '../lib/companyReportExcel';
 import type { Profile } from '../../../types/domain';
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // Fetches everything the Company Report workbook needs fresh (own query,
 // not reusing the individual CSV-export hooks' cached data) since a
@@ -13,6 +16,7 @@ import type { Profile } from '../../../types/domain';
 export function useDownloadCompanyReport() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async () => {
       const ds = getDataSource(demoMode);
@@ -29,7 +33,9 @@ export function useDownloadCompanyReport() {
         siteVisits,
         generatedByName: profile?.name ?? 'Management',
       });
-      downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), companyReportFilename());
+      const filename = companyReportFilename();
+      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
+      logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
     },
   });
 }
