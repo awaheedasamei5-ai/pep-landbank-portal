@@ -1588,7 +1588,9 @@ function createDemoDataSource(): DataSource {
           siteVisitsCount: db.siteVisits.length,
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
-          collectedTrend: computeMonthlyTrend(db.payments),
+          // approved-only, matching the live query's .eq('status','approved')
+          // -- see that call site's comment for why.
+          collectedTrend: computeMonthlyTrend(db.payments.filter((p) => (p.status ?? 'approved') === 'approved')),
         };
       },
       // No dedicated demo RPC to call -- this mirrors leaderboard_rows()'s
@@ -2693,7 +2695,10 @@ function createLiveDataSource(): DataSource {
           client.from('complaints').select('status'),
           client.from('site_visits').select('id'),
           client.from('profiles').select('agent_key,name,role,email').eq('active', true),
-          client.from('payments').select('amount,payment_date').gte('payment_date', sixMonthsAgo),
+          // status='approved' matches the real app-wide rule (also enforced
+          // in Data Check's Ledger mismatch check) that a pending payment
+          // must not count as collected until a manager approves it.
+          client.from('payments').select('amount,payment_date').eq('status', 'approved').gte('payment_date', sixMonthsAgo),
         ]);
         if (leadsRes.error) throw leadsRes.error;
         if (complaintsRes.error) throw complaintsRes.error;

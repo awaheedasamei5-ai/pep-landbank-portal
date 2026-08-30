@@ -12,6 +12,7 @@ const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[]
   { key: 'leaderboard', label: 'Leaderboard', icon: 'trophy', path: '/app/mgr/leaderboard' },
   { key: 'commission', label: 'Commission', icon: 'wallet', path: '/app/mgr/commission' },
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/app/mgr/settings' },
+  { key: 'analytics', label: 'Analytics', icon: 'chartLine', path: '/app/mgr/analytics' },
   { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
   { key: 'datacheck', label: 'Data Check', icon: 'check', path: '/app/data-check' },
 ];

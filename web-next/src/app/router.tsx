@@ -48,6 +48,7 @@ import { BannerTrackingScreen } from '../features/banners/screens/BannerTracking
 import { ExpensesScreen } from '../features/expenses/screens/ExpensesScreen';
 import { SiteVisitAuthScreen } from '../features/site-visit-auth/screens/SiteVisitAuthScreen';
 import { DataCheckScreen } from '../features/data-check/screens/DataCheckScreen';
+import { AnalyticsScreen } from '../features/analytics/screens/AnalyticsScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -135,6 +136,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <ReportsScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/analytics',
+        element: (
+          <RequireRole role="manager">
+            <AnalyticsScreen />
           </RequireRole>
         ),
       },

@@ -681,7 +681,7 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 37,
+    version: 38,
     leads,
     payments,
     scheduleItems,
