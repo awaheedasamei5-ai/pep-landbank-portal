@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router';
-import { ghs } from '../../../shared/lib/format';
+import { ghs, today } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { Icon, type IconName } from '../../../shared/ui/Icon';
+import { AreaChart } from '../../../shared/ui/AreaChart';
+import { DonutChart } from '../../../shared/ui/DonutChart';
 import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useManagerOverview } from '../hooks/useManagerOverview';
 import styles from './MgrHomeScreen.module.css';
@@ -13,7 +15,24 @@ const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[]
   { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
 ];
 
-const STAGE_COLORS: Record<string, string> = { '1': '#94A3B8', '2A': '#64748B', '2B': '#3B82F6', '3': '#F59E0B', '4': 'var(--ok)', Lost: '#EF4444' };
+const STAGE_COLORS: Record<string, string> = { '1': '#94A3B8', '2A': '#64748B', '2B': '#3B82F6', '3': '#F59E0B', '4': '#146C43', Lost: '#B0402C' };
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function trailingMonthLabels(): string[] {
+  const [y, m] = today().slice(0, 7).split('-').map(Number);
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(y, m - 1 - (5 - i), 1);
+    return d.toLocaleDateString('en-GB', { month: 'short' });
+  });
+}
 
 // Company-wide dashboard -- confirmed live (Manager Overview research,
 // 2026-08-29) that a real manager-role session gets unrestricted SELECT
@@ -29,8 +48,10 @@ export function MgrHomeScreen() {
   const navigate = useNavigate();
   const { data, isLoading } = useManagerOverview();
 
-  const maxStageCount = Math.max(1, ...(data?.stageFunnel.map((s) => s.count) ?? [1]));
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
+  const trend = data?.collectedTrend ?? [];
+  const trendDelta = trend.length >= 2 ? trend[trend.length - 1] - trend[trend.length - 2] : null;
+  const monthLabels = trailingMonthLabels();
 
   return (
     <div className={styles.wrap}>
@@ -39,11 +60,10 @@ export function MgrHomeScreen() {
           <h1 className={styles.title}>Manager Home</h1>
           <p className={styles.sub}>Live across every agent</p>
         </div>
-        <div className={styles.headBtns}>
+        <div className={styles.toolbar}>
           {HEAD_LINKS.map((l) => (
-            <button key={l.key} type="button" className={styles.leaderboardBtn} onClick={() => navigate(l.path)}>
-              <Icon name={l.icon} size={15} />
-              {l.label}
+            <button key={l.key} type="button" className={styles.toolbarBtn} title={l.label} aria-label={l.label} onClick={() => navigate(l.path)}>
+              <Icon name={l.icon} size={17} />
             </button>
           ))}
         </div>
@@ -60,37 +80,63 @@ export function MgrHomeScreen() {
               <PipePill tone="red" value={data.openComplaints} label="Open complaints" />
             </PipePillStrip>
           </div>
-          <div className={styles.pillsWrap}>
-            <PipePillStrip>
-              <PipePill tone="blue" value={ghs(data.pipelineValue)} label="Pipeline value" isMoney />
-              <PipePill tone="green" value={ghs(data.collected)} label="Collected" isMoney trend={data.collectedTrend} />
-              <PipePill tone="gold" value={data.siteVisitsCount} label="Site visits logged" />
-            </PipePillStrip>
+
+          <div className={styles.heroCard}>
+            <div className={styles.heroTop}>
+              <div>
+                <div className={styles.heroLabel}>Collected this month</div>
+                <div className={styles.heroValue}>{ghs(data.collected)}</div>
+              </div>
+              {trendDelta !== null && trendDelta !== 0 && (
+                <span className={`${styles.heroDelta} ${trendDelta > 0 ? styles.heroDeltaUp : styles.heroDeltaDown}`}>
+                  {trendDelta > 0 ? '▲' : '▼'} {ghs(Math.abs(trendDelta))} vs last month
+                </span>
+              )}
+            </div>
+            <div className={styles.heroChart}>
+              <AreaChart values={trend} labels={monthLabels} color="var(--c-success)" height={72} />
+            </div>
+            <div className={styles.heroFootRow}>
+              <div>
+                <div className={styles.heroFootVal}>{ghs(data.pipelineValue)}</div>
+                <div className={styles.heroFootLbl}>Pipeline value</div>
+              </div>
+              <div>
+                <div className={styles.heroFootVal}>{data.siteVisitsCount}</div>
+                <div className={styles.heroFootLbl}>Site visits logged</div>
+              </div>
+            </div>
           </div>
 
           <div className={styles.sectitle}>Pipeline by stage</div>
-          <div className={styles.card}>
-            {data.stageFunnel.map((s) => (
-              <div className={styles.barRow} key={s.stage}>
-                <div className={styles.barLabel}>{s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage)}</div>
-                <div className={styles.barTrack}>
-                  <div className={styles.barFill} style={{ width: `${s.count ? Math.max(4, Math.round((s.count / maxStageCount) * 100)) : 0}%`, background: STAGE_COLORS[s.stage] }} />
+          <div className={`${styles.card} ${styles.donutCard}`}>
+            <DonutChart segments={data.stageFunnel.map((s) => ({ key: s.stage, label: s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage), value: s.count, color: STAGE_COLORS[s.stage] ?? '#94A3B8' }))} centerValue={String(data.stageFunnel.reduce((sum, s) => sum + s.count, 0))} centerLabel="leads" />
+            <div className={styles.legend}>
+              {data.stageFunnel.map((s) => (
+                <div className={styles.legendRow} key={s.stage}>
+                  <span className={styles.legendDot} style={{ background: STAGE_COLORS[s.stage] ?? '#94A3B8' }} />
+                  <span className={styles.legendLabel}>{s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage)}</span>
+                  <span className={styles.legendValue}>{s.count}</span>
                 </div>
-                <div className={styles.barValue}>{s.count}</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className={styles.sectitle}>By agent</div>
           <div className={styles.card}>
             {data.byAgent.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No leads yet.</p>}
             {data.byAgent.map((a) => (
-              <div className={styles.barRow} key={a.key}>
-                <div className={styles.barLabel}>{a.name}</div>
-                <div className={styles.barTrack}>
-                  <div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((a.value / maxAgentValue) * 100))}%`, background: 'linear-gradient(90deg, var(--leaf), var(--green))' }} />
+              <div className={styles.agentRow} key={a.key}>
+                <span className={styles.agentAvatar}>{initials(a.name)}</span>
+                <div className={styles.agentMain}>
+                  <div className={styles.agentTopLine}>
+                    <span className={styles.agentName}>{a.name}</span>
+                    <span className={styles.agentValue}>{ghs(a.value)}</span>
+                  </div>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((a.value / maxAgentValue) * 100))}%`, background: 'linear-gradient(90deg, var(--c-accent-soft), var(--c-accent))' }} />
+                  </div>
                 </div>
-                <div className={styles.barValue}>{ghs(a.value)}</div>
               </div>
             ))}
           </div>
