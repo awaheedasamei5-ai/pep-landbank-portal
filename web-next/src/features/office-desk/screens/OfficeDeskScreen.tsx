@@ -20,6 +20,7 @@ export function OfficeDeskScreen() {
     { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', icon: 'calculator', onOpen: () => navigate('/app/office/quotation') },
     { key: 'leave', label: 'Leave', sub: 'Request & approve staff leave', color: 'blue', icon: 'palm', onOpen: () => navigate('/app/office/leave') },
     { key: 'notes', label: 'Notes', sub: 'Quick private notes, just for you', color: 'purple', icon: 'notepad', onOpen: () => navigate('/app/office/notes') },
+    { key: 'banners', label: 'Banner Tracking', sub: 'Add, track & route to every placement', color: 'orange', icon: 'pin', onOpen: () => navigate('/app/office/banners') },
   ];
 
   return (

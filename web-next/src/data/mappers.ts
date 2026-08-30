@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -83,6 +83,23 @@ export function mapStreakRow(r: Record<string, unknown>): StreakRow {
     staffKey: r.staff_key as string,
     date: r.streak_date as string,
     dayMet: !!r.streak_day_met,
+  };
+}
+
+export function mapBannerRow(r: Record<string, unknown>): Banner {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    area: (r.area as string) ?? '',
+    status: (r.status as Banner['status']) ?? 'placed',
+    lat: r.lat != null ? Number(r.lat) : null,
+    lng: r.lng != null ? Number(r.lng) : null,
+    image: (r.image as string) ?? null,
+    notes: (r.notes as string) ?? null,
+    createdBy: r.created_by as string,
+    createdByName: (r.created_by_name as string) ?? '',
+    createdAt: r.created_at as string,
+    updatedAt: (r.updated_at as string) ?? (r.created_at as string),
   };
 }
 

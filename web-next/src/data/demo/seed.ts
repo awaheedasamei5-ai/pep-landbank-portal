@@ -624,8 +624,14 @@ export function seedDemo(): DemoDb {
 
   const contracts: DemoDb['contracts'] = [];
 
+  const banners: DemoDb['banners'] = [
+    { id: uid(), name: 'Spintex Road – near GOIL', area: 'Spintex', status: 'placed', lat: null, lng: null, image: null, notes: null, createdBy: AGENT_KEY, createdByName: 'Elias Torgbuivi', createdAt: isoPlusDays(t, -30), updatedAt: isoPlusDays(t, -30) },
+    { id: uid(), name: 'Tema Roundabout billboard', area: 'Tema', status: 'needs_maintenance', lat: null, lng: null, image: null, notes: 'Corner peeling, needs reprint', createdBy: 'emmanuel', createdByName: 'Emmanuel', createdAt: isoPlusDays(t, -60), updatedAt: isoPlusDays(t, -3) },
+    { id: uid(), name: 'Weija Junction', area: 'Weija', status: 'location_only', lat: null, lng: null, image: null, notes: 'Scouted, banner not printed yet', createdBy: 'elizabeth', createdByName: 'Elizabeth', createdAt: isoPlusDays(t, -5), updatedAt: isoPlusDays(t, -5) },
+  ];
+
   return {
-    version: 29,
+    version: 31,
     leads,
     payments,
     scheduleItems,
@@ -650,6 +656,7 @@ export function seedDemo(): DemoDb {
     chatMessages,
     contracts,
     receiptShareLinks: [],
+    banners,
   };
 }
 

@@ -1,4 +1,4 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -7,6 +7,7 @@ import { getSupabaseClient } from './client';
 import {
   mapAllocationRequestRow,
   mapAttendanceRow,
+  mapBannerRow,
   mapChatMessageRow,
   mapComplaintRow,
   mapContractRequestRow,
@@ -322,6 +323,26 @@ export interface DataSource {
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
     decide(id: string, approve: boolean, decidedBy: string, decidedByName: string, decidedSignature: string | null): Promise<LeaveRequest>;
   };
+  // Real table `banners` (confirmed live) -- physical banner/scouted-
+  // location tracking. Unlike Plot Inventory, banners_sel/ins/upd RLS is
+  // open to any authenticated staff member (banners_del is owner-or-
+  // manager only, not exposed here -- this pass is create/list/update
+  // only, matching the Dashboard+List scope actually built). Map & Routes
+  // (Leaflet) and Reports tabs, plus the separate banner_status_log audit
+  // trail, are deliberately out of scope -- a real, much larger geo/
+  // reporting feature, same scoping discipline as Allocations' deferred
+  // PDF/chat-send.
+  banners: {
+    list(): Promise<Banner[]>;
+    create(createdBy: string, createdByName: string, input: NewBanner): Promise<Banner>;
+    updateStatus(id: string, status: BannerStatus): Promise<Banner>;
+  };
+  // Real column `leads.banner_id` -- how many real leads are attributed to
+  // each banner, keyed by banner id. Confirmed live: `leads` RLS already
+  // scopes SELECT correctly per caller, so this naturally undercounts for
+  // a plain agent (their own leads only) exactly like index.html's own
+  // apiLoadLeadBannerCounts() does -- not a bug, matches production.
+  leadBannerCounts(): Promise<Record<string, number>>;
   // Real table `allocation_requests` -- same manager/elias/emmanuel gate
   // as Plot Inventory (alloc_sel/alloc_upd, confirmed live). list()
   // naturally self-scopes in live mode (own rows, or every row for that
@@ -1044,6 +1065,47 @@ function createDemoDataSource(): DataSource {
         demoSave();
         return updated;
       },
+    },
+    banners: {
+      async list() {
+        return demoLoad().banners;
+      },
+      async create(createdBy, createdByName, input) {
+        const banner: Banner = {
+          id: crypto.randomUUID(),
+          name: input.name,
+          area: input.area,
+          status: input.status,
+          lat: null,
+          lng: null,
+          image: null,
+          notes: input.notes ?? null,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.banners = [banner, ...db.banners];
+        demoSave();
+        return banner;
+      },
+      async updateStatus(id, status) {
+        const db = demoLoad();
+        const index = db.banners.findIndex((b) => b.id === id);
+        if (index === -1) throw new Error('Banner not found');
+        const updated: Banner = { ...db.banners[index], status, updatedAt: new Date().toISOString() };
+        db.banners = [...db.banners.slice(0, index), updated, ...db.banners.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+    },
+    async leadBannerCounts() {
+      const counts: Record<string, number> = {};
+      demoLoad().leads.forEach((l) => {
+        if (l.bannerId) counts[l.bannerId] = (counts[l.bannerId] ?? 0) + 1;
+      });
+      return counts;
     },
     allocationRequests: {
       async list(viewerKey, viewerRole) {
@@ -2119,6 +2181,36 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
+    },
+    banners: {
+      async list() {
+        const { data, error } = await requireClient().from('banners').select('*').order('updated_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapBannerRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('banners')
+          .insert({ name: input.name, area: input.area, status: input.status, notes: input.notes ?? null, created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapBannerRow(data);
+      },
+      async updateStatus(id, status) {
+        const { data, error } = await requireClient().from('banners').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapBannerRow(data);
+      },
+    },
+    async leadBannerCounts() {
+      const { data, error } = await requireClient().from('leads').select('banner_id').not('banner_id', 'is', null);
+      if (error) return {};
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach((r: { banner_id: string | null }) => {
+        if (r.banner_id) counts[r.banner_id] = (counts[r.banner_id] ?? 0) + 1;
+      });
+      return counts;
     },
     allocationRequests: {
       async list() {

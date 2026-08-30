@@ -1011,3 +1011,36 @@ export interface NewNote {
   title: string;
   body: string;
 }
+
+// Real table `banners` (confirmed live) -- physical advertising banner/
+// scouted-location tracking. `status` is one of index.html's real
+// BANNER_STATUS keys, not a free string. Real RLS (banners_sel/ins/upd,
+// confirmed live) is open to any authenticated staff member, unlike Plot
+// Inventory -- banners_del is owner-or-manager only. lat/lng/image are
+// real columns but only meaningful for the Map & Routes tab, which is
+// deliberately out of scope for this pass (Leaflet-based, a separate,
+// much larger geo feature) -- kept nullable/unused here rather than
+// invented.
+export type BannerStatus = 'placed' | 'needs_maintenance' | 'location_only' | 'being_replaced';
+
+export interface Banner {
+  id: string;
+  name: string;
+  area: string;
+  status: BannerStatus;
+  lat: number | null;
+  lng: number | null;
+  image: string | null;
+  notes: string | null;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewBanner {
+  name: string;
+  area: string;
+  status: BannerStatus;
+  notes?: string;
+}
