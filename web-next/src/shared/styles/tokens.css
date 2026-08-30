@@ -1,19 +1,58 @@
-/* Ported verbatim from index.html's \3c style> block (:root, body.dark, and the
-   streak-milestone skin overrides) -- same token NAMES and VALUES, so any
-   component styled against these matches production exactly. Do not rename
-   or re-value without also updating index.html, until cutover. */
+/* Palmstead Design Language (Phase 11) -- see the published "Palmstead
+   Design Language" artifact for the full research/rationale. This file
+   is the SINGLE highest-leverage lever for the visual redesign: every
+   component in this app was already built against these variable
+   NAMES (var(--green), var(--card), var(--ok)...), so redefining their
+   VALUES here re-skins the entire app in one place, with zero risk of
+   breaking any individual screen's layout.
+
+   New semantic tokens (--c-*) are the real source of truth, named for
+   what they actually are. The legacy names below (--green, --gold,
+   --premium, --leaf...) are kept ONLY as aliases so the ~150 already-
+   shipped component stylesheets keep working unchanged -- new
+   components should reach for the --c-* names directly, not the
+   legacy ones, since e.g. --green has meant "the accent color" (not
+   literally green) since the very first index.html port.
+
+   The actual webfont <link> tags live in index.html's <head> (a real
+   preconnect + stylesheet, not @import here -- @import blocks parallel
+   loading and adds a request waterfall). Nothing was ever actually
+   loading Inter before this -- --user-font-family:Inter had no matching
+   <link> anywhere, so every screen has silently been rendering in the
+   OS's default sans-serif the whole time. This is the first real
+   webfont this app has ever loaded. */
+
 :root {
-  --user-font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  --ink: #1E1B4B; --ink2: #312E81; --green: #4F46E5; --green2: #6366F1; --leaf: #818CF8;
-  --gold: #7C3AED; --gold2: #A78BFA; --premium: #C9A227; --premium2: #E8C766;
-  --paper: #F5F5FB; --card: #FFF; --line: #E5E4F0;
-  --text: #1B1A33; --muted: #68678A; --danger: #B4472F; --warn: #B8791E; --info: #0284C7; --ok: #16A34A;
-  --shadow: 0 1px 2px rgb(30 27 75 / 6%), 0 10px 28px rgb(30 27 75 / 8%);
-  --shadow-lg: 0 18px 44px rgb(30 27 75 / 18%);
-  --glow-lime: 0 0 0 1px rgb(79 70 229 / 18%), 0 8px 24px rgb(79 70 229 / 14%);
-  --glow-blue: 0 0 0 1px rgb(129 140 248 / 18%), 0 8px 24px rgb(129 140 248 / 14%);
+  /* ---- real names ---- */
+  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --c-ink: #151A33; --c-ink-2: #20264A;
+  --c-accent: #C9A227; --c-accent-soft: #E7CE7A; --c-accent-bg: #FBF3DC;
+  --c-success: #146C43; --c-success-soft: #3F9C6C; --c-success-bg: #E6F4EC;
+  --c-paper: #F5F6FB; --c-card: #FFF; --c-line: #E3E5F1; --c-line-2: #D4D7EA;
+  --c-text: #14162B; --c-muted: #6A6E8E; --c-faint: #9C9FBD;
+  --c-danger: #B0402C; --c-danger-bg: #FBEAE6;
+  --c-warn: #B07A1E; --c-warn-bg: #FBF1DF;
+  --c-info: #2563A8; --c-info-bg: #E9F1FA;
+
+  /* ---- legacy aliases (do not add new consumers of these -- use --c-* above) ---- */
+  --user-font-family: var(--font-body);
+  --ink: var(--c-ink); --ink2: var(--c-ink-2);
+  --green: var(--c-accent); --green2: var(--c-accent-soft); --leaf: var(--c-accent-soft);
+  --gold: var(--c-accent); --gold2: var(--c-accent-soft);
+  --premium: var(--c-accent); --premium2: var(--c-accent-soft);
+  --paper: var(--c-paper); --card: var(--c-card); --line: var(--c-line);
+  --text: var(--c-text); --muted: var(--c-muted);
+  --danger: var(--c-danger); --warn: var(--c-warn); --info: var(--c-info); --ok: var(--c-success);
+  --shadow: 0 1px 2px rgb(20 22 50 / 5%), 0 10px 28px rgb(20 22 50 / 7%);
+  --shadow-lg: 0 18px 44px rgb(20 22 50 / 16%);
+  --glow-lime: 0 0 0 1px rgb(201 162 39 / 20%), 0 8px 24px rgb(201 162 39 / 16%);
+  --glow-blue: 0 0 0 1px rgb(37 99 168 / 18%), 0 8px 24px rgb(37 99 168 / 14%);
   --glass: rgb(255 255 255 / 68%);
-  --wave: linear-gradient(180deg,#0B0A1F 0%,#1E1B4B 32%,#4F46E5 58%,#A78BFA 78%,#F5F5FB 100%);
+  --wave: linear-gradient(180deg,#0B0D1A 0%,#151A33 32%,#C9A227 78%,#F5F6FB 100%);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
   --r: 20px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
   --r-sm: 12px; --r-md: 20px; --r-lg: 28px; --r-pill: 100px;
@@ -21,12 +60,57 @@
   --fw-reg: 500; --fw-semi: 700; --fw-bold: 800;
 }
 
-body.dark {
-  --paper: #120F26; --card: #211D4A; --line: #332F5E; --text: #ECEAF9; --muted: #9C97C4;
-  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 28px rgb(0 0 0 / 35%);
-  --shadow-lg: 0 18px 44px rgb(0 0 0 / 50%);
-  --glass: rgb(33 29 74 / 70%);
+/* Dark mode, designed as a first-class theme (not an inverted
+   afterthought) -- automatic via the OS/browser setting. A manual
+   in-app toggle (writing body.dark, kept below for when that ships)
+   isn't wired to any UI yet, so prefers-color-scheme is what actually
+   controls dark mode for everyone today. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-ink: #EDEEFA; --c-ink-2: #C7CBEF;
+    --c-accent: #E3C25E; --c-accent-soft: #8A712C; --c-accent-bg: #2A230F;
+    --c-success: #4FBE85; --c-success-soft: #1F5C3D; --c-success-bg: #0F241A;
+    --c-paper: #0A0B16; --c-card: #141530; --c-line: #272A4E; --c-line-2: #34386490;
+    --c-text: #EEEFFA; --c-muted: #9C9FCB; --c-faint: #5F628B;
+    --c-danger: #E27562; --c-danger-bg: #301715;
+    --c-warn: #E0AC57; --c-warn-bg: #2E2410;
+    --c-info: #6FA8E0; --c-info-bg: #0F2033;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 40%);
+    --shadow-lg: 0 18px 44px rgb(0 0 0 / 55%);
+    --glass: rgb(20 21 48 / 70%);
+  }
 }
+
+body.dark {
+  --c-ink: #EDEEFA; --c-ink-2: #C7CBEF;
+  --c-accent: #E3C25E; --c-accent-soft: #8A712C; --c-accent-bg: #2A230F;
+  --c-success: #4FBE85; --c-success-soft: #1F5C3D; --c-success-bg: #0F241A;
+  --c-paper: #0A0B16; --c-card: #141530; --c-line: #272A4E; --c-line-2: #34386490;
+  --c-text: #EEEFFA; --c-muted: #9C9FCB; --c-faint: #5F628B;
+  --c-danger: #E27562; --c-danger-bg: #301715;
+  --c-warn: #E0AC57; --c-warn-bg: #2E2410;
+  --c-info: #6FA8E0; --c-info-bg: #0F2033;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 28px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 18px 44px rgb(0 0 0 / 55%);
+  --glass: rgb(20 21 48 / 70%);
+}
+
+/* Explicit light override wins even inside an OS-dark browser, for
+   whenever a manual toggle sets this. */
+body.light {
+  --c-ink: #151A33; --c-ink-2: #20264A;
+  --c-accent: #C9A227; --c-accent-soft: #E7CE7A; --c-accent-bg: #FBF3DC;
+  --c-success: #146C43; --c-success-soft: #3F9C6C; --c-success-bg: #E6F4EC;
+  --c-paper: #F5F6FB; --c-card: #FFF; --c-line: #E3E5F1; --c-line-2: #D4D7EA;
+  --c-text: #14162B; --c-muted: #6A6E8E; --c-faint: #9C9FBD;
+  --c-danger: #B0402C; --c-danger-bg: #FBEAE6;
+  --c-warn: #B07A1E; --c-warn-bg: #FBF1DF;
+  --c-info: #2563A8; --c-info-bg: #E9F1FA;
+  --shadow: 0 1px 2px rgb(20 22 50 / 5%), 0 10px 28px rgb(20 22 50 / 7%);
+  --shadow-lg: 0 18px 44px rgb(20 22 50 / 16%);
+  --glass: rgb(255 255 255 / 68%);
+}
+
 body[data-skin="sunset"] { --ink: #7C2D12; --ink2: #9A3412; --green: #EA580C; --green2: #F97316; --leaf: #FB923C; --gold: #DC2626; --gold2: #F87171; }
 body[data-skin="emerald"] { --ink: #064E3B; --ink2: #065F46; --green: #059669; --green2: #10B981; --leaf: #34D399; --gold: #0D9488; --gold2: #2DD4BF; }
 body[data-skin="royal"] { --ink: #3B0764; --ink2: #581C87; --green: #7C2D92; --green2: #9333EA; --leaf: #C084FC; --gold: #B45309; --gold2: #F59E0B; }
@@ -35,7 +119,13 @@ body[data-skin="royal"] { --ink: #3B0764; --ink2: #581C87; --green: #7C2D92; --g
 
 body {
   margin: 0;
-  font-family: var(--user-font-family);
+  font-family: var(--font-body);
   background: var(--paper);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
