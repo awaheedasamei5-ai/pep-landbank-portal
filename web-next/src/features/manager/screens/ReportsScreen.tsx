@@ -6,8 +6,19 @@ import { useAllLeadsReport, useAllEnquiriesReport, useAllComplaintsReport, useAl
 import { useTeamRoster } from '../hooks/useTeamRoster';
 import { useDownloadCompanyReport } from '../hooks/useCompanyReportExcel';
 import { useDownloadAgentPipeline, useDownloadMasterPipeline, usePipelineAgents } from '../hooks/usePipelineExcel';
+import { useDownloadManagementReport } from '../hooks/useManagementReport';
+import { reportPeriodRange, type ReportPeriodKey } from '../lib/managementReportLogic';
 import type { Lead } from '../../../types/domain';
 import styles from './ReportsScreen.module.css';
+
+const PERIOD_OPTIONS: { key: ReportPeriodKey; label: string }[] = [
+  { key: 'week', label: 'This week' },
+  { key: 'month', label: 'This month' },
+  { key: 'lastmonth', label: 'Last month' },
+  { key: 'year', label: 'This year' },
+  { key: 'lastyear', label: 'Last year' },
+  { key: 'custom', label: 'Custom range' },
+];
 
 // Port of mgrReports()'s "Individual sheets" CSV section + client search
 // (index.html:19967-20055), the styled Company Report .xlsx workbook
@@ -28,6 +39,11 @@ export function ReportsScreen() {
   const { data: pipelineAgents } = usePipelineAgents();
   const [selectedAgentKey, setSelectedAgentKey] = useState('');
   const [query, setQuery] = useState('');
+  const downloadManagementReport = useDownloadManagementReport();
+  const [periodKey, setPeriodKey] = useState<ReportPeriodKey>('month');
+  const [customFrom, setCustomFrom] = useState(today());
+  const [customTo, setCustomTo] = useState(today());
+  const [compare, setCompare] = useState(false);
 
   const nameFor = (agentKey: string) => roster?.find((r) => r.key === agentKey)?.name ?? agentKey;
 
@@ -60,6 +76,42 @@ export function ReportsScreen() {
       <div className={styles.eyebrow}>Management</div>
       <h1 className={styles.title}>Reports</h1>
       <p className={styles.sub}>Download company data &mdash; live figures, exported on demand, nothing pre-generated or stale.</p>
+
+      <div className={styles.sectitle}>Management Report (PDF)</div>
+      <div className={styles.card} style={{ padding: '14px 16px' }}>
+        <div className={styles.periodRow}>
+          {PERIOD_OPTIONS.map((o) => (
+            <button key={o.key} type="button" className={`${styles.periodChip} ${periodKey === o.key ? styles.periodChipOn : ''}`} onClick={() => setPeriodKey(o.key)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {periodKey === 'custom' && (
+          <div className={styles.customRow}>
+            <label className={styles.customField}>
+              From
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            </label>
+            <label className={styles.customField}>
+              To
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            </label>
+          </div>
+        )}
+        <label className={styles.compareRow}>
+          <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />
+          Compare to the same-length previous period
+        </label>
+        <button
+          type="button"
+          className={styles.dlChip}
+          style={{ width: '100%', padding: '10px 0', fontSize: 13 }}
+          disabled={downloadManagementReport.isPending}
+          onClick={() => downloadManagementReport.mutate({ range: reportPeriodRange(periodKey, customFrom, customTo), compare })}
+        >
+          {downloadManagementReport.isPending ? 'Building…' : 'Generate PDF report'}
+        </button>
+      </div>
 
       <input className={styles.search} placeholder="Search a client by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
       {q && (

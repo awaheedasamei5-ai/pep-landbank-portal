@@ -57,13 +57,25 @@ export function pdfBrandedHeader(doc: jsPDF, title: string, subtitle: string, ri
   return 42;
 }
 
-export function pdfSectionTitle(doc: jsPDF, y: number, pageW: number, text: string): number {
+// `subtitle` is optional -- index.html's own pdfSectionTitle(doc,y,pageW,text)
+// took no subtitle param at all, so its two call sites that passed a second
+// string (Revenue trend/"last 6 months", Pipeline composition/health label)
+// silently dropped it. Fixed here rather than ported forward: rendered as
+// small muted text right after the title when present.
+export function pdfSectionTitle(doc: jsPDF, y: number, pageW: number, text: string, subtitle?: string): number {
   doc.setFillColor(...PDF_GOLD);
   doc.rect(12, y - 3.6, 3, 3, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...PDF_INK);
   doc.text(text, 17, y);
+  if (subtitle) {
+    const titleW = doc.getTextWidth(text);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_MUTED);
+    doc.text(subtitle, 17 + titleW + 4, y);
+  }
   doc.setDrawColor(200, 208, 220);
   doc.setLineWidth(0.4);
   doc.line(12, y + 2.5, pageW - 12, y + 2.5);
@@ -191,6 +203,70 @@ export function pdfSimpleTable(doc: jsPDF, y: number, pageW: number, headers: st
     y += rowH;
   });
   return y + 7;
+}
+
+export interface PdfLinePoint {
+  label: string;
+  value: number;
+}
+
+// Simple line chart with a labeled point per month -- used for the
+// trailing-6-month revenue trend on Management Reports (Commission's
+// own bar chart is a better fit for a per-agent breakdown, but a
+// continuous trend reads more naturally as a line).
+export function pdfLineChart(doc: jsPDF, x: number, y: number, w: number, h: number, points: PdfLinePoint[]): number {
+  const max = Math.max(1, ...points.map((p) => p.value));
+  const n = points.length;
+  const stepX = n > 1 ? w / (n - 1) : 0;
+  const scaleY = (v: number) => y + h - 10 - (v / max) * (h - 16);
+  doc.setDrawColor(...PDF_LEAF);
+  doc.setLineWidth(1.1);
+  for (let i = 0; i < n - 1; i++) doc.line(x + i * stepX, scaleY(points[i].value), x + (i + 1) * stepX, scaleY(points[i + 1].value));
+  points.forEach((p, i) => {
+    const px = x + i * stepX;
+    const py = scaleY(p.value);
+    doc.setFillColor(...PDF_LEAF);
+    doc.circle(px, py, 1.3, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...PDF_MUTED);
+    doc.text(p.label, px, y + h - 3, { align: 'center' });
+  });
+  doc.setTextColor(20, 20, 20);
+  return y + h + 6;
+}
+
+export interface PdfCompositionSegment {
+  label: string;
+  value: number;
+  color: [number, number, number];
+  fmt?: (v: number) => string;
+}
+
+// Stacked composition bar + legend (value and % per segment) -- same
+// visual idea as the app's own DonutChart but a horizontal bar reads
+// better at this document's scale/aspect ratio than a small pie would.
+export function pdfCompositionBar(doc: jsPDF, x: number, y: number, w: number, segments: PdfCompositionSegment[]): number {
+  const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
+  let cx = x;
+  const barH = 8;
+  segments.forEach((seg) => {
+    const segW = (seg.value / total) * w;
+    doc.setFillColor(...seg.color);
+    doc.rect(cx, y, Math.max(0.3, segW), barH, 'F');
+    cx += segW;
+  });
+  let ly = y + barH + 5;
+  segments.forEach((seg) => {
+    doc.setFillColor(...seg.color);
+    doc.rect(x, ly - 3, 3, 3, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(20, 20, 20);
+    doc.text(`${seg.label}: ${Math.round((seg.value / total) * 100)}% (${seg.fmt ? seg.fmt(seg.value) : seg.value})`, x + 5, ly);
+    ly += 5;
+  });
+  return ly + 3;
 }
 
 // Stamps every page of a finished report with a thin rule + confidentiality
