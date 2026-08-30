@@ -14,8 +14,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 16px;
   text-align: left;
@@ -42,12 +42,12 @@
 .label {
   font-weight: 700;
   font-size: 13.5px;
-  color: var(--text);
+  color: var(--c-text);
 }
 
 .sub {
   font-size: 11.5px;
-  color: var(--muted);
+  color: var(--c-muted);
   line-height: 1.35;
 }
 .purple { background: linear-gradient(150deg, #A78BFA, #7C3AED); }

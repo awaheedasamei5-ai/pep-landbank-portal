@@ -3,14 +3,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, var(--ink) 0%, var(--green) 60%, var(--leaf) 100%);
+  background: linear-gradient(180deg, var(--c-ink) 0%, var(--c-accent) 60%, var(--leaf) 100%);
   padding: var(--sp-5);
 }
 
 .card {
   width: 100%;
   max-width: 380px;
-  background: var(--card);
+  background: var(--c-card);
   border-radius: var(--r-lg);
   padding: var(--sp-6);
   box-shadow: var(--shadow-lg);
@@ -20,12 +20,12 @@
 .title {
   font-weight: var(--fw-bold);
   font-size: var(--fs-2xl);
-  color: var(--text);
+  color: var(--c-text);
   margin: 0 0 var(--sp-1);
 }
 
 .sub {
-  color: var(--muted);
+  color: var(--c-muted);
   font-size: var(--fs-sm);
   margin: 0 0 var(--sp-5);
 }
@@ -44,13 +44,13 @@
 
 .btnAgent {
   composes: btn;
-  background: var(--green);
+  background: var(--c-accent);
   color: #fff;
 }
 
 .btnManager {
   composes: btn;
-  background: var(--paper);
-  color: var(--text);
-  border: 1px solid var(--line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  border: 1px solid var(--c-line);
 }

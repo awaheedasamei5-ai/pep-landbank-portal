@@ -3,7 +3,7 @@
   padding: 24px 20px 22px;
   margin-bottom: 20px;
   color: #fff;
-  background: linear-gradient(135deg, var(--ink), var(--green));
+  background: linear-gradient(135deg, var(--c-ink), var(--c-accent));
 }
 
 .greet {
@@ -24,7 +24,7 @@
 .value {
   font-size: 32px;
   font-weight: 800;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   margin-top: 3px;
 }
 
@@ -49,4 +49,4 @@
 }
 
 .commissionChipLabel { font-size: 12.5px; font-weight: 700; opacity: .85; }
-.commissionChipVal { font-family: 'IBM Plex Mono', monospace; font-weight: 800; font-size: 14px; }
+.commissionChipVal { font-family: var(--font-mono); font-weight: 800; font-size: 14px; }

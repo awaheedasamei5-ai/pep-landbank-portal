@@ -80,7 +80,7 @@
 .num {
   font-size: 19px;
   font-weight: 800;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   margin-top: 3px;
 }
 

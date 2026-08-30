@@ -1,24 +1,24 @@
 .wrap { padding: 20px 16px 90px; }
 
-.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--c-muted); }
 
 .totalRow { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 4px 0 0; }
-.total { font-size: 32px; font-family: 'IBM Plex Mono', monospace; margin: 0; }
+.total { font-size: 32px; font-family: var(--font-mono); margin: 0; }
 
 .delta {
   font-size: 12.5px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   padding: 3px 8px;
   border-radius: 100px;
   white-space: nowrap;
 }
-.deltaUp { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
-.deltaDown { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.deltaUp { color: var(--c-success); background: color-mix(in srgb, var(--c-success) 14%, transparent); }
+.deltaDown { color: var(--c-danger); background: color-mix(in srgb, var(--c-danger) 12%, transparent); }
 
-.sub { color: var(--muted); margin: 6px 0 20px; font-size: 13px; line-height: 1.45; }
+.sub { color: var(--c-muted); margin: 6px 0 20px; font-size: 13px; line-height: 1.45; }
 
-.sectitle { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 12px; }
+.sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 12px; }
 
 .list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -27,16 +27,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 13px 15px;
   box-shadow: var(--shadow);
 }
 
 .name { font-weight: 700; font-size: 14px; }
-.meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
 
 .right { text-align: right; flex-shrink: 0; }
-.amt { font-family: 'IBM Plex Mono', monospace; font-weight: 800; font-size: 15px; }
-.amtLabel { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.amt { font-family: var(--font-mono); font-weight: 800; font-size: 15px; }
+.amtLabel { font-size: 10.5px; color: var(--c-muted); margin-top: 1px; }

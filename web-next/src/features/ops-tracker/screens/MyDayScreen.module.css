@@ -1,11 +1,11 @@
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
 .title { font-size: 22px; margin: 0 0 4px; }
-.sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
+.sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
 .addRow { display: flex; gap: 8px; margin-bottom: 18px; }
-.input { flex: 1; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); font-size: 14px; }
+.input { flex: 1; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--c-line); font-size: 14px; }
 
 .addBtn {
-  background: var(--green);
+  background: var(--c-accent);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -15,7 +15,7 @@
 }
 .addBtn:disabled { opacity: .6; cursor: default; }
 
-.empty { color: var(--muted); font-size: 13.5px; }
+.empty { color: var(--c-muted); font-size: 13.5px; }
 
 /* Real kanban board -- 4 columns, one per actual ScheduleItemStatus value
    (see MyDayScreen.tsx's own comment). Horizontally scrollable with snap
@@ -71,15 +71,15 @@
 }
 
 .assignRow { display: flex; align-items: center; gap: 8px; margin: -10px 0 14px; }
-.assignLabel { font-size: 12px; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.assignLabel { font-size: 12px; color: var(--c-muted); font-weight: 700; flex-shrink: 0; }
 
 .assignSelect {
   flex: 1;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--paper);
-  color: var(--text);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
   font-size: 13px;
   font-family: inherit;
 }
@@ -97,5 +97,5 @@
 .availChip { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 100px; }
 .availChipOk { background: var(--c-success-bg); color: var(--c-success); }
 .availChipWarn { background: var(--c-warn-bg); color: var(--c-warn); }
-.availAi { display: flex; gap: 6px; align-items: flex-start; color: var(--ink); }
-.availAiBadge { flex-shrink: 0; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 5px; background: var(--c-accent-soft); color: var(--ink); margin-top: 1px; }
+.availAi { display: flex; gap: 6px; align-items: flex-start; color: var(--c-ink); }
+.availAiBadge { flex-shrink: 0; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 5px; background: var(--c-accent-soft); color: var(--c-ink); margin-top: 1px; }

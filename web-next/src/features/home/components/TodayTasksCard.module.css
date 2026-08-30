@@ -1,6 +1,6 @@
 .card {
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 16px;
   box-shadow: var(--shadow);
@@ -15,8 +15,8 @@
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.stat { background: var(--paper); border-radius: 12px; padding: 10px 8px; text-align: center; }
-.stat b { display: block; font-family: var(--font-mono); font-size: 19px; font-weight: 700; color: var(--ink); }
-.stat span { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.stat { background: var(--c-paper); border-radius: 12px; padding: 10px 8px; text-align: center; }
+.stat b { display: block; font-family: var(--font-mono); font-size: 19px; font-weight: 700; color: var(--c-ink); }
+.stat span { font-size: 10px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 
 .link { display: block; text-align: center; margin-top: 12px; font-size: 12px; font-weight: 700; color: var(--c-accent); text-decoration: none; }

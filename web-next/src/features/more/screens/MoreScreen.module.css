@@ -5,8 +5,8 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 16px;
   margin-bottom: 20px;
@@ -27,7 +27,7 @@
   flex-shrink: 0;
 }
 .name { font-weight: 700; font-size: 15px; }
-.meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
 
 .roleBadge {
   display: inline-block;
@@ -42,9 +42,9 @@
   color: #7C3AED;
 }
 
-.sectionTitle { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
+.sectionTitle { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
 
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); margin-bottom: 20px; overflow: hidden; box-shadow: var(--shadow); }
+.card { background: var(--c-card); border: 1px solid var(--c-line); border-radius: var(--r-md); margin-bottom: 20px; overflow: hidden; box-shadow: var(--shadow); }
 
 .row {
   display: flex;
@@ -52,11 +52,11 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--c-line);
 }
 .row:last-child { border-bottom: none; }
 .rowLabel { font-size: 13.5px; font-weight: 600; }
-.rowSub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.rowSub { color: var(--c-muted); font-size: 11.5px; margin-top: 2px; }
 
 .pill { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 100px; }
 .pillDemo { background: rgb(37 99 235 / 10%); color: #2563eb; }
@@ -64,15 +64,15 @@
 .actionBtn {
   padding: 8px 14px;
   border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--card);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
-.actionBtn.danger { border-color: var(--danger); color: var(--danger); }
-.actionBtn.warn { border-color: var(--warn); color: var(--warn); }
+.actionBtn.danger { border-color: var(--c-danger); color: var(--c-danger); }
+.actionBtn.warn { border-color: var(--c-warn); color: var(--c-warn); }
 
 .sigRow { padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
 
@@ -82,17 +82,17 @@
   border-radius: 10px;
   overflow: hidden;
   flex: 0 0 auto;
-  background: var(--paper);
-  border: 1px dashed var(--line);
+  background: var(--c-paper);
+  border: 1px dashed var(--c-line);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10.5px;
-  color: var(--muted);
+  color: var(--c-muted);
 }
 .sigPreview img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .sigCol { flex: 1; min-width: 0; }
-.sigHint { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.4; }
+.sigHint { color: var(--c-muted); font-size: 11px; margin-top: 6px; line-height: 1.4; }
 .sigFileInput { font-size: 12px; max-width: 100%; }
 .sigRemoveRow { padding: 0 16px 14px; }
 
@@ -100,12 +100,12 @@
   width: 100%;
   padding: 9px;
   border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--card);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
 }
 .sigRemoveBtn:disabled { opacity: .6; cursor: default; }
 
-.version { text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+.version { text-align: center; color: var(--c-muted); font-size: 11.5px; margin-top: 8px; }
