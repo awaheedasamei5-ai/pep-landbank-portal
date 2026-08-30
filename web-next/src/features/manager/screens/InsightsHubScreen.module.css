@@ -1,0 +1,25 @@
+.wrap { padding: 20px 16px 90px; }
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 10px; font-size: 13px; }
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.title { font-size: 22px; margin: 2px 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 16px; font-size: 13.5px; }
+
+.pillsWrap { margin-bottom: 8px; }
+
+.hygieneLink {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 14px;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  margin-bottom: 4px;
+}
+
+.sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 22px 0 12px; }

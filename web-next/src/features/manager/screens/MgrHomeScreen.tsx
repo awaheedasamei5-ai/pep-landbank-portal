@@ -8,13 +8,17 @@ import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useManagerOverview } from '../hooks/useManagerOverview';
 import styles from './MgrHomeScreen.module.css';
 
+// Analytics/Reports/Data Check used to live here directly, but a 6th
+// icon squeezed this row enough that "Manager Home" wrapped to two lines
+// on a 375px viewport (caught live) -- moved into the new Insights hub
+// instead, which is a more honest home for them anyway (mirrors
+// index.html's own Insights Hub, which exists specifically to
+// consolidate these same destinations).
 const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[] = [
   { key: 'leaderboard', label: 'Leaderboard', icon: 'trophy', path: '/app/mgr/leaderboard' },
   { key: 'commission', label: 'Commission', icon: 'wallet', path: '/app/mgr/commission' },
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/app/mgr/settings' },
-  { key: 'analytics', label: 'Analytics', icon: 'chartLine', path: '/app/mgr/analytics' },
-  { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
-  { key: 'datacheck', label: 'Data Check', icon: 'check', path: '/app/data-check' },
+  { key: 'insights', label: 'Insights', icon: 'chartLine', path: '/app/mgr/insights' },
 ];
 
 // A deliberate progression, not arbitrary category colors -- cool/faint
@@ -92,7 +96,13 @@ export function MgrHomeScreen() {
             <div className={styles.heroTop}>
               <div>
                 <div className={styles.heroLabel}>Collected this month</div>
-                <div className={styles.heroValue}>{ghs(data.collected)}</div>
+                {/* Real bug fixed here: this used to bind to data.collected,
+                    an ALL-TIME sum of every lead's amtPaid (correctly used
+                    below for Outstanding) -- not a month-scoped figure at
+                    all, despite the label. trend's last element is the
+                    actual current-month value (same one trendDelta below
+                    already compares against). */}
+                <div className={styles.heroValue}>{ghs(trend[trend.length - 1] ?? 0)}</div>
               </div>
               {trendDelta !== null && trendDelta !== 0 && (
                 <span className={`${styles.heroDelta} ${trendDelta > 0 ? styles.heroDeltaUp : styles.heroDeltaDown}`}>

@@ -50,6 +50,7 @@ import { SiteVisitAuthScreen } from '../features/site-visit-auth/screens/SiteVis
 import { DataCheckScreen } from '../features/data-check/screens/DataCheckScreen';
 import { AnalyticsScreen } from '../features/analytics/screens/AnalyticsScreen';
 import { StaffReportScreen } from '../features/staff-report/screens/StaffReportScreen';
+import { InsightsHubScreen } from '../features/manager/screens/InsightsHubScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -145,6 +146,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <AnalyticsScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/insights',
+        element: (
+          <RequireRole role="manager">
+            <InsightsHubScreen />
           </RequireRole>
         ),
       },
