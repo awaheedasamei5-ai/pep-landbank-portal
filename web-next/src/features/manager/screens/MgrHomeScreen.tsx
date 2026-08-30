@@ -13,6 +13,7 @@ const HEAD_LINKS: { key: string; label: string; icon: IconName; path: string }[]
   { key: 'commission', label: 'Commission', icon: 'wallet', path: '/app/mgr/commission' },
   { key: 'settings', label: 'Settings', icon: 'settings', path: '/app/mgr/settings' },
   { key: 'reports', label: 'Reports', icon: 'barChart', path: '/app/mgr/reports' },
+  { key: 'datacheck', label: 'Data Check', icon: 'check', path: '/app/data-check' },
 ];
 
 // A deliberate progression, not arbitrary category colors -- cool/faint

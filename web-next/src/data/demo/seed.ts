@@ -73,6 +73,14 @@ export function seedDemo(): DemoDb {
   const payments: DemoDb['payments'] = [
     { id: uid(), leadId: leads[0].id, agentKey: AGENT_KEY, amount: 24000, date: isoPlusDays(t, -18), clientName: leads[0].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
     { id: uid(), leadId: leads[1].id, agentKey: AGENT_KEY, amount: 60000, date: isoPlusDays(t, -3), clientName: leads[1].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    // Backing approved payments for the other agents' leads' amtPaid --
+    // without these, Data Check's Ledger mismatch scan (amtPaid vs sum of
+    // approved payments) would flag all three as false positives just
+    // because this hand-crafted seed set amtPaid directly on the lead
+    // instead of building it up through payment rows.
+    { id: uid(), leadId: leads[3].id, agentKey: 'emmanuel', amount: 45000, date: isoPlusDays(t, -20), clientName: leads[3].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[4].id, agentKey: 'emmanuel', amount: 120000, date: isoPlusDays(t, -55), clientName: leads[4].name, paymentMethod: 'Stanbic Bank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[5].id, agentKey: 'elizabeth', amount: 16000, date: isoPlusDays(t, -7), clientName: leads[5].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
     // A pending payment 'elias' logged on emmanuel's lead -- exercises the
     // full real workflow in demo mode: shows in Pending Approvals for the
     // manager persona, and does NOT show up in leads[3]'s amtPaid above
@@ -105,8 +113,12 @@ export function seedDemo(): DemoDb {
     commissionFullCap: 1000,
     commissionHalfCap: 500,
     commissionPoolPerPlot: 500,
-    fullPrice: 48000,
-    halfPrice: 24000,
+    // Matches what most seeded leads were actually priced at (60000/48000)
+    // -- keeps Data Check's Price mismatch check meaningful (Abena Boateng
+    // at 36000 stays a genuine, isolated old-promo flag) instead of every
+    // populated lead flagging against a stale reference price.
+    fullPrice: 60000,
+    halfPrice: 48000,
     fullDiscount: 0,
     halfDiscount: 0,
     int3: 750,
@@ -669,7 +681,7 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 35,
+    version: 37,
     leads,
     payments,
     scheduleItems,

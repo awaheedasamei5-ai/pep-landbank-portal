@@ -47,6 +47,7 @@ import { AllocationRequestsScreen } from '../features/allocations/screens/Alloca
 import { BannerTrackingScreen } from '../features/banners/screens/BannerTrackingScreen';
 import { ExpensesScreen } from '../features/expenses/screens/ExpensesScreen';
 import { SiteVisitAuthScreen } from '../features/site-visit-auth/screens/SiteVisitAuthScreen';
+import { DataCheckScreen } from '../features/data-check/screens/DataCheckScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -192,6 +193,7 @@ export const router = createBrowserRouter([
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },
+      { path: 'data-check', element: <DataCheckScreen /> },
     ],
   },
 ]);

@@ -89,6 +89,19 @@ export function MoreScreen() {
         )}
       </div>
 
+      <div className={styles.sectionTitle}>Tools</div>
+      <div className={styles.card}>
+        <div className={styles.row}>
+          <div>
+            <div className={styles.rowLabel}>Data Check</div>
+            <div className={styles.rowSub}>Scan {profile.role === 'manager' ? 'the company' : 'your pipeline'} for pricing/payment inconsistencies</div>
+          </div>
+          <button type="button" className={styles.actionBtn} onClick={() => navigate('/app/data-check')}>
+            Open
+          </button>
+        </div>
+      </div>
+
       <div className={styles.sectionTitle}>E-signature</div>
       <div className={styles.card}>
         <div className={styles.sigRow}>

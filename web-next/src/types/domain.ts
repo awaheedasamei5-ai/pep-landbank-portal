@@ -67,6 +67,12 @@ export interface Lead {
   siteVisit?: string | null;
   docStage?: string | null;
   docStageUpdatedAt?: string | null;
+  // Real columns `version`/`last_modified_at`/`last_modified_by` (confirmed
+  // live on production; staging was missing them plus the trigger that
+  // populates them until this pass -- ported both, see Data Check's
+  // comment). Auto-maintained server-side by `leads_track_modification`,
+  // a BEFORE UPDATE trigger -- never set directly from the client.
+  lastModifiedAt?: string | null;
 }
 
 // Every field the Pipeline Update accordion's "Save update" can change in

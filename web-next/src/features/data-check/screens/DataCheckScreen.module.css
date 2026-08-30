@@ -1,0 +1,62 @@
+.wrap { padding: 20px 16px 90px; }
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 10px; font-size: 13px; }
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.title { font-size: 21px; margin: 2px 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 18px; font-size: 13.5px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+.kpiRow { display: flex; gap: 10px; margin-bottom: 18px; }
+
+.kpi {
+  flex: 1;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.kpiVal { font-family: var(--font-mono); font-weight: 800; font-size: 20px; }
+.kpiValWarn { color: var(--c-warn); }
+.kpiLbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--c-muted); font-weight: 700; margin-top: 3px; }
+
+.list { display: flex; flex-direction: column; gap: 8px; }
+
+.row {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 13px 15px;
+  box-shadow: var(--shadow);
+}
+.rowTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.name { font-weight: 700; font-size: 14px; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
+.detail { font-size: 12.5px; color: var(--c-text); margin-top: 9px; }
+
+.tag { font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
+.tagDanger { background: var(--c-danger-bg); color: var(--c-danger); }
+.tagWarn { background: var(--c-warn-bg); color: var(--c-warn); }
+
+.actionsRow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+.fixBtn {
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dismissBtn {
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: none;
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}

@@ -144,6 +144,12 @@ export interface DataSource {
     // manager/allowlist staff (same reasoning that let useLead's fix work
     // without a live-side query change either).
     listForLead(leadId: string): Promise<Payment[]>;
+    // Unfiltered on purpose, same reasoning as listForLead above -- real
+    // payments_sel RLS already scopes correctly per caller (own agent_key,
+    // or every row for manager/elias/emmanuel/elizabeth). Used by Data
+    // Check's company-wide "ledger mismatch" scan, which needs every
+    // payment to sum per-lead, not one lead or one agent at a time.
+    listAll(): Promise<Payment[]>;
     listPending(): Promise<Payment[]>;
     create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
     approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
@@ -606,6 +612,9 @@ function createDemoDataSource(): DataSource {
       },
       async listForLead(leadId) {
         return demoLoad().payments.filter((p) => p.leadId === leadId);
+      },
+      async listAll() {
+        return demoLoad().payments;
       },
       async listPending() {
         return demoLoad().payments.filter((p) => p.status === 'pending');
@@ -1827,6 +1836,11 @@ function createLiveDataSource(): DataSource {
       },
       async listForLead(leadId) {
         const { data, error } = await requireClient().from('payments').select('*').eq('lead_id', leadId);
+        if (error) throw error;
+        return (data ?? []).map(mapPaymentRow);
+      },
+      async listAll() {
+        const { data, error } = await requireClient().from('payments').select('*');
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },

@@ -37,6 +37,7 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     siteVisit: (r.site_visit as string) ?? null,
     docStage: (r.doc_stage as string) ?? null,
     docStageUpdatedAt: (r.doc_stage_updated_at as string) ?? null,
+    lastModifiedAt: (r.last_modified_at as string) ?? null,
   };
 }
 
