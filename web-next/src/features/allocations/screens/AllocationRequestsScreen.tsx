@@ -5,6 +5,15 @@ import { useAllocationRequests, useAllocatePlot, useCanAllocatePlots, useCreateA
 import type { AllocationRequest, Lead } from '../../../types/domain';
 import styles from './AllocationRequestsScreen.module.css';
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 // Real table `allocation_requests`, same manager/elias/emmanuel gate as
 // Plot Inventory (confirmed live). The real trigger for one of these
 // existing is server-side (approve_payment RPC creates one once a lead
@@ -37,8 +46,8 @@ export function AllocationRequestsScreen() {
 
       {showForm && <NewRequestForm onDone={() => setShowForm(false)} />}
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No allocation requests yet.</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
+      {requests && requests.length === 0 && !isLoading && <p className={styles.emptyMsg}>No allocation requests yet.</p>}
 
       <div className={styles.list}>
         {sorted.map((r, i) => (
@@ -85,7 +94,7 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
               ))}
             </div>
           )}
-          {q && matches.length === 0 && <p style={{ color: 'var(--muted)', fontSize: 12.5, marginTop: 10 }}>No clients match &quot;{query}&quot;.</p>}
+          {q && matches.length === 0 && <p className={styles.noMatch}>No clients match &quot;{query}&quot;.</p>}
         </>
       ) : (
         <>
@@ -113,7 +122,8 @@ function RequestRow({ request, canAllocate }: { request: AllocationRequest; canA
   return (
     <div className={styles.row}>
       <div className={styles.rowTop}>
-        <div>
+        <span className={styles.avatar}>{initials(request.clientName)}</span>
+        <div className={styles.rowMain}>
           <div className={styles.name}>{request.clientName}</div>
           <div className={styles.meta}>
             {request.agentName} &middot; {request.percentPaid ?? 0}% paid ({ghs(request.amtPaid ?? 0)} of {ghs(request.grandTotal ?? 0)})
