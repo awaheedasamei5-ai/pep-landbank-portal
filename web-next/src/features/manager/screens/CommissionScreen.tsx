@@ -4,6 +4,15 @@ import { useCompanyCommission } from '../../commission/hooks/useCompanyCommissio
 import { useDownloadCommissionReport } from '../../commission/hooks/useCommissionReportPdf';
 import styles from './CommissionScreen.module.css';
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 // Port of mgrCommission() (index.html:25479-25501) -- defaults to LAST
 // month (the one actually payable, on the 15th of the current month), not
 // the current still-accruing one. CSV export out of scope for this pass.
@@ -58,7 +67,8 @@ export function CommissionScreen() {
             {sortedRows.map((r) => (
               <div className={styles.row} key={r.key}>
                 <div className={styles.rowTop}>
-                  <div>
+                  <span className={styles.avatar}>{initials(r.name)}</span>
+                  <div className={styles.rowMain}>
                     <div className={styles.name}>{r.name}</div>
                     <div className={styles.meta}>
                       {r.newPlotsThisMonth} new plot{r.newPlotsThisMonth === 1 ? '' : 's'} this month
