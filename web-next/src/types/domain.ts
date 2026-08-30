@@ -1053,3 +1053,43 @@ export interface NewBanner {
   status: BannerStatus;
   notes?: string;
 }
+
+// Real table `fund_requests` -- the request/approval half of Office Desk's
+// Expenses feature (confirmed live). Deliberately the ONLY half built this
+// pass: index.html's own comment on apiInsertExpense/apiLoadDailyBalances
+// explains why -- "Expense logging, daily cash balances and receipts move
+// real money, so that side of this app stays live-only... Fund Requests is
+// just a request/approval workflow (no cash actually changes hands until
+// someone logs real spend against it later), so it's safe to demo" -- and
+// web-next has no live-mode sign-in wired yet (a real, separate, already-
+// documented gap), so a live-only feature couldn't be verified through the
+// app's own UI at all right now. Log Expense/Daily Balance/Categories/
+// Recurring/Dashboard tabs, and "Log actual spend" against an approved
+// request, are all out of scope here for that reason, not an oversight.
+export type FundRequestType = 'budget' | 'specific';
+export type FundRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface FundRequest {
+  id: string;
+  type: FundRequestType;
+  amount: number;
+  purpose: string;
+  requestedBy: string;
+  requestedByName: string;
+  status: FundRequestStatus;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  receiptData: string | null;
+  receiptName: string | null;
+  createdAt: string;
+}
+
+export interface NewFundRequest {
+  type: FundRequestType;
+  amount: number;
+  purpose: string;
+  receiptData?: string | null;
+  receiptName?: string | null;
+}

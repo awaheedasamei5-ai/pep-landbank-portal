@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -83,6 +83,25 @@ export function mapStreakRow(r: Record<string, unknown>): StreakRow {
     staffKey: r.staff_key as string,
     date: r.streak_date as string,
     dayMet: !!r.streak_day_met,
+  };
+}
+
+export function mapFundRequestRow(r: Record<string, unknown>): FundRequest {
+  return {
+    id: r.id as string,
+    type: (r.req_type as FundRequest['type']) ?? 'budget',
+    amount: Number(r.amount ?? 0),
+    purpose: (r.purpose as string) ?? '',
+    requestedBy: r.requested_by as string,
+    requestedByName: (r.requested_by_name as string) ?? '',
+    status: (r.status as FundRequest['status']) ?? 'pending',
+    decidedBy: (r.decided_by as string) ?? null,
+    decidedByName: (r.decided_by_name as string) ?? null,
+    decidedAt: (r.decided_at as string) ?? null,
+    decisionNote: (r.decision_note as string) ?? null,
+    receiptData: (r.receipt_data as string) ?? null,
+    receiptName: (r.receipt_name as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

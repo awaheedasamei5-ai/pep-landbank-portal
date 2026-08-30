@@ -45,6 +45,7 @@ import { TechnicalQuotationScreen } from '../features/quotation/screens/Technica
 import { LeaveScreen } from '../features/leave/screens/LeaveScreen';
 import { AllocationRequestsScreen } from '../features/allocations/screens/AllocationRequestsScreen';
 import { BannerTrackingScreen } from '../features/banners/screens/BannerTrackingScreen';
+import { ExpensesScreen } from '../features/expenses/screens/ExpensesScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -185,6 +186,7 @@ export const router = createBrowserRouter([
       { path: 'office/leave', element: <LeaveScreen /> },
       { path: 'office/notes', element: <NotesScreen /> },
       { path: 'office/banners', element: <BannerTrackingScreen /> },
+      { path: 'office/expenses', element: <ExpensesScreen /> },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },

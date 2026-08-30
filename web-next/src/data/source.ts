@@ -1,4 +1,4 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -8,6 +8,7 @@ import {
   mapAllocationRequestRow,
   mapAttendanceRow,
   mapBannerRow,
+  mapFundRequestRow,
   mapChatMessageRow,
   mapComplaintRow,
   mapContractRequestRow,
@@ -336,6 +337,18 @@ export interface DataSource {
     list(): Promise<Banner[]>;
     create(createdBy: string, createdByName: string, input: NewBanner): Promise<Banner>;
     updateStatus(id: string, status: BannerStatus): Promise<Banner>;
+  };
+  // Real table `fund_requests` -- see the FundRequest type's comment in
+  // types/domain.ts for the real reason this is only ever the request/
+  // approval half of Expenses, not the whole feature. Real RLS
+  // (fundreq_ins/sel/upd, confirmed live) technically lets any signed-in
+  // staff request their own funds, but the real UI gate (canManageExpenses
+  // in index.html) is stricter -- manager or 'elias' only, matching
+  // Log Payment's own precedent of a UI gate tighter than RLS allows.
+  fundRequests: {
+    list(viewerKey: string, viewerRole: string): Promise<FundRequest[]>;
+    create(requestedBy: string, requestedByName: string, input: NewFundRequest): Promise<FundRequest>;
+    decide(id: string, approve: boolean, decidedBy: string, decidedByName: string, note?: string): Promise<FundRequest>;
   };
   // Real column `leads.banner_id` -- how many real leads are attributed to
   // each banner, keyed by banner id. Confirmed live: `leads` RLS already
@@ -1106,6 +1119,44 @@ function createDemoDataSource(): DataSource {
         if (l.bannerId) counts[l.bannerId] = (counts[l.bannerId] ?? 0) + 1;
       });
       return counts;
+    },
+    fundRequests: {
+      async list(viewerKey, viewerRole) {
+        const db = demoLoad();
+        const canSeeAll = viewerRole === 'manager';
+        return db.fundRequests.filter((f) => canSeeAll || f.requestedBy === viewerKey);
+      },
+      async create(requestedBy, requestedByName, input) {
+        const fr: FundRequest = {
+          id: crypto.randomUUID(),
+          type: input.type,
+          amount: input.amount,
+          purpose: input.purpose,
+          requestedBy,
+          requestedByName,
+          status: 'pending',
+          decidedBy: null,
+          decidedByName: null,
+          decidedAt: null,
+          decisionNote: null,
+          receiptData: input.receiptData ?? null,
+          receiptName: input.receiptName ?? null,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.fundRequests = [fr, ...db.fundRequests];
+        demoSave();
+        return fr;
+      },
+      async decide(id, approve, decidedBy, decidedByName, note) {
+        const db = demoLoad();
+        const index = db.fundRequests.findIndex((f) => f.id === id);
+        if (index === -1) throw new Error('Fund request not found');
+        const updated: FundRequest = { ...db.fundRequests[index], status: approve ? 'approved' : 'rejected', decidedBy, decidedByName, decidedAt: new Date().toISOString(), decisionNote: note ?? null };
+        db.fundRequests = [...db.fundRequests.slice(0, index), updated, ...db.fundRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
     },
     allocationRequests: {
       async list(viewerKey, viewerRole) {
@@ -2212,6 +2263,34 @@ function createLiveDataSource(): DataSource {
         if (r.banner_id) counts[r.banner_id] = (counts[r.banner_id] ?? 0) + 1;
       });
       return counts;
+    },
+    fundRequests: {
+      async list() {
+        // Unfiltered on purpose -- fundreq_sel RLS already scopes this
+        // correctly per real session (own rows, or every row for manager).
+        const { data, error } = await requireClient().from('fund_requests').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapFundRequestRow);
+      },
+      async create(requestedBy, requestedByName, input) {
+        const { data, error } = await requireClient()
+          .from('fund_requests')
+          .insert({ req_type: input.type, amount: input.amount, purpose: input.purpose, requested_by: requestedBy, requested_by_name: requestedByName, receipt_data: input.receiptData ?? null, receipt_name: input.receiptName ?? null })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapFundRequestRow(data);
+      },
+      async decide(id, approve, decidedBy, decidedByName, note) {
+        const { data, error } = await requireClient()
+          .from('fund_requests')
+          .update({ status: approve ? 'approved' : 'rejected', decided_by: decidedBy, decided_by_name: decidedByName, decided_at: new Date().toISOString(), decision_note: note ?? null })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapFundRequestRow(data);
+      },
     },
     allocationRequests: {
       async list() {

@@ -633,8 +633,43 @@ export function seedDemo(): DemoDb {
     { id: uid(), name: 'Weija Junction', area: 'Weija', status: 'location_only', lat: null, lng: null, image: null, notes: 'Scouted, banner not printed yet', createdBy: 'elizabeth', createdByName: 'Elizabeth', createdAt: isoPlusDays(t, -5), updatedAt: isoPlusDays(t, -5) },
   ];
 
+  const fundRequests: DemoDb['fundRequests'] = [
+    {
+      id: uid(),
+      type: 'specific',
+      amount: 850,
+      purpose: 'Fuel + transport for the Royal Palm Enclave site visits this week',
+      requestedBy: AGENT_KEY,
+      requestedByName: 'Elias Torgbuivi',
+      status: 'pending',
+      decidedBy: null,
+      decidedByName: null,
+      decidedAt: null,
+      decisionNote: null,
+      receiptData: null,
+      receiptName: null,
+      createdAt: isoPlusDays(t, -1),
+    },
+    {
+      id: uid(),
+      type: 'budget',
+      amount: 2000,
+      purpose: 'Monthly office supplies + printing budget',
+      requestedBy: 'emmanuel',
+      requestedByName: 'Emmanuel',
+      status: 'approved',
+      decidedBy: 'management',
+      decidedByName: 'Management',
+      decidedAt: isoPlusDays(t, -4),
+      decisionNote: null,
+      receiptData: null,
+      receiptName: null,
+      createdAt: isoPlusDays(t, -6),
+    },
+  ];
+
   return {
-    version: 32,
+    version: 34,
     leads,
     payments,
     scheduleItems,
@@ -660,6 +695,7 @@ export function seedDemo(): DemoDb {
     contracts,
     receiptShareLinks: [],
     banners,
+    fundRequests,
   };
 }
 
