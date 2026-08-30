@@ -54,3 +54,36 @@
   color: var(--c-text);
   border: 1px solid var(--c-line);
 }
+
+.modeLink {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semi);
+  cursor: pointer;
+  text-align: center;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: var(--fs-md);
+  margin-bottom: var(--sp-3);
+}
+
+.error {
+  color: var(--c-danger);
+  font-size: var(--fs-sm);
+  margin: -6px 0 var(--sp-3);
+  text-align: left;
+}
