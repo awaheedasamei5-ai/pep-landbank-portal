@@ -5,7 +5,7 @@
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--ink), var(--green));
+  background: linear-gradient(135deg, var(--c-ink), var(--c-accent));
   color: #fff;
   display: flex;
   align-items: center;
@@ -127,3 +127,93 @@
 .historyAmtMuted { color: var(--c-muted); }
 
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; }
+
+.sectionHeadRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.sectionHeadRow .sectionTitle { margin: 0; }
+
+.editLink {
+  background: none;
+  border: none;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.readRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--c-line);
+  font-size: 13.5px;
+}
+.readRow:last-child { border-bottom: none; }
+.readLabel { color: var(--c-muted); font-size: 12px; font-weight: 600; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid2 .field { margin-bottom: 12px; }
+
+.calcBox {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-paper);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 4px 0 10px;
+}
+.calcLabel { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.calcValue { font-family: var(--font-mono); font-weight: 800; font-size: 15px; margin-top: 2px; }
+
+.errorMsg { font-size: 12.5px; color: var(--c-danger); margin: 4px 0 8px; }
+.warnText { color: var(--c-warn); font-weight: 700; }
+.helpText { font-size: 12.5px; color: var(--c-muted); margin: 4px 0; }
+
+.actionsRow { display: flex; gap: 8px; margin-top: 12px; }
+
+.cancelBtn {
+  padding: 11px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: none;
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dangerBtn {
+  padding: 11px 14px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.dangerOptions { display: flex; flex-direction: column; gap: 8px; }
+
+.dangerOptionBtn {
+  text-align: left;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.dangerOptionTitle { font-weight: 700; font-size: 13.5px; }

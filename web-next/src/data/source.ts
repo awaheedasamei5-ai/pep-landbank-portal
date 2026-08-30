@@ -1,4 +1,4 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -96,6 +96,22 @@ export interface DataSource {
     listCompany(): Promise<Lead[]>;
     assign(id: string, agentKey: string): Promise<Lead>;
     setSource(id: string, source: string): Promise<Lead>;
+    // Plain leads_upd RLS UPDATE (confirmed live, no WITH CHECK) -- matches
+    // index.html's apiUpdateLead()/saveUpdate() exactly, including that a
+    // NEW payment amount is never part of this patch (that goes through
+    // payments.create() separately, so a pending payment can never leak
+    // into the lead's running balance before Management approves it).
+    update(id: string, patch: LeadUpdate): Promise<Lead>;
+    // Real update_lead_doc_stage RPC (SECURITY DEFINER, manager/elias/
+    // emmanuel/elizabeth only, confirmed live) -- stage must be one of the
+    // 6 real DOC_STAGE keys or the RPC itself rejects it.
+    updateDocStage(id: string, stage: string): Promise<void>;
+    // Plain leads_del RLS DELETE (own lead or manager, confirmed live).
+    // Vacating an allocated plot on a refund/opt-out delete is the
+    // caller's responsibility (see PipelineDetailScreen's danger zone) --
+    // mirrors index.html's deleteLeadConfirm(), which does the same
+    // plot-vacate-then-delete sequence client-side, not inside one RPC.
+    remove(id: string): Promise<void>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
   // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
@@ -515,6 +531,28 @@ function createDemoDataSource(): DataSource {
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
         return updated;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        const updated: Lead = { ...db.leads[index], ...patch };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async updateDocStage(id, stage) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        const updated: Lead = { ...db.leads[index], docStage: stage, docStageUpdatedAt: new Date().toISOString() };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.leads = db.leads.filter((l) => l.id !== id);
+        demoSave();
       },
     },
     payments: {
@@ -1572,6 +1610,37 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('leads').update({ lead_source: source }).eq('id', id).select().single();
         if (error) throw error;
         return mapLeadRow(data);
+      },
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if ('name' in patch) dbPatch.name = patch.name;
+        if ('contact' in patch) dbPatch.contact = patch.contact;
+        if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
+        if ('noPlots' in patch) dbPatch.no_plots = patch.noPlots;
+        if ('unitPrice' in patch) dbPatch.unit_price = patch.unitPrice;
+        if ('discount' in patch) dbPatch.discount = patch.discount;
+        if ('netTotal' in patch) dbPatch.net_total = patch.netTotal;
+        if ('grandTotal' in patch) dbPatch.grand_total = patch.grandTotal;
+        if ('paymentPlan' in patch) dbPatch.payment_plan = patch.paymentPlan;
+        if ('amtPaid' in patch) dbPatch.amt_paid = patch.amtPaid;
+        if ('stage' in patch) dbPatch.stage = patch.stage;
+        if ('nextAction' in patch) dbPatch.next_action = patch.nextAction;
+        if ('notes' in patch) dbPatch.notes = patch.notes;
+        if ('tags' in patch) dbPatch.tags = patch.tags;
+        if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
+        if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
+        if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
+        const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
+      async updateDocStage(id, stage) {
+        const { error } = await requireClient().rpc('update_lead_doc_stage', { p_lead_id: id, p_stage: stage });
+        if (error) throw error;
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('leads').delete().eq('id', id);
+        if (error) throw error;
       },
     },
     payments: {

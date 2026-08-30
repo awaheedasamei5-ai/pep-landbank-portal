@@ -62,6 +62,35 @@ export interface Lead {
   netTotal?: number | null;
   depositTarget?: number | null;
   kyc?: LeadKyc | null;
+  nextAction?: string | null;
+  tags?: string | null;
+  siteVisit?: string | null;
+  docStage?: string | null;
+  docStageUpdatedAt?: string | null;
+}
+
+// Every field the Pipeline Update accordion's "Save update" can change in
+// one request, mirroring index.html's saveUpdate()/apiUpdateLead() patch
+// shape exactly (index.html:3552-3591) -- a plain leads_upd RLS UPDATE, not
+// an RPC (confirmed live: no WITH CHECK restricts these columns for the
+// owning agent/manager/elias).
+export interface LeadUpdate {
+  name?: string;
+  contact?: string;
+  plotType?: PlotType;
+  noPlots?: number;
+  unitPrice?: number;
+  discount?: number;
+  netTotal?: number;
+  grandTotal?: number;
+  paymentPlan?: PaymentPlan;
+  amtPaid?: number;
+  stage?: Stage;
+  nextAction?: string;
+  notes?: string;
+  tags?: string;
+  siteVisit?: string;
+  depositTarget?: number;
 }
 
 export interface LeadKyc {

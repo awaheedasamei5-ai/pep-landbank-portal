@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import type { LeadUpdate } from '../../../types/domain';
 
 // Real bug found while testing the payment-receipt feature: leads.get()
 // is agent-scoped (both demo and live), so a manager opening a lead from
@@ -26,6 +27,48 @@ export function useLead(id: string) {
         return all.find((l) => l.id === id);
       }
       return ds.leads.get(agentKey, id);
+    },
+  });
+}
+
+// Real gate on the accompanying "Documentation & allocation" accordion
+// section (canViewClientDatabase() in index.html) -- manager or elias/
+// emmanuel/elizabeth only, same allowlist update_lead_doc_stage's RPC
+// itself enforces server-side.
+export function useCanViewDocStage(): boolean {
+  const profile = useSessionStore((s) => s.profile);
+  return !!profile && (profile.role === 'manager' || ['elias', 'emmanuel', 'elizabeth'].includes(profile.key));
+}
+
+export function useUpdateLead() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: LeadUpdate }) => getDataSource(demoMode).leads.update(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+}
+
+export function useUpdateLeadDocStage() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, stage }: { id: string; stage: string }) => getDataSource(demoMode).leads.updateDocStage(id, stage),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['lead'] }),
+  });
+}
+
+export function useDeleteLead() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).leads.remove(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
     },
   });
 }

@@ -32,6 +32,11 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     netTotal: r.net_total != null ? Number(r.net_total) : null,
     depositTarget: r.deposit_target != null ? Number(r.deposit_target) : null,
     kyc: (r.kyc as Lead['kyc']) ?? null,
+    nextAction: (r.next_action as string) ?? null,
+    tags: (r.tags as string) ?? null,
+    siteVisit: (r.site_visit as string) ?? null,
+    docStage: (r.doc_stage as string) ?? null,
+    docStageUpdatedAt: (r.doc_stage_updated_at as string) ?? null,
   };
 }
 
