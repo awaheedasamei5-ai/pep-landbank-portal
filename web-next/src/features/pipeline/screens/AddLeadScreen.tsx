@@ -102,7 +102,7 @@ export function AddLeadScreen() {
           <label className={styles.label}>Notes</label>
           <input className={styles.input} placeholder="Context, preferences, history…" {...register('notes')} />
         </div>
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>Grand total: {ghs(grandTotal)}</p>
+        <p className={styles.grandTotal}>Grand total: {ghs(grandTotal)}</p>
         <div className={styles.actions}>
           <button type="button" className={styles.cancel} onClick={() => navigate('/app/sales/pipeline')}>
             Cancel

@@ -83,7 +83,7 @@ export function AddEnquiryScreen() {
               </label>
             ))}
           </div>
-          <input className={styles.input} style={{ marginTop: 8 }} placeholder="Other (optional)" {...register('otherType')} />
+          <input className={`${styles.input} ${styles.otherInput}`} placeholder="Other (optional)" {...register('otherType')} />
         </div>
 
         <div className={styles.grid2}>
