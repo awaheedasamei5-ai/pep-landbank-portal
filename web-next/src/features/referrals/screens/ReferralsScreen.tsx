@@ -2,6 +2,15 @@ import { useNavigate } from 'react-router';
 import { useReferrals } from '../hooks/useReferrals';
 import styles from './ReferralsScreen.module.css';
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 // Deliberately no "mark cleared"/payout action anywhere on this screen --
 // see the Referral type's comment in types/domain.ts for the real, still-
 // live RLS gap this is working around (a raw UPDATE can bypass the one
@@ -22,10 +31,11 @@ export function ReferralsScreen() {
         </button>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {referrals?.map((r) => (
         <div className={styles.row} key={r.id}>
-          <div>
+          <span className={styles.avatar}>{initials(r.referredName)}</span>
+          <div className={styles.rowMain}>
             <div className={styles.name}>
               {r.referrerName}
               <span className={styles.arrow}>→</span>
@@ -42,7 +52,7 @@ export function ReferralsScreen() {
           </div>
         </div>
       ))}
-      {referrals && referrals.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No referrals recorded yet.</p>}
+      {referrals && referrals.length === 0 && !isLoading && <p className={styles.emptyMsg}>No referrals recorded yet.</p>}
     </div>
   );
 }

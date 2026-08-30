@@ -8,10 +8,11 @@
   margin-bottom: 20px;
 }
 .title { font-size: 22px; margin: 0; }
-.sub { color: var(--muted); margin: 4px 0 0; font-size: 13.5px; }
+.sub { color: var(--c-muted); margin: 4px 0 0; font-size: 13.5px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
 
 .addBtn {
-  background: var(--green);
+  background: var(--c-accent);
   color: #fff;
   border: none;
   border-radius: var(--r-pill);
@@ -25,19 +26,34 @@
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 14px 16px;
   margin-bottom: 10px;
   box-shadow: var(--shadow);
 }
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #FDBA74, #EA580C);
+}
+
+.rowMain { flex: 1; min-width: 0; }
 .name { font-weight: 700; font-size: 14px; }
-.meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.arrow { color: var(--muted); font-size: 11px; margin: 0 4px; }
-.right { text-align: right; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
+.arrow { color: var(--c-muted); font-size: 11px; margin: 0 4px; }
+.right { text-align: right; flex-shrink: 0; }
 
 .status {
   display: inline-block;
@@ -46,6 +62,6 @@
   font-size: 10.5px;
   font-weight: 700;
 }
-.statusPending { background: rgb(184 121 30 / 12%); color: var(--warn); }
-.statusCleared { background: rgb(22 163 74 / 12%); color: var(--ok); }
-.points { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.statusPending { background: var(--c-warn-bg); color: var(--c-warn); }
+.statusCleared { background: var(--c-success-bg); color: var(--c-success); }
+.points { font-family: var(--font-mono); font-size: 11px; color: var(--c-muted); margin-top: 4px; }
