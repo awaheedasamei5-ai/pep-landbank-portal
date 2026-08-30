@@ -4,21 +4,23 @@ import { exportCSV } from '../../../shared/lib/csv';
 import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useAllLeadsReport, useAllEnquiriesReport, useAllComplaintsReport, useAllSiteVisitsReport } from '../hooks/useReports';
 import { useTeamRoster } from '../hooks/useTeamRoster';
+import { useDownloadCompanyReport } from '../hooks/useCompanyReportExcel';
 import type { Lead } from '../../../types/domain';
 import styles from './ReportsScreen.module.css';
 
 // Port of mgrReports()'s "Individual sheets" CSV section + client search
-// (index.html:19967-20055) -- live figures, exported on demand, nothing
-// pre-generated. The styled .xlsx workbook exports (ExcelJS templates,
-// Company Report, Master Pipeline, per-agent downloads) are a much larger
-// undertaking deliberately out of scope for this first cut -- CSV covers
-// the same underlying data without that dependency.
+// (index.html:19967-20055), plus the styled Company Report .xlsx workbook
+// (downloadCompanyExcel(), index.html:20524-20623). The Master Pipeline /
+// per-agent .xlsx exports are a separate, much larger undertaking (they
+// load and write into your actual uploaded pipeline-template.xlsx,
+// preserving its live formula columns) -- still out of scope here.
 export function ReportsScreen() {
   const { data: leads, isLoading: leadsLoading } = useAllLeadsReport();
   const { data: enquiries } = useAllEnquiriesReport();
   const { data: complaints } = useAllComplaintsReport();
   const { data: siteVisits } = useAllSiteVisitsReport();
   const { data: roster } = useTeamRoster();
+  const downloadCompanyReport = useDownloadCompanyReport();
   const [query, setQuery] = useState('');
 
   const nameFor = (agentKey: string) => roster?.find((r) => r.key === agentKey)?.name ?? agentKey;
@@ -177,20 +179,30 @@ export function ReportsScreen() {
         />
       </div>
 
-      <p className={styles.footnote}>Excel workbook exports (styled company report, master pipeline template) aren&apos;t built yet.</p>
+      <div className={styles.sectitle}>Full workbook</div>
+      <div className={styles.card}>
+        <ReportRow
+          label="Company Report (.xlsx)"
+          hint="Summary, agent performance, leads, enquiries, feedback & site visits — one styled workbook"
+          onDownload={() => downloadCompanyReport.mutate()}
+          downloading={downloadCompanyReport.isPending}
+          buttonLabel="⬇ .xlsx"
+        />
+      </div>
+      <p className={styles.footnote}>The Master Pipeline workbook (your real uploaded template, live formulas preserved) isn&apos;t built yet.</p>
     </div>
   );
 }
 
-function ReportRow({ label, hint, onDownload }: { label: string; hint: string; onDownload: () => void }) {
+function ReportRow({ label, hint, onDownload, downloading, buttonLabel = '⬇ CSV' }: { label: string; hint: string; onDownload: () => void; downloading?: boolean; buttonLabel?: string }) {
   return (
     <div className={styles.row}>
       <div>
         <div className={styles.rowLabel}>{label}</div>
         <div className={styles.rowHint}>{hint}</div>
       </div>
-      <button type="button" className={styles.dlChip} onClick={onDownload}>
-        ⬇ CSV
+      <button type="button" className={styles.dlChip} onClick={onDownload} disabled={downloading}>
+        {downloading ? '…' : buttonLabel}
       </button>
     </div>
   );
