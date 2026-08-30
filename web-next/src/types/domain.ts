@@ -800,6 +800,15 @@ export interface ChatMessage {
   kind: string | null;
   refType: string | null;
   refId: string | null;
+  // Real column `reply_to_id` (self-referencing FK, `on delete set null`)
+  // -- a genuinely new capability for this app, not a port (neither
+  // production nor staging had it before this pass; the real UI pattern
+  // itself is ported from real chat-app research, see
+  // web-next-dribbble-figma-research memory). Resolved client-side by
+  // looking the id up in the same already-loaded thread array -- no
+  // extra query needed, the whole point of only ever offering "reply"
+  // on a message already visible on screen.
+  replyToId: string | null;
 }
 
 export interface ChatConversation {

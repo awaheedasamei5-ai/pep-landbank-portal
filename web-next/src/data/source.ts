@@ -475,7 +475,7 @@ export interface DataSource {
   chat: {
     listConversations(myKey: string): Promise<ChatConversation[]>;
     listThread(myKey: string, otherKey: string): Promise<ChatMessage[]>;
-    send(myKey: string, myName: string, otherKey: string, body: string): Promise<ChatMessage>;
+    send(myKey: string, myName: string, otherKey: string, body: string, replyToId?: string | null): Promise<ChatMessage>;
     markThreadRead(myKey: string, otherKey: string): Promise<void>;
   };
 }
@@ -1564,7 +1564,7 @@ function createDemoDataSource(): DataSource {
           .chatMessages.filter((m) => !m.kind && ((m.senderKey === myKey && m.recipientKey === otherKey) || (m.senderKey === otherKey && m.recipientKey === myKey)))
           .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
       },
-      async send(myKey, myName, otherKey, body) {
+      async send(myKey, myName, otherKey, body, replyToId) {
         const db = demoLoad();
         const message: ChatMessage = {
           id: Math.random().toString(36).slice(2, 10),
@@ -1580,6 +1580,7 @@ function createDemoDataSource(): DataSource {
           kind: null,
           refType: null,
           refId: null,
+          replyToId: replyToId ?? null,
         };
         db.chatMessages.push(message);
         demoSave();
@@ -2627,10 +2628,10 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapChatMessageRow);
       },
-      async send(myKey, myName, otherKey, body) {
+      async send(myKey, myName, otherKey, body, replyToId) {
         const { data, error } = await requireClient()
           .from('messages')
-          .insert({ sender_key: myKey, sender_name: myName, recipient_key: otherKey, body })
+          .insert({ sender_key: myKey, sender_name: myName, recipient_key: otherKey, body, reply_to_id: replyToId ?? null })
           .select()
           .single();
         if (error) throw error;

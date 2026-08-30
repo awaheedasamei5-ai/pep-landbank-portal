@@ -589,6 +589,7 @@ export function seedDemo(): DemoDb {
       kind: null,
       refType: null,
       refId: null,
+      replyToId: null,
     },
     {
       id: uid(),
@@ -604,6 +605,7 @@ export function seedDemo(): DemoDb {
       kind: null,
       refType: null,
       refId: null,
+      replyToId: null,
     },
     {
       id: uid(),
@@ -619,6 +621,7 @@ export function seedDemo(): DemoDb {
       kind: null,
       refType: null,
       refId: null,
+      replyToId: null,
     },
   ];
 
@@ -631,7 +634,7 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 31,
+    version: 32,
     leads,
     payments,
     scheduleItems,

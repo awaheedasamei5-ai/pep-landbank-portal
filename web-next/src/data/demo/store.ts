@@ -51,7 +51,7 @@ export interface DemoDb {
   banners: Banner[];
 }
 
-const DEMO_VERSION = 31;
+const DEMO_VERSION = 32;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

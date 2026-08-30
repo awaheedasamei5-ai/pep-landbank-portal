@@ -36,7 +36,7 @@ export function useSendMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ otherKey, body }: { otherKey: string; body: string }) => getDataSource(demoMode).chat.send(myKey, myName, otherKey, body),
+    mutationFn: ({ otherKey, body, replyToId }: { otherKey: string; body: string; replyToId?: string | null }) => getDataSource(demoMode).chat.send(myKey, myName, otherKey, body, replyToId),
     onSuccess: (_data, { otherKey }) => {
       queryClient.invalidateQueries({ queryKey: ['chatThread', myKey, otherKey] });
       queryClient.invalidateQueries({ queryKey: ['chatConversations', myKey] });

@@ -304,6 +304,7 @@ export function mapChatMessageRow(r: Record<string, unknown>): ChatMessage {
     kind: (r.kind as string) ?? null,
     refType: (r.ref_type as string) ?? null,
     refId: (r.ref_id as string) ?? null,
+    replyToId: (r.reply_to_id as string) ?? null,
   };
 }
 
