@@ -2,11 +2,21 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
+import { Icon } from '../../../shared/ui/Icon';
 import { StageBadge } from '../../pipeline/components/StageBadge';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useClients } from '../hooks/useClients';
 import { clientKey } from '../lib/groupClients';
 import styles from './ClientDatabaseScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 // A directory view over the same `leads` data "My pipeline" shows, grouped
 // by client instead of by deal -- there is no separate clients table in
@@ -52,7 +62,10 @@ export function ClientDatabaseScreen() {
         <PipePill tone="green" value={ghs((clients ?? []).reduce((s, c) => s + c.totalValue, 0))} label="Total value" isMoney />
       </PipePillStrip>
 
-      <div className={styles.searchWrap} style={{ marginTop: 16 }}>
+      <div className={styles.searchWrap}>
+        <span className={styles.searchIcon}>
+          <Icon name="search" size={16} />
+        </span>
         <input
           className={styles.search}
           type="text"
@@ -62,7 +75,7 @@ export function ClientDatabaseScreen() {
         />
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {filtered.map((c) => {
         const key = clientKey(c.name, c.contact);
         const isOpen = expanded.has(key);
@@ -70,7 +83,8 @@ export function ClientDatabaseScreen() {
         return (
           <div className={styles.card} key={key}>
             <button type="button" className={styles.row} onClick={() => toggle(key)} aria-expanded={isOpen}>
-              <div>
+              <span className={styles.avatar}>{initials(c.name)}</span>
+              <div className={styles.rowMain}>
                 <div className={styles.name}>{c.name}</div>
                 <div className={styles.meta}>{c.contact}</div>
               </div>
@@ -80,6 +94,9 @@ export function ClientDatabaseScreen() {
                   {c.leadCount} {c.leadCount === 1 ? 'deal' : 'deals'}
                 </div>
               </div>
+              <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
+                <Icon name="chevronDown" size={16} />
+              </span>
             </button>
             {isOpen && (
               <div className={styles.leads}>
@@ -94,7 +111,7 @@ export function ClientDatabaseScreen() {
                     </div>
                     <div className={styles.right}>
                       <div className={styles.leadValue}>{ghs(l.grandTotal)}</div>
-                      <div style={{ marginTop: 4 }}>
+                      <div className={styles.leadStageWrap}>
                         <StageBadge stage={l.stage} />
                       </div>
                     </div>
@@ -105,8 +122,8 @@ export function ClientDatabaseScreen() {
           </div>
         );
       })}
-      {clients && clients.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No clients yet — add a lead to your pipeline first.</p>}
-      {clients && clients.length > 0 && filtered.length === 0 && <p style={{ color: 'var(--muted)' }}>No clients match "{query}".</p>}
+      {clients && clients.length === 0 && !isLoading && <p className={styles.emptyMsg}>No clients yet — add a lead to your pipeline first.</p>}
+      {clients && clients.length > 0 && filtered.length === 0 && <p className={styles.emptyMsg}>No clients match &quot;{query}&quot;.</p>}
     </div>
   );
 }

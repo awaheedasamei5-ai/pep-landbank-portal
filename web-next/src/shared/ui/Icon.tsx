@@ -36,7 +36,9 @@ export type IconName =
   | 'trophy'
   | 'wallet'
   | 'settings'
-  | 'barChart';
+  | 'barChart'
+  | 'chevronDown'
+  | 'search';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -236,6 +238,15 @@ function IconInner({ name }: { name: IconName }) {
           <rect x={6.5} y={13} width={3} height={6} rx={0.8} fill="currentColor" />
           <rect x={11} y={9} width={3} height={10} rx={0.8} fill="currentColor" />
           <rect x={15.5} y={6} width={3} height={13} rx={0.8} fill="currentColor" />
+        </>
+      );
+    case 'chevronDown':
+      return <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+    case 'search':
+      return (
+        <>
+          <circle cx={11} cy={11} r={6.5} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M20 20l-4.3-4.3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
         </>
       );
   }
