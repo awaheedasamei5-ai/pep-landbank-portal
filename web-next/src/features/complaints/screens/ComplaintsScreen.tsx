@@ -1,8 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Icon } from '../../../shared/ui/Icon';
 import type { Complaint } from '../../../types/domain';
 import { useComplaints, useUpdateComplaint } from '../hooks/useComplaints';
 import styles from './ComplaintsScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 function statusClass(status: string): string {
   return status === 'Resolved' ? styles.statusResolved : styles.statusOpen;
@@ -35,29 +45,36 @@ export function ComplaintsScreen() {
         </button>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
-      {complaints?.map((c) => (
-        <div className={styles.card} key={c.id}>
-          <button type="button" className={styles.row} onClick={() => setExpanded(expanded === c.id ? null : c.id)} aria-expanded={expanded === c.id}>
-            <div>
-              <div className={styles.name}>{c.name}</div>
-              <div className={styles.meta}>
-                {c.contact}
-                {c.category ? ` · ${c.category}` : ''}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
+      {complaints?.map((c) => {
+        const isOpen = expanded === c.id;
+        return (
+          <div className={styles.card} key={c.id}>
+            <button type="button" className={styles.row} onClick={() => setExpanded(isOpen ? null : c.id)} aria-expanded={isOpen}>
+              <span className={styles.avatar}>{initials(c.name ?? '') || '?'}</span>
+              <div className={styles.rowMain}>
+                <div className={styles.name}>{c.name}</div>
+                <div className={styles.meta}>
+                  {c.contact}
+                  {c.category ? ` · ${c.category}` : ''}
+                </div>
               </div>
-            </div>
-            <div className={styles.right}>
-              <div className={styles.date}>{c.createdAt.slice(0, 10)}</div>
-              <div className={styles.pillRow}>
-                {c.priority && <span className={`${styles.pill} ${priorityClass(c.priority)}`}>{c.priority}</span>}
-                <span className={`${styles.pill} ${statusClass(c.status)}`}>{c.status}</span>
+              <div className={styles.right}>
+                <div className={styles.date}>{c.createdAt.slice(0, 10)}</div>
+                <div className={styles.pillRow}>
+                  {c.priority && <span className={`${styles.pill} ${priorityClass(c.priority)}`}>{c.priority}</span>}
+                  <span className={`${styles.pill} ${statusClass(c.status)}`}>{c.status}</span>
+                </div>
               </div>
-            </div>
-          </button>
-          {expanded === c.id && <ComplaintDetail complaint={c} />}
-        </div>
-      ))}
-      {complaints && complaints.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No complaints logged yet.</p>}
+              <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
+                <Icon name="chevronDown" size={15} />
+              </span>
+            </button>
+            {isOpen && <ComplaintDetail complaint={c} />}
+          </div>
+        );
+      })}
+      {complaints && complaints.length === 0 && !isLoading && <p className={styles.emptyMsg}>No complaints logged yet.</p>}
     </div>
   );
 }
