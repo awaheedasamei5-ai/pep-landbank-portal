@@ -1,9 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { Icon } from '../../../shared/ui/Icon';
 import type { SiteVisit } from '../../../types/domain';
 import { useSiteVisits } from '../hooks/useSiteVisits';
 import styles from './SiteVisitsScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 const DETAIL_FIELDS: { key: keyof SiteVisit; label: string }[] = [
   { key: 'purpose', label: 'Purpose' },
@@ -47,7 +57,7 @@ export function SiteVisitsScreen() {
           <h1 className={styles.title}>Site visits</h1>
           <p className={styles.sub}>{visits?.length ?? 0} logged</p>
           {hasSveAccess && (
-            <button type="button" onClick={() => navigate('/app/sales/sitevisits/experience')} style={{ background: 'none', border: 'none', color: 'var(--gold)', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: 0, marginTop: 4 }}>
+            <button type="button" className={styles.experienceLink} onClick={() => navigate('/app/sales/sitevisits/experience')}>
               Experience feedback →
             </button>
           )}
@@ -57,14 +67,15 @@ export function SiteVisitsScreen() {
         </button>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {visits?.map((v) => {
         const isOpen = expanded.has(v.id);
         const details = DETAIL_FIELDS.filter((f) => v[f.key]);
         return (
           <div className={styles.card} key={v.id}>
             <button type="button" className={styles.row} onClick={() => toggle(v.id)} aria-expanded={isOpen}>
-              <div>
+              <span className={styles.avatar}>{initials(v.name)}</span>
+              <div className={styles.rowMain}>
                 <div className={styles.name}>{v.name}</div>
                 <div className={styles.meta}>
                   {v.contact} · {v.site}
@@ -74,10 +85,13 @@ export function SiteVisitsScreen() {
               <div className={styles.right}>
                 <div className={styles.date}>{v.visitDate}</div>
                 {v.visitTime && <div className={styles.time}>{v.visitTime}</div>}
-                <div style={{ marginTop: 4 }}>
+                <div className={styles.statusWrap}>
                   <span className={styles.status}>{v.status}</span>
                 </div>
               </div>
+              <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
+                <Icon name="chevronDown" size={15} />
+              </span>
             </button>
             {isOpen && details.length > 0 && (
               <div className={styles.detail}>
@@ -92,7 +106,7 @@ export function SiteVisitsScreen() {
           </div>
         );
       })}
-      {visits && visits.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No site visits logged yet.</p>}
+      {visits && visits.length === 0 && !isLoading && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
     </div>
   );
 }
