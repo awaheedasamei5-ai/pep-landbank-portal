@@ -10,16 +10,16 @@ export function OfficeDeskScreen() {
   const canLogPayments = useCanLogPayments();
 
   const items: TileItem[] = [
-    { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', glyph: '🗂️', onOpen: () => navigate('/app/office/myday') },
-    { key: 'memo', label: 'Memorandum', sub: 'Internal correspondence', color: 'teal', glyph: '📝', onOpen: () => navigate('/app/office/memos') },
-    { key: 'attendance', label: 'Attendance', sub: 'Sign in & out for the day', color: 'blue', glyph: '✅', onOpen: () => navigate('/app/office/attendance') },
+    { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
+    { key: 'memo', label: 'Memorandum', sub: 'Internal correspondence', color: 'teal', icon: 'note', onOpen: () => navigate('/app/office/memos') },
+    { key: 'attendance', label: 'Attendance', sub: 'Sign in & out for the day', color: 'blue', icon: 'check', onOpen: () => navigate('/app/office/attendance') },
     ...(canLogPayments
-      ? [{ key: 'payment', label: 'Log Payment', sub: 'Record & approve client payments', color: 'orange', glyph: '💳', onOpen: () => navigate('/app/office/payments') } satisfies TileItem]
+      ? [{ key: 'payment', label: 'Log Payment', sub: 'Record & approve client payments', color: 'orange', icon: 'card', onOpen: () => navigate('/app/office/payments') } satisfies TileItem]
       : []),
-    { key: 'contracts', label: 'Contract requests', sub: 'Request & track contracts of sale', color: 'red', glyph: '📄', onOpen: () => navigate('/app/office/contracts') },
-    { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', glyph: '🧮', onOpen: () => navigate('/app/office/quotation') },
-    { key: 'leave', label: 'Leave', sub: 'Request & approve staff leave', color: 'blue', glyph: '🌴', onOpen: () => navigate('/app/office/leave') },
-    { key: 'notes', label: 'Notes', sub: 'Quick private notes, just for you', color: 'purple', glyph: '🗒️', onOpen: () => navigate('/app/office/notes') },
+    { key: 'contracts', label: 'Contract requests', sub: 'Request & track contracts of sale', color: 'red', icon: 'document', onOpen: () => navigate('/app/office/contracts') },
+    { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', icon: 'calculator', onOpen: () => navigate('/app/office/quotation') },
+    { key: 'leave', label: 'Leave', sub: 'Request & approve staff leave', color: 'blue', icon: 'palm', onOpen: () => navigate('/app/office/leave') },
+    { key: 'notes', label: 'Notes', sub: 'Quick private notes, just for you', color: 'purple', icon: 'notepad', onOpen: () => navigate('/app/office/notes') },
   ];
 
   return (

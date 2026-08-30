@@ -14,20 +14,20 @@ export function SalesDeskScreen() {
   const canManageCompanyLeads = useCanManageCompanyLeads();
 
   const items: TileItem[] = [
-    { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', glyph: '📈', onOpen: () => navigate('/app/sales/pipeline') },
-    { key: 'clients', label: 'Client Database', sub: 'Search & browse by client', color: 'blue', glyph: '🗂️', onOpen: () => navigate('/app/sales/clients') },
+    { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/sales/pipeline') },
+    { key: 'clients', label: 'Client Database', sub: 'Search & browse by client', color: 'blue', icon: 'folder', onOpen: () => navigate('/app/sales/clients') },
     ...(hasPlotAccess
-      ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', glyph: '🗺️', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
+      ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', icon: 'map', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]
       : []),
     ...(hasPlotAccess
-      ? [{ key: 'allocations', label: 'Allocations', sub: 'Request & confirm plot allocations', color: 'orange', glyph: '📐', onOpen: () => navigate('/app/sales/allocations') } satisfies TileItem]
+      ? [{ key: 'allocations', label: 'Allocations', sub: 'Request & confirm plot allocations', color: 'orange', icon: 'ruler', onOpen: () => navigate('/app/sales/allocations') } satisfies TileItem]
       : []),
-    { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', glyph: '📍', onOpen: () => navigate('/app/sales/sitevisits') },
-    { key: 'enquiry', label: 'Client enquiry', sub: 'Log what prospects ask about', color: 'blue', glyph: '❓', onOpen: () => navigate('/app/sales/enquiries') },
-    { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', glyph: '🎁', onOpen: () => navigate('/app/sales/referrals') },
-    { key: 'complaints', label: 'Complaints', sub: 'Log & resolve client issues', color: 'red', glyph: '⚠️', onOpen: () => navigate('/app/sales/complaints') },
+    { key: 'sitevisit', label: 'Site visit', sub: 'Log & review client visits', color: 'teal', icon: 'pin', onOpen: () => navigate('/app/sales/sitevisits') },
+    { key: 'enquiry', label: 'Client enquiry', sub: 'Log what prospects ask about', color: 'blue', icon: 'question', onOpen: () => navigate('/app/sales/enquiries') },
+    { key: 'referrals', label: 'Referrals', sub: 'Track who your clients bring in', color: 'orange', icon: 'gift', onOpen: () => navigate('/app/sales/referrals') },
+    { key: 'complaints', label: 'Complaints', sub: 'Log & resolve client issues', color: 'red', icon: 'warning', onOpen: () => navigate('/app/sales/complaints') },
     ...(canManageCompanyLeads
-      ? [{ key: 'companyleads', label: 'Company Leads', sub: 'Leads shared company-wide, not tied to one agent', color: 'purple', glyph: '🏢', onOpen: () => navigate('/app/sales/company-leads') } satisfies TileItem]
+      ? [{ key: 'companyleads', label: 'Company Leads', sub: 'Leads shared company-wide, not tied to one agent', color: 'purple', icon: 'building', onOpen: () => navigate('/app/sales/company-leads') } satisfies TileItem]
       : []),
   ];
 

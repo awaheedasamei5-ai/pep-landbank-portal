@@ -2,11 +2,37 @@
 // markup copied verbatim (element-for-element, not flattened into a single
 // path string, since several of these mix <rect>/<path>), keyed by a name
 // union so callers get compile-time checking instead of the old runtime
-// `ic[name] || ''` silent-failure fallback. Only the 5 bottom-nav icons are
-// ported for Phase 1; widen this as later phases need more (fic()'s ~40+
-// colored tile glyphs are a separate, larger registry -- not needed yet).
+// `ic[name] || ''` silent-failure fallback. The 5 bottom-nav icons were the
+// Phase 1 cut; the 16 below are new for Phase 11, replacing the raw emoji
+// glyphs TileGrid was using as a stand-in (see that file's own comment) --
+// every path here is drawn from scratch as plain geometry (rects/circles/
+// paths), not copied from any icon library, kept to the same stroke-based
+// visual language as the original 5 (strokeWidth 1.8, round caps/joins,
+// no fill) so the whole set reads as one system.
 
-export type IconName = 'home' | 'briefcase2' | 'desk' | 'chat' | 'more';
+export type IconName =
+  | 'home'
+  | 'briefcase2'
+  | 'desk'
+  | 'chat'
+  | 'more'
+  | 'chartLine'
+  | 'folder'
+  | 'map'
+  | 'ruler'
+  | 'pin'
+  | 'question'
+  | 'gift'
+  | 'warning'
+  | 'building'
+  | 'checklist'
+  | 'note'
+  | 'check'
+  | 'card'
+  | 'document'
+  | 'calculator'
+  | 'palm'
+  | 'notepad';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -35,6 +61,139 @@ function IconInner({ name }: { name: IconName }) {
           <circle cx={12} cy={12} r={2} />
           <circle cx={19} cy={12} r={2} />
         </g>
+      );
+    case 'chartLine':
+      return (
+        <>
+          <path d="M4 19V5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M4 19h16" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M6.5 15l4-4.5 3 2.5L19 6" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M14.5 6H19v4.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'folder':
+      return <path d="M3 7a1 1 0 011-1h5l2 2h9a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />;
+    case 'map':
+      return (
+        <>
+          <path d="M9 4L4 6v14l5-2 6 2 5-2V4l-5 2-6-2z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M9 4v14M15 6v14" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'ruler':
+      return (
+        <>
+          <rect x={3} y={9} width={18} height={7} rx={1.5} transform="rotate(-8 12 12.5)" stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M8 10.3l.7 1.6M12 9.7l.7 1.9M16 9.1l.7 2.1" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'pin':
+      return (
+        <>
+          <path d="M12 21s7-6.4 7-11.5A7 7 0 105 9.5C5 14.6 12 21 12 21z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <circle cx={12} cy={9.5} r={2.4} stroke="currentColor" strokeWidth={1.8} fill="none" />
+        </>
+      );
+    case 'question':
+      return (
+        <>
+          <circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M9.6 9.4a2.5 2.5 0 114.15 1.88c-.7.62-1.75 1.05-1.75 2.22" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <circle cx={12} cy={17} r={0.9} fill="currentColor" />
+        </>
+      );
+    case 'gift':
+      return (
+        <>
+          <rect x={4} y={10} width={16} height={10} rx={1.2} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M3 7h18v3.5H3z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M12 7v13" stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M12 7C10.5 3.5 6 3.5 6 6c0 1.4 2.5 1 6 1zM12 7c1.5-3.5 6-3.5 6-1 0 1.4-2.5 1-6 1z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'warning':
+      return (
+        <>
+          <path d="M12 4.5L21 19H3L12 4.5z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M12 10.2v3.6" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <circle cx={12} cy={16.4} r={0.9} fill="currentColor" />
+        </>
+      );
+    case 'building':
+      return (
+        <>
+          <rect x={5} y={3.5} width={11} height={17} rx={1} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M16 10h3v10.5h-3M8 8h2M11.5 8h2M8 11.5h2M11.5 11.5h2M8 15h2M11.5 15h2" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'checklist':
+      return (
+        <>
+          <rect x={3.5} y={4} width={17} height={16} rx={2} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M7 9l1.4 1.4L10.5 8M7 14.5l1.4 1.4 2.1-2.4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M13.5 9h4M13.5 14.5h4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'note':
+      return (
+        <>
+          <path d="M5 3.5h9.5L19 8v12.5H5z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M14.5 3.5V8H19" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M8 12.5h8M8 16h8" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'check':
+      return (
+        <>
+          <circle cx={12} cy={12} r={9} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M8 12.3l2.6 2.6L16.2 9" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'card':
+      return (
+        <>
+          <rect x={3} y={5.5} width={18} height={13} rx={2} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M3 9.5h18" stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M6.5 14.3h4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'document':
+      return (
+        <>
+          <path d="M6 3.5h8L20 9.5v11H6z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M14 3.5v6h6" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M9 13.5h7M9 17h7" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
+      );
+    case 'calculator':
+      return (
+        <>
+          <rect x={5} y={3} width={14} height={18} rx={2} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M7.5 6.5h9v3.5h-9z" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" fill="none" />
+          <g fill="currentColor">
+            <circle cx={8} cy={14} r={0.9} />
+            <circle cx={12} cy={14} r={0.9} />
+            <circle cx={16} cy={14} r={0.9} />
+            <circle cx={8} cy={17.5} r={0.9} />
+            <circle cx={12} cy={17.5} r={0.9} />
+            <circle cx={16} cy={17.5} r={0.9} />
+          </g>
+        </>
+      );
+    case 'palm':
+      return (
+        <>
+          <path d="M12 21V12" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M12 12c0-3.5-2-6-5.5-6.5C7 9 9 11.5 12 12zM12 12c0-3.5 2-6 5.5-6.5C17 9 15 11.5 12 12zM12 10.5c-.3-3-2.4-4.7-5-5.2C7.5 8.2 9.4 10 12 10.5zM12 10.5c.3-3 2.4-4.7 5-5.2C16.5 8.2 14.6 10 12 10.5z" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'notepad':
+      return (
+        <>
+          <rect x={4.5} y={5} width={15} height={16} rx={1.5} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <path d="M8.5 3.5v3M12 3.5v3M15.5 3.5v3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M8 12h8M8 15.5h8" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" fill="none" />
+        </>
       );
   }
 }

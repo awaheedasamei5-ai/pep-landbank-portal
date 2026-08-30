@@ -11,6 +11,17 @@
   box-shadow: var(--shadow);
 }
 
+.gaugeCard {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 20px 16px 14px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: center;
+}
+
 .statusRow { display: flex; align-items: center; justify-content: space-between; }
 .statusLabel { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .statusTime { font-family: 'IBM Plex Mono', monospace; font-weight: 800; font-size: 20px; margin-top: 4px; }

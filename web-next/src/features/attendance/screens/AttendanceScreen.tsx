@@ -1,11 +1,30 @@
 import { useState } from 'react';
 import { getCurrentPosition } from '../../../shared/lib/geolocation';
 import { useAttendanceHistory, useSignIn, useSignOut, useTodayAttendance } from '../hooks/useAttendance';
+import { SegmentedGauge } from '../../../shared/ui/SegmentedGauge';
+import { today as todayIso } from '../../../shared/lib/format';
 import styles from './AttendanceScreen.module.css';
 
 function fmtTime(iso: string | null): string {
   if (!iso) return '--:--';
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Same 09:00 on-time cutoff the Leaderboard's onTimeDays already assumes
+// (source.ts's manager-overview aggregation) -- no shift-start-time config
+// exists anywhere in the schema (see this file's own top comment), so every
+// "on time" reading in this app deliberately uses the same hardcoded
+// convention rather than each screen inventing its own.
+const ON_TIME_CUTOFF = '09:00';
+
+function weekdaysElapsedThisMonth(): number {
+  const now = new Date(todayIso() + 'T00:00:00');
+  let count = 0;
+  for (let d = 1; d <= now.getDate(); d++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), d).getDay();
+    if (day !== 0 && day !== 6) count++;
+  }
+  return count;
 }
 
 // No clock_in()/clock_out() RPC exists on production (confirmed live) --
@@ -17,9 +36,15 @@ function fmtTime(iso: string | null): string {
 // types/domain.ts.
 export function AttendanceScreen() {
   const { data: today, isLoading } = useTodayAttendance();
-  const { data: history } = useAttendanceHistory(14);
+  const { data: history } = useAttendanceHistory(31);
   const signIn = useSignIn();
   const signOut = useSignOut();
+
+  const thisMonth = todayIso().slice(0, 7);
+  const monthHistory = (history ?? []).filter((h) => h.workDate.slice(0, 7) === thisMonth);
+  const daysAttended = monthHistory.filter((h) => h.signInAt).length;
+  const onTimeDays = monthHistory.filter((h) => h.signInAt && h.signInAt.slice(11, 16) <= ON_TIME_CUTOFF).length;
+  const workingDaysSoFar = weekdaysElapsedThisMonth();
 
   const [showForm, setShowForm] = useState<'in' | 'out' | null>(null);
   const [offSite, setOffSite] = useState(false);
@@ -54,6 +79,10 @@ export function AttendanceScreen() {
     <div className={styles.wrap}>
       <h1 className={styles.title}>Attendance</h1>
       <p className={styles.sub}>Sign in when you start work, sign out when you're done.</p>
+
+      <div className={styles.gaugeCard}>
+        <SegmentedGauge value={daysAttended} max={Math.max(workingDaysSoFar, daysAttended, 1)} label="days this month" sublabel={`${onTimeDays} on time`} />
+      </div>
 
       <div className={styles.card}>
         {!isLoading && !today && (
