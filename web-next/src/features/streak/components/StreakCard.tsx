@@ -1,13 +1,17 @@
 import type { TodayStreak } from '../hooks/useTodayStreak';
+import { useStreakCoaching } from '../hooks/useStreakCoaching';
 import { StreakWeekRow } from './StreakWeekRow';
 import styles from './StreakCard.module.css';
 
 // Port of streakWidgetHtml() (index.html:10461-10507). Two panes (daily
 // streak / pipeline status) crossfade forever via pure CSS -- see the
-// moodFade keyframe in StreakCard.module.css -- no JS timer.
+// moodFade keyframe in StreakCard.module.css -- no JS timer. The AI
+// coaching line below is new for V2 -- a real Groq-backed insight, not
+// a port of anything in the old app.
 export function StreakCard({ streak }: { streak: TodayStreak }) {
   const { mood, pet, petMood, weekHistory, risk, riskLabel, streakLen } = streak;
   const severe = petMood.severity === 'severe';
+  const { data: coaching } = useStreakCoaching(streak);
 
   return (
     <div className={styles.card}>
@@ -45,6 +49,12 @@ export function StreakCard({ streak }: { streak: TodayStreak }) {
           <span className={`${styles.riskDot} ${styles[pet.dotClass]}`} />
           {risk.daysLeft} day{risk.daysLeft === 1 ? '' : 's'} left this month · pipeline {pet.label.toLowerCase()}
         </div>
+        {coaching && (
+          <div className={styles.aiRow}>
+            <span className={styles.aiBadge}>AI</span>
+            <span>{coaching}</span>
+          </div>
+        )}
       </div>
     </div>
   );

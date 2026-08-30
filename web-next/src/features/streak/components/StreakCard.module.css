@@ -158,6 +158,37 @@
 .warn { background: #FBBF24; }
 .dgr { background: #F87171; }
 
+/* AI coaching line -- sits below .riskRow, entirely outside the mood
+   crossfade layers above (no shared animation/z-index), specifically so
+   it can never interact with the fragile .bgB animation-delay rule below.
+   Renders nothing while loading or unavailable -- see useStreakCoaching's
+   own comment on why a missing AI layer must never break this card. */
+.aiRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / 14%);
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: .95;
+  animation: aiFadeIn .4s ease-out;
+}
+
+@keyframes aiFadeIn { from { opacity: 0; transform: translateY(2px); } to { opacity: .95; transform: none; } }
+
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 18%);
+  margin-top: 1px;
+}
+
 /* Declared last, deliberately: .bgLayer/.artPane/.moodPane above each set
    the full `animation` shorthand (which resets animation-delay to its
    default), so at equal specificity a `.bgB{animation-delay:...}` rule
