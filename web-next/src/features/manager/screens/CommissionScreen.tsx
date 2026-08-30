@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { ghs, monthLabel, shiftMonth, today } from '../../../shared/lib/format';
 import { useCompanyCommission } from '../../commission/hooks/useCompanyCommission';
+import { useDownloadCommissionReport } from '../../commission/hooks/useCommissionReportPdf';
 import styles from './CommissionScreen.module.css';
 
 // Port of mgrCommission() (index.html:25479-25501) -- defaults to LAST
 // month (the one actually payable, on the 15th of the current month), not
-// the current still-accruing one. CSV/PDF export out of scope for this
-// first cut.
+// the current still-accruing one. CSV export out of scope for this pass.
 export function CommissionScreen() {
   const [monthKey, setMonthKey] = useState(() => shiftMonth(today().slice(0, 7), -1));
   const { data, isLoading } = useCompanyCommission(monthKey);
+  const downloadPdf = useDownloadCommissionReport();
   const payoutDate = `${shiftMonth(monthKey, 1)}-15`;
   const sortedRows = data ? [...data.rows].sort((a, b) => b.total - a.total) : [];
 
@@ -34,6 +35,10 @@ export function CommissionScreen() {
 
       {data && (
         <>
+          <button type="button" className={styles.downloadBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate(data)}>
+            {downloadPdf.isPending ? 'Generating…' : '⬇ Download PDF report'}
+          </button>
+
           <div className={styles.kpis}>
             <div className={styles.kpi}>
               <div className={styles.kpiLabel}>Pool total</div>
