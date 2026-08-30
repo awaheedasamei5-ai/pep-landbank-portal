@@ -425,6 +425,7 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     leaveTotalDays: Number(r.leave_total_days ?? 20),
     workDays: (r.work_days as number[]) ?? [1, 2, 3, 4, 5],
     eidObservingStaff: (r.eid_observing_staff as string[]) ?? [],
+    referralPointsPerReferral: Number(r.referral_points_per_referral ?? 50),
   };
 }
 

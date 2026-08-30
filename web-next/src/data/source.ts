@@ -185,8 +185,25 @@ export interface DataSource {
   // scoping the real RLS policy applies live: visible only if
   // referrer_lead_id points at one of the agent's own leads.
   referrals: {
-    listForAgent(agentKey: string): Promise<Referral[]>;
+    // `viewAll` mirrors real RLS (referrals_sel_staff): manager/elias/
+    // emmanuel/elizabeth see every referral regardless of whose lead it's
+    // tied to; a plain agent only ever sees their own. Threaded through
+    // explicitly here so the demo store matches that instead of always
+    // filtering to one agent.
+    listForAgent(agentKey: string, viewAll?: boolean): Promise<Referral[]>;
     create(agentKey: string, input: NewReferral): Promise<Referral>;
+    // Safe to do as a plain UPDATE (referrals_upd_staff RLS has no WITH
+    // CHECK restricting this column) -- the dangerous path is status/
+    // points, which must go exclusively through clear() below.
+    linkLead(id: string, leadId: string): Promise<Referral>;
+    // Calls the real clear_referral(p_referral_id, p_points) RPC
+    // (SECURITY DEFINER, manager/elias/emmanuel/elizabeth only) -- it
+    // re-validates server-side that the linked lead has paid >=30% of
+    // its grand total before setting status='Cleared'. Never call
+    // .update() on status/points_awarded directly; that's the exact
+    // bypass that produced the real bad row this app is working around
+    // (see the Referral type's comment).
+    clear(id: string, points: number): Promise<Referral>;
   };
   // Agent-scoped via agent_key exactly like leads/site_visits (confirmed
   // live) -- straightforward, unlike referrals' lead-linked scoping.
@@ -627,9 +644,29 @@ function createDemoDataSource(): DataSource {
       },
     },
     referrals: {
-      async listForAgent(agentKey) {
+      async listForAgent(agentKey, viewAll) {
         const db = demoLoad();
+        if (viewAll) return db.referrals;
         return db.referrals.filter((r) => r.referrerLeadId && db.leads.some((l) => l.id === r.referrerLeadId && l.agent === agentKey));
+      },
+      async linkLead(id, leadId) {
+        const db = demoLoad();
+        db.referrals = db.referrals.map((r) => (r.id === id ? { ...r, referredLeadId: leadId } : r));
+        demoSave();
+        return db.referrals.find((r) => r.id === id)!;
+      },
+      async clear(id, points) {
+        const db = demoLoad();
+        const referral = db.referrals.find((r) => r.id === id);
+        if (!referral) throw new Error('Referral not found');
+        if (!referral.referredLeadId) throw new Error('Link this referral to a lead before clearing it');
+        const lead = db.leads.find((l) => l.id === referral.referredLeadId);
+        if (!lead) throw new Error('Linked lead not found');
+        const pct = lead.grandTotal > 0 ? lead.amtPaid / lead.grandTotal : 0;
+        if (pct < 0.3) throw new Error(`Linked lead has only paid ${Math.round(pct * 100)}% of the plot price -- needs at least 30% before this referral can be cleared`);
+        db.referrals = db.referrals.map((r) => (r.id === id ? { ...r, status: 'Cleared', pointsAwarded: points, clearedAt: new Date().toISOString() } : r));
+        demoSave();
+        return db.referrals.find((r) => r.id === id)!;
       },
       async create(agentKey, input) {
         const db = demoLoad();
@@ -1492,6 +1529,16 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('referrals').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapReferralRow);
+      },
+      async linkLead(id, leadId) {
+        const { data, error } = await requireClient().from('referrals').update({ referred_lead_id: leadId }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapReferralRow(data);
+      },
+      async clear(id, points) {
+        const { data, error } = await requireClient().rpc('clear_referral', { p_referral_id: id, p_points: points });
+        if (error) throw error;
+        return mapReferralRow(data as Record<string, unknown>);
       },
       async create(agentKey, input) {
         const client = requireClient();

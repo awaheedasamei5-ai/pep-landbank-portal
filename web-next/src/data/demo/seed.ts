@@ -146,6 +146,7 @@ export function seedDemo(): DemoDb {
     leaveTotalDays: 20,
     workDays: [1, 2, 3, 4, 5],
     eidObservingStaff: ['adams'],
+    referralPointsPerReferral: 50,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS

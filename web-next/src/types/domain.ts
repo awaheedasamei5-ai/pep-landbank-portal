@@ -247,6 +247,11 @@ export interface Config {
   leaveTotalDays: number;
   workDays: number[];
   eidObservingStaff: string[];
+  // Real column referral_points_per_referral (confirmed live, current
+  // value 50) -- the default point award clear_referral() expects a
+  // caller to pass explicitly (the RPC takes points as a free parameter,
+  // not a lookup, so a manager can still override it per referral).
+  referralPointsPerReferral: number;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
