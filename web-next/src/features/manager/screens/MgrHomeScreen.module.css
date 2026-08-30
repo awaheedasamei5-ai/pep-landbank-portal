@@ -74,13 +74,41 @@
 .donutCard { display: flex; align-items: center; gap: 18px; }
 
 .legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.legendRow { display: flex; align-items: center; gap: 8px; }
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.legendRow:hover { background: var(--c-paper); }
 .legendDot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .legendLabel { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--c-text); }
 .legendValue { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 700; color: var(--c-muted); }
 
-.agentRow { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
+.agentRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
 .agentRow:last-child { margin-bottom: 0; }
+.agentRow:hover .agentName { color: var(--c-accent); }
 
 .agentAvatar {
   width: 34px;

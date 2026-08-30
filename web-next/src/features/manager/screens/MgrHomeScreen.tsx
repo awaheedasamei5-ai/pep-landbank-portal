@@ -118,11 +118,11 @@ export function MgrHomeScreen() {
             <DonutChart segments={data.stageFunnel.map((s) => ({ key: s.stage, label: s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage), value: s.count, color: STAGE_COLORS[s.stage] ?? '#94A3B8' }))} centerValue={String(data.stageFunnel.reduce((sum, s) => sum + s.count, 0))} centerLabel="leads" />
             <div className={styles.legend}>
               {data.stageFunnel.map((s) => (
-                <div className={styles.legendRow} key={s.stage}>
+                <button type="button" className={styles.legendRow} key={s.stage} onClick={() => navigate(`/app/mgr/pipeline?stage=${encodeURIComponent(s.stage)}`)}>
                   <span className={styles.legendDot} style={{ background: STAGE_COLORS[s.stage] ?? '#94A3B8' }} />
                   <span className={styles.legendLabel}>{s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage)}</span>
                   <span className={styles.legendValue}>{s.count}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -131,7 +131,7 @@ export function MgrHomeScreen() {
           <div className={styles.card}>
             {data.byAgent.length === 0 && <p style={{ color: 'var(--muted)', margin: 0 }}>No leads yet.</p>}
             {data.byAgent.map((a) => (
-              <div className={styles.agentRow} key={a.key}>
+              <button type="button" className={styles.agentRow} key={a.key} onClick={() => navigate(`/app/mgr/pipeline?agent=${encodeURIComponent(a.key)}`)}>
                 <span className={styles.agentAvatar}>{initials(a.name)}</span>
                 <div className={styles.agentMain}>
                   <div className={styles.agentTopLine}>
@@ -142,7 +142,7 @@ export function MgrHomeScreen() {
                     <div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((a.value / maxAgentValue) * 100))}%`, background: 'linear-gradient(90deg, var(--c-accent-soft), var(--c-accent))' }} />
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </>

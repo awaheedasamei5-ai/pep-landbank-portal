@@ -30,6 +30,7 @@ import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen'
 import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
 import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
 import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen';
+import { ManagerPipelineScreen } from '../features/manager/screens/ManagerPipelineScreen';
 import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
@@ -84,6 +85,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <LeaderboardScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/pipeline',
+        element: (
+          <RequireRole role="manager">
+            <ManagerPipelineScreen />
           </RequireRole>
         ),
       },
