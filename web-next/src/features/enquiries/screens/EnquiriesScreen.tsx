@@ -2,6 +2,15 @@ import { useNavigate } from 'react-router';
 import { useEnquiries } from '../hooks/useEnquiries';
 import styles from './EnquiriesScreen.module.css';
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 // Agent-scoped via agent_key exactly like leads/site_visits (confirmed
 // live) -- listForAgent() already enforces it server-side. `types` is
 // split back into chips here purely for display; it's stored as one
@@ -22,11 +31,12 @@ export function EnquiriesScreen() {
         </button>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {enquiries?.map((e) => (
         <div className={styles.card} key={e.id}>
           <div className={styles.top}>
-            <div>
+            <span className={styles.avatar}>{initials(e.name ?? '') || '?'}</span>
+            <div className={styles.topMain}>
               <div className={styles.name}>{e.name}</div>
               <div className={styles.meta}>
                 {e.contact}
@@ -54,7 +64,7 @@ export function EnquiriesScreen() {
           )}
         </div>
       ))}
-      {enquiries && enquiries.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No enquiries logged yet.</p>}
+      {enquiries && enquiries.length === 0 && !isLoading && <p className={styles.emptyMsg}>No enquiries logged yet.</p>}
     </div>
   );
 }
