@@ -1,5 +1,6 @@
 import type { Lead, Payment, SiteVisit, FundRequest } from '../../../types/domain';
 import { today, isoPlusDays, monthKey, shiftMonth } from '../../../shared/lib/format';
+import { linearForecastNextMonth } from '../../../shared/lib/forecast';
 import { computePipelineComposition, type PipelineComposition } from '../../analytics/lib/analyticsLogic';
 
 // Port of index.html's Management Reports data model (index.html:22755-
@@ -151,21 +152,8 @@ export function computeManagementReportData(leads: Lead[], payments: Payment[], 
   const fvals = [2, 1, 0].map((i) => {
     const key = shiftMonth(mk, -i);
     return approved.filter((p) => monthKey(p.date) === key).reduce((s, p) => s + p.amount, 0);
-  });
-  let forecastNextMonth: number | null = null;
-  if (fvals.filter((v) => v > 0).length >= 2) {
-    const n = 3;
-    const xMean = 1;
-    const yMean = fvals.reduce((a, b) => a + b, 0) / n;
-    let numer = 0;
-    let den = 0;
-    [0, 1, 2].forEach((x, i) => {
-      numer += (x - xMean) * (fvals[i] - yMean);
-      den += (x - xMean) ** 2;
-    });
-    const slope = den ? numer / den : 0;
-    forecastNextMonth = Math.max(0, Math.round(yMean + slope * (3 - xMean)));
-  }
+  }) as [number, number, number];
+  const forecastNextMonth = linearForecastNextMonth(fvals);
 
   return {
     newLeadsCount: newLeads.length,

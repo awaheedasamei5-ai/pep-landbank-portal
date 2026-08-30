@@ -63,6 +63,11 @@ export interface Lead {
   depositTarget?: number | null;
   kyc?: LeadKyc | null;
   nextAction?: string | null;
+  // Real column `priority` (confirmed live, text -- 'High'/'Medium'/'Low'
+  // in practice, no enum constraint) -- was a real, unmapped column this
+  // whole build; only surfaced when Smart Insights needed it for its
+  // "high priority, no follow-up planned" nudge.
+  priority?: string | null;
   tags?: string | null;
   siteVisit?: string | null;
   docStage?: string | null;

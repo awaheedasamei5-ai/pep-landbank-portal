@@ -1,0 +1,42 @@
+.wrap { padding: 20px 16px 90px; }
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 10px; font-size: 13px; }
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.title { font-size: 21px; margin: 2px 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 18px; font-size: 13.5px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+.grid { display: flex; flex-direction: column; gap: 10px; }
+
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.card:disabled { cursor: default; }
+
+.iconBubble {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ok .iconBubble { background: var(--c-success-bg); color: var(--c-success); }
+.warn .iconBubble { background: var(--c-warn-bg); color: var(--c-warn); }
+.danger .iconBubble { background: var(--c-danger-bg); color: var(--c-danger); }
+
+.cardBody { flex: 1; min-width: 0; }
+.cardText { font-weight: 700; font-size: 13.5px; }
+.cardDetail { color: var(--c-muted); font-size: 12px; margin-top: 3px; }

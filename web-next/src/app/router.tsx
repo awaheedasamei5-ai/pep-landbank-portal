@@ -51,6 +51,8 @@ import { DataCheckScreen } from '../features/data-check/screens/DataCheckScreen'
 import { AnalyticsScreen } from '../features/analytics/screens/AnalyticsScreen';
 import { StaffReportScreen } from '../features/staff-report/screens/StaffReportScreen';
 import { InsightsHubScreen } from '../features/manager/screens/InsightsHubScreen';
+import { SmartInsightsScreen } from '../features/smart-insights/screens/SmartInsightsScreen';
+import { InsightListScreen } from '../features/smart-insights/screens/InsightListScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
@@ -221,6 +223,8 @@ export const router = createBrowserRouter([
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
       { path: 'more', element: <MoreScreen /> },
       { path: 'data-check', element: <DataCheckScreen /> },
+      { path: 'insights', element: <SmartInsightsScreen /> },
+      { path: 'insights/:kind', element: <InsightListScreen /> },
     ],
   },
 ]);

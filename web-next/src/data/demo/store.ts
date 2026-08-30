@@ -53,7 +53,7 @@ export interface DemoDb {
   weeklyVisitForms: WeeklyVisitForm[];
 }
 
-const DEMO_VERSION = 38;
+const DEMO_VERSION = 39;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

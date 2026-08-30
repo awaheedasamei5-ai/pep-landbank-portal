@@ -93,6 +93,15 @@ export function MoreScreen() {
       <div className={styles.card}>
         <div className={styles.row}>
           <div>
+            <div className={styles.rowLabel}>Smart Insights</div>
+            <div className={styles.rowSub}>Proactive nudges auto-generated from {profile.role === 'manager' ? 'company-wide' : 'your'} live data</div>
+          </div>
+          <button type="button" className={styles.actionBtn} onClick={() => navigate('/app/insights')}>
+            Open
+          </button>
+        </div>
+        <div className={styles.row}>
+          <div>
             <div className={styles.rowLabel}>Data Check</div>
             <div className={styles.rowSub}>Scan {profile.role === 'manager' ? 'the company' : 'your pipeline'} for pricing/payment inconsistencies</div>
           </div>

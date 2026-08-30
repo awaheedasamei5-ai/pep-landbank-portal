@@ -53,7 +53,10 @@ export function seedDemo(): DemoDb {
       },
     },
     { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 60000, grandTotal: 60000, stage: '4' },
-    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1' },
+    // priority:'High' with no nextAction -- gives Smart Insights' "high
+    // priority, no follow-up planned" nudge a real row to surface,
+    // purely additive (priority feeds nothing else app-wide).
+    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1', priority: 'High' },
     // Other agents' leads -- not visible to the logged-in demo agent's own
     // screens (listForAgent still filters correctly), only exist so
     // Manager Home's company-wide overview has real multi-agent shape to
@@ -681,7 +684,7 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 38,
+    version: 39,
     leads,
     payments,
     scheduleItems,

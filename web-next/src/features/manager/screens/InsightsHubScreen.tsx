@@ -37,6 +37,7 @@ export function InsightsHubScreen() {
     { key: 'datacheck', label: 'Data Check', sub: 'Pricing/payment inconsistencies, company-wide', color: 'orange', icon: 'check', onOpen: () => navigate('/app/data-check') },
     { key: 'staffreport', label: 'Staff Report', sub: 'One staff member, or compare everyone', color: 'purple', icon: 'team', onOpen: () => navigate('/app/office/staffreport') },
     { key: 'commission', label: 'Commission', sub: "This month's pool & per-agent breakdown", color: 'teal', icon: 'wallet', onOpen: () => navigate('/app/mgr/commission') },
+    { key: 'insights', label: 'Smart Insights', sub: 'Proactive nudges, auto-generated company-wide', color: 'red', icon: 'warning', onOpen: () => navigate('/app/insights') },
   ];
 
   return (
