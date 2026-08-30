@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useContractRequests, useCreateContractRequest, useCanFulfilContracts, useFulfilContractRequest } from '../hooks/useContractRequests';
 import type { Lead, ContractRequest } from '../../../types/domain';
@@ -7,11 +8,12 @@ import styles from './ContractRequestsScreen.module.css';
 // Real table `contract_requests` (confirmed live): any signed-in staff can
 // request one against their own lead; only Management or the 'elizabeth'
 // key can mark it fulfilled (contract_requests_upd RLS). Actually
-// generating the contract-of-sale PDF (index.html's buildContractOfSalePDF,
-// a long legal document template) is deliberately out of scope here -- this
-// models the real request/fulfil workflow, the part every staff member
-// actually interacts with day to day.
+// generating the contract-of-sale PDF is a separate screen
+// (ContractGeneratorScreen, linked below for staff who can fulfil) -- this
+// screen itself only models the real request/fulfil workflow, the part
+// every staff member actually interacts with day to day.
 export function ContractRequestsScreen() {
+  const navigate = useNavigate();
   const { data: requests, isLoading } = useContractRequests();
   const canFulfil = useCanFulfilContracts();
   const [showForm, setShowForm] = useState(false);
@@ -37,9 +39,16 @@ export function ContractRequestsScreen() {
           <h1 className={styles.title}>Contract requests</h1>
           <p className={styles.sub}>{requests?.length ?? 0} total</p>
         </div>
-        <button type="button" className={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
-          {showForm ? 'Cancel' : '+ Request contract'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {canFulfil && (
+            <button type="button" className={styles.addBtn} style={{ background: 'none', border: '1px solid var(--line)', color: 'var(--muted)' }} onClick={() => navigate('/app/office/contracts/generate')}>
+              📄 Generate
+            </button>
+          )}
+          <button type="button" className={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
+            {showForm ? 'Cancel' : '+ Request contract'}
+          </button>
+        </div>
       </div>
 
       {showForm && <NewRequestForm onDone={() => setShowForm(false)} />}

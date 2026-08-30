@@ -33,6 +33,7 @@ import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen
 import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
+import { ContractGeneratorScreen } from '../features/contracts/screens/ContractGeneratorScreen';
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
 import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
@@ -158,6 +159,10 @@ export const router = createBrowserRouter([
       // itself (useCanLogPayments), matching real payments_ins RLS.
       { path: 'office/payments', element: <LogPaymentScreen /> },
       { path: 'office/contracts', element: <ContractRequestsScreen /> },
+      // Finer manager/'elizabeth'-only restriction lives in
+      // ContractGeneratorScreen itself (useCanFulfilContracts), matching
+      // real contracts_ins RLS.
+      { path: 'office/contracts/generate', element: <ContractGeneratorScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
       { path: 'office/leave', element: <LeaveScreen /> },
       { path: 'office/notes', element: <NotesScreen /> },

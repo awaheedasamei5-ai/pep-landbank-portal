@@ -1,4 +1,4 @@
-import type { Config, PlotType } from '../../../types/domain';
+import type { Config, Lead, PlotType } from '../../../types/domain';
 
 // Ported exactly from index.html's computeInstallmentPlan()/
 // computeQuotationTotals() (index.html:16586-16613) -- Standard Quotation
@@ -14,7 +14,7 @@ export const PLAN_MONTHS: Record<PaymentPlanKey, number> = { 'Full Payment': 0, 
 // must read GHS 14,400 (30% of net) not GHS 15,300 (30% of the GHS 51,000
 // grand). Getting this backwards is the exact bug that test caught once
 // already -- ported as a fixed constant, not re-derived.
-const QUOTE_DEPOSIT_PCT = 0.3;
+export const QUOTE_DEPOSIT_PCT = 0.3;
 
 export type PaymentPlanKey = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
 
@@ -78,4 +78,46 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
   const planMonths = PLAN_MONTHS[plan] ?? 0;
   const ip = computeInstallmentPlan(net, interestTotal, planMonths, QUOTE_DEPOSIT_PCT);
   return { listTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule };
+}
+
+// Ported from index.html's computeLead()+computeLeadQuotationTotals()
+// (index.html:2860-2864, 17077-17095) -- used by the Contract of Sale PDF.
+// Unlike the plain calculator above, a real lead can carry manager-set
+// overrides on top of standard pricing: a custom unitPrice, an explicit
+// discount, a stored netTotal/grandTotal (set once when the deal was
+// negotiated and not necessarily equal to today's config-driven price),
+// and a depositTarget that need not be exactly 30% of net. Every override
+// is respected when present; only a field actually left blank falls back
+// to the same standard-pricing math computeQuotationTotals() uses.
+export function computeLeadQuotationTotals(config: Config, lead: Lead): QuotationTotals {
+  const p = pricingFor(config, lead.plotType);
+  const qty = lead.noPlots;
+  const gross = (lead.unitPrice || p.list) * qty;
+  const disc = lead.discount != null ? lead.discount : p.disc * qty;
+  const computedNet = Math.max(gross - disc, 0);
+  const eq = p.eq * qty;
+  const interestTotal = interestFor(config, lead.paymentPlan) * eq;
+
+  const net = lead.netTotal != null ? lead.netTotal : computedNet;
+  const grand = lead.grandTotal != null ? lead.grandTotal : net + interestTotal;
+  const planMonths = PLAN_MONTHS[lead.paymentPlan] ?? 0;
+  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * QUOTE_DEPOSIT_PCT);
+
+  let deposit = 0;
+  let balance = grand;
+  let monthlyDue = 0;
+  const schedule: InstallmentScheduleRow[] = [];
+  if (planMonths && grand > 0) {
+    deposit = Math.min(Math.max(target, 0), grand);
+    balance = grand - deposit;
+    monthlyDue = Math.round(balance / planMonths);
+    let opening = balance;
+    for (let m = 1; m <= planMonths; m++) {
+      const payment = m === planMonths ? opening : monthlyDue;
+      const closing = Math.max(0, Math.round((opening - payment) * 100) / 100);
+      schedule.push({ month: m, opening, payment, closing });
+      opening = closing;
+    }
+  }
+  return { listTotal: gross, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule };
 }

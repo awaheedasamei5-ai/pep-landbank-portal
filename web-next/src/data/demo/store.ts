@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -24,6 +24,7 @@ export interface DemoDb {
   memoRecipients: MemoRecipient[];
   complaints: Complaint[];
   contractRequests: ContractRequest[];
+  contracts: Contract[];
   leaveRequests: LeaveRequest[];
   allocationRequests: AllocationRequest[];
   notes: Note[];
@@ -39,7 +40,7 @@ export interface DemoDb {
   chatMessages: ChatMessage[];
 }
 
-const DEMO_VERSION = 23;
+const DEMO_VERSION = 24;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

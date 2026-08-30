@@ -18,7 +18,40 @@ export function seedDemo(): DemoDb {
   const t = today();
 
   const leads: DemoDb['leads'] = [
-    { id: uid(), agent: AGENT_KEY, name: 'Mercy Owusu', contact: '0240758072', date: isoPlusDays(t, -18), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 24000, grandTotal: 48000, stage: '2B' },
+    // Has address+kyc filled in (real jsonb shape, confirmed live) so the
+    // Contract of Sale PDF has one lead in demo mode that renders every
+    // KYC field non-blank, not just the underlying-data-optional path.
+    {
+      id: uid(),
+      agent: AGENT_KEY,
+      name: 'Mercy Owusu',
+      contact: '0240758072',
+      date: isoPlusDays(t, -18),
+      plotType: 'Half Plot',
+      noPlots: 1,
+      unitPrice: 48000,
+      paymentPlan: '6 Months',
+      amtPaid: 24000,
+      grandTotal: 48000,
+      stage: '2B',
+      address: 'House No. 12, Spintex Road, Accra',
+      kyc: {
+        nationality: 'Ghanaian',
+        occupation: 'Teacher',
+        dob: '1990-04-12',
+        idType: 'Ghana Card',
+        idNumber: 'GHA-123456789-0',
+        email: 'mercy.owusu@example.com',
+        location: 'Spintex, Accra',
+        contactName: 'Kojo Owusu',
+        contactPhone: '0244112233',
+        contactEmail: 'kojo.owusu@example.com',
+        contactAddress: 'House No. 12, Spintex Road, Accra',
+        contactRelation: 'Brother',
+        landUsage: 'Residential',
+        landUsageDetail: '',
+      },
+    },
     { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 60000, grandTotal: 60000, stage: '4' },
     { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1' },
     // Other agents' leads -- not visible to the logged-in demo agent's own
@@ -94,6 +127,18 @@ export function seedDemo(): DemoDb {
     quoteNotesText:
       'Kindly make all payments by cheque or transfer to Trulander JSF Ltd.\nQuotation and offer is valid for 10 days only.\nKindly ensure all payments are receipted with Trulander receipts.\nBank Details: Ecobank Account No. 1441002259946, Spintex Branch.\nKindly note all payments shall be latest by the 27th of each month.\nWe accept either post-dated cheques or standing orders for credit payment.',
     quoteLandNoteText: 'We offer to deliver all Land Indentures and Certified Site plan within 3 weeks after Full payment',
+    // Real production values (confirmed live) -- both images are null in
+    // production too, so the PDF's own defaults (public/contract-cover.jpg,
+    // public/trulander-wordmark.png) are what actually render there.
+    contractCeoName: 'FRANK ADU PEPRAH',
+    contractPreamble:
+      'i. WHEREAS the Vendor is the beneficial owner of ALL THAT piece or parcel of land, containing an approximate area of {ACRES} acre more or less, situate at Royal Palm Enclave Tsopoli, Accra in the Greater Accra Region of the Republic of Ghana.\n\nii. The Land was leased by the Dorsi Animle Family represented by the its Head and Lawful representative Numo Napoleon Tawiah Animle of the Shai Osudoku District of the Greater Accra with consent and concurrence of principal members of the family (here-in the Head Lessors) to TRULANDER JSF LIMITED represented by its CEO, Mr. FRANK ADU PEPRAH for a total land area measuring approximately 72.30 Acres (29.27 Hect) by a lease an Indenture dated 1st February, 2025 for a term of 80 years with an option to renew for a further term of 45 years with effect from 1st February, 2025.\n\niii. WHEREAS the Head Lessor interest has been duly registered at the Land Title Registry of the Lands Commission with Land Title Certificate No. TD.23221.\n\niv. WHERAS the Deed dated 1st February, 2025 between the Trulander JSF Limited and the Head Lessor has been registered at the Lands Commission as LVDGAST97782872025A and Survey Plotted Plan No. X4114.\n\nv. The Vendor has obtained the consent of the Head lessors to assign his unexpired interest in the lease to the purchaser herein and the Purchaser has requested to purchase the land, subject to the terms and conditions hereinafter stated.',
+    contractDefinitions:
+      '1. DEFINITIONS AND INTERPRETATION\n\n1.1 Definitions\n\nUnless the context otherwise requires, the following words used in this Agreement shall have the meanings ascribed to them in this Clause 1.1.\n\n1.1.1 "Agreement" means this Contract of Sale.\n\n1.1.2 "Encumbrance" means any mortgage, charge, pledge, lien, option, restriction, right of first refusal, third party right or interest, or other encumbrance or security interest of any kind, or another type of arrangement having similar effect, or which diminishes the value of the Property;\n\n1.1.3 "Parties" means the Vendor and the Purchaser, and "Party" means the Vendor or the Purchaser;\n\n1.1.4 "Land" means ALL THAT LAND in consideration of this transaction between the Vendor and the Purchaser.\n\n1.1.5 "Purchaser" and "Vendor" shall have the meaning afore stated\n\n1.2 Interpretation\n\nIn this Agreement, unless the context otherwise requires:\n\n1.2.1 Sections, Clauses, Paragraphs and Headings are for ease of reference only and are not meant to be used in interpreting the provisions of this Agreement.\n\n1.2.2 Reference to "days" means calendar days.\n\n1.2.3 All Schedules form part of this Agreement.',
+    contractTerms:
+      '2. REPRESENTATIONS AND WARRANTIES\n\n2.1 The Vendor makes the following representations and warranties to the Purchaser:\n\n2.1.1 It has the requisite capacity to enter into this Agreement as the beneficial owner of the Property.\n\n2.1.2 The Property is not subject to any encumbrance which has not been disclosed to the Purchaser.\n\n2.1.3 There is no restrictive covenant with regard to the Property as at the date of executing this Agreement which has not been disclosed to the Purchaser.\n\n2.1.4 That it shall give full vacant possession to the Purchasers upon receipt of full payment.\n\n2.1.5 That the Vendor shall execute a Sublease Deed in favor of the Purchaser upon full payment of the Consideration or Purchase Price within 3 weeks.\n\n2.1.6 That the Vendor shall execute a Certified Site-plan in favor of the Vendor. Barcoded site-plan shall be at the expense of the Purchaser.\n\n2.1.7 During the validity period of the Lease, the Vendor guarantees that the Property acquired herein will not be leased, sold or mortgaged to a third party.\n\n2.1.8 The Purchaser shall peaceably enjoy the Property without any unlawful interference by the Vendor or anyone claiming under or through the Vendor upon full payment of consideration and execution of this Agreement.\n\n2.1.9 Vendor shall keep plots allocated in clause (E) for Purchaser except in case of default of payment or breach of this Contract.\n\n2.2 The Purchaser makes the following representations and warranties to the Vendor:\n\n2.2.1 That the Purchaser has inspected the land and have dutifully done his independent due diligence to satisfy himself under the guidance of his Counsel or Solicitor.\n\n2.2.2 That the Purchaser enters into this agreement as a result of his own satisfaction of any representation or warranty either written, oral or implied, made by or on behalf of the Vendor of anything whatsoever subject to the agreement and that this agreement contains the entire agreement between the parties.\n\n2.2.3 That the Purchaser has the funds to pay for the Purchase Price and warrants to make such payments per the payment plan as agreed.\n\n2.2.4 That the Purchaser shall be responsible for the cost of registering his interest in the Land at the Land Commission.\n\n2.2.5 That the Purchaser shall be responsible to undertake all activities necessary to take possession of the land once allocation is done including but not limited to the construction of a 4feet protective or non-trespass wall.\n\n2.2.6 The Purchaser shall develop the Property within 30 months. Development shall be defined at the least as the construction of a protective fence of about 4feets tall within the first 12months. Development is to protect buyers\' interest from any possible encroachment or trespass from neighboring Landowners.\n\n2.2.7 The Purchaser shall retain the option to join the Palm Enclave Property-Owners Association (PEPA) to further develop the key infrastructure within the enclave for their mutual benefit.\n\n2.2.8 The Purchaser shall be responsible for the management of the land to the satisfaction of his right to enjoyment of the land which includes his rights to own, protect, right of usage and occupation. That the right to enjoyment of his Land shall not be to the disadvantage of others.\n\n2.2.9 The Purchaser shall peaceably enjoy the Property without any interference caused by the Vendor or anyone claiming under or through the Vendor.\n\n2.2.10 The Purchaser shall observe and perform the covenants and conditions here-in stated and shall indemnify and keep the Vendor and his successors in title fully indemnified against all actions, proceedings, damages, costs, claims and expenses which may be suffered or incurred by the Purchaser or his successors in title in respect of any future breach or non-observance or non-performance of these covenants and conditions.\n\n2.2.11 The Land location is designated as a Residential Land. Purchaser shall develop Standard residential property of 1-3 floors for the location above. Vendor and Purchaser shall access suitability of above location for any planned mid-to-high rise buildings.\n\n2.2.12 The Purchaser shall pay GHS100 per plot as annual ground rent. This amount shall be due by the 31st December of every calendar year and due for renewal every 10years at not less than 10% of previous rent.\n\n3. PARTIES HEREBY FURTHER AGREE AS FOLLOWS: PAYMENTS, DEFAULTS AND REFUND\n\n3.1 Payments and Defaults\n\na. All payments shall be made to the Companies Bank Accounts and Designated Platforms\n\nb. All Payments shall be receipted in the name and in favor of the Purchaser\n\nc. Payment plans as agreed shall be strictly adhered to.\n\nd. Purchaser undertakes to pay a 5% monthly penal charge on each month of default on the outstanding due payable except otherwise agreed.\n\ne. Monthly penal charges on defaults shall be calculated on compound interest basis.\n\nf. Monthly Penal charges shall automatically apply 5 days after the default date except explicitly expressed and agreed in writing.\n\n3.2 A Refund shall be paid under the following conditions:\n\na. Monthly Penal charges shall automatically apply 5 days after the default date except explicitly expressed and agreed in writing.\n\nb. Where Vendor cancels sales transaction or this contract due to failure of Purchaser to meet payment obligation. Vendor shall issue a Notice of Refund Letter.\n\nc. Formal cancellation notice shall be issued where Purchaser fails to make payments due on two (2) consecutive deadlines. Refund Notice shall be issued Seven (7) days after Notice of Cancellation.\n\nd. Where Purchaser cancels the transaction and this contract and request for a refund of consideration paid due to Personal challenges other-than breach of agreement by Vendor. Purchaser shall issue a Request for Refund Letter 7 days after issue of cancellation notice.\n\ne. Where Purchaser cancels the transaction and this contract due to Vendors breach of this Contract. Refer 3.3 below\n\n3.3 All Refunds shall follow the following process:\n\na. A request or notification of refund shall be made by a formal document written as above\n\nb. Refunds for Installment payments shall be paid in full after 90days subject to clause 3.3(d).\n\nc. Refund for an outright payment shall be made after 60 days.\n\nd. Ten percent (10%) of the land value shall be deducted as administrative charge plus any commission or agency fees.\n\ne. Where refund arises due to breach by Vendor clause 3.3(d) shall not be applicable.\n\n4. GOVERNING LAW\n\nThis Agreement shall be governed by and construed in accordance with the laws of the Republic of Ghana. Any dispute that shall arise in respect of this agreement shall be resolved amicably between the parties within 21 working days from the date of the dispute. Failure by the parties to resolve the dispute, a Party shall reserve the right to seek redress of all matters by Arbitration under the Alternative Dispute Resolutions Act, 2010 (Act 798) of the Republic of Ghana.\n\n5. ENTIRE UNDERSTANDING\n\nThis Contract constitutes the entire agreement and understanding between the parties hereto and supersedes any prior written or oral agreements, representation and warranties between them respecting the subject matter hereof.\n\n6. NOTICES\n\nAny notice to be given by any Party shall be in writing and shall be deemed duly served if delivered personally to the addressee at the registered address of that party set opposite its name below or at such other address as the party to be served may have notified in accordance with the provision of this clause for the purposes of this agreement.',
+    contractCoverImage: null,
+    contractWordmarkImage: null,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -554,7 +599,9 @@ export function seedDemo(): DemoDb {
     },
   ];
 
-  return { version: 23, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages };
+  const contracts: DemoDb['contracts'] = [];
+
+  return { version: 24, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, sveInvites, sveSubmissions, chatMessages, contracts };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

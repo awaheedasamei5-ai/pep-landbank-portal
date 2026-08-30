@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewComplaint, NewContractRequest, NewEnquiry, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { getSupabaseClient } from './client';
@@ -8,6 +8,7 @@ import {
   mapChatMessageRow,
   mapComplaintRow,
   mapContractRequestRow,
+  mapContractRow,
   mapEnquiryRow,
   mapLeaderboardRawRow,
   mapLeadRow,
@@ -186,6 +187,16 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<ContractRequest[]>;
     create(agentKey: string, agentName: string, input: NewContractRequest): Promise<ContractRequest>;
     fulfil(id: string): Promise<ContractRequest>;
+  };
+  // Real table `contracts` (confirmed live) -- metadata-only record of a
+  // generated Contract of Sale PDF (no blob stored, see the Contract
+  // type's own comment). contracts_ins RLS is manager/elizabeth only;
+  // list() is broader (also the lead's own agent, or the elias/emmanuel/
+  // elizabeth allowlist) but this app only calls it from the generator
+  // screen, itself gated to canManageContracts-equivalent staff.
+  contracts: {
+    list(): Promise<Contract[]>;
+    create(leadId: string, clientName: string, agentKey: string, createdBy: string, createdByName: string): Promise<Contract>;
   };
   // Real table `leave_requests` (confirmed live). Unlike contract_requests,
   // SELECT RLS here is genuinely open to any authenticated staff member
@@ -710,6 +721,26 @@ function createDemoDataSource(): DataSource {
         db.contractRequests = [...db.contractRequests.slice(0, index), updated, ...db.contractRequests.slice(index + 1)];
         demoSave();
         return updated;
+      },
+    },
+    contracts: {
+      async list() {
+        return demoLoad().contracts;
+      },
+      async create(leadId, clientName, agentKey, createdBy, createdByName) {
+        const record: Contract = {
+          id: Math.random().toString(36).slice(2, 10),
+          leadId,
+          clientName,
+          agentKey,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.contracts = [record, ...db.contracts];
+        demoSave();
+        return record;
       },
     },
     leaveRequests: {
@@ -1514,6 +1545,22 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('contract_requests').update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapContractRequestRow(data);
+      },
+    },
+    contracts: {
+      async list() {
+        const { data, error } = await requireClient().from('contracts').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractRow);
+      },
+      async create(leadId, clientName, agentKey, createdBy, createdByName) {
+        const { data, error } = await requireClient()
+          .from('contracts')
+          .insert({ lead_id: leadId, client_name: clientName, agent_key: agentKey, created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractRow(data);
       },
     },
     leaveRequests: {

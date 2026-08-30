@@ -42,6 +42,12 @@ export function shiftMonth(mk: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// Ported from index.html's fmtLongDate() (index.html:23587) -- 'YYYY-MM-DD' -> '12 April 1990'.
+export function fmtLongDate(iso: string): string {
+  if (!iso) return '';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 export function daysSince(iso: string): number {
   const then = new Date(iso + 'T00:00:00').getTime();
   const now = new Date(today() + 'T00:00:00').getTime();

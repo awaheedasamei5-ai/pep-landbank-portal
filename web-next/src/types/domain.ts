@@ -43,6 +43,36 @@ export interface Lead {
   // yet), same treatment Complaints gave its unused source/sentiment.
   leadSource?: string | null;
   bannerId?: string | null;
+  // Real columns address/discount/net_total/deposit_target/kyc (all
+  // confirmed live) -- manager-settable overrides on top of the standard
+  // pricing (see computeLeadQuotationTotals in features/contracts/lib/
+  // contractPdf.ts) plus the KYC bundle the Contract of Sale PDF's page 3
+  // (KNOW YOUR CUSTOMER) is built from. Every real row currently has kyc
+  // as either null or an object with every field present but blank --
+  // optional here so a lead with no KYC captured yet renders blank fields
+  // rather than crashing.
+  address?: string | null;
+  discount?: number | null;
+  netTotal?: number | null;
+  depositTarget?: number | null;
+  kyc?: LeadKyc | null;
+}
+
+export interface LeadKyc {
+  nationality?: string;
+  occupation?: string;
+  dob?: string;
+  idType?: string;
+  idNumber?: string;
+  email?: string;
+  location?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactAddress?: string;
+  contactRelation?: string;
+  landUsage?: string;
+  landUsageDetail?: string;
 }
 
 export interface NewLead {
@@ -177,6 +207,19 @@ export interface Config {
   quoteDocTypeText: string;
   quoteNotesText: string;
   quoteLandNoteText: string;
+  // Real columns contract_ceo_name/contract_preamble/contract_definitions/
+  // contract_terms/contract_cover_image/contract_wordmark_image (confirmed
+  // live) -- feed the Contract of Sale PDF (buildContractOfSalePDF).
+  // contractPreamble contains a literal '{ACRES}' placeholder the PDF
+  // substitutes per-lead; the images fall back to the bundled defaults
+  // (public/contract-cover.jpg, public/trulander-wordmark.png) when null,
+  // matching production (both currently null there).
+  contractCeoName: string;
+  contractPreamble: string;
+  contractDefinitions: string;
+  contractTerms: string;
+  contractCoverImage: string | null;
+  contractWordmarkImage: string | null;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
@@ -740,6 +783,24 @@ export interface NewContractRequest {
   leadId: string;
   clientName: string;
   note?: string;
+}
+
+// Real table `contracts` (confirmed live) -- a generated Contract of Sale
+// is recorded here as METADATA ONLY, no PDF blob stored (index.html's own
+// comment on this: buildContractOfSalePDF() regenerates the exact same
+// document fresh from the lead's own data plus the current contract
+// text/images any time it's needed, so a stored copy would just go
+// stale). contracts_ins RLS is manager/elizabeth only, matching
+// canManageContracts() -- gate generation client-side the same way
+// useCanFulfilContracts() already gates contract_requests fulfilment.
+export interface Contract {
+  id: string;
+  leadId: string;
+  clientName: string;
+  agentKey: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
 }
 
 // Real table `leave_requests` (confirmed live). Unusually open SELECT RLS

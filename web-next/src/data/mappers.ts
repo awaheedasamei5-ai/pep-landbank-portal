@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -27,6 +27,11 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     notes: (r.notes as string) ?? undefined,
     leadSource: (r.lead_source as string) ?? null,
     bannerId: (r.banner_id as string) ?? null,
+    address: (r.address as string) ?? null,
+    discount: r.discount != null ? Number(r.discount) : null,
+    netTotal: r.net_total != null ? Number(r.net_total) : null,
+    depositTarget: r.deposit_target != null ? Number(r.deposit_target) : null,
+    kyc: (r.kyc as Lead['kyc']) ?? null,
   };
 }
 
@@ -405,6 +410,24 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     quoteDocTypeText: (r.quote_doc_type_text as string) ?? 'Quotation with Payment Plan Schedule',
     quoteNotesText: (r.quote_notes_text as string) ?? '',
     quoteLandNoteText: (r.quote_land_note_text as string) ?? '',
+    contractCeoName: (r.contract_ceo_name as string) ?? 'FRANK ADU PEPRAH',
+    contractPreamble: (r.contract_preamble as string) ?? '',
+    contractDefinitions: (r.contract_definitions as string) ?? '',
+    contractTerms: (r.contract_terms as string) ?? '',
+    contractCoverImage: (r.contract_cover_image as string) ?? null,
+    contractWordmarkImage: (r.contract_wordmark_image as string) ?? null,
+  };
+}
+
+export function mapContractRow(r: Record<string, unknown>): Contract {
+  return {
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    clientName: r.client_name as string,
+    agentKey: (r.agent_key as string) ?? 'company',
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    createdAt: r.created_at as string,
   };
 }
 
