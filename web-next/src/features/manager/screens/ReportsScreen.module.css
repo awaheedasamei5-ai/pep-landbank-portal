@@ -69,5 +69,6 @@
   cursor: pointer;
   white-space: nowrap;
 }
+.dlChip:disabled { opacity: .6; cursor: default; }
 
 .footnote { color: var(--muted); font-size: 11.5px; margin-top: 16px; text-align: center; }

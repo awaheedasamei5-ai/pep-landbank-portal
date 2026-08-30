@@ -5,15 +5,17 @@ import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useAllLeadsReport, useAllEnquiriesReport, useAllComplaintsReport, useAllSiteVisitsReport } from '../hooks/useReports';
 import { useTeamRoster } from '../hooks/useTeamRoster';
 import { useDownloadCompanyReport } from '../hooks/useCompanyReportExcel';
+import { useDownloadAgentPipeline, useDownloadMasterPipeline, usePipelineAgents } from '../hooks/usePipelineExcel';
 import type { Lead } from '../../../types/domain';
 import styles from './ReportsScreen.module.css';
 
 // Port of mgrReports()'s "Individual sheets" CSV section + client search
-// (index.html:19967-20055), plus the styled Company Report .xlsx workbook
-// (downloadCompanyExcel(), index.html:20524-20623). The Master Pipeline /
-// per-agent .xlsx exports are a separate, much larger undertaking (they
-// load and write into your actual uploaded pipeline-template.xlsx,
-// preserving its live formula columns) -- still out of scope here.
+// (index.html:19967-20055), the styled Company Report .xlsx workbook
+// (downloadCompanyExcel(), index.html:20524-20623), and the Master
+// Pipeline / per-agent pipeline .xlsx exports (index.html:20001-20184) --
+// these write into the real uploaded pipeline-template.xlsx, preserving
+// every one of its live formula columns, not a rebuild. Import (round-
+// tripping an edited workbook back into the app) stays out of scope.
 export function ReportsScreen() {
   const { data: leads, isLoading: leadsLoading } = useAllLeadsReport();
   const { data: enquiries } = useAllEnquiriesReport();
@@ -21,6 +23,10 @@ export function ReportsScreen() {
   const { data: siteVisits } = useAllSiteVisitsReport();
   const { data: roster } = useTeamRoster();
   const downloadCompanyReport = useDownloadCompanyReport();
+  const downloadMasterPipeline = useDownloadMasterPipeline();
+  const downloadAgentPipeline = useDownloadAgentPipeline();
+  const { data: pipelineAgents } = usePipelineAgents();
+  const [selectedAgentKey, setSelectedAgentKey] = useState('');
   const [query, setQuery] = useState('');
 
   const nameFor = (agentKey: string) => roster?.find((r) => r.key === agentKey)?.name ?? agentKey;
@@ -189,7 +195,36 @@ export function ReportsScreen() {
           buttonLabel="⬇ .xlsx"
         />
       </div>
-      <p className={styles.footnote}>The Master Pipeline workbook (your real uploaded template, live formulas preserved) isn&apos;t built yet.</p>
+
+      <div className={styles.sectitle}>Master Pipeline</div>
+      <p className={styles.sub} style={{ margin: '0 0 10px' }}>
+        Every client from every agent, combined into the exact same pipeline template &mdash; same columns, same colours, same formulas, sorted A&ndash;Z.
+      </p>
+      <div className={styles.card}>
+        <ReportRow label="All agents, one workbook" hint={leadsLoading ? 'Loading…' : `${leads?.length ?? 0} clients`} onDownload={() => downloadMasterPipeline.mutate()} downloading={downloadMasterPipeline.isPending} buttonLabel="⬇ .xlsx" />
+      </div>
+
+      <div className={styles.sectitle}>Just one agent</div>
+      <div className={styles.card}>
+        <select className={styles.search} value={selectedAgentKey || pipelineAgents?.[0]?.key || ''} onChange={(e) => setSelectedAgentKey(e.target.value)}>
+          {pipelineAgents?.map((a) => (
+            <option key={a.key} value={a.key}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+        <ReportRow
+          label="Same template, just filtered"
+          hint="Pick an agent above to download only their clients"
+          onDownload={() => {
+            const key = selectedAgentKey || pipelineAgents?.[0]?.key;
+            const agent = pipelineAgents?.find((a) => a.key === key);
+            if (agent) downloadAgentPipeline.mutate({ agentKey: agent.key, agentName: agent.name });
+          }}
+          downloading={downloadAgentPipeline.isPending}
+          buttonLabel="⬇ .xlsx"
+        />
+      </div>
     </div>
   );
 }
