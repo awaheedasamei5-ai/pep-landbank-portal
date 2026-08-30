@@ -4,6 +4,8 @@ import { useLeaderboard } from '../hooks/useLeaderboard';
 import styles from './LeaderboardScreen.module.css';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
+const ROW_TIER_CLASS = ['rowFirst', 'rowSecond', 'rowThird'] as const;
+const RANK_TIER_CLASS = ['rankFirst', 'rankSecond', 'rankThird'] as const;
 
 function rank(i: number): string {
   return MEDALS[i] ?? String(i + 1);
@@ -82,8 +84,8 @@ export function LeaderboardScreen() {
       {rows && rows.length > 0 && (
         <div className={styles.list}>
           {rows.map((r, i) => (
-            <div className={`${styles.row} ${i === 0 ? styles.rowFirst : ''}`} key={r.staffKey}>
-              <div className={styles.rank}>{rank(i)}</div>
+            <div className={`${styles.row} ${styles[ROW_TIER_CLASS[i]] ?? ''}`} key={r.staffKey}>
+              <div className={`${styles.rank} ${styles[RANK_TIER_CLASS[i]] ?? ''}`}>{rank(i)}</div>
               <div className={styles.rowMain}>
                 <div className={styles.rowName}>{r.staffName}</div>
                 <div className={styles.pillRow}>
