@@ -237,6 +237,16 @@ export interface Config {
   techFullPlotWidthFt: number;
   techHalfPlotLengthFt: number;
   techHalfPlotWidthFt: number;
+  // Real columns leave_total_days/work_days/eid_observing_staff
+  // (confirmed live) -- feed the leave-quota calendar engine
+  // (shared/lib/ghanaHolidays.ts, features/leave/lib/leaveLogic.ts).
+  // work_days is a 0=Sunday..6=Saturday day-of-week array (production
+  // value [1,2,3,4,5], Mon-Fri); eid_observing_staff is a real, short
+  // allowlist of staff keys for whom the two Eid holiday windows do NOT
+  // block leave selection (everyone else treats them as holidays).
+  leaveTotalDays: number;
+  workDays: number[];
+  eidObservingStaff: string[];
 }
 
 // One payment's contribution to an agent's personal commission, and what it

@@ -1,5 +1,9 @@
 import { Fragment, useState } from 'react';
+import { useSessionStore } from '../../../auth/useSessionStore';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCanDecideLeave, useCreateLeaveRequest, useDecideLeaveRequest, useLeaveRequests } from '../hooks/useLeaveRequests';
+import { LeaveCalendar } from '../components/LeaveCalendar';
+import { leaveDatesConflictReason, leaveDaysRemaining, leaveDaysUsed } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
 import styles from './LeaveScreen.module.css';
@@ -7,13 +11,14 @@ import styles from './LeaveScreen.module.css';
 // Real table `leave_requests` (confirmed live): SELECT RLS is genuinely
 // open to any signed-in staff member (not agent/manager-scoped), matching
 // index.html's own cross-staff "who's on leave" checks -- so this list is
-// company-wide for everyone, not "my requests". Deliberately the request/
-// decide subset of a much larger real feature: the private annual-
-// calendar "planned" stage, emergency leave, deduct-quota toggle,
-// reschedule flow, and the signature-on-approval requirement (a per-staff
-// digital signature this app has no capture UI for) are all out of scope.
-// Date selection is simplified to a start date + day count (a consecutive
-// range) rather than the full multi-select calendar picker.
+// company-wide for everyone, not "my requests". The quota-tracking
+// calendar engine (Ghana public holidays, colleague-conflict blocking,
+// days-remaining) is a real, faithful port (see features/leave/lib/
+// leaveLogic.ts, shared/lib/ghanaHolidays.ts) -- what's deliberately still
+// out of scope is the surrounding workflow: the private annual-calendar
+// "planned" (save-now-send-later) stage, emergency leave's deduct-quota
+// opt-out, and the reschedule flow. Every request here goes straight to
+// 'pending', submitted immediately rather than saved privately first.
 export function LeaveScreen() {
   const { data: requests, isLoading } = useLeaveRequests();
   const canDecide = useCanDecideLeave();
@@ -37,7 +42,7 @@ export function LeaveScreen() {
         </button>
       </div>
 
-      {showForm && <NewLeaveForm onDone={() => setShowForm(false)} />}
+      {showForm && <NewLeaveForm requests={requests ?? []} onDone={() => setShowForm(false)} />}
 
       {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {requests && requests.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No leave requests yet.</p>}
@@ -55,37 +60,84 @@ export function LeaveScreen() {
   );
 }
 
-function NewLeaveForm({ onDone }: { onDone: () => void }) {
+function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: () => void }) {
   const create = useCreateLeaveRequest();
-  const [startDate, setStartDate] = useState(today());
-  const [days, setDays] = useState(1);
+  const profile = useSessionStore((s) => s.profile);
+  const { data: config } = useConfig();
+  const [year, setYear] = useState(() => new Date(today()).getFullYear());
+  const [month, setMonth] = useState(() => new Date(today()).getMonth());
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [letterText, setLetterText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleDate(iso: string) {
+    setSelectedDates((prev) => (prev.includes(iso) ? prev.filter((d) => d !== iso) : [...prev, iso]));
+    setError(null);
+  }
+
+  function navMonth(delta: number) {
+    let m = month + delta;
+    let y = year;
+    if (m < 0) {
+      m = 11;
+      y--;
+    } else if (m > 11) {
+      m = 0;
+      y++;
+    }
+    setMonth(m);
+    setYear(y);
+  }
+
+  const agentKey = profile?.key ?? '';
+  const remaining = config ? leaveDaysRemaining(config, requests, agentKey, year) : null;
+  const used = config ? leaveDaysUsed(requests, agentKey, year) : 0;
 
   async function submit() {
-    const dates: string[] = [];
-    const d = new Date(`${startDate}T00:00:00`);
-    for (let i = 0; i < days; i++) {
-      dates.push(d.toISOString().slice(0, 10));
-      d.setDate(d.getDate() + 1);
+    if (!config) return;
+    if (!selectedDates.length) {
+      setError('Pick at least one date first');
+      return;
     }
-    await create.mutateAsync({ dates, letterText: letterText || undefined });
+    if (selectedDates.length > (remaining ?? 0)) {
+      setError(`That's ${selectedDates.length} day(s), but you only have ${remaining} left for ${year}.`);
+      return;
+    }
+    const conflict = leaveDatesConflictReason(config, requests, selectedDates, agentKey, year);
+    if (conflict) {
+      setError(`${conflict} Please adjust your selection.`);
+      return;
+    }
+    await create.mutateAsync({ dates: selectedDates.slice().sort(), letterText: letterText || undefined });
     onDone();
   }
 
   return (
     <div className={styles.formCard}>
-      <div className={styles.grid2}>
-        <div className={styles.field}>
-          <label className={styles.label}>Start date</label>
-          <input className={styles.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+      {config && (
+        <div className={styles.quotaRow}>
+          <div className={styles.quotaItem}>
+            <div className={styles.quotaLabel}>Total days/yr</div>
+            <div className={styles.quotaVal}>{config.leaveTotalDays}</div>
+          </div>
+          <div className={styles.quotaItem}>
+            <div className={styles.quotaLabel}>Used in {year}</div>
+            <div className={styles.quotaVal}>{used}</div>
+          </div>
+          <div className={styles.quotaItem}>
+            <div className={styles.quotaLabel}>Remaining</div>
+            <div className={styles.quotaValStrong}>{remaining}</div>
+          </div>
         </div>
-        <div className={styles.field}>
-          <label className={styles.label}>No. of days</label>
-          <input className={styles.input} type="number" min={1} value={days} onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))} />
-        </div>
-      </div>
+      )}
+      {config ? (
+        <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={requests} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} />
+      ) : (
+        <p style={{ color: 'var(--muted)' }}>Loading…</p>
+      )}
       <textarea className={styles.textarea} placeholder="Reason (optional)" value={letterText} onChange={(e) => setLetterText(e.target.value)} />
-      <button type="button" className={styles.submitBtn} disabled={create.isPending} onClick={submit}>
+      {error && <p className={styles.error}>{error}</p>}
+      <button type="button" className={styles.submitBtn} disabled={create.isPending || !config} onClick={submit}>
         {create.isPending ? 'Sending…' : 'Send request'}
       </button>
     </div>

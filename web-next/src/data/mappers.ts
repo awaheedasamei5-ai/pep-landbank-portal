@@ -422,6 +422,9 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     techFullPlotWidthFt: Number(r.tech_full_plot_width_ft ?? 100),
     techHalfPlotLengthFt: Number(r.tech_half_plot_length_ft ?? 50),
     techHalfPlotWidthFt: Number(r.tech_half_plot_width_ft ?? 70),
+    leaveTotalDays: Number(r.leave_total_days ?? 20),
+    workDays: (r.work_days as number[]) ?? [1, 2, 3, 4, 5],
+    eidObservingStaff: (r.eid_observing_staff as string[]) ?? [],
   };
 }
 

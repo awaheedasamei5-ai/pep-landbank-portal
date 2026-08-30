@@ -143,6 +143,9 @@ export function seedDemo(): DemoDb {
     techFullPlotWidthFt: 100,
     techHalfPlotLengthFt: 50,
     techHalfPlotWidthFt: 70,
+    leaveTotalDays: 20,
+    workDays: [1, 2, 3, 4, 5],
+    eidObservingStaff: ['adams'],
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS
@@ -607,7 +610,7 @@ export function seedDemo(): DemoDb {
 
   const contracts: DemoDb['contracts'] = [];
 
-  return { version: 26, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, staffSignatures: {}, sveInvites, sveSubmissions, chatMessages, contracts };
+  return { version: 27, leads, payments, scheduleItems, streaks, config, plots, siteVisits, referrals, enquiries, attendance, memos, memoRecipients, complaints, contractRequests, leaveRequests, allocationRequests, notes, staffActiveOverrides: {}, staffSignatures: {}, sveInvites, sveSubmissions, chatMessages, contracts };
 }
 
 export { AGENT_KEY as DEMO_AGENT_KEY };

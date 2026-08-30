@@ -47,7 +47,15 @@
   color: var(--text);
   font-family: inherit;
 }
-.textarea { resize: vertical; min-height: 60px; }
+.textarea { resize: vertical; min-height: 60px; margin-top: 14px; }
+
+.quotaRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.quotaItem { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
+.quotaLabel { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.quotaVal { font-size: 17px; font-weight: 800; font-family: 'IBM Plex Mono', monospace; margin-top: 3px; }
+.quotaValStrong { font-size: 17px; font-weight: 800; font-family: 'IBM Plex Mono', monospace; margin-top: 3px; color: var(--green); }
+
+.error { color: var(--danger); font-size: 12px; margin: 10px 0 0; }
 
 .submitBtn {
   width: 100%;
