@@ -669,7 +669,7 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 34,
+    version: 35,
     leads,
     payments,
     scheduleItems,
@@ -696,6 +696,7 @@ export function seedDemo(): DemoDb {
     receiptShareLinks: [],
     banners,
     fundRequests,
+    weeklyVisitForms: [],
   };
 }
 

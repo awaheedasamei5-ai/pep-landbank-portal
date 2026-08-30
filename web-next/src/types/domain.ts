@@ -1093,3 +1093,50 @@ export interface NewFundRequest {
   receiptData?: string | null;
   receiptName?: string | null;
 }
+
+// Real table `weekly_visit_forms` -- one row per (week_start, visit_date),
+// created on demand the moment anyone opens a day that doesn't have one yet
+// (confirmed live: a real unique index on (week_start, visit_date)). This
+// is Site Visit Authorization's Logistics half -- estimate vs. actual cost
+// reconciliation for a day's site visits, then Management finalizes/
+// approves. PDF generation and "remove a visit from this form" (which
+// deletes the underlying site_visits row entirely, a more destructive
+// action than fits this pass) are deliberately deferred, same scoping
+// discipline as this session's other gap fixes.
+export type WeeklyVisitFormStatus = 'Open' | 'Finalized';
+
+export interface WeeklyVisitForm {
+  id: string;
+  weekStart: string;
+  visitDate: string;
+  vehicleRentalEst: number;
+  driversTipEst: number;
+  fuelEst: number;
+  refreshmentEst: number;
+  tntEst: number;
+  vehicleRentalAct: number;
+  driversTipAct: number;
+  fuelAct: number;
+  refreshmentAct: number;
+  tntAct: number;
+  siteManagerName: string | null;
+  status: WeeklyVisitFormStatus;
+  approvedBy: string | null;
+  approvedByName: string | null;
+  approvedSignature: string | null;
+  finalizedAt: string | null;
+}
+
+export interface WeeklyVisitFormCostPatch {
+  vehicleRentalEst?: number;
+  driversTipEst?: number;
+  fuelEst?: number;
+  refreshmentEst?: number;
+  tntEst?: number;
+  vehicleRentalAct?: number;
+  driversTipAct?: number;
+  fuelAct?: number;
+  refreshmentAct?: number;
+  tntAct?: number;
+  siteManagerName?: string | null;
+}

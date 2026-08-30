@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router';
 import { useCanLogPayments } from '../../payments/hooks/useLogPayment';
 import { useCanManageExpenses } from '../../expenses/hooks/useFundRequests';
+import { useCanViewSiteVisitAuth } from '../../site-visit-auth/hooks/useSiteVisitAuth';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 
 // Port of officeDeskGroups()'s items (index.html:8965-8994) -- "Operations
@@ -10,6 +11,7 @@ export function OfficeDeskScreen() {
   const navigate = useNavigate();
   const canLogPayments = useCanLogPayments();
   const canManageExpenses = useCanManageExpenses();
+  const canViewSiteVisitAuth = useCanViewSiteVisitAuth();
 
   const items: TileItem[] = [
     { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
@@ -25,6 +27,9 @@ export function OfficeDeskScreen() {
     { key: 'banners', label: 'Banner Tracking', sub: 'Add, track & route to every placement', color: 'orange', icon: 'pin', onOpen: () => navigate('/app/office/banners') },
     ...(canManageExpenses
       ? [{ key: 'expenses', label: 'Expenses', sub: 'Request funds & track approvals', color: 'green', icon: 'wallet', onOpen: () => navigate('/app/office/expenses') } satisfies TileItem]
+      : []),
+    ...(canViewSiteVisitAuth
+      ? [{ key: 'sitevisitauth', label: 'Site Visit Authorization', sub: "Daily logistics cost estimate & approval", color: 'teal', icon: 'ruler', onOpen: () => navigate('/app/office/sitevisitauth') } satisfies TileItem]
       : []),
   ];
 

@@ -1,4 +1,4 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow } from '../types/domain';
+import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -9,6 +9,7 @@ import {
   mapAttendanceRow,
   mapBannerRow,
   mapFundRequestRow,
+  mapWeeklyVisitFormRow,
   mapChatMessageRow,
   mapComplaintRow,
   mapContractRequestRow,
@@ -349,6 +350,16 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<FundRequest[]>;
     create(requestedBy: string, requestedByName: string, input: NewFundRequest): Promise<FundRequest>;
     decide(id: string, approve: boolean, decidedBy: string, decidedByName: string, note?: string): Promise<FundRequest>;
+  };
+  // Real table `weekly_visit_forms`, one row per (week_start, visit_date)
+  // -- real unique index confirmed live, matching index.html's own get-or-
+  // create-on-demand pattern (apiLoadOrCreateWeeklyVisitForm). Gated the
+  // same as SVE Management (canViewClientDatabase(): manager/elias/
+  // emmanuel/elizabeth, confirmed live via wvf_staff_sel/ins/upd RLS).
+  weeklyVisitForms: {
+    getOrCreate(weekStart: string, visitDate: string): Promise<WeeklyVisitForm>;
+    saveCosts(id: string, patch: WeeklyVisitFormCostPatch): Promise<WeeklyVisitForm>;
+    finalize(id: string, approvedBy: string, approvedByName: string, signature: string | null): Promise<WeeklyVisitForm>;
   };
   // Real column `leads.banner_id` -- how many real leads are attributed to
   // each banner, keyed by banner id. Confirmed live: `leads` RLS already
@@ -1154,6 +1165,57 @@ function createDemoDataSource(): DataSource {
         if (index === -1) throw new Error('Fund request not found');
         const updated: FundRequest = { ...db.fundRequests[index], status: approve ? 'approved' : 'rejected', decidedBy, decidedByName, decidedAt: new Date().toISOString(), decisionNote: note ?? null };
         db.fundRequests = [...db.fundRequests.slice(0, index), updated, ...db.fundRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+    },
+    weeklyVisitForms: {
+      async getOrCreate(weekStart, visitDate) {
+        const db = demoLoad();
+        db.weeklyVisitForms = db.weeklyVisitForms ?? [];
+        let f = db.weeklyVisitForms.find((x) => x.weekStart === weekStart && x.visitDate === visitDate);
+        if (!f) {
+          f = {
+            id: crypto.randomUUID(),
+            weekStart,
+            visitDate,
+            vehicleRentalEst: 0,
+            driversTipEst: 0,
+            fuelEst: 0,
+            refreshmentEst: 0,
+            tntEst: 0,
+            vehicleRentalAct: 0,
+            driversTipAct: 0,
+            fuelAct: 0,
+            refreshmentAct: 0,
+            tntAct: 0,
+            siteManagerName: null,
+            status: 'Open',
+            approvedBy: null,
+            approvedByName: null,
+            approvedSignature: null,
+            finalizedAt: null,
+          };
+          db.weeklyVisitForms = [f, ...db.weeklyVisitForms];
+          demoSave();
+        }
+        return { ...f };
+      },
+      async saveCosts(id, patch) {
+        const db = demoLoad();
+        const index = db.weeklyVisitForms.findIndex((f) => f.id === id);
+        if (index === -1) throw new Error('Form not found');
+        const updated: WeeklyVisitForm = { ...db.weeklyVisitForms[index], ...patch };
+        db.weeklyVisitForms = [...db.weeklyVisitForms.slice(0, index), updated, ...db.weeklyVisitForms.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async finalize(id, approvedBy, approvedByName, signature) {
+        const db = demoLoad();
+        const index = db.weeklyVisitForms.findIndex((f) => f.id === id);
+        if (index === -1) throw new Error('Form not found');
+        const updated: WeeklyVisitForm = { ...db.weeklyVisitForms[index], status: 'Finalized', approvedBy, approvedByName, approvedSignature: signature, finalizedAt: new Date().toISOString() };
+        db.weeklyVisitForms = [...db.weeklyVisitForms.slice(0, index), updated, ...db.weeklyVisitForms.slice(index + 1)];
         demoSave();
         return updated;
       },
@@ -2290,6 +2352,53 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapFundRequestRow(data);
+      },
+    },
+    weeklyVisitForms: {
+      async getOrCreate(weekStart, visitDate) {
+        const client = requireClient();
+        const { data, error } = await client.from('weekly_visit_forms').select('*').eq('week_start', weekStart).eq('visit_date', visitDate).maybeSingle();
+        if (error) throw error;
+        if (data) return mapWeeklyVisitFormRow(data);
+        const ins = await client.from('weekly_visit_forms').insert({ week_start: weekStart, visit_date: visitDate }).select().single();
+        if (ins.error) {
+          // Real race guard, matching index.html's own retry-on-conflict --
+          // the unique index on (week_start, visit_date) means a second
+          // staff member opening the same day at the same moment can lose
+          // the insert race; the row they were racing against already
+          // exists, so just re-select it instead of surfacing an error.
+          const retry = await client.from('weekly_visit_forms').select('*').eq('week_start', weekStart).eq('visit_date', visitDate).maybeSingle();
+          if (retry.error || !retry.data) throw retry.error ?? ins.error;
+          return mapWeeklyVisitFormRow(retry.data);
+        }
+        return mapWeeklyVisitFormRow(ins.data);
+      },
+      async saveCosts(id, patch) {
+        const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if ('vehicleRentalEst' in patch) dbPatch.vehicle_rental_est = patch.vehicleRentalEst;
+        if ('driversTipEst' in patch) dbPatch.drivers_tip_est = patch.driversTipEst;
+        if ('fuelEst' in patch) dbPatch.fuel_est = patch.fuelEst;
+        if ('refreshmentEst' in patch) dbPatch.refreshment_est = patch.refreshmentEst;
+        if ('tntEst' in patch) dbPatch.tnt_est = patch.tntEst;
+        if ('vehicleRentalAct' in patch) dbPatch.vehicle_rental_act = patch.vehicleRentalAct;
+        if ('driversTipAct' in patch) dbPatch.drivers_tip_act = patch.driversTipAct;
+        if ('fuelAct' in patch) dbPatch.fuel_act = patch.fuelAct;
+        if ('refreshmentAct' in patch) dbPatch.refreshment_act = patch.refreshmentAct;
+        if ('tntAct' in patch) dbPatch.tnt_act = patch.tntAct;
+        if ('siteManagerName' in patch) dbPatch.site_manager_name = patch.siteManagerName;
+        const { data, error } = await requireClient().from('weekly_visit_forms').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapWeeklyVisitFormRow(data);
+      },
+      async finalize(id, approvedBy, approvedByName, signature) {
+        const { data, error } = await requireClient()
+          .from('weekly_visit_forms')
+          .update({ status: 'Finalized', approved_by: approvedBy, approved_by_name: approvedByName, approved_signature: signature, finalized_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapWeeklyVisitFormRow(data);
       },
     },
     allocationRequests: {

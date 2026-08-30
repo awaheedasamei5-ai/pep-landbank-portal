@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../../types/domain';
+import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -50,9 +50,10 @@ export interface DemoDb {
   receiptShareLinks: { id: string; paymentId: string; token: string; createdAt: string }[];
   banners: Banner[];
   fundRequests: FundRequest[];
+  weeklyVisitForms: WeeklyVisitForm[];
 }
 
-const DEMO_VERSION = 34;
+const DEMO_VERSION = 35;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

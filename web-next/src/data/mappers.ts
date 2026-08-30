@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow } from '../types/domain';
+import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -83,6 +83,30 @@ export function mapStreakRow(r: Record<string, unknown>): StreakRow {
     staffKey: r.staff_key as string,
     date: r.streak_date as string,
     dayMet: !!r.streak_day_met,
+  };
+}
+
+export function mapWeeklyVisitFormRow(r: Record<string, unknown>): WeeklyVisitForm {
+  return {
+    id: r.id as string,
+    weekStart: r.week_start as string,
+    visitDate: r.visit_date as string,
+    vehicleRentalEst: Number(r.vehicle_rental_est ?? 0),
+    driversTipEst: Number(r.drivers_tip_est ?? 0),
+    fuelEst: Number(r.fuel_est ?? 0),
+    refreshmentEst: Number(r.refreshment_est ?? 0),
+    tntEst: Number(r.tnt_est ?? 0),
+    vehicleRentalAct: Number(r.vehicle_rental_act ?? 0),
+    driversTipAct: Number(r.drivers_tip_act ?? 0),
+    fuelAct: Number(r.fuel_act ?? 0),
+    refreshmentAct: Number(r.refreshment_act ?? 0),
+    tntAct: Number(r.tnt_act ?? 0),
+    siteManagerName: (r.site_manager_name as string) ?? null,
+    status: (r.status as WeeklyVisitForm['status']) ?? 'Open',
+    approvedBy: (r.approved_by as string) ?? null,
+    approvedByName: (r.approved_by_name as string) ?? null,
+    approvedSignature: (r.approved_signature as string) ?? null,
+    finalizedAt: (r.finalized_at as string) ?? null,
   };
 }
 
