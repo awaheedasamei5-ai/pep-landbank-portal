@@ -1,59 +1,85 @@
 .wrap { padding: 20px 16px 90px; }
 
-.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--c-muted); }
 .title { font-size: 22px; margin: 4px 0 0; }
-.sub { color: var(--muted); margin: 6px 0 20px; font-size: 13px; line-height: 1.45; }
+.sub { color: var(--c-muted); margin: 6px 0 20px; font-size: 13px; line-height: 1.45; }
 
-.list { display: flex; flex-direction: column; gap: 8px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
 
-.row {
-  background: var(--card);
-  border: 1px solid var(--line);
+@media (width >= 520px) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
   border-radius: var(--r-md);
-  padding: 13px 15px;
+  padding: 14px;
   box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+
+  /* Grid items default to min-width: auto, so a long unbreakable string
+     (an email address) sets the track's minimum size instead of letting
+     .email's own text-overflow:ellipsis truncate it -- this is what was
+     actually causing the grid to overflow the viewport horizontally. */
+  min-width: 0;
 }
 
-.rowTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 
-.name { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.email { color: var(--muted); font-size: 12px; margin-top: 2px; }
-
-.deactivatedTag {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--danger);
-  background: rgb(180 71 47 / 12%);
-  padding: 2px 8px;
-  border-radius: 100px;
-  text-transform: none;
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--c-accent-soft), var(--c-accent));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
 }
+.avatarDim { opacity: .45; }
+
+.statusPill { font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 100px; white-space: nowrap; }
+.statusActive { background: var(--c-success-bg); color: var(--c-success); }
+.statusInactive { background: var(--c-danger-bg); color: var(--c-danger); }
+
+.name { font-weight: 700; font-size: 13.5px; color: var(--c-text); line-height: 1.3; }
+.role { font-size: 11px; color: var(--c-muted); font-weight: 600; margin-top: 2px; }
+.email { font-size: 10.5px; color: var(--c-faint); margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .deactivateBtn, .reactivateBtn {
-  flex-shrink: 0;
-  padding: 7px 13px;
+  margin-top: 12px;
+  padding: 8px 10px;
   border-radius: var(--r-pill);
   border: none;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 11px;
   cursor: pointer;
-  white-space: nowrap;
+  width: 100%;
 }
-.deactivateBtn { background: rgb(180 71 47 / 12%); color: var(--danger); }
-.reactivateBtn { background: var(--green); color: #fff; }
+.deactivateBtn { background: var(--c-danger-bg); color: var(--c-danger); }
+.reactivateBtn { background: var(--c-success); color: #fff; }
 .deactivateBtn:disabled, .reactivateBtn:disabled { opacity: .6; cursor: default; }
 
-.confirmRow { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.confirmText { font-size: 12.5px; color: var(--text); display: block; margin-bottom: 10px; }
-.confirmActions { display: flex; gap: 8px; }
+.confirmBox { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-line); }
+.confirmText { font-size: 11px; color: var(--c-text); display: block; margin-bottom: 8px; line-height: 1.4; }
+.confirmActions { display: flex; flex-direction: column; gap: 6px; }
 
 .cancelBtn {
-  padding: 7px 13px;
+  padding: 8px 10px;
   border-radius: var(--r-pill);
-  border: 1px solid var(--line);
+  border: 1px solid var(--c-line);
   background: none;
-  color: var(--muted);
+  color: var(--c-muted);
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 11px;
   cursor: pointer;
 }
