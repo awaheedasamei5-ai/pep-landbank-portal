@@ -1,5 +1,6 @@
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { Icon } from '../../../shared/ui/Icon';
 import type { Plot, PlotStatus } from '../../../types/domain';
 import { usePlots } from '../hooks/usePlots';
 import styles from './PlotInventoryScreen.module.css';
@@ -53,10 +54,16 @@ export function PlotInventoryScreen() {
         </div>
       </div>
 
-      {isLoading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {[...bySite.entries()].map(([site, sitePlots]) => (
         <div key={site}>
-          <div className={styles.site}>{site}</div>
+          <div className={styles.site}>
+            <span className={styles.siteIcon}>
+              <Icon name="map" size={15} />
+            </span>
+            {site}
+            <span className={styles.siteCount}>{sitePlots.length}</span>
+          </div>
           {sitePlots
             .filter((p) => p.unitKind === 'whole')
             .map((whole) => {
@@ -72,7 +79,7 @@ export function PlotInventoryScreen() {
             })}
         </div>
       ))}
-      {plots && plots.length === 0 && !isLoading && <p style={{ color: 'var(--muted)' }}>No plots recorded yet.</p>}
+      {plots && plots.length === 0 && !isLoading && <p className={styles.emptyMsg}>No plots recorded yet.</p>}
     </div>
   );
 }
