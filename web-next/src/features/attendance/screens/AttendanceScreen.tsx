@@ -74,115 +74,98 @@ export function AttendanceScreen() {
   }
 
   const isPending = signIn.isPending || signOut.isPending;
+  const nowLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const nowDateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+
+  const clockPhase: 'in' | 'out' | 'done' = !today ? 'in' : !today.signOutAt ? 'out' : 'done';
+  const circleLabel = clockPhase === 'in' ? 'Clock in' : clockPhase === 'out' ? 'Clock out' : 'Complete';
+  const circleSub = clockPhase === 'in' ? nowDateLabel : clockPhase === 'out' ? `In at ${fmtTime(today?.signInAt ?? null)}` : `${fmtTime(today?.signInAt ?? null)} — ${fmtTime(today?.signOutAt ?? null)}`;
+
+  function handleCircleClick() {
+    if (clockPhase === 'done') return;
+    setShowForm((f) => (f ? null : clockPhase));
+  }
 
   return (
     <div className={styles.wrap}>
       <h1 className={styles.title}>Attendance</h1>
       <p className={styles.sub}>Sign in when you start work, sign out when you're done.</p>
 
-      <div className={styles.gaugeCard}>
-        <SegmentedGauge value={daysAttended} max={Math.max(workingDaysSoFar, daysAttended, 1)} label="days this month" sublabel={`${onTimeDays} on time`} />
-      </div>
+      <div className={styles.clockCard}>
+        <button type="button" className={`${styles.clockCircle} ${styles[`phase_${clockPhase}`]}`} onClick={handleCircleClick} disabled={isPending || clockPhase === 'done'}>
+          <span className={styles.clockCircleTime}>{clockPhase === 'in' ? nowLabel : circleLabel}</span>
+          <span className={styles.clockCircleLabel}>{clockPhase === 'in' ? circleLabel : circleSub}</span>
+        </button>
+        {clockPhase !== 'in' && <div className={styles.clockCaption}>{circleSub}</div>}
 
-      <div className={styles.card}>
-        {!isLoading && !today && (
-          <>
-            <div className={styles.statusRow}>
-              <div>
-                <div className={styles.statusLabel}>Today</div>
-                <div className={styles.statusTime}>Not signed in</div>
-              </div>
+        {showForm === 'in' && (
+          <div className={styles.form}>
+            <div className={styles.field}>
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={offSite} onChange={(e) => setOffSite(e.target.checked)} />
+                Signing in off-site
+              </label>
+              {offSite && <input className={styles.input} placeholder="Why are you off-site today?" value={reason} onChange={(e) => setReason(e.target.value)} />}
             </div>
-            {showForm !== 'in' ? (
-              <button type="button" className={styles.actionBtn} onClick={() => setShowForm('in')}>
-                Sign in
-              </button>
-            ) : (
-              <div className={styles.form}>
-                <div className={styles.field}>
-                  <label className={styles.checkLabel}>
-                    <input type="checkbox" checked={offSite} onChange={(e) => setOffSite(e.target.checked)} />
-                    Signing in off-site
-                  </label>
-                  {offSite && <input className={styles.input} placeholder="Why are you off-site today?" value={reason} onChange={(e) => setReason(e.target.value)} />}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.checkLabel}>
-                    <input type="checkbox" checked={late} onChange={(e) => setLate(e.target.checked)} />
-                    Signing in late
-                  </label>
-                  {late && <input className={styles.input} placeholder="Reason for lateness" value={lateReason} onChange={(e) => setLateReason(e.target.value)} />}
-                </div>
-                <p className={styles.hint}>We'll try to capture your location -- it's fine if that's not available.</p>
-                <button type="button" className={styles.actionBtn} onClick={submitSignIn} disabled={isPending}>
-                  {isPending ? 'Signing in…' : 'Confirm sign in'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {today && !today.signOutAt && (
-          <>
-            <div className={styles.statusRow}>
-              <div>
-                <div className={styles.statusLabel}>Signed in</div>
-                <div className={styles.statusTime}>{fmtTime(today.signInAt)}</div>
-                {today.isOffSiteIn && <div className={styles.statusSub}>Off-site{today.signInReason ? `: ${today.signInReason}` : ''}</div>}
-              </div>
+            <div className={styles.field}>
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={late} onChange={(e) => setLate(e.target.checked)} />
+                Signing in late
+              </label>
+              {late && <input className={styles.input} placeholder="Reason for lateness" value={lateReason} onChange={(e) => setLateReason(e.target.value)} />}
             </div>
-            {showForm !== 'out' ? (
-              <button type="button" className={styles.actionBtn} onClick={() => setShowForm('out')}>
-                Sign out
-              </button>
-            ) : (
-              <div className={styles.form}>
-                <div className={styles.field}>
-                  <label className={styles.checkLabel}>
-                    <input type="checkbox" checked={offSite} onChange={(e) => setOffSite(e.target.checked)} />
-                    Signing out off-site
-                  </label>
-                  {offSite && <input className={styles.input} placeholder="Why are you off-site?" value={reason} onChange={(e) => setReason(e.target.value)} />}
-                </div>
-                <button type="button" className={styles.actionBtn} onClick={submitSignOut} disabled={isPending}>
-                  {isPending ? 'Signing out…' : 'Confirm sign out'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-
-        {today?.signOutAt && (
-          <div className={styles.statusRow}>
-            <div>
-              <div className={styles.statusLabel}>Today, complete</div>
-              <div className={styles.times}>
-                <div>
-                  <div className={styles.statusSub}>In</div>
-                  <div className={styles.rowTimes}>{fmtTime(today.signInAt)}</div>
-                </div>
-                <div>
-                  <div className={styles.statusSub}>Out</div>
-                  <div className={styles.rowTimes}>{fmtTime(today.signOutAt)}</div>
-                </div>
-              </div>
-            </div>
+            <p className={styles.hint}>We'll try to capture your location -- it's fine if that's not available.</p>
+            <button type="button" className={styles.confirmBtn} onClick={submitSignIn} disabled={isPending}>
+              {isPending ? 'Signing in…' : 'Confirm sign in'}
+            </button>
           </div>
         )}
+
+        {showForm === 'out' && (
+          <div className={styles.form}>
+            <div className={styles.field}>
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={offSite} onChange={(e) => setOffSite(e.target.checked)} />
+                Signing out off-site
+              </label>
+              {offSite && <input className={styles.input} placeholder="Why are you off-site?" value={reason} onChange={(e) => setReason(e.target.value)} />}
+            </div>
+            <button type="button" className={styles.confirmBtn} onClick={submitSignOut} disabled={isPending}>
+              {isPending ? 'Signing out…' : 'Confirm sign out'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.gaugeCard}>
+        <SegmentedGauge value={daysAttended} max={Math.max(workingDaysSoFar, daysAttended, 1)} label="days this month" sublabel={`${onTimeDays} on time`} />
       </div>
 
       {history && history.length > 0 && (
         <>
           <div className={styles.historyTitle}>Recent history</div>
-          {history.map((h) => (
-            <div className={styles.row} key={h.id}>
-              <div className={styles.date}>{h.workDate}</div>
-              <div className={styles.rowTimes}>
-                {fmtTime(h.signInAt)} → {fmtTime(h.signOutAt)}
-                {(h.isOffSiteIn || h.isOffSiteOut) && <span className={styles.offSite}> · off-site</span>}
-              </div>
-            </div>
-          ))}
+          <div className={styles.historyCard}>
+            {history.map((h) => {
+              const onTime = !!h.signInAt && h.signInAt.slice(11, 16) <= ON_TIME_CUTOFF;
+              const weekday = new Date(h.workDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' });
+              const dayNum = new Date(h.workDate + 'T00:00:00').getDate();
+              return (
+                <div className={styles.row} key={h.id}>
+                  <div className={styles.dateBadge}>
+                    <span className={styles.dateBadgeDay}>{dayNum}</span>
+                    <span className={styles.dateBadgeWeekday}>{weekday}</span>
+                  </div>
+                  <div className={styles.rowMain}>
+                    <div className={styles.rowTimes}>
+                      {fmtTime(h.signInAt)} <span className={styles.arrow}>→</span> {fmtTime(h.signOutAt)}
+                    </div>
+                    {(h.isOffSiteIn || h.isOffSiteOut) && <div className={styles.offSite}>Off-site</div>}
+                  </div>
+                  <span className={`${styles.statusDot} ${onTime ? styles.dotOk : styles.dotLate}`} title={onTime ? 'On time' : 'Late'} />
+                </div>
+              );
+            })}
+          </div>
         </>
       )}
     </div>

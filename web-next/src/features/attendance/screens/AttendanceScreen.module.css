@@ -1,49 +1,71 @@
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
 .title { font-size: 22px; margin: 0 0 4px; }
-.sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
+.sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 18px 16px;
-  margin-bottom: 20px;
-  box-shadow: var(--shadow);
-}
-
-.gaugeCard {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 20px 16px 14px;
+/* Big circular clock in/out control -- the reference attendance app's
+   central interaction, adapted onto this app's own gold/navy palette
+   instead of copied colors. One control instead of a small pill button,
+   its own gradient signaling state (gold = action needed, navy = mid-
+   shift, muted = day complete) rather than a plain "Sign in" label. */
+.clockCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  padding: 26px 16px 20px;
   margin-bottom: 16px;
   box-shadow: var(--shadow);
-  display: flex;
-  justify-content: center;
+  text-align: center;
 }
 
-.statusRow { display: flex; align-items: center; justify-content: space-between; }
-.statusLabel { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.statusTime { font-family: 'IBM Plex Mono', monospace; font-weight: 800; font-size: 20px; margin-top: 4px; }
-.statusSub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-
-.times { display: flex; gap: 20px; margin-top: 4px; }
-
-.actionBtn {
-  width: 100%;
-  padding: 13px;
-  border-radius: var(--r-pill);
+.clockCircle {
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
   border: none;
-  background: var(--green);
-  color: #fff;
-  font-weight: 700;
-  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0 auto;
   cursor: pointer;
-  margin-top: 14px;
+  color: #fff;
+  box-shadow: 0 16px 36px -10px rgb(20 22 50 / 35%);
 }
-.actionBtn:disabled { opacity: .6; cursor: default; }
 
-.form { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.clockCircle:disabled { cursor: default; }
+
+.phase_in {
+  background: radial-gradient(circle at 32% 28%, var(--c-accent-soft), var(--c-accent) 68%);
+}
+
+.phase_out {
+  background: radial-gradient(circle at 32% 28%, var(--c-ink-2), var(--c-ink) 72%);
+}
+
+.phase_done {
+  background: radial-gradient(circle at 32% 28%, var(--c-success-soft), var(--c-success) 72%);
+  opacity: .82;
+}
+
+.clockCircleTime {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: .01em;
+}
+
+.clockCircleLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .85;
+}
+
+.clockCaption { margin-top: 12px; font-size: 12.5px; color: var(--c-muted); font-weight: 600; }
+
+.form { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--c-line); text-align: left; }
 .field { margin-bottom: 12px; }
 .checkLabel { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
@@ -52,27 +74,77 @@
   box-sizing: border-box;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--c-line);
   font-size: 13.5px;
-  background: var(--bg, var(--card));
-  color: var(--text);
+  background: var(--c-card);
+  color: var(--c-text);
   margin-top: 8px;
 }
-.hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.hint { font-size: 11px; color: var(--c-muted); margin-top: 6px; }
 
-.historyTitle { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
+.confirmBtn {
+  width: 100%;
+  padding: 13px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.confirmBtn:disabled { opacity: .6; cursor: default; }
+
+.gaugeCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 20px 16px 14px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: center;
+}
+
+.historyTitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
+
+.historyCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
 
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+  gap: 13px;
   padding: 12px 14px;
-  margin-bottom: 8px;
+  border-bottom: 1px solid var(--c-line);
 }
-.date { font-weight: 700; font-size: 13px; }
-.rowTimes { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
-.offSite { color: var(--warn); font-weight: 700; }
+.row:last-child { border-bottom: none; }
+
+.dateBadge {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: var(--c-paper);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.dateBadgeDay { font-family: var(--font-mono); font-weight: 800; font-size: 14px; color: var(--c-text); line-height: 1.1; }
+.dateBadgeWeekday { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: var(--c-muted); letter-spacing: .04em; }
+
+.rowMain { flex: 1; min-width: 0; }
+.rowTimes { font-family: var(--font-mono); font-size: 12.5px; color: var(--c-text); font-weight: 600; }
+.arrow { color: var(--c-faint); }
+.offSite { color: var(--c-warn); font-weight: 700; font-size: 10.5px; margin-top: 2px; }
+
+.statusDot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dotOk { background: var(--c-success); }
+.dotLate { background: var(--c-warn); }
