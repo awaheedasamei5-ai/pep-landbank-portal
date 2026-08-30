@@ -10,6 +10,15 @@ import styles from './ManagerPipelineScreen.module.css';
 
 const STAGES: (Stage | 'Lost')[] = ['1', '2A', '2B', '3', '4', 'Lost'];
 
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 // Real destination for Manager Home's "Pipeline by stage" donut and "By
 // agent" rows -- both link here with a `stage` and/or `agent` query param
 // pre-applied. Company-wide (every agent), unlike Sales Desk's "My
@@ -61,6 +70,7 @@ export function ManagerPipelineScreen() {
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {filtered.map((l) => (
         <div className={styles.row} key={l.id} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)} role="button" tabIndex={0}>
+          <span className={styles.avatar}>{initials(l.name)}</span>
           <div className={styles.rowMain}>
             <div className={styles.name}>{l.name}</div>
             <div className={styles.meta}>

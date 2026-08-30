@@ -57,7 +57,8 @@ export function LeaderboardScreen() {
               <div className={styles.leaderEyebrow}>🏆 Currently leading</div>
               <div className={styles.leaderName}>{leader.staffName}</div>
               <div className={styles.leaderMeta}>
-                {ghs(leader.totalCollected)} collected &middot; {leader.dealsClosedYear} deals closed {year} &middot; {leader.siteVisits} site visits
+                {ghs(leader.totalCollected)} collected &middot; {leader.dealsClosedYear} deal{leader.dealsClosedYear === 1 ? '' : 's'} closed {year} &middot; {leader.siteVisits} site visit
+                {leader.siteVisits === 1 ? '' : 's'}
               </div>
             </div>
             <div className={styles.leaderPoints}>
