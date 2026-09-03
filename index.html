@@ -2515,6 +2515,26 @@ function refreshCurrentRoute(){
   catch(e){ toast('Could not refresh -- try the back button instead'); }
 }
 function toast(m){const t=document.getElementById('toast');document.getElementById('toastMsg').textContent=m;t.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>t.classList.remove('show'),2600);}
+// Fixed 2026-09-03: every save/submit/delete/edit catch block across the app
+// used to show e.message straight to the user -- e.g. a real toast reading
+// "new row violates row-level security policy for table 'leads'". Real,
+// current DB/network error shapes seen in production get mapped to plain
+// language here; anything unrecognized falls back to a safe generic message
+// rather than ever surfacing raw Postgres/Supabase/network text.
+function throwFriendly(msg){ throw Object.assign(new Error(msg),{friendly:true}); }
+function friendlyErr(e,fallback){
+  if(e&&e.friendly) return e.message;
+  const raw=String((e&&e.message)||e||'');
+  const code=e&&e.code;
+  if(/row-level security policy/i.test(raw)) return "You don't have permission to do that.";
+  if(code==='23505'||/duplicate key value/i.test(raw)) return 'That record already exists.';
+  if(code==='23503'||/violates foreign key constraint/i.test(raw)) return "That's linked to other records and can't be changed right now.";
+  if(code==='23502'||/null value in column/i.test(raw)) return 'Please fill in all required fields.';
+  if(code==='PGRST301'||/JWT expired/i.test(raw)) return 'Your session expired — please sign in again.';
+  if(/Failed to fetch|NetworkError|ERR_INTERNET|net::/i.test(raw)) return 'Network problem — check your connection and try again.';
+  if(/timeout/i.test(raw)) return 'That took too long — please try again.';
+  return fallback||'Something went wrong. Please try again.';
+}
 /* Short Web Audio tones for the boot animation, sign-in, and success popups --
    no audio asset to host, works offline. Browsers block audio before any user
    gesture, so 'boot' is best-effort (silently swallowed if blocked); 'signin'
@@ -3696,11 +3716,11 @@ async function apiClientInsertReferral({referredName,referredContact,referredLoc
 // incident this app already treats with the same extra care).
 async function apiClearReferral(id,{pointsAwarded}){
   if(DEMO_MODE){ const d=await demoLoad(); const rec=(d.referrals||[]).find(x=>x.id===id);
-    if(!rec) throw new Error('Referral not found');
-    if(!rec.referredLeadId) throw new Error('Link this referral to a lead before clearing it');
+    if(!rec) throwFriendly('Referral not found');
+    if(!rec.referredLeadId) throwFriendly('Link this referral to a lead before clearing it');
     const lead=(d.leads||[]).find(l=>l.id===rec.referredLeadId);
     const pct=lead&&num(lead.grandTotal)>0?num(lead.amtPaid)/num(lead.grandTotal):0;
-    if(pct<0.30) throw new Error('Linked lead has only paid '+Math.round(pct*100)+'% of the plot price -- needs at least 30% before this referral can be cleared');
+    if(pct<0.30) throwFriendly('Linked lead has only paid '+Math.round(pct*100)+'% of the plot price -- needs at least 30% before this referral can be cleared');
     Object.assign(rec,{status:'Cleared',clearedAt:new Date().toISOString(),pointsAwarded});
     await demoSave(); return rec; }
   const {data,error}=await sb.rpc('clear_referral',{p_referral_id:id,p_points:pointsAwarded});
@@ -3850,7 +3870,7 @@ async function apiApprovePlotRequest(req){
     if(req.combineWithLeadId){
       let existing=null;
       for(const k of Object.keys(d.leads)){ existing=(d.leads[k]||[]).find(x=>x.id===req.combineWithLeadId); if(existing) break; }
-      if(!existing) throw new Error('Lead not found');
+      if(!existing) throwFriendly('Lead not found');
       const newNoPlots=num(existing.noPlots)+num(req.noPlots);
       const cc=computeLead({...existing,noPlots:newNoPlots});
       const patch={noPlots:newNoPlots,netTotal:cc.net,grandTotal:cc.grand,balance:cc.bal};
@@ -4085,7 +4105,7 @@ async function apiClientChangePin(newPin){
 async function apiClientUpdateContact(name,contact){
   const {data,error}=await sb.rpc('client_portal_update_contact',{p_new_name:name,p_new_contact:contact});
   if(error) throw error;
-  if(!data||!data.ok) throw new Error(data&&data.reason==='contact_in_use'?'That phone number is already linked to another client.':(data&&data.reason==='invalid_contact'?'Enter a valid phone number.':'Could not update your details.'));
+  if(!data||!data.ok) throwFriendly(data&&data.reason==='contact_in_use'?'That phone number is already linked to another client.':(data&&data.reason==='invalid_contact'?'Enter a valid phone number.':'Could not update your details.'));
   CLIENT_PROFILE.name=name; CLIENT_PROFILE.contact=contact;
   if(CLIENT_DB&&CLIENT_DB.leads) CLIENT_DB.leads.forEach(l=>{ l.name=name; l.contact=contact; });
   return data;
@@ -4100,7 +4120,7 @@ async function apiClientLoadChannels(){
 async function apiClientUpdateChannels(email,whatsapp){
   const {data,error}=await sb.rpc('client_portal_update_channels',{p_email:email,p_whatsapp:whatsapp});
   if(error) throw error;
-  if(!data||!data.ok) throw new Error('Could not save your contact details');
+  if(!data||!data.ok) throwFriendly('Could not save your contact details');
   CLIENT_PROFILE.email=email; CLIENT_PROFILE.whatsapp=whatsapp;
 }
 async function apiClientUpdateAvatar(dataUrl){
@@ -4803,7 +4823,7 @@ async function viewAttendanceApp(){
     ATTENDANCE_TEAM_TODAY=team;
     ATTENDANCE_MONTH_ROWS=monthRows;
     ATT_CAL_LOADED_MONTHS.add(ATT_CAL_CURSOR);
-  }catch(e){ toast('Could not load attendance: '+(e.message||e)); }
+  }catch(e){ toast('Could not load attendance: '+(friendlyErr(e))); }
   paintAttendanceBody();
 }
 // Lazy-loads one additional month into ATTENDANCE_HISTORY when the calendar
@@ -4991,7 +5011,7 @@ function paintAttendanceBody(){
     if(!confirm("Are you absolutely sure? Days-present/absent history for the whole team will be gone."))return;
     resetBtn.disabled=true; resetBtn.textContent='Resetting…';
     try{ await apiResetAllAttendance(); toast('Attendance data reset'); viewAttendanceApp(); }
-    catch(e){ toast('Could not reset: '+(e.message||e)); resetBtn.disabled=false; resetBtn.textContent='Reset attendance data'; }
+    catch(e){ toast('Could not reset: '+(friendlyErr(e))); resetBtn.disabled=false; resetBtn.textContent='Reset attendance data'; }
   };
   clearInterval(ATTENDANCE_CLOCK_TIMER);
   if(btnState!=='done'){
@@ -5103,7 +5123,7 @@ function openAttendanceDetailModal(rec,staffName){
         Object.assign(rec,patch);
         toast('Attendance record updated'); ov.remove();
         if(typeof viewAttendanceApp==='function') viewAttendanceApp();
-      }catch(e){ toast('Could not update: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+      }catch(e){ toast('Could not update: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save changes'; }
     };
     document.getElementById('att_deleteRec').onclick=async()=>{
       if(!confirm("Delete "+staffName+"'s attendance record for "+fmtLongDate(rec.workDate)+"? This can't be undone.")) return;
@@ -5112,7 +5132,7 @@ function openAttendanceDetailModal(rec,staffName){
         await apiDeleteAttendanceRecord(rec.id);
         toast('Attendance record deleted'); ov.remove();
         if(typeof viewAttendanceApp==='function') viewAttendanceApp();
-      }catch(e){ toast('Could not delete: '+(e.message||e)); btn.disabled=false; btn.textContent='Delete record'; }
+      }catch(e){ toast('Could not delete: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Delete record'; }
     };
   }
 }
@@ -5236,7 +5256,7 @@ function bindAttendanceCtrls(){
         const rec=await apiSignIn(loc.lat,loc.lng,lateReason,site.offSiteReason,site.isOffSite,photo);
         ATTENDANCE_TODAY=rec; ATTENDANCE_HISTORY=[rec,...ATTENDANCE_HISTORY.filter(a=>a.workDate!==rec.workDate)];
         toast('Signed in'); paintAttendanceBody();
-      }catch(e){ toast('Could not sign in: '+(e.message||e)); btn.disabled=false; btn.querySelector('.lbl').textContent='Sign In'; }
+      }catch(e){ toast('Could not sign in: '+(friendlyErr(e))); btn.disabled=false; btn.querySelector('.lbl').textContent='Sign In'; }
     }else{
       btn.disabled=true; btn.querySelector('.lbl').textContent='Locating…';
       try{
@@ -5248,7 +5268,7 @@ function bindAttendanceCtrls(){
         const rec=await apiSignOut(loc.lat,loc.lng,site.offSiteReason,site.isOffSite);
         ATTENDANCE_TODAY=rec; ATTENDANCE_HISTORY=[rec,...ATTENDANCE_HISTORY.filter(a=>a.workDate!==rec.workDate)];
         toast('Signed out'); paintAttendanceBody();
-      }catch(e){ toast('Could not sign out: '+(e.message||e)); btn.disabled=false; btn.querySelector('.lbl').textContent='Sign Out'; }
+      }catch(e){ toast('Could not sign out: '+(friendlyErr(e))); btn.disabled=false; btn.querySelector('.lbl').textContent='Sign Out'; }
     }
   };
 }
@@ -6022,7 +6042,7 @@ async function drainOfflineQueue(){
           if(error){
             if(isNetworkShapedError(error)) break;
             await offlineDbDelete(item.id);
-            toast('A queued offline change to '+(item.extra.leadName||'a client record')+' could not be saved: '+(error.message||error));
+            toast('A queued offline change to '+(item.extra.leadName||'a client record')+' could not be saved: '+friendlyErr(error));
             continue;
           }
           if(item.extra.expectedVersion!=null && (!data||data.length===0)){
@@ -6039,7 +6059,7 @@ async function drainOfflineQueue(){
             if(isNetworkShapedError(error)) break;
             if(error.code==='23505'){ await offlineDbDelete(item.id); continue; } // already landed from an earlier attempt whose response was lost
             await offlineDbDelete(item.id);
-            toast('A queued offline payment for '+(item.payload.client_name||'a client')+' could not be saved: '+(error.message||error));
+            toast('A queued offline payment for '+(item.payload.client_name||'a client')+' could not be saved: '+friendlyErr(error));
             continue;
           }
           await offlineDbDelete(item.id);
@@ -6188,7 +6208,7 @@ function bindClientDatabaseCtrls(container){
     importFile.onchange=e=>{
       if(!e.target.files[0]){ return; }
       startPipelineImport(e.target.files[0],{companyWide:true,onDone:async()=>{
-        CLIENTDB_LOADED=false; try{ await apiLoadClientDatabase(); }catch(err){ toast('Could not refresh client list: '+(err.message||err)); }
+        CLIENTDB_LOADED=false; try{ await apiLoadClientDatabase(); }catch(err){ toast('Could not refresh client list: '+(friendlyErr(err))); }
         const body=document.getElementById('cdbBody'); if(body){ body.innerHTML=clientDatabaseBodyHtml(); bindClientDatabaseCtrls(body); }
       }});
       e.target.value='';
@@ -6234,7 +6254,7 @@ async function downloadClientDbTemplate(){
     const url=URL.createObjectURL(blob);
     triggerDownload(url,'Client_Import_Template.xlsx','excel',blob);
     toast('Template downloaded');
-  }catch(e){ toast('Could not build template: '+(e.message||e)); }
+  }catch(e){ toast('Could not build template: '+(friendlyErr(e))); }
   if(btn){ btn.disabled=false; btn.textContent='⬇ Blank template'; }
 }
 function openAddClientDbLead(){
@@ -6269,14 +6289,14 @@ function openAddClientDbLead(){
       CLIENTDB_LIST.push(row); if(agentKey===PROFILE.agent_key) DB.leads.push(row);
       toast('Client added'); ov.remove();
       const body=document.getElementById('cdbBody'); if(body){ body.innerHTML=clientDatabaseBodyHtml(); bindClientDatabaseCtrls(body); }
-    }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save client'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save client'; }
   };
 }
 async function viewClientDatabase(){
   const homeRoute=PROFILE.role==='manager'?'mgrSalesDesk':'salesdesk';
   V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Company-wide</div><h2>Client Database</h2><p>Every client across every agent.</p></div></div>
   <div id="cdbBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
-  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client database'); }catch(e){ toast('Could not load client database: '+(e.message||e)); } }
+  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client database'); }catch(e){ toast('Could not load client database: '+(friendlyErr(e))); } }
   const body=document.getElementById('cdbBody');
   body.innerHTML=clientDatabaseBodyHtml();
   bindClientDatabaseCtrls(body);
@@ -6524,7 +6544,7 @@ async function openLeadSourceModal(lead,onSaved){
       toast('Source saved'); ov.remove();
       if(onSaved) onSaved();
       else{ const body=document.getElementById('companyLeadsBody'); if(body){ body.innerHTML=companyLeadsBodyHtml(); bindCompanyLeadsRows(body); } }
-    }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save'; }
   };
 }
 function companyLeadsBodyHtml(){
@@ -6546,7 +6566,7 @@ function companyLeadsBodyHtml(){
 async function viewCompanyPipeline(){
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgrSalesDesk':'salesdesk')}<div class="pagehead"><div><div class="eyebrow">Company-sourced</div><h2>Company Leads</h2><p>Clients who came to the company directly -- assign each to an agent once you know who's handling them.</p></div></div>
   <div id="companyLeadsBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
-  if(!COMPANY_LEADS_LOADED){ try{ await withLoadTimeout(apiLoadCompanyLeads(),15000,'Company leads'); }catch(e){ toast('Could not load company leads: '+(e.message||e)); } }
+  if(!COMPANY_LEADS_LOADED){ try{ await withLoadTimeout(apiLoadCompanyLeads(),15000,'Company leads'); }catch(e){ toast('Could not load company leads: '+(friendlyErr(e))); } }
   const body=document.getElementById('companyLeadsBody');
   body.innerHTML=companyLeadsBodyHtml();
   bindCompanyLeadsRows(body);
@@ -6584,7 +6604,7 @@ function openAddCompanyLeadModal(){
       if(src.referrerLeadId){ try{ await apiInsertReferral({referrerLeadId:src.referrerLeadId,referrerName:src.referrerName,referrerContact:src.referrerContact,referredName:name,referredContact:contact,referredLocation:'',referredNoPlots:val('cl_noplots'),referredLeadId:row.id}); }catch(e){} }
       toast('Company lead added'); ov.remove();
       const body=document.getElementById('companyLeadsBody'); if(body){ body.innerHTML=companyLeadsBodyHtml(); bindCompanyLeadsRows(body); }
-    }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save lead'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save lead'; }
   };
 }
 function openAssignCompanyLeadModal(lead){
@@ -6612,7 +6632,7 @@ function openAssignCompanyLeadModal(lead){
       try{ const rec=await apiSendMessage(agentKey,lead.name+' (company lead) has been assigned to you — find them in your pipeline.'); if(rec) DB.messages.push(rec); }catch(e){}
       toast('Assigned to '+(agent?agent.name:agentKey)); ov.remove();
       const body=document.getElementById('companyLeadsBody'); if(body){ body.innerHTML=companyLeadsBodyHtml(); bindCompanyLeadsRows(body); }
-    }catch(e){ toast('Could not assign: '+(e.message||e)); btn.disabled=false; btn.textContent='Assign'; }
+    }catch(e){ toast('Could not assign: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Assign'; }
   };
 }
 async function viewPlotRequests(){
@@ -6620,7 +6640,7 @@ async function viewPlotRequests(){
   V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Additional plot requests</div><h2>Plot Requests</h2><p>Submitted by clients from their dashboard.</p></div></div>
   <div id="prBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   let list=[];
-  try{ list=await apiLoadPlotRequests(); }catch(e){ toast('Could not load plot requests: '+(e.message||e)); }
+  try{ list=await apiLoadPlotRequests(); }catch(e){ toast('Could not load plot requests: '+(friendlyErr(e))); }
   document.getElementById('prBody').innerHTML=plotRequestsListHtml(list);
   bindPlotRequestCtrls(list);
 }
@@ -6661,14 +6681,14 @@ function bindPlotRequestCtrls(list){
     const req=list.find(x=>x.id===b.dataset.approvepr); if(!req) return;
     b.disabled=true; b.textContent='Approving…';
     try{ await apiApprovePlotRequest(req); toast('Approved — added to the pipeline'); viewPlotRequests(); }
-    catch(e){ toast('Could not approve: '+(e.message||e)); b.disabled=false; b.textContent='Approve'; }
+    catch(e){ toast('Could not approve: '+(friendlyErr(e))); b.disabled=false; b.textContent='Approve'; }
   });
   document.querySelectorAll('[data-rejectpr]').forEach(b=>b.onclick=async()=>{
     const req=list.find(x=>x.id===b.dataset.rejectpr); if(!req) return;
     if(!confirm('Reject this request from '+req.clientName+'?')) return;
     b.disabled=true;
     try{ await apiRejectPlotRequest(req.id); toast('Request rejected'); viewPlotRequests(); }
-    catch(e){ toast('Could not reject: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Could not reject: '+(friendlyErr(e))); b.disabled=false; }
   });
 }
 async function apiFlagAllocation(id,reason){
@@ -6820,7 +6840,7 @@ async function apiSendMessage(recipientKey,body,attachment){
       data=retry.data; error=retry.error;
       if(!error){ const m=mapMsg(data); m.attachData=null; m.attachType=null; m.attachName=null; return m; }
     }else{
-      throw new Error('Photo/file/audio sharing needs one more database update — ask Management to re-run team_chat_schema.sql in Supabase. Plain text messages work fine either way.');
+      throwFriendly('Photo/file/audio sharing needs one more database update — ask Management to re-run team_chat_schema.sql in Supabase. Plain text messages work fine either way.');
     }
   }
   if(error) throw error; return mapMsg(data);
@@ -6908,16 +6928,16 @@ async function apiDeletePlot(id){
 async function apiSplitPlot(plotId){
   if(DEMO_MODE){
     const d=await demoLoad(); d.plots=d.plots||[];
-    const p=d.plots.find(x=>x.id===plotId); if(!p) throw new Error('Plot not found');
+    const p=d.plots.find(x=>x.id===plotId); if(!p) throwFriendly('Plot not found');
     if(p.status==='Subdivided'){
       const kids=d.plots.filter(x=>x.parentPlotId===plotId);
       const a=kids.find(k=>k.plotNumber===p.plotNumber+'a'), b=kids.find(k=>k.plotNumber===p.plotNumber+'b');
       if(a&&b) return {alreadySplit:true,plotA:a,plotB:b};
-      throw new Error('Plot is marked Subdivided but its children could not be found');
+      throwFriendly('Plot is marked Subdivided but its children could not be found');
     }
-    if(p.plotType!=='Full Plot') throw new Error('Only a Full Plot can be split into halves');
-    if(p.status!=='Available') throw new Error('Only an Available plot can be split (current status: '+p.status+')');
-    if(p.unitKind==='half'||p.parentPlotId) throw new Error('This plot is already a half-unit and cannot be split further');
+    if(p.plotType!=='Full Plot') throwFriendly('Only a Full Plot can be split into halves');
+    if(p.status!=='Available') throwFriendly('Only an Available plot can be split (current status: '+p.status+')');
+    if(p.unitKind==='half'||p.parentPlotId) throwFriendly('This plot is already a half-unit and cannot be split further');
     const half=p.price!=null?p.price/2:null;
     const a={id:uid(),site:p.site,plotNumber:p.plotNumber+'a',plotType:'Half Plot',status:'Available',price:half,unitKind:'half',parentPlotId:p.id,clientName:'',clientContact:'',agentKey:'',notes:''};
     const b={id:uid(),site:p.site,plotNumber:p.plotNumber+'b',plotType:'Half Plot',status:'Available',price:half,unitKind:'half',parentPlotId:p.id,clientName:'',clientContact:'',agentKey:'',notes:''};
@@ -7103,7 +7123,7 @@ document.getElementById('resetSendBtn').onclick=async()=>{
   const btn=document.getElementById('resetSendBtn'); btn.disabled=true; btn.textContent='Sending…';
   try{
     const {error}=await sb.auth.resetPasswordForEmail(email);
-    if(error){ err.textContent=error.message||'Could not send code.'; btn.disabled=false; btn.textContent='Send code'; return; }
+    if(error){ err.textContent=friendlyErr(error,'Could not send code.'); btn.disabled=false; btn.textContent='Send code'; return; }
     RESET_EMAIL=email;
     document.getElementById('resetStep1').classList.add('hidden');
     document.getElementById('resetStep2').classList.remove('hidden');
@@ -7120,9 +7140,9 @@ document.getElementById('resetConfirmBtn').onclick=async()=>{
   const btn=document.getElementById('resetConfirmBtn'); btn.disabled=true; btn.textContent='Setting password…';
   try{
     const {error:verifyErr}=await sb.auth.verifyOtp({email:RESET_EMAIL, token:code, type:'recovery'});
-    if(verifyErr){ err.textContent=verifyErr.message||'That code is invalid or expired.'; btn.disabled=false; btn.textContent='Set new password'; return; }
+    if(verifyErr){ err.textContent=friendlyErr(verifyErr,'That code is invalid or expired.'); btn.disabled=false; btn.textContent='Set new password'; return; }
     const {error:updErr}=await sb.auth.updateUser({password:pw});
-    if(updErr){ err.textContent=updErr.message||'Could not set new password.'; btn.disabled=false; btn.textContent='Set new password'; return; }
+    if(updErr){ err.textContent=friendlyErr(updErr,'Could not set new password.'); btn.disabled=false; btn.textContent='Set new password'; return; }
     await sb.auth.signOut();
     document.getElementById('resetCard').classList.add('hidden');
     document.getElementById('authCard').classList.remove('hidden');
@@ -7364,7 +7384,7 @@ async function enterApp(){
   // The greeting animation used to run AFTER data finished loading, stacking its fixed
   // 5s on top of however long the network took. Running both at once means the wait is
   // whichever is longer, not both added together -- same animation, faster sign-in.
-  const loadPromise=(async()=>{ try{ await withLoadTimeout(apiLoadConfig(),15000,'Config'); await withLoadTimeout(apiLoadAll(),20000,'Sign-in'); }catch(e){ toast(e.message||'Could not load data'); } })();
+  const loadPromise=(async()=>{ try{ await withLoadTimeout(apiLoadConfig(),15000,'Config'); await withLoadTimeout(apiLoadAll(),20000,'Sign-in'); }catch(e){ toast(friendlyErr(e,'Could not load data')); } })();
   const greetPromise=showGreetScreen(PROFILE.role==='manager'?'Management':PROFILE.name,PROFILE.role==='manager');
   await Promise.all([loadPromise,greetPromise]);
   refreshAnnounceBubble();
@@ -8043,7 +8063,7 @@ document.getElementById('joinSubmit').onclick=async()=>{
       return;
     }
     const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{name}}});
-    if(error){ err.textContent=error.message||'Could not create account.'; btn.disabled=false; btn.textContent='Create my account'; return; }
+    if(error){ err.textContent=friendlyErr(error,'Could not create account.'); btn.disabled=false; btn.textContent='Create my account'; return; }
     if(!data.session){
       toast('Account created — check your email and tap the confirmation link, then come back and sign in.');
       document.getElementById('joinCard').classList.add('hidden'); document.getElementById('authCard').classList.remove('hidden');
@@ -9238,7 +9258,7 @@ async function shareBlobUrl(blobUrl,filename){
     if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:filename}); }
     else if(navigator.share){ await navigator.share({title:filename}); }
     else{ toast('Sharing is not supported on this browser — use Download instead.'); }
-  }catch(e){ if(e.name!=='AbortError') toast('Could not share: '+(e.message||e)); }
+  }catch(e){ if(e.name!=='AbortError') toast('Could not share: '+(friendlyErr(e))); }
 }
 function previewUnavailableBody(){
   return `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:10px;padding:30px;text-align:center"><span style="width:40px;height:40px;display:inline-flex;opacity:.7">${ic.doc}</span><div style="font-weight:700">No in-app preview for this file type</div><div class="mini" style="color:#9DB2CC">Use Download or Send below</div></div>`;
@@ -9289,7 +9309,7 @@ function openFilePreview(dataUrl,filename,kind){
   if(kind==='excel' && isDataUri){
     (async()=>{
       try{
-        if(typeof ExcelJS==='undefined') throw new Error('lib not loaded');
+        if(typeof ExcelJS==='undefined') throwFriendly('lib not loaded');
         const wb=new ExcelJS.Workbook();
         await wb.xlsx.load(b64ToArrayBuffer(dataUrl.slice(dataUrl.indexOf(',')+1)));
         const ws=wb.worksheets[0];
@@ -9861,7 +9881,7 @@ function bindTargetCard(){
       await apiDeleteTargetSelection(id);
       DB.targetSelections=(DB.targetSelections||[]).filter(t=>t.id!==id);
       toast('Removed'); agentHome();
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
 }
 async function openTargetSelector(){
@@ -9921,7 +9941,7 @@ async function openTargetSelector(){
         DB.targetSelections.push(rec);
       }
       toast('Selections saved'); ov.remove(); agentHome();
-    }catch(e){ toast('Save failed: '+(e.message||e)); saveBtn.disabled=false; saveBtn.textContent='Save selections'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); saveBtn.disabled=false; saveBtn.textContent='Save selections'; }
   };
 }
 function computeSmartInsights(leads,paymentsForScope){
@@ -10125,12 +10145,12 @@ function openEditEntryModal(opts){
       else values[f.key]=val(id);
     });
     try{ await opts.onSave(values); ov.remove(); }
-    catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+    catch(e){ toast('Could not save: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save changes'; }
   };
 }
 async function confirmDeleteEntry(label,apiFn,id,onDone){
   if(!confirm('Delete '+label+'? This cannot be undone.')) return;
-  try{ await apiFn(id); onDone(); }catch(e){ toast('Could not delete: '+(e.message||e)); }
+  try{ await apiFn(id); onDone(); }catch(e){ toast('Could not delete: '+(friendlyErr(e))); }
 }
 function homeHeroGreeting(){
   const h=new Date().getHours();
@@ -10619,7 +10639,7 @@ function agentHome(){ const k=kpisOf(DB.leads);
   document.getElementById('dashRefreshBtn').onclick=async(e)=>{
     const btn=e.currentTarget; btn.classList.add('spinning'); btn.disabled=true;
     try{ await withLoadTimeout(apiLoadAll(),20000,'Refresh'); toast('Up to date'); agentHome(); }
-    catch(err){ toast(err.message||'Refresh failed'); btn.classList.remove('spinning'); btn.disabled=false; }
+    catch(err){ toast(friendlyErr(err,'Refresh failed')); btn.classList.remove('spinning'); btn.disabled=false; }
   };
 }
 
@@ -10721,7 +10741,7 @@ function openPipelineDeleteRequestModal(){
     try{
       await apiInsertPipelineDeleteRequest(PROFILE.key,PROFILE.name,reason);
       toast('Request sent to Management'); ov.remove();
-    }catch(e){ toast('Could not send request: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request to Management'; }
+    }catch(e){ toast('Could not send request: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send request to Management'; }
   };
 }
 async function requestPipelineOp(kind){
@@ -10730,7 +10750,7 @@ async function requestPipelineOp(kind){
     const rec=await apiSendMessage('manager',PROFILE.name+' has requested '+label+' of their pipeline.');
     if(rec) DB.messages.push(rec);
     toast('Request sent to Management');
-  }catch(e){ toast('Could not send request: '+(e.message||e)); }
+  }catch(e){ toast('Could not send request: '+(friendlyErr(e))); }
 }
 // Order List reference's filter-chip row -- stage filter (from the <select>
 // above) and the paid-only toggle both render as removable pill chips here
@@ -10908,7 +10928,7 @@ function renderRestorePicker(data){
         done++;
       }
       toast('Restored '+done+' client'+(done===1?'':'s')); ov.remove(); route('pipeline');
-    }catch(e){ toast('Restore stopped after '+done+' — '+(e.message||e)); btn.disabled=false; btn.textContent='Restore selected'; }
+    }catch(e){ toast('Restore stopped after '+done+' — '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Restore selected'; }
   };
 }
 
@@ -11241,7 +11261,7 @@ async function submitAddPlot(){
     const row=await apiInsertPlot({site:PLOT_SITE,plotNumber:plotNum,plotType:val('pa_type'),status:'Available',
       price:val('pa_price')?num(val('pa_price')):null,clientName:'',clientContact:'',agentKey:'',notes:''});
     DB.plots.unshift(row); plotFormOpen=false; toast('Plot '+plotNum+' added'); refreshPlotsView();
-  }catch(e){ toast('Could not add plot: '+(e.message||e)); btn.disabled=false; btn.textContent='Add plot'; }
+  }catch(e){ toast('Could not add plot: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Add plot'; }
 }
 async function submitBulkPlots(){
   const raw=val('pb_list'); const nums=[...new Set(raw.split(/[\n,]/).map(s=>s.trim()).filter(Boolean))];
@@ -11293,7 +11313,7 @@ async function savePlotDetail(){
     addActivity('Plot '+p.plotNumber,'Plot edited',changes.length?changes.join(' · '):'Details updated','by '+PROFILE.name,'',null);
     if(before.status==='Allocated' && patch.status!=='Allocated') await cascadePlotNoLongerAllocated(p.plotNumber,'Plot status changed to '+patch.status);
   }
-  catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+  catch(e){ toast('Could not save: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save changes'; }
 }
 async function deleteSelectedPlot(){
   const p=DB.plots.find(x=>x.id===selectedPlotId); if(!p) return;
@@ -11332,7 +11352,7 @@ async function splitSelectedPlot(){
     DB.plots.push({...plotA,site:p.site,unitKind:'half',parentPlotId:p.id,clientName:plotA.clientName||'',clientContact:plotA.clientContact||'',agentKey:plotA.agentKey||'',notes:plotA.notes||''});
     DB.plots.push({...plotB,site:p.site,unitKind:'half',parentPlotId:p.id,clientName:plotB.clientName||'',clientContact:plotB.clientContact||'',agentKey:plotB.agentKey||'',notes:plotB.notes||''});
     selectedPlotId=null; toast(p.plotNumber+' split into '+aNum+' and '+bNum); refreshPlotsView();
-  }catch(e){ toast('Split failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Split into '+aNum+' / '+bNum; }
+  }catch(e){ toast('Split failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Split into '+aNum+' / '+bNum; }
 }
 function viewPlots(){
   PLOTS_CONTEXT='standalone';
@@ -11402,7 +11422,7 @@ function checkPlotFieldLive(inputId,statusId,halfWrapId,neededType){
             const chosen=which==='a'?plotA:plotB;
             input.value=chosen.plotNumber;
             check();
-          }catch(e){ toast('Could not split: '+(e.message||e)); btn.disabled=false; btn.textContent='Use '+p.plotNumber+which; }
+          }catch(e){ toast('Could not split: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Use '+p.plotNumber+which; }
         });
       }
     }
@@ -11576,7 +11596,7 @@ async function sendAllocationToChat(a){
     const rec=await apiSendMessage(a.agentKey,msg,{data:dataUrl,type:'file',name:'Allocation_'+(a.clientName||'client').replace(/\s+/g,'_')+'.pdf'});
     DB.messages.push(rec);
     toast('Sent to '+a.agentName+"'s chat");
-  }catch(e){ toast('Could not send: '+(e.message||e)); }
+  }catch(e){ toast('Could not send: '+(friendlyErr(e))); }
 }
 /* ================= TEAM CHAT (real-time, WhatsApp-style) ================= */
 function chatDayLabel(iso){
@@ -11947,7 +11967,7 @@ async function sendChatAttachment(otherKey,file){
     const rec=await apiSendMessage(otherKey,'',{data,type,name}); DB.messages.push(rec);
     const l=document.getElementById('chatLog'); if(l){ l.innerHTML=renderChatLog(otherKey); l.scrollTop=l.scrollHeight; }
     bindChatMediaCtrls(otherKey);
-  }catch(e){ toast(e.message||'Could not send that file'); }
+  }catch(e){ toast(friendlyErr(e,'Could not send that file')); }
 }
 function downloadChatFile(m){
   const a=document.createElement('a'); a.href=m.attachData; a.download=m.attachName||'file';
@@ -11998,7 +12018,7 @@ function bindChatMediaCtrls(otherKey){
     try{ await apiDeleteMessage(id); DB.messages=DB.messages.filter(x=>x.id!==id);
       const l=document.getElementById('chatLog'); if(l){ l.innerHTML=renderChatLog(otherKey); }
       bindChatMediaCtrls(otherKey);
-    }catch(e){ toast('Delete failed: '+(e.message||e)); }
+    }catch(e){ toast('Delete failed: '+(friendlyErr(e))); }
   });
 }
 let VOICE_RECORDER=null, VOICE_CHUNKS=[], VOICE_STREAM=null, VOICE_TIMER=null, VOICE_SECONDS=0;
@@ -12289,7 +12309,7 @@ async function apiUpdateTodoStatus(id,status){
   const {error}=await sb.from('schedule_items').update(patch).eq('id',id); if(error) throw error;
 }
 async function apiRescheduleTodo(id,newDate,newStart,newEnd){
-  const orig=TODO_LIST.find(x=>x.id===id); if(!orig) throw new Error('Task not found');
+  const orig=TODO_LIST.find(x=>x.id===id); if(!orig) throwFriendly('Task not found');
   const rec=await apiInsertTodo({title:orig.title,notes:orig.notes,contact:orig.contact,date:newDate,startTime:newStart,endTime:newEnd});
   if(DEMO_MODE){ const d=await demoLoad(); const t=(d.todos||[]).find(x=>x.id===id); if(t){ t.status='rescheduled'; t.rescheduledToId=rec.id; } await demoSave(); }
   else{ const {error}=await sb.from('schedule_items').update({status:'rescheduled',rescheduled_to_id:rec.id}).eq('id',id); if(error) throw error; }
@@ -12466,7 +12486,7 @@ function openTodoEditModal(t){
       const patch={title,date:val('tde_date'),startTime:val('tde_start'),endTime:val('tde_end'),contact:val('tde_contact').trim(),notes:val('tde_notes').trim()};
       await apiUpdateTodo(t.id,patch); Object.assign(t,patch);
       toast('To-do updated'); ov.remove(); paintTodoTab();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save changes'; }
   };
 }
 function bindTodoCtrls(){
@@ -12480,12 +12500,12 @@ function bindTodoCtrls(){
     if(!confirm('Delete this to-do permanently? This cannot be undone.')) return;
     b.disabled=true;
     try{ await apiDeleteTodo(b.dataset.tododelete); TODO_LIST=TODO_LIST.filter(x=>x.id!==b.dataset.tododelete); toast('To-do deleted'); paintTodoTab(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-todoclose]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
     try{ await apiUpdateTodoStatus(b.dataset.todoclose,'closed'); const t=TODO_LIST.find(x=>x.id===b.dataset.todoclose); if(t){ t.status='closed'; t.closedAt=new Date().toISOString(); } toast('Marked closed'); paintTodoTab(); evaluateMyAchievements(); evaluateMyStreak(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-todoreschedule]').forEach(b=>b.onclick=()=>{
     const t=TODO_LIST.find(x=>x.id===b.dataset.todoreschedule); if(t) openTodoRescheduleModal(t);
@@ -12502,13 +12522,13 @@ function bindTodoCtrls(){
       await apiCancelFutureRecurrence(seriesId,isoPlusDays(t.date,1));
       TODO_LIST.forEach(x=>{ if(x.status==='open'&&x.date>t.date&&(x.id===seriesId||x.recursParentId===seriesId)) x.status='cancelled'; });
       toast('Series stopped'); paintTodoTab();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   const reportBtn=document.getElementById('todoReportBtn'); if(reportBtn) reportBtn.onclick=openTodoReportModal;
 }
 async function todoEnsureRangeLoaded(){
   try{ TODO_LIST=await withLoadTimeout(apiLoadTodos(isoPlusDays(TODO_DATE,-3),isoPlusDays(TODO_DATE,3)),8000,'To-dos'); TODO_LOADED=true; todoArmAlarms(); }
-  catch(e){ toast('Could not load to-dos: '+(e.message||e)); }
+  catch(e){ toast('Could not load to-dos: '+(friendlyErr(e))); }
 }
 function paintTodoTab(){
   const body=document.getElementById('dutiesTodoBody');
@@ -12586,7 +12606,7 @@ function openTodoNewModal(){
       }
       TODO_LIST.push(...recs); TODO_LIST.sort((a,b)=>a.date===b.date?a.startTime.localeCompare(b.startTime):a.date.localeCompare(b.date));
       toast(recs.length>1?recs.length+' occurrences saved':'To-do saved'); ov.remove(); todoArmAlarms(); paintTodoTab(); evaluateMyStreak();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save to-do'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save to-do'; }
   };
 }
 function openTodoRescheduleModal(t){
@@ -12621,7 +12641,7 @@ function openTodoRescheduleModal(t){
       const rec=await apiRescheduleTodo(t.id,newDate,start,end);
       t.status='rescheduled'; t.rescheduledToId=rec.id; TODO_LIST.push(rec);
       toast('Rescheduled'); ov.remove(); todoArmAlarms(); paintTodoTab();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Reschedule'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Reschedule'; }
   };
 }
 function openTodoReportModal(){
@@ -12640,7 +12660,7 @@ function openTodoReportModal(){
     const from=val('tp_from'), to=val('tp_to');
     const btn=document.getElementById('tp_go'); btn.disabled=true; btn.textContent='Building…';
     try{ const list=await apiLoadTodos(from,to); buildTodoReportPDF(from,to,list); ov.remove(); }
-    catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Generate PDF'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Generate PDF'; }
   };
 }
 function buildTodoReportPDF(from,to,list){
@@ -12846,7 +12866,7 @@ function bindDayGridDrag(container,items,date,onDone){
         else{ toast(msg); el.style.top=dayGridTopPx(item.startTime)+'px'; return; }
       }
       try{ await apiRescheduleTodo(item.id,date,newStart,newEnd); toast('Moved to '+newStart+'–'+newEnd); if(onDone) onDone(); }
-      catch(err){ toast('Could not move: '+(err.message||err)); el.style.top=dayGridTopPx(item.startTime)+'px'; }
+      catch(err){ toast('Could not move: '+(friendlyErr(err))); el.style.top=dayGridTopPx(item.startTime)+'px'; }
     });
     el.addEventListener('pointercancel',()=>{ dragging=false; el.style.top=dayGridTopPx(item.startTime)+'px'; });
   });
@@ -13024,13 +13044,13 @@ async function paintMonthTab(){
   const toDate=MONTH_CURSOR+'-'+String(new Date(y,m,0).getDate()).padStart(2,'0');
   let counts;
   try{ counts=await withLoadTimeout(apiLoadMonthCounts(fromDate,toDate,[PROFILE.key]),8000,'Records'); }
-  catch(e){ body.innerHTML=`<div class="empty">Could not load Records: ${esc(e.message||e)}</div><button class="chip" id="monthRetryBtn" style="margin-top:10px">Retry</button>`; const rb=document.getElementById('monthRetryBtn'); if(rb) rb.onclick=()=>paintMonthTab(); return; }
+  catch(e){ body.innerHTML=`<div class="empty">Could not load Records: ${esc(friendlyErr(e))}</div><button class="chip" id="monthRetryBtn" style="margin-top:10px">Retry</button>`; const rb=document.getElementById('monthRetryBtn'); if(rb) rb.onclick=()=>paintMonthTab(); return; }
   let dayHtml='';
   if(RECORDS_OPEN_DATE&&RECORDS_OPEN_DATE.slice(0,7)===MONTH_CURSOR){
     try{
       const {blocks,dueTasks}=await apiLoadDayAgenda(RECORDS_OPEN_DATE,[PROFILE.key]);
       dayHtml=dayRecordsHtml(RECORDS_OPEN_DATE,blocks,dueTasks);
-    }catch(e){ dayHtml=`<div class="empty">Could not load that day: ${esc(e.message||e)}</div>`; }
+    }catch(e){ dayHtml=`<div class="empty">Could not load that day: ${esc(friendlyErr(e))}</div>`; }
   }
   body.innerHTML=`
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -13122,7 +13142,7 @@ async function paintMyDayTab(){
     const [agenda,week]=await withLoadTimeout(Promise.all([apiLoadDayAgenda(date,[PROFILE.key]),apiLoadWeekAgenda(date,[PROFILE.key])]),8000,'My Day');
     blocks=agenda.blocks; dueTasks=agenda.dueTasks; weekItems=week;
   }catch(e){
-    body.innerHTML=`<div class="empty">Could not load My Day: ${esc(e.message||e)}</div><button class="chip" id="mydayRetryBtn" style="margin-top:10px">Retry</button>`;
+    body.innerHTML=`<div class="empty">Could not load My Day: ${esc(friendlyErr(e))}</div><button class="chip" id="mydayRetryBtn" style="margin-top:10px">Retry</button>`;
     const rb=document.getElementById('mydayRetryBtn'); if(rb) rb.onclick=()=>paintMyDayTab();
     return;
   }
@@ -13156,7 +13176,7 @@ async function paintTeamTab(){
   let blocks,dueTasks;
   try{ ({blocks,dueTasks}=await withLoadTimeout(apiLoadDayAgenda(date,staffKeys),8000,'Team view')); }
   catch(e){
-    body.innerHTML=`<div class="empty">Could not load the team view: ${esc(e.message||e)}</div><button class="chip" id="teamRetryBtn" style="margin-top:10px">Retry</button>`;
+    body.innerHTML=`<div class="empty">Could not load the team view: ${esc(friendlyErr(e))}</div><button class="chip" id="teamRetryBtn" style="margin-top:10px">Retry</button>`;
     const rb=document.getElementById('teamRetryBtn'); if(rb) rb.onclick=()=>paintTeamTab();
     return;
   }
@@ -13201,7 +13221,7 @@ async function paintOpsReportsTab(){
       let prior=null, priorData=null;
       if(OPSRPT_COMPARE){ prior=priorPeriodRange(range); const priorTodos=await apiLoadAllTodosForLeaderboard(prior.from,prior.to); priorData=computeOpsReportData(prior.from,prior.to,priorTodos,tasksData,taskEventsData); }
       buildOpsReportPDF(range,data,prior,priorData);
-    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Generate PDF report';
   };
 }
@@ -13300,13 +13320,13 @@ async function paintTaskRequestsInbox(){
   box.querySelectorAll('[data-reqaccept]').forEach(b=>b.onclick=async()=>{
     b.disabled=true; b.textContent='Accepting…';
     try{ await apiRespondTaskRequestAccept(b.dataset.reqaccept); toast('Accepted'); await viewDuties(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Accept'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Accept'; }
   });
   box.querySelectorAll('[data-reqdecline]').forEach(b=>b.onclick=async()=>{
     const reason=prompt('Reason for declining (optional):')||'';
     b.disabled=true; b.textContent='Declining…';
     try{ await apiRespondTaskRequestDecline(b.dataset.reqdecline,reason); toast('Declined'); await paintTaskRequestsInbox(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Decline'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Decline'; }
   });
   box.querySelectorAll('[data-reqpropose]').forEach(b=>b.onclick=()=>{
     document.getElementById('reqPropose_'+b.dataset.reqpropose).classList.toggle('hidden');
@@ -13317,7 +13337,7 @@ async function paintTaskRequestsInbox(){
     if(end<=start){ toast('End time must be after start time'); return; }
     b.disabled=true; b.textContent='Sending…';
     try{ await apiRespondTaskRequestProposeTime(id,newDate,start,end); toast('New time sent — accepted onto your calendar'); await viewDuties(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Send new time'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Send new time'; }
   });
 }
 // Shared by task escalation (management-assigned work) and to-do escalation
@@ -13371,7 +13391,7 @@ function openEscalateItemModal(item,currentAssignee,onRequested){
       await apiRequestTaskAssignment(item.id,toKey,toStaff?toStaff.name:toKey,note,urgent);
       toast('Request sent to '+(toStaff?toStaff.name:toKey)); ov.remove();
       onRequested(toKey,toStaff?toStaff.name:toKey,note);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send request'; }
   };
 }
 function openEscalateTaskModal(id){
@@ -13467,7 +13487,7 @@ async function deleteTaskWithPaperTrail(t){
     DB.tasks=DB.tasks.filter(x=>x.id!==t.id);
     toast('Task deleted'+(willSend?' — paper trail sent to '+recipientName:''));
     route('duties');
-  }catch(e){ toast('Delete failed: '+(e.message||e)); }
+  }catch(e){ toast('Delete failed: '+(friendlyErr(e))); }
 }
 async function changeTaskStatus(t,status,note){
   const fromStatus=t.status;
@@ -13481,7 +13501,7 @@ async function changeTaskStatus(t,status,note){
     if((status==='Open'||status==='In Progress')&&(fromStatus==='Done'||fromStatus==='Cancelled')){ t.completedAt=null; t.cancelledAt=null; }
     if(status==='Done') evaluateMyAchievements();
     toast('Task updated'); route('taskDetail',t.id);
-  }catch(e){ toast('Failed: '+(e.message||e)); }
+  }catch(e){ toast('Failed: '+(friendlyErr(e))); }
 }
 async function loadTaskTimeline(t){
   const wrap=document.getElementById('taskTimeline'); if(!wrap) return;
@@ -13554,7 +13574,7 @@ function bindTaskDetailCtrls(t){
       const newTitle=val('te_title').trim(), newDesc=val('te_desc').trim();
       if(!newTitle){ toast('Title cannot be empty'); return; }
       try{ await apiEditTaskContent(t.id,newTitle,newDesc); t.title=newTitle; t.description=newDesc; toast('Saved'); viewTaskDetail(t.id); }
-      catch(e){ toast('Failed: '+(e.message||e)); }
+      catch(e){ toast('Failed: '+(friendlyErr(e))); }
     };
   };
   const progBtn=document.getElementById('taskProgressBtn');
@@ -13562,7 +13582,7 @@ function bindTaskDetailCtrls(t){
     const note=val('taskProgressInput').trim(); if(!note){ toast('Write an update first'); return; }
     progBtn.disabled=true;
     try{ await apiLogTaskEvent(t.id,'progress',{note}); toast('Update posted'); document.getElementById('taskProgressInput').value=''; loadTaskTimeline(t); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
     progBtn.disabled=false;
   };
   const startBtn=document.getElementById('taskStartBtn'); if(startBtn) startBtn.onclick=()=>changeTaskStatus(t,'In Progress');
@@ -13608,7 +13628,7 @@ function openNewTaskModal(){
         assignedTo:toKey,assignedToName:toStaff?toStaff.name:toKey,dueDate:val('nt_due')||null,leadId:matchedLead?matchedLead.id:null});
       rec.assignedByName=PROFILE.name; rec.assignedBy=PROFILE.key;
       DB.tasks.unshift(rec); toast('Task assigned'); ov.remove(); viewDuties();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Assign task'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Assign task'; }
   };
 }
 
@@ -13643,12 +13663,12 @@ function bindFeedbackCtrls(){
     const body=val('fb_body').trim(); if(!body){ toast('Write something first'); return; }
     postBtn.disabled=true; postBtn.textContent='Posting…';
     try{ const rec=await apiInsertFeedback(val('fb_cat'),body); DB.feedback.unshift(rec); toast('Posted'); viewFeedback(); }
-    catch(e){ toast('Failed: '+(e.message||e)); postBtn.disabled=false; postBtn.textContent='Post'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); postBtn.disabled=false; postBtn.textContent='Post'; }
   };
   document.querySelectorAll('[data-fbdel]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this post?')) return;
     try{ await apiDeleteFeedback(b.dataset.fbdel); DB.feedback=DB.feedback.filter(x=>x.id!==b.dataset.fbdel); toast('Deleted'); viewFeedback(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
   document.querySelectorAll('[data-fbtogglecomments]').forEach(b=>b.onclick=()=>toggleFeedbackComments(b.dataset.fbtogglecomments));
   const pdfBtn=document.getElementById('fbDownloadPdf');
@@ -13766,7 +13786,7 @@ function bindAllocationCtrls(){
         buildAuthorizationPDF(a,plots,PROFILE.name,multi);
         toast('Authorization PDF downloaded — get it signed, then come back to confirm');
         wrap.innerHTML=renderAllocationAwaiting(a); bindAllocationAwaitingCtrls(a,wrap);
-      }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Download Authorization PDF'; }
+      }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Download Authorization PDF'; }
     };
   });
   V.querySelectorAll('[data-dlalloc]').forEach(b=>b.onclick=()=>{ const a=DB.allocations.find(x=>x.id===b.dataset.dlalloc); if(a) buildAllocationPDF(a); });
@@ -13784,7 +13804,7 @@ function bindAllocationCtrls(){
       for(const key of notifyTo){ try{ const rec=await apiSendMessage(key,`${PROFILE.name} fixed the flagged issue on ${a.clientName}'s allocation request — ready to suggest plots again.`); DB.messages.push(rec); }catch(e){} }
       toast('Marked as fixed — '+(flaggedByName||'the team')+' notified');
       PROFILE.role==='manager'?managerView():viewAllocations();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent="I've fixed this — notify for re-review"; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent="I've fixed this — notify for re-review"; }
   });
 }
 function openFlagAllocationModal(a){
@@ -13813,7 +13833,7 @@ function openFlagAllocationModal(a){
       if(rec) DB.messages.push(rec);
       toast('Flagged — '+a.agentName+' notified'); ov.remove();
       PROFILE.role==='manager'?managerView():viewAllocations();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send & flag'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send & flag'; }
   };
 }
 function bindAllocationAwaitingCtrls(a,wrap){
@@ -13891,7 +13911,7 @@ function bindAllocationAwaitingCtrls(a,wrap){
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocated','Plot '+plot+' has been allocated to you. Log in to view the details and download your allocation confirmation.').catch(()=>{}); }
       toast('Allocation confirmed — '+a.agentName+' will see it on their dashboard');
       wrap.innerHTML=renderAllocationDone(a); bindAllocationDoneCtrls(a);
-    }catch(e){ toast('Failed: '+(e.message||e)); confirmBtn.disabled=false; confirmBtn.textContent=confirmBtn.dataset.allplots?('Confirm all '+plotNums.length+' approved'):'Confirm approved plot'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); confirmBtn.disabled=false; confirmBtn.textContent=confirmBtn.dataset.allplots?('Confirm all '+plotNums.length+' approved'):'Confirm approved plot'; }
   };
 }
 function bindAllocationDoneCtrls(a){
@@ -13921,7 +13941,7 @@ function bindAllocationDoneCtrls(a){
       addActivity(a.clientName,'Allocation reverted','Plot '+revertedPlot+' allocation undone by '+PROFILE.name,'','',null);
       toast('Allocation undone — back in Pending'); selectedAllocId=null;
       PROFILE.role==='manager'?managerView():viewAllocations();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Mistake? Undo — send back to Pending'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Mistake? Undo — send back to Pending'; }
   });
   wrap.querySelectorAll('[data-delalloc]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this allocation request entirely? '+(a.plotNumber?('Plot '+a.plotNumber+' goes back to Available. '):'')+'This cannot be undone.')) return;
@@ -13935,7 +13955,7 @@ function bindAllocationDoneCtrls(a){
       DB.allocations=(DB.allocations||[]).filter(x=>x.id!==a.id);
       toast('Allocation request deleted'); selectedAllocId=null;
       PROFILE.role==='manager'?managerView():viewAllocations();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
 }
 function openEditAllocatedPlotModal(a){
@@ -13996,7 +14016,7 @@ function openEditAllocatedPlotModal(a){
       { const leadRec=findLeadById(a.leadId); if(leadRec) notifyClient(leadRec,'Plot allocation updated','Your allocated plot is now '+newPlot+'. Log in to view the details.').catch(()=>{}); }
       toast('Allocation updated — now Plot '+newPlot); ov.remove();
       PROFILE.role==='manager'?managerView():viewAllocations();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save change'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save change'; }
   };
 }
 
@@ -14249,7 +14269,7 @@ async function saveNewLead(){ const l=readLeadForm();
     else if(src.referrerLeadId){ try{ await apiInsertReferral({referrerLeadId:src.referrerLeadId,referrerName:src.referrerName,referrerContact:src.referrerContact,referredName:l.name,referredContact:l.contact,referredLocation:'',referredNoPlots:l.noPlots,referredLeadId:row.id}); }catch(e){} }
     await addActivity(l.name,'New lead added','Stage: '+displayStageCode(l.stage),l.nextAction);
     toast('Lead saved to your pipeline'); route('pipeline');
-  }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save lead'; }
+  }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save lead'; }
 }
 
 /* ================= UPDATE ================= */
@@ -14334,7 +14354,7 @@ function openContractRequestModal(lead){
       }
       toast('Request sent'); ov.remove();
       formUpdate(lead.id);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send request'; }
   };
 }
 function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return; }
@@ -14460,7 +14480,7 @@ function formUpdate(id){ const l=findLeadById(id); if(!l){ route('home'); return
       await notifyClient(l,'Documentation update','Your plot documentation has moved to: '+docStageLabel(stage)+'.');
       toast('Stage updated — client notified');
       formUpdate(id);
-    }catch(e){ toast('Could not update stage: '+(e.message||e)); saveDocStageBtn.disabled=false; saveDocStageBtn.textContent='Update stage'; }
+    }catch(e){ toast('Could not update stage: '+(friendlyErr(e))); saveDocStageBtn.disabled=false; saveDocStageBtn.textContent='Update stage'; }
   };
 }
 // Shown when a deposit payment would push the client's deposit total past the
@@ -14561,7 +14581,7 @@ function deleteLeadConfirm(id,name){
       const reasonLabel=reason==='wrong'?'data entered wrong':reason==='refund'?'client refund/opt-out':'other reason';
       addActivity(name,'Lead deleted','Reason: '+reasonLabel+' — deleted by '+PROFILE.name,'','',null);
       ov.remove(); toast(name+' deleted'); route('pipeline');
-    }catch(e){ toast('Delete failed: '+(e.message||e)); b.disabled=false; b.textContent='Retry'; }
+    }catch(e){ toast('Delete failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Retry'; }
   });
 }
 // Intercepts the one case that needs a decision before saving: a deposit payment that
@@ -14625,7 +14645,7 @@ async function saveUpdate(id,resolvedDepositTarget){ const l=findLeadById(id); i
     if(paymentResult&&paymentResult.offerReceipt){
       offerSendReceipt({...l,name,contact},paymentResult.payment);
     }
-  }catch(e){ toast('Update failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save update'; }
+  }catch(e){ toast('Update failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save update'; }
 }
 
 /* ================= MONTH-BY-MONTH PAYMENT SCHEDULE ================= */
@@ -14744,7 +14764,7 @@ function openEditPaymentModal(p,lead){
       }
       toast('Payment corrected'); ov.remove();
       route('paymentSchedule',lead.id);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save correction'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save correction'; }
   };
 }
 async function deletePaymentEntry(p,lead){
@@ -14763,7 +14783,7 @@ async function deletePaymentEntry(p,lead){
     }
     toast('Payment deleted');
     route('paymentSchedule',lead.id);
-  }catch(e){ toast('Failed: '+(e.message||e)); }
+  }catch(e){ toast('Failed: '+(friendlyErr(e))); }
 }
 function openLogMonthPayment(lead,slotKey,expected){
   const [y,m]=slotKey.split('-').map(Number);
@@ -14795,7 +14815,7 @@ function openLogMonthPayment(lead,slotKey,expected){
       ov.remove();
       route('paymentSchedule',lead.id);
       if(result.offerReceipt) offerSendReceipt(lead,result.payment);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save payment'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save payment'; }
   };
 }
 
@@ -14820,7 +14840,7 @@ async function viewLogPaymentApp(){
     <button class="chip ${logPayTab==='pending'?'on':''}" data-logpaytab="pending">Pending Approvals${pendingCount?' ('+pendingCount+')':''}</button>
   </div>`:''}
   <div id="logpayBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
-  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client list'); }catch(e){ toast('Could not load clients: '+(e.message||e)); } }
+  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client list'); }catch(e){ toast('Could not load clients: '+(friendlyErr(e))); } }
   if(isMgr) document.querySelectorAll('[data-logpaytab]').forEach(b=>b.onclick=()=>{ logPayTab=b.dataset.logpaytab; viewLogPaymentApp(); });
   paintLogPayBody();
 }
@@ -14869,7 +14889,7 @@ function bindPendingPaymentsCtrls(){
       toast('Approved · receipt ready to send');
       paintLogPayBody();
       offerSendReceipt(lead,approvedRec);
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Approve & send receipt'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Approve & send receipt'; }
   });
   document.querySelectorAll('[data-paydecline]').forEach(b=>b.onclick=async()=>{
     const p=(DB.pendingPayments||[]).find(x=>x.id===b.dataset.paydecline); if(!p) return;
@@ -14888,7 +14908,7 @@ function bindPendingPaymentsCtrls(){
       }
       toast('Declined');
       paintLogPayBody();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
 }
 function logPaymentSearchResultsHtml(q){
@@ -15007,7 +15027,7 @@ function bindLogPayDetailCtrls(lead){
       if(result.status==='approved') toast('Payment logged · '+ghs(amount));
       paintLogPayBody();
       if(result.offerReceipt) await offerSendReceipt(lead,result.payment);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Log payment'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Log payment'; }
   };
   document.querySelectorAll('[data-lpedit]').forEach(b=>b.onclick=()=>{
     const p=findPaymentById(b.dataset.lpedit); if(p) openLogPayEditModal(p,lead);
@@ -15038,7 +15058,7 @@ function bindLogPayDetailCtrls(lead){
       }
       toast('Payment deleted');
       paintLogPayBody();
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
 }
 function openLogPayEditModal(p,lead){
@@ -15082,7 +15102,7 @@ function openLogPayEditModal(p,lead){
       }
       toast('Payment corrected'); ov.remove();
       paintLogPayBody();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save correction'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save correction'; }
   };
 }
 
@@ -15143,7 +15163,7 @@ async function paintSiteVisitAuthBody(){
     }
     SVA_VISITS=SVA_ALL_WEEK_VISITS.filter(v=>v.date===SVA_SELECTED_DAY);
     SVA_FORM=await apiLoadOrCreateWeeklyVisitForm(SVA_WEEK_START,SVA_SELECTED_DAY);
-  }catch(e){ body.innerHTML=`<div class="empty">Could not load this day's form: ${esc(e.message||e)}</div>`; return; }
+  }catch(e){ body.innerHTML=`<div class="empty">Could not load this day's form: ${esc(friendlyErr(e))}</div>`; return; }
   body.innerHTML=siteVisitAuthBodyHtml(SVA_FORM,SVA_VISITS);
   bindSiteVisitAuthCtrls();
 }
@@ -15241,7 +15261,7 @@ function bindSiteVisitAuthCtrls(){
       Object.assign(SVA_FORM,patch);
       toast('Cost estimate saved');
       await paintSiteVisitAuthBody();
-    }catch(e){ toast('Could not save: '+(e.message||e)); saveBtn.disabled=false; saveBtn.textContent='Save cost estimate'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); saveBtn.disabled=false; saveBtn.textContent='Save cost estimate'; }
   };
   const finBtn=document.getElementById('svaFinalize');
   if(finBtn) finBtn.onclick=async()=>{
@@ -15251,7 +15271,7 @@ function bindSiteVisitAuthCtrls(){
       SVA_FORM=await apiFinalizeWeeklyVisitForm(SVA_FORM.id);
       toast('Finalized and approved');
       await paintSiteVisitAuthBody();
-    }catch(e){ toast('Could not finalize: '+(e.message||e)); finBtn.disabled=false; finBtn.textContent='Finalize & approve'; }
+    }catch(e){ toast('Could not finalize: '+(friendlyErr(e))); finBtn.disabled=false; finBtn.textContent='Finalize & approve'; }
   };
   const dlBtn=document.getElementById('svaDownload');
   if(dlBtn) dlBtn.onclick=()=>buildWeeklyVisitAuthPDF(SVA_FORM,SVA_VISITS);
@@ -15265,7 +15285,7 @@ function bindSiteVisitAuthCtrls(){
       DB.sitevisits=(DB.sitevisits||[]).filter(x=>x.id!==id);
       toast('Removed from the form');
       await paintSiteVisitAuthBody();
-    }catch(e){ toast('Could not remove: '+(e.message||e)); b.disabled=false; }
+    }catch(e){ toast('Could not remove: '+(friendlyErr(e))); b.disabled=false; }
   });
 }
 /* ================= SITE VISIT EXPERIENCE (staff side) =================
@@ -15348,7 +15368,7 @@ async function paintSiteVisitExperienceBody(){
         try{ SVE_DAY_REPORT=await apiLoadSveDayReport(SVE_REPORT_DATE); }catch(e){ SVE_DAY_REPORT=null; }
       }
     }
-  }catch(e){ body.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
+  }catch(e){ body.innerHTML=`<div class="empty">Could not load: ${esc(friendlyErr(e))}</div>`; return; }
   body.innerHTML=siteVisitExperienceBodyHtml();
   bindSiteVisitExperienceCtrls();
 }
@@ -15504,7 +15524,7 @@ function bindSiteVisitExperienceCtrls(){
       await apiSaveSveManagerReview(sid,review);
       const s=SVE_SUBMISSIONS.find(x=>x.id===sid); if(s) s.managerReview=review;
       toast('Review saved'); paintSiteVisitExperienceBody();
-    }catch(e){ toast('Could not save: '+(e.message||e)); b.disabled=false; b.textContent='Save review'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); b.disabled=false; b.textContent='Save review'; }
   });
   const saveSummaryBtn=document.getElementById('sveSaveSummaryBtn');
   if(saveSummaryBtn) saveSummaryBtn.onclick=async()=>{
@@ -15516,7 +15536,7 @@ function bindSiteVisitExperienceCtrls(){
     try{
       SVE_DAY_REPORT=await apiSaveSveDayReport(date,{siteManagerName,summaryText});
       toast('Summary saved'); paintSiteVisitExperienceBody();
-    }catch(e){ toast('Could not save: '+(e.message||e)); saveSummaryBtn.disabled=false; saveSummaryBtn.textContent='Save summary'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); saveSummaryBtn.disabled=false; saveSummaryBtn.textContent='Save summary'; }
   };
   const genBtn=document.getElementById('sveGenerateBtn');
   if(genBtn) genBtn.onclick=async()=>{
@@ -15535,7 +15555,7 @@ function bindSiteVisitExperienceCtrls(){
         }
       }
       toast('Report generated'+(res.pdfBase64?' and sent to Management':''));
-    }catch(e){ toast('Could not generate: '+(e.message||e)); }
+    }catch(e){ toast('Could not generate: '+(friendlyErr(e))); }
     genBtn.disabled=false; genBtn.textContent='Send to Management';
   };
   const dlBtn=document.getElementById('sveDownloadReportBtn');
@@ -15554,7 +15574,7 @@ function bindSiteVisitExperienceCtrls(){
         setTimeout(()=>URL.revokeObjectURL(url),4000);
         toast('Report downloaded');
       }else{ toast('No PDF returned — try again'); }
-    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
     dlBtn.disabled=false; dlBtn.textContent='⬇ Download PDF';
   };
 }
@@ -15564,9 +15584,9 @@ async function apiGenerateSiteVisitExperienceReport(date,skipEmail){
   if(error){
     let reason=null;
     if(error.context && typeof error.context.json==='function'){ try{ const j=await error.context.json(); reason=j&&j.reason; }catch(e2){} }
-    throw new Error(reason==='forbidden'?"You don't have permission to generate this report":reason==='unauthorized'?'Please sign in again':(reason||error.message||'Could not generate report'));
+    throwFriendly(reason==='forbidden'?"You don't have permission to generate this report":reason==='unauthorized'?'Please sign in again':(reason||'Could not generate report'));
   }
-  if(!data||!data.ok) throw new Error((data&&data.reason)||'Could not generate report');
+  if(!data||!data.ok) throwFriendly((data&&data.reason)||'Could not generate report');
   return data;
 }
 function buildSiteVisitExperiencePDF(s){
@@ -16231,7 +16251,7 @@ async function saveEnq(){ const name=val('e_name').trim(), contact=val('e_contac
   const row={name,contact,location:val('e_loc').trim(),types:[...enqTypes],plot:val('e_plot'),source:val('e_src'),
     details:val('e_details').trim(),follow:val('e_follow'),followDate:val('e_fdate')};
   try{ const rec=await apiInsertEnquiry(row); DB.enquiries.unshift(rec); showSavedScreen('enquiry',rec,'Enquiry logged'); }
-  catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save enquiry'; }
+  catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save enquiry'; }
 }
 
 /* ================= CLIENT FEEDBACK (was "Complaint" -- feedback can be positive or negative;
@@ -16269,7 +16289,7 @@ async function saveCmp(sentiment){ const name=val('c_name').trim();
     }
     showSavedScreen('complaint',rec,'Feedback recorded \u00b7 assigned to '+row.owner);
   }
-  catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save feedback'; }
+  catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save feedback'; }
 }
 
 /* ================= SITE VISIT ================= */
@@ -16408,7 +16428,7 @@ async function saveSV(){ const name=val('s_name').trim();
     ['elias','emmanuel','manager'].forEach(key=>{ if(key!==PROFILE.key) sendPdfToStaffChat(key,pdfUri,'SiteVisit_'+rec.name.replace(/\s+/g,'_')+'.pdf',msg); });
     showSavedScreen('sitevisit',rec,'Site visit request sent \u00b7 awaiting confirmation');
   }
-  catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Submit request'; }
+  catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Submit request'; }
 }
 
 /* ================= ACTIVITY ================= */
@@ -16494,7 +16514,7 @@ function formProfile(){
       if(error) throw error;
       PROFILE.avatar=b64; document.getElementById('avatarPreview').innerHTML=`<img src="${b64}" style="width:100%;height:100%;object-fit:cover"/>`;
       paintTopbarAvatar(); toast('Profile picture updated');
-    }catch(err){ toast('Could not save photo: '+(err.message||err)); }
+    }catch(err){ toast('Could not save photo: '+(friendlyErr(err))); }
   };
   const sigInput=document.getElementById('signatureInput');
   sigInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
@@ -16502,7 +16522,7 @@ function formProfile(){
       const b64=await readSignatureFile(file);
       await apiUpdateSignature(b64);
       toast('Signature saved'); formProfile();
-    }catch(err){ toast('Could not save signature: '+(err.message||err)); }
+    }catch(err){ toast('Could not save signature: '+(friendlyErr(err))); }
   };
   const removeSigBtn=document.getElementById('removeSigBtn');
   if(removeSigBtn) removeSigBtn.onclick=async()=>{
@@ -16516,7 +16536,7 @@ function formProfile(){
   if(genBtn) genBtn.onclick=async()=>{
     genBtn.disabled=true; genBtn.textContent='Generating…';
     try{ await apiGetOrCreateWidgetToken(); formProfile(); }
-    catch(err){ toast('Could not generate link: '+(err.message||err)); genBtn.disabled=false; genBtn.textContent='Generate my widget link'; }
+    catch(err){ toast('Could not generate link: '+(friendlyErr(err))); genBtn.disabled=false; genBtn.textContent='Generate my widget link'; }
   };
   const copyBtn=document.getElementById('copyWidgetLinkBtn');
   if(copyBtn) copyBtn.onclick=async()=>{
@@ -16689,7 +16709,7 @@ async function paintPerformanceSection(){
       :`<div class="tag ok" style="display:inline-flex;margin-bottom:4px">You're #1 — keep it up</div>`}
     ${suggestions.length?`<div class="mini" style="font-weight:700;margin:12px 0 6px">Ways to close the gap</div>
       <ul style="margin:0;padding-left:18px">${suggestions.map(s=>`<li class="mini" style="margin-bottom:4px">${esc(s)}</li>`).join('')}</ul>`:''}`;
-  }catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load performance',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  }catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load performance',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
 }
 async function saveAccountContact(){
   const phone=val('ct_phone').trim(), whatsapp=val('ct_whatsapp').trim();
@@ -16701,7 +16721,7 @@ async function saveAccountContact(){
     Object.assign(PROFILE,{phone,whatsapp,social_handles:social});
     const mine=(DB.profiles||[]).find(p=>p.id===USER.id); if(mine) Object.assign(mine,{phone,whatsapp,social_handles:social});
     toast('Contact info saved');
-  }catch(e){ toast('Could not save: '+(e.message||e)); }
+  }catch(e){ toast('Could not save: '+(friendlyErr(e))); }
   btn.disabled=false; btn.textContent='Save contact info';
 }
 // Self-service replacement for what used to be a manager-only bulk form -- every
@@ -16715,7 +16735,7 @@ async function saveAccountAboutMe(){
     const mine=(DB.profiles||[]).find(p=>p.agent_key===PROFILE.key);
     if(mine) Object.assign(mine,{birthday:birthday||null,position:position||null,address:address||null,id_number:idNumber||null});
     toast('Your details are saved');
-  }catch(e){ toast('Could not save: '+(e.message||e)); }
+  }catch(e){ toast('Could not save: '+(friendlyErr(e))); }
   btn.disabled=false; btn.textContent='Save my details';
 }
 /* ================= QUOTATION REQUEST (available on every dashboard) ================= */
@@ -16877,7 +16897,7 @@ function openStandardQuotationRequest(){
         listTotal:t.listTotal,discountTotal:t.discountTotal,interestTotal:t.interestTotal,grandTotal:t.grand});
       buildQuotationPDF({clientName,address,contact,email,plotType,noPlots,period,...t});
       toast('Quotation generated'); ov.remove();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
   };
 }
 function sqft(x){ return num(x).toLocaleString('en-US',{maximumFractionDigits:0})+' sq ft'; }
@@ -16986,7 +17006,7 @@ function openTechnicalQuotationRequest(){
         quoteKind:'technical',details:{fullCount:t.fullCount,halfCount:t.halfCount,fullArea:t.fullArea,halfArea:t.halfArea,customLots:t.customLots,customAreas:t.customAreas,totalArea:t.totalArea,ratePerSqft:t.rate}});
       buildTechnicalQuotationPDF({clientName,address,contact,email,period,...t});
       toast('Technical quotation generated'); ov.remove();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Generate quotation PDF'; }
   };
 }
 function buildQuotationPDF(q){
@@ -17505,7 +17525,7 @@ function paintClientContractSale(leads,reqs){
       await apiClientSubmitContractRequest(lead.id,CLIENT_PROFILE.name,address,kyc,null);
       route('clienthome');
       await showClientSuccessModal('Contract request submitted',"Thank you — Management will review your details and confirm your contract shortly. You'll see it ready to download on your home screen.");
-    }catch(e){ toast('Could not submit: '+(e.message||e)); btn.disabled=false; btn.textContent=existing?'Update & resubmit':'Submit for review'; }
+    }catch(e){ toast('Could not submit: '+(friendlyErr(e))); btn.disabled=false; btn.textContent=existing?'Update & resubmit':'Submit for review'; }
   };
 }
 /* ================= REFERRALS (Client side) =================
@@ -17590,7 +17610,7 @@ function openClientReferralModal(){
       if(myLead&&myLead.agent&&myLead.agent!=='manager') apiSendPush({ownerKind:'staff',ownerId:myLead.agent,title:'Your client sent a referral',body:CLIENT_PROFILE.name+' referred '+name+' ('+contact+')',tag:'referral'});
       offerShareReferral(name,contact,location,plots);
       paintClientReferrals();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send referral'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send referral'; }
   };
 }
 function offerShareReferral(name,contact,location,plots){
@@ -17706,7 +17726,7 @@ function openClientPlotRequestModal(leads){
         combineWithLeadId:val('pr_combine')||null,notes:val('pr_notes').trim()});
       ov.remove();
       await showClientSuccessModal('Request sent!','Thank you — your agent and Management have been notified and will review this shortly.');
-    }catch(e){ toast('Could not send request: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request'; }
+    }catch(e){ toast('Could not send request: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send request'; }
   };
 }
 // Cumulative approved-payment total for one lead, as of (inclusive of) a given
@@ -18493,7 +18513,7 @@ async function viewContractApp(){
   </div>
   <div id="contractAppBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   document.querySelectorAll('[data-catab]').forEach(b=>b.onclick=()=>{ contractAppTab=b.dataset.catab; viewContractApp(); });
-  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client list'); }catch(e){ toast('Could not load clients: '+(e.message||e)); } }
+  if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client list'); }catch(e){ toast('Could not load clients: '+(friendlyErr(e))); } }
   paintContractAppBody();
 }
 function contractRequestsHtml(){
@@ -18536,7 +18556,7 @@ function bindContractRequestsCtrls(){
     try{
       await generateAndRecordContract(lead,isClientReq?{forcePrompt:true,prefill:{address:req.clientAddress||lead.address||'',kyc:req.clientKyc||lead.kyc||{}}}:undefined);
       paintContractAppBody();
-    } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
+    } catch(e){ toast('Could not generate: '+(friendlyErr(e))); } finally { b.disabled=false; }
   });
   const unreadIds=(DB.contractRequests||[]).filter(r=>r.status==='pending'&&!r.read).map(r=>r.id);
   if(unreadIds.length){ apiMarkContractRequestsRead(unreadIds).then(()=>{ unreadIds.forEach(id=>{ const r=DB.contractRequests.find(x=>x.id===id); if(r) r.read=true; }); }); }
@@ -18731,7 +18751,7 @@ function bindContractAppCtrls(){
       CONTRACT_COVER_IMG=null; TRULANDER_WORDMARK_IMG=null; // force a re-fetch so the new image is used next time
       toast('Contract settings saved');
       paintContractAppBody();
-    }catch(e){ toast('Could not save: '+(e.message||e)); saveBtn.disabled=false; saveBtn.textContent='Save contract settings'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); saveBtn.disabled=false; saveBtn.textContent='Save contract settings'; }
   };
 }
 function bindContractResultRows(){
@@ -18747,7 +18767,7 @@ function bindContractResultRows(){
     const pendingClientReq=(DB.contractRequests||[]).find(r=>r.leadId===lead.id&&r.status==='pending'&&r.source==='client');
     try{
       await generateAndRecordContract(lead,pendingClientReq?{forcePrompt:true,prefill:{address:pendingClientReq.clientAddress||lead.address||'',kyc:pendingClientReq.clientKyc||lead.kyc||{}}}:undefined);
-    } catch(e){ toast('Could not generate: '+(e.message||e)); } finally { b.disabled=false; }
+    } catch(e){ toast('Could not generate: '+(friendlyErr(e))); } finally { b.disabled=false; }
   });
 }
 // A brand-new client (not yet anywhere in the pipeline) still needs a real lead
@@ -18786,7 +18806,7 @@ function openContractNewClientModal(){
       toast('Client added — generating contract…'); ov.remove();
       await generateAndRecordContract(row);
       paintContractAppBody();
-    }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save & download contract'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save & download contract'; }
   };
 }
 
@@ -19014,7 +19034,7 @@ async function saveClientVisit(){
     const rec=await apiClientInsertSiteVisit(row); CLIENT_DB.sitevisits.unshift(rec);
     route('clienthome');
     await showClientSuccessModal('Visit request sent!',"Thank you for booking a site visit — we'll confirm the date and time with you shortly.");
-  }catch(e){ toast('Could not send request: '+(e.message||e)); btn.disabled=false; btn.textContent='Submit request'; }
+  }catch(e){ toast('Could not send request: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Submit request'; }
 }
 function starRatingHtml(field,current){
   return `<div class="starRating" data-starfield="${esc(field)}" data-value="${current||0}">${[1,2,3,4,5].map(n=>`<button type="button" class="starBtn ${n<=(current||0)?'on':''}" data-star="${n}">★</button>`).join('')}</div>`;
@@ -19067,7 +19087,7 @@ function paintClientSiteVisitExperience(eligible,feedback){
       if(idx>=0) feedback[idx]=rec; else feedback.push(rec);
       toast('Thank you for your feedback');
       paintClientSiteVisitExperience(eligible,feedback);
-    }catch(e){ toast('Could not submit: '+(e.message||e)); btn.disabled=false; btn.textContent='Submit rating'; }
+    }catch(e){ toast('Could not submit: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Submit rating'; }
   });
 }
 function formClientFeedback(){
@@ -19103,7 +19123,7 @@ async function saveClientFeedback(sentiment){
     }
     route('clienthome');
     await showClientSuccessModal('Message sent!',"Thanks for reaching out — we've received your message and will follow up soon.");
-  }catch(e){ toast('Could not send: '+(e.message||e)); btn.disabled=false; btn.textContent='Send'; }
+  }catch(e){ toast('Could not send: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send'; }
 }
 // Premium UI rebuild -- same Profile/Settings split as the staff side
 // (formProfile()/formAccount()): identity fields reached via the topbar
@@ -19136,19 +19156,19 @@ function formClientProfile(){
     if(!name||!contact){ toast('Name and phone number are required'); return; }
     const btn=document.getElementById('saveClientContact'); btn.disabled=true; btn.textContent='Saving…';
     try{ await apiClientUpdateContact(name,contact); document.getElementById('tbName').textContent=name.split(' ')[0]; toast('Details updated — your agent has been notified'); formClientProfile(); }
-    catch(e){ toast(e.message||'Could not update your details'); btn.disabled=false; btn.textContent='Save details'; }
+    catch(e){ toast(friendlyErr(e,'Could not update your details')); btn.disabled=false; btn.textContent='Save details'; }
   };
   document.getElementById('saveClientChannels').onclick=async()=>{
     const btn=document.getElementById('saveClientChannels'); btn.disabled=true; btn.textContent='Saving…';
     const whatsapp=val('cs_whatsapp').trim()?composeIntlPhone(val('cs_wacountry'),val('cs_whatsapp')):'';
     try{ await apiClientUpdateChannels(val('cs_email').trim(),whatsapp); toast('Saved'); btn.disabled=false; btn.textContent='Save'; }
-    catch(e){ toast(e.message||'Could not save'); btn.disabled=false; btn.textContent='Save'; }
+    catch(e){ toast(friendlyErr(e,'Could not save')); btn.disabled=false; btn.textContent='Save'; }
   };
   const avInput=document.getElementById('clientAvatarInput');
   avInput.onchange=async(e)=>{ const file=e.target.files[0]; e.target.value=''; if(!file) return;
     const b64=await openAvatarCropper(file); if(!b64) return;
     try{ await apiClientUpdateAvatar(b64); document.getElementById('clientAvatarPreview').innerHTML=`<img src="${b64}" style="width:100%;height:100%;object-fit:cover"/>`; paintTopbarAvatar(); toast('Profile picture updated'); }
-    catch(err){ toast('Could not save photo: '+(err.message||err)); }
+    catch(err){ toast('Could not save photo: '+(friendlyErr(err))); }
   };
 }
 function formClientSettings(){
@@ -19173,7 +19193,7 @@ function formClientSettings(){
     if(p1!==p2){ toast('PINs do not match'); return; }
     const btn=document.getElementById('saveClientPin'); btn.disabled=true; btn.textContent='Saving…';
     try{ await apiClientChangePin(p1); toast('PIN updated'); formClientSettings(); }
-    catch(e){ toast('Could not update PIN: '+(e.message||e)); btn.disabled=false; btn.textContent='Update PIN'; }
+    catch(e){ toast('Could not update PIN: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Update PIN'; }
   };
   { const cur=applyDisplayPrefs();
     const ffSel=document.getElementById('dispFontFamily');
@@ -19233,10 +19253,10 @@ async function managerView(){
   <div style="display:flex;gap:8px"><button class="iconbtn" id="mgrRefresh" title="Refresh live data" style="background:#F1EFE7;border-color:var(--line);color:var(--ink)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none"><path d="M4 12a8 8 0 0113.7-5.6L20 8m0 0V4m0 4h-4M20 12a8 8 0 01-13.7 5.6L4 16m0 0v4m0-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`:''}
   <div id="mbody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>
   <div class="footer-note">System created by Abdul Waheed (Digital Operations) © ${new Date().getFullYear()}</div>`;
-  if(!isOverview) document.getElementById('mgrRefresh').onclick=async()=>{ toast('Refreshing…'); try{ await withLoadTimeout(apiLoadAll(),20000,'Refresh'); managerView(); toast('Up to date'); }catch(e){ toast(e.message||'Refresh failed'); } };
+  if(!isOverview) document.getElementById('mgrRefresh').onclick=async()=>{ toast('Refreshing…'); try{ await withLoadTimeout(apiLoadAll(),20000,'Refresh'); managerView(); toast('Up to date'); }catch(e){ toast(friendlyErr(e,'Refresh failed')); } };
   const body=document.getElementById('mbody');
   if(mgrTab==='overview'){ body.innerHTML=mgrOverview(); bindTasks(); bindOverviewCtrls(); animateKpiCounts(body); bindExpectedRevenueCard(); bindPipelineHealthCard(); bindBannerSlideshow();
-    document.getElementById('mgrHeroRefresh').onclick=async(e)=>{ const btn=e.currentTarget; btn.classList.add('spinning'); btn.disabled=true; try{ await withLoadTimeout(apiLoadAll(),20000,'Refresh'); toast('Up to date'); managerView(); }catch(err){ toast(err.message||'Refresh failed'); btn.classList.remove('spinning'); btn.disabled=false; } };
+    document.getElementById('mgrHeroRefresh').onclick=async(e)=>{ const btn=e.currentTarget; btn.classList.add('spinning'); btn.disabled=true; try{ await withLoadTimeout(apiLoadAll(),20000,'Refresh'); toast('Up to date'); managerView(); }catch(err){ toast(friendlyErr(err,'Refresh failed')); btn.classList.remove('spinning'); btn.disabled=false; } };
   }
   else if(mgrTab==='Data Check'){ const renderMgrDataCheck=()=>{ body.innerHTML=renderDataCheck(null); bindDataCheckCtrls(null,renderMgrDataCheck); }; renderMgrDataCheck(); }
   else if(mgrTab==='Leaderboard'){
@@ -19252,7 +19272,7 @@ async function managerView(){
     // is a fixed 90-day/all-time window independent of slYear.
     if(LEADERBOARD_ROWS_YEAR!==slYear) jobs.push(withLoadTimeout(apiLoadLeaderboardRows(slYear+'-01-01',slYear+'-12-31'),8000,'Leaderboard').then(rows=>{ LEADERBOARD_ROWS=rows; LEADERBOARD_ROWS_YEAR=slYear; }));
     if(!LEADERBOARD_TASKS_LOADED) jobs.push(withLoadTimeout(apiLoadFullTasks(),8000,'Leaderboard').then(rows=>{ LEADERBOARD_TASKS_FULL=rows; LEADERBOARD_TASKS_LOADED=true; }));
-    if(jobs.length){ try{ await Promise.all(jobs); }catch(e){ toast(e.message||'Could not load leaderboard'); } }
+    if(jobs.length){ try{ await Promise.all(jobs); }catch(e){ toast(friendlyErr(e,'Could not load leaderboard')); } }
     body.innerHTML=mgrLeaderboard(); bindLeagueCtrls();
   }
   else if(mgrTab==='Reports'){ route('mgmtreports','exports'); }
@@ -19261,7 +19281,7 @@ async function managerView(){
   else if(mgrTab==='Import History'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ IMPORT_BATCHES_LIST=await withLoadTimeout(apiLoadImportBatches(),15000,'Import History'); IMPORT_BATCHES_LOADED=true; body.innerHTML=importHistoryHtml(); bindImportHistoryCtrls(); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load Import History',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load Import History',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='Plots'){ PLOTS_CONTEXT='manager'; body.innerHTML=renderPlotsGrid(); bindPlotsGrid(); }
   else if(mgrTab==='Allocations'){
@@ -19285,7 +19305,7 @@ async function managerView(){
     bindAllocationCtrls();
   }
   else if(mgrTab==='Client Database'){
-    if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client database'); }catch(e){ toast('Could not load client database: '+(e.message||e)); } }
+    if(!CLIENTDB_LOADED){ try{ await withLoadTimeout(apiLoadClientDatabase(),15000,'Client database'); }catch(e){ toast('Could not load client database: '+(friendlyErr(e))); } }
     body.innerHTML=clientDatabaseBodyHtml();
     bindClientDatabaseCtrls(body);
   }
@@ -19304,23 +19324,23 @@ async function managerView(){
   else if(mgrTab==='System Health'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ const health=await computeSystemHealth(); body.innerHTML=systemHealthHtml(health); bindSystemHealthCtrls(); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load System Health',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load System Health',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='System'){ body.innerHTML=mgrSystemHtml(); bindSystemCtrls(); }
   else if(mgrTab==='Audit Log'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ AUDIT_LOG_LIST=await withLoadTimeout(apiLoadAuditEvents(),15000,'Audit Log'); AUDIT_LOG_LOADED=true; body.innerHTML=auditLogHtml(); bindAuditLogCtrls(); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Audit Log',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Audit Log',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='Support Diagnostics'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ const d=await withLoadTimeout(computeDiagnostics(),15000,'Diagnostics'); body.innerHTML=diagnosticsHtml(d); bindDiagnosticsCtrls(d); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load diagnostics',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load diagnostics',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   }
   else if(mgrTab==='Referrals'){ if(!REFERRALS_LOADED){ try{ REFERRALS_LIST=await withLoadTimeout(apiLoadReferrals(),15000,'Referrals'); REFERRALS_LOADED=true; }catch(e){} } body.innerHTML=mgrReferralsHtml(); bindReferralsCtrls(); }
   else if(mgrTab==='Referral Settings'){ body.innerHTML=mgrReferralSettingsHtml(); bindReferralSettingsCtrls(); }
   else if(mgrTab==='Achievement Settings'){
-    try{ ACHIEVEMENT_DEFS=await withLoadTimeout(apiListAchievementDefs(),15000,'Achievements'); }catch(e){ toast('Could not load achievements: '+(e.message||e)); }
+    try{ ACHIEVEMENT_DEFS=await withLoadTimeout(apiListAchievementDefs(),15000,'Achievements'); }catch(e){ toast('Could not load achievements: '+(friendlyErr(e))); }
     body.innerHTML=mgrAchievementSettingsHtml(); bindAchievementSettingsCtrls();
   }
 }
@@ -19596,7 +19616,7 @@ async function paintPipelineDeleteRequests(){
     const note=prompt('Reason for rejecting this request (shown to the staff member)?')||'';
     b.disabled=true;
     try{ await apiDecidePipelineDeleteRequest(b.dataset.pdrreject,false,note); toast('Request rejected'); paintPipelineDeleteRequests(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   body.querySelectorAll('[data-pdrapprove]').forEach(b=>b.onclick=async()=>{
     const r=pending.find(x=>x.id===b.dataset.pdrapprove); if(!r) return;
@@ -19604,7 +19624,7 @@ async function paintPipelineDeleteRequests(){
     if(prompt('Type DELETE to confirm')!=='DELETE'){ toast('Cancelled — text did not match'); return; }
     b.disabled=true; b.textContent='Deleting…';
     try{ await apiDecidePipelineDeleteRequest(b.dataset.pdrapprove,true); toast(r.staffName+"'s pipeline deleted"); paintPipelineDeleteRequests(); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Approve & delete permanently'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Approve & delete permanently'; }
   });
 }
 // mgrOverview() itself is synchronous (its HTML is assigned directly to
@@ -19971,7 +19991,7 @@ function openLeaderboardWeightsModal(){
         tasksCompleted:num(val('lbw_tasks')),todosCompleted:num(val('lbw_todos')),taskSpeedBonus:num(val('lbw_speed')),
         regularity:num(val('lbw_regularity')),punctuality:num(val('lbw_punctuality'))}});
       toast('Weights saved'); ov.remove(); managerView();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save weights'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save weights'; }
   };
 }
 function mgrLeaderboard(){
@@ -20222,7 +20242,7 @@ async function downloadMasterPipelineExcel(){
     const url=URL.createObjectURL(blob);
     triggerDownload(url,'PEP_Landbank_Master_Pipeline_'+today()+'.xlsx','excel',blob);
     toast('Master pipeline downloaded — '+allLeads.length+' clients, A–Z');
-  }catch(e){ toast('Could not build file: '+(e.message||e)); }
+  }catch(e){ toast('Could not build file: '+(friendlyErr(e))); }
   btn.disabled=false; btn.textContent='⬇ Download Master Pipeline (.xlsx)';
 }
 function bindReportCtrls(){
@@ -20244,7 +20264,7 @@ function bindReportCtrls(){
       const url=URL.createObjectURL(blob);
       triggerDownload(url,'Pipeline_'+agent.name.replace(/\s+/g,'_')+'_'+today()+'.xlsx','excel',blob);
       toast('Downloaded');
-    }catch(e){ toast('Could not build file: '+(e.message||e)); }
+    }catch(e){ toast('Could not build file: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='⬇ Download (.xlsx)';
   };
   document.getElementById('csvLeads').onclick=()=>{
@@ -20389,7 +20409,7 @@ async function downloadAgentPipelineExcel(){
     const url=URL.createObjectURL(blob);
     triggerDownload(url,'Pipeline_'+PROFILE.name.replace(/\s+/g,'_')+'_'+today()+'.xlsx','excel',blob);
     toast('Pipeline downloaded');
-  }catch(e){ toast('Could not build file: '+(e.message||e)); }
+  }catch(e){ toast('Could not build file: '+(friendlyErr(e))); }
   if(btn){ btn.disabled=false; btn.textContent='⬇ Download my pipeline (.xlsx)'; }
 }
 function xlCellDate(v){
@@ -20427,11 +20447,11 @@ function resolveImportColumns(ws){
    the existing commit function was left untouched to avoid regressing it. */
 async function scanImportFile(file,opts){
   opts=opts||{};
-  if(typeof ExcelJS==='undefined') throw new Error('Import library failed to load — check your connection.');
+  if(typeof ExcelJS==='undefined') throwFriendly('Import library failed to load — check your connection.');
   const buf=await file.arrayBuffer();
   const wb=new ExcelJS.Workbook(); await wb.xlsx.load(buf);
   const ws=wb.getWorksheet('💼 Pipeline')||wb.getWorksheet('Pipeline')||wb.worksheets[0];
-  if(!ws) throw new Error('Could not find the Pipeline sheet in that file');
+  if(!ws) throwFriendly('Could not find the Pipeline sheet in that file');
   const cols=resolveImportColumns(ws);
   const isManagerImport=opts.companyWide||PROFILE.role==='manager';
   let freshLeads;
@@ -20504,7 +20524,7 @@ async function startPipelineImport(file,opts){
   try{
     const scan=await scanImportFile(file,opts);
     openImportPreviewModal(file,opts,scan);
-  }catch(e){ toast('Could not read that file: '+(e.message||e)); }
+  }catch(e){ toast('Could not read that file: '+(friendlyErr(e))); }
 }
 async function importPipelineExcel(file,opts){
   opts=opts||{};
@@ -20634,7 +20654,7 @@ async function importPipelineExcel(file,opts){
           await checkAllocationTrigger(rec);
           added++;
         }
-      }catch(rowErr){ errors.push('Row '+r+' ('+(name||'unnamed')+'): '+(rowErr.message||rowErr)); }
+      }catch(rowErr){ errors.push('Row '+r+' ('+(name||'unnamed')+'): '+friendlyErr(rowErr)); }
       r++;
     }
     if(opts.onDone) await opts.onDone(); else viewPipeline();
@@ -20656,7 +20676,7 @@ async function importPipelineExcel(file,opts){
         details:{conflicts,errors}
       });
     }catch(e){ console.warn('Could not archive import batch:',e); }
-  }catch(e){ toast('Import failed: '+(e.message||e)); }
+  }catch(e){ toast('Import failed: '+(friendlyErr(e))); }
 }
 async function apiInsertImportBatch(b){
   if(DEMO_MODE){ const d=await demoLoad(); d.importBatches=d.importBatches||[];
@@ -20693,7 +20713,7 @@ async function viewImportHistory(){
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'salesdesk')}<div class="skel" style="height:120px;border-radius:16px"></div>`;
   try{ IMPORT_BATCHES_LIST=await withLoadTimeout(apiLoadImportBatches(),15000,'Import History'); IMPORT_BATCHES_LOADED=true;
     V.innerHTML=back(PROFILE.role==='manager'?'mgr':'salesdesk')+importHistoryHtml(); bindImportHistoryCtrls(); }
-  catch(e){ V.innerHTML=back(PROFILE.role==='manager'?'mgr':'salesdesk')+emptyState(ic.alertTri||ic.alert,'Could not load Import History',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+  catch(e){ V.innerHTML=back(PROFILE.role==='manager'?'mgr':'salesdesk')+emptyState(ic.alertTri||ic.alert,'Could not load Import History',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   V.classList.remove('view-enter'); void V.offsetWidth; V.classList.add('view-enter');
   renderBottomNavNow();
 }
@@ -20728,7 +20748,7 @@ function bindImportHistoryCtrls(){
     det.classList.remove('hidden');
     det.innerHTML=`<div class="mini" style="padding:8px 0">Loading…</div>`;
     try{ const detail=await apiLoadImportBatchDetail(id); det.innerHTML=importConflictDetailHtml(detail); }
-    catch(e){ det.innerHTML=`<div class="mini">Could not load detail: ${esc(e.message||e)}</div>`; }
+    catch(e){ det.innerHTML=`<div class="mini">Could not load detail: ${esc(friendlyErr(e))}</div>`; }
   });
 }
 async function downloadCompanyExcel(){
@@ -20828,7 +20848,7 @@ async function downloadCompanyExcel(){
     const url=URL.createObjectURL(blob);
     triggerDownload(url,'PEP_Landbank_Company_Report_'+today()+'.xlsx','excel',blob);
     toast('Company report downloaded');
-  }catch(e){ toast('Could not build report: '+(e.message||e)); }
+  }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
   btn.disabled=false; btn.textContent='⬇ Download Company Report (.xlsx)';
 }
 
@@ -21005,7 +21025,7 @@ function bindQuotationSettingsCtrls(){
         quoteLandNoteText:val('cfg_quoteLandNoteText').trim(),quoteFooterAddress:val('cfg_quoteFooterAddress').trim(),
         receiptThanksText:val('cfg_receiptThanksText').trim(),receiptLogoImage});
       toast('Text saved');
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save text';
   };
 }
@@ -21022,7 +21042,7 @@ function bindCommissionSettingsCtrls(){
   if(saveCommBtn) saveCommBtn.onclick=async()=>{
     saveCommBtn.disabled=true; saveCommBtn.textContent='Saving…';
     try{ await apiSaveConfig({commissionFullCap:num(val('cfg_commfull')),commissionHalfCap:num(val('cfg_commhalf')),commissionPoolPerPlot:num(val('cfg_commpool'))}); toast('Commission settings updated'); }
-    catch(e){ toast('Save failed: '+(e.message||e)); }
+    catch(e){ toast('Save failed: '+(friendlyErr(e))); }
     saveCommBtn.disabled=false; saveCommBtn.textContent='Save commission settings';
   };
 }
@@ -21082,7 +21102,7 @@ function bindPricingTargetsCtrls(){
       toast(changed.length?'Pricing updated · '+changed.length+' change'+(changed.length===1?'':'s')+' logged':'Pricing updated');
       if(changed.length){ managerView(); return; }
     }
-    catch(e){ toast('Save failed: '+(e.message||e)); }
+    catch(e){ toast('Save failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save pricing';
   };
   document.getElementById('applyAdj').onclick=async()=>{
@@ -21095,7 +21115,7 @@ function bindPricingTargetsCtrls(){
       await apiInsertActivity({client:'(bulk)',action:'Price adjustment applied',detail:plot+' · '+(mode==='discount'?'extra discount':'price increase')+' GHS '+amt+' · '+n+' leads affected'});
       DB.activity.unshift({agentName:PROFILE.name,client:'(bulk)',action:'Price adjustment applied',at:today()+' '+nowTime()});
       toast('Applied to '+n+' outstanding lead(s)'); await withLoadTimeout(apiLoadAll(),20000,'Refresh'); managerView();
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Apply adjustment now';
   };
   document.getElementById('saveTargets').onclick=async()=>{
@@ -21103,7 +21123,7 @@ function bindPricingTargetsCtrls(){
     const targets={}; STAFF_LIST.filter(s=>s.role==='agent').forEach(s=>{ targets[s.key]=num(val('tgt_'+s.key)); });
     const commissionPct=num(val('cfg_commission'));
     try{ await apiSaveConfig({targets,commissionPct}); toast('Targets updated'); }
-    catch(e){ toast('Save failed: '+(e.message||e)); }
+    catch(e){ toast('Save failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save targets';
   };
 }
@@ -21192,7 +21212,7 @@ function bindStaffSettingsCtrls(){
       try{ await apiSetAgentActive(key,goingActive); paintTeamToggle(b,goingActive);
         toast('Agent '+(goingActive?'reactivated':'deactivated'));
         await refreshStaffList(); buildDropdown();
-      }catch(e){ toast('Failed: '+(e.message||e)); }
+      }catch(e){ toast('Failed: '+(friendlyErr(e))); }
       b.disabled=false;
     };
   });
@@ -21208,7 +21228,7 @@ function bindStaffSettingsCtrls(){
         const prof=(DB.profiles||[]).find(x=>x.agent_key===key); if(prof) prof.tool_access=access;
         toast('Tool access updated');
         managerView();
-      }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Save access'; }
+      }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Save access'; }
     };
   });
 }
@@ -21252,19 +21272,19 @@ function bindCompanySettingsCtrls(){
     try{
       await apiSaveConfig({companyPhone:val('cfg_companyPhone').trim(),companyWhatsapp:val('cfg_companyWhatsapp').trim(),companyEmail:val('cfg_companyEmail').trim(),companyTin:val('cfg_companyTin').trim(),companyAddress:val('cfg_companyAddress').trim()});
       toast('Company contact info saved');
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save company contact info';
   };
   document.getElementById('saveDailyReportRecipients').onclick=async()=>{
     const btn=document.getElementById('saveDailyReportRecipients'); btn.disabled=true; btn.textContent='Saving…';
     try{ await apiSaveConfig({dailyReportRecipients:val('cfg_dailyReportRecipients').trim()}); toast('Recipients saved'); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save recipients';
   };
   document.getElementById('saveAttendanceCutoff').onclick=async()=>{
     const btn=document.getElementById('saveAttendanceCutoff'); btn.disabled=true; btn.textContent='Saving…';
     try{ await apiSaveConfig({attendanceCutoffTime:val('cfg_attendanceCutoff')||'09:00'}); toast('Cutoff time saved'); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save cutoff time';
   };
   document.getElementById('att_mapsLink').addEventListener('change',attParseMapsLink);
@@ -21292,7 +21312,7 @@ function bindCompanySettingsCtrls(){
       const lat=val('att_officeLat')?num(val('att_officeLat')):null, lng=val('att_officeLng')?num(val('att_officeLng')):null;
       await apiSaveConfig({officeLat:lat,officeLng:lng,officeRadiusMeters:num(val('att_officeRadius'))||150});
       toast('Office location saved');
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save office location';
   };
   document.querySelectorAll('#att_workDays [data-wd]').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
@@ -21303,7 +21323,7 @@ function bindCompanySettingsCtrls(){
       if(!workDays.length){ toast('Pick at least one work day'); btn.disabled=false; btn.textContent='Save work days & hours'; return; }
       await apiSaveConfig({workDays,workStartTime:val('att_workStart')||'08:00',workEndTime:val('att_workEnd')||'17:00'});
       toast('Work days & hours saved');
-    }catch(e){ toast('Failed: '+(e.message||e)); }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save work days & hours';
   };
 }
@@ -21324,7 +21344,7 @@ function bindSystemCtrls(){
   if(sysRefreshBtn) sysRefreshBtn.onclick=async()=>{
     sysRefreshBtn.disabled=true; sysRefreshBtn.textContent='Reloading…';
     try{ await withLoadTimeout(apiLoadAll(),20000,'Reload'); toast('Data reloaded'); managerView(); }
-    catch(e){ toast('Reload failed: '+(e.message||e)); sysRefreshBtn.disabled=false; sysRefreshBtn.textContent='↻ Reload all data from the database now'; }
+    catch(e){ toast('Reload failed: '+(friendlyErr(e))); sysRefreshBtn.disabled=false; sysRefreshBtn.textContent='↻ Reload all data from the database now'; }
   };
   const sysBackupBtn=document.getElementById('sysBackupBtn');
   if(sysBackupBtn) sysBackupBtn.onclick=async()=>{
@@ -21351,7 +21371,7 @@ function bindSystemCtrls(){
       const url=URL.createObjectURL(blob);
       triggerDownload(url,'PEP_Landbank_Backup_'+today()+'.json','backup',blob);
       toast('Backup downloaded');
-    }catch(e){ toast('Backup failed: '+(e.message||e)); }
+    }catch(e){ toast('Backup failed: '+(friendlyErr(e))); }
     sysBackupBtn.disabled=false; sysBackupBtn.innerHTML=`<span style="width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:6px">${ic.save}</span>Download full data backup (.json)`;
   };
 }
@@ -21412,7 +21432,7 @@ function openReferralEditModal(r){
         referredLocation:val('refe_location').trim(),referredNoPlots:num(val('refe_noplots'))||1};
       await apiEditReferral(r.id,patch); Object.assign(r,patch);
       toast('Referral updated'); ov.remove(); managerView();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save changes'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save changes'; }
   };
 }
 function bindReferralsCtrls(){
@@ -21422,7 +21442,7 @@ function bindReferralsCtrls(){
   document.querySelectorAll('[data-refdismiss]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Mark this referral as not interested? It will be archived, no points awarded.')) return;
     try{ await apiDismissReferral(b.dataset.refdismiss); const r=REFERRALS_LIST.find(x=>x.id===b.dataset.refdismiss); if(r) r.status='Not interested'; toast('Archived'); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
   document.querySelectorAll('[data-refconvert]').forEach(b=>b.onclick=()=>{
     const r=REFERRALS_LIST.find(x=>x.id===b.dataset.refconvert); if(!r) return;
@@ -21436,12 +21456,12 @@ function bindReferralsCtrls(){
     const r=REFERRALS_LIST.find(x=>x.id===b.dataset.refdelete); if(!r) return;
     if(!confirm('Delete this referral permanently? This cannot be undone.')) return;
     try{ await apiDeleteReferral(r.id); REFERRALS_LIST=REFERRALS_LIST.filter(x=>x.id!==r.id); toast('Referral deleted'); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
   document.querySelectorAll('[data-refarchive]').forEach(b=>b.onclick=async()=>{
     const r=REFERRALS_LIST.find(x=>x.id===b.dataset.refarchive); if(!r) return;
     try{ await apiArchiveReferral(r.id); r.archived=true; toast('Removed from list'); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
   });
   const clearHistBtn=document.getElementById('refClearHistoryBtn');
   if(clearHistBtn) clearHistBtn.onclick=async()=>{
@@ -21449,7 +21469,7 @@ function bindReferralsCtrls(){
     if(!decided.length) return;
     if(!confirm('Clear referral history? This removes '+decided.length+' decided referral(s) from this list — cleared points already awarded are unaffected.')) return;
     try{ await apiArchiveDecidedReferrals(decided.map(r=>r.id)); decided.forEach(r=>r.archived=true); toast('Referral history cleared'); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); }
   };
 }
 // A referral can only be cleared once it's linked to the referred person's real
@@ -21524,7 +21544,7 @@ function openReferralClearModal(r){
       toast('Referral cleared — '+points+' points awarded'); ov.remove();
       try{ await apiSendSms(r.referrerContact,'Great news! Your referral of '+r.referredName+' has gone through and you have earned '+points+' points with Palmstead. Keep referring to earn more — check your Referrals dashboard for your rewards.','referral_cleared'); }catch(e){}
       managerView();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Clear & award points'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Clear & award points'; }
   };
 }
 function mgrReferralSettingsHtml(){
@@ -21556,7 +21576,7 @@ function bindReferralSettingsCtrls(){
       await apiSaveConfig({referralPointsPerReferral:num(val('ref_points'))||50,referralRewards:rewards});
       toast('Referral settings saved');
       managerView();
-    }catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save referral settings'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save referral settings'; }
   };
 }
 /* ---- Achievement Settings (Management config for the Portfolio badge system) ----
@@ -21620,7 +21640,7 @@ function openAchievementDefModal(def){
       const i=ACHIEVEMENT_DEFS.findIndex(d=>d.id===saved.id);
       if(i>=0) ACHIEVEMENT_DEFS[i]=saved; else ACHIEVEMENT_DEFS.push(saved);
       toast(def?'Achievement updated':'Achievement created'); ov.remove(); managerView();
-    }catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent=def?'Save changes':'Create achievement'; }
+    }catch(e){ toast('Could not save: '+(friendlyErr(e))); btn.disabled=false; btn.textContent=def?'Save changes':'Create achievement'; }
   };
 }
 function bindAchievementSettingsCtrls(){
@@ -21637,7 +21657,7 @@ function bindAchievementSettingsCtrls(){
     if(!confirm('Remove "'+d.label+'"? Staff who already earned it keep the badge, but it stops appearing in the catalog.')) return;
     b.disabled=true;
     try{ const saved=await apiUpsertAchievementDef({...d,active:false}); const i=ACHIEVEMENT_DEFS.findIndex(x=>x.id===d.id); if(i>=0) ACHIEVEMENT_DEFS[i]=saved; toast('Removed'); managerView(); }
-    catch(e){ toast('Could not remove: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Could not remove: '+(friendlyErr(e))); b.disabled=false; }
   });
 }
 /* Server-side backup/restore of core business records (leads, plots, payments, contracts,
@@ -21699,7 +21719,7 @@ function bindMgrBackupCtrls(){
   if(nowBtn) nowBtn.onclick=async()=>{
     nowBtn.disabled=true; nowBtn.textContent='Backing up…';
     try{ await apiCreateBackupNow(); BACKUPS_LIST=await apiLoadBackups(); toast('Backup created'); managerView(); }
-    catch(e){ toast('Backup failed: '+(e.message||e)); nowBtn.disabled=false; nowBtn.innerHTML=`<span style="width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:6px">${ic.save}</span>Backup now`; }
+    catch(e){ toast('Backup failed: '+(friendlyErr(e))); nowBtn.disabled=false; nowBtn.innerHTML=`<span style="width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:6px">${ic.save}</span>Backup now`; }
   };
   document.querySelectorAll('[data-bkdownload]').forEach(b=>b.onclick=async()=>{
     b.disabled=true; const orig=b.textContent; b.textContent='Preparing…';
@@ -21709,7 +21729,7 @@ function bindMgrBackupCtrls(){
       const url=URL.createObjectURL(blob);
       triggerDownload(url,'PEP_Landbank_Backup_'+full.created_at.slice(0,10)+'.json','backup',blob);
       toast('Backup downloaded');
-    }catch(e){ toast('Download failed: '+(e.message||e)); }
+    }catch(e){ toast('Download failed: '+(friendlyErr(e))); }
     b.disabled=false; b.textContent=orig;
   });
   document.querySelectorAll('[data-bkrestore]').forEach(b=>b.onclick=()=>openRestoreConfirmModal(b.dataset.bkrestore,b.dataset.bkwhen));
@@ -21821,7 +21841,7 @@ async function openBackupSendModal(backupId,whenLabel){
       }
       resultEl.textContent=sent+' sent'+(failed?', '+failed+' skipped (no email on file, or delivery failed)':'');
       toast(sent+' statement(s) sent');
-    }catch(e){ resultEl.textContent='Failed: '+(e.message||e); }
+    }catch(e){ resultEl.textContent='Failed: '+(friendlyErr(e)); }
     btn.disabled=false; btn.textContent='Send';
   };
 }
@@ -21871,7 +21891,7 @@ function openRestoreConfirmModal(backupId,whenLabel){
       toast('Restore complete'); ov.remove();
       await withLoadTimeout(apiLoadAll(),20000,'Restore'); BACKUPS_LOADED=false; BACKUPS_LIST=await withLoadTimeout(apiLoadBackups(),15000,'Backups'); BACKUPS_LOADED=true;
       managerView();
-    }catch(e){ toast('Restore failed: '+(e.message||e)); goBtn.disabled=false; goBtn.textContent='Restore now'; }
+    }catch(e){ toast('Restore failed: '+(friendlyErr(e))); goBtn.disabled=false; goBtn.textContent='Restore now'; }
   };
 }
 /* System Health -- Management-only snapshot of things that can silently fail:
@@ -22048,7 +22068,7 @@ function bindReportArchiveCtrls(){
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         logDownload(a.download,'pdf',a.href);
       }
-    }catch(e){ toast('Could not load report: '+(e.message||e)); }
+    }catch(e){ toast('Could not load report: '+(friendlyErr(e))); }
     b.disabled=false; b.textContent=orig;
   });
 }
@@ -22134,7 +22154,7 @@ async function apiDeleteNote(id){
 async function viewNotesApp(){
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'more')}<div class="pagehead"><div><div class="eyebrow">Personal</div><h2>Notes</h2><p>Quick private notes — jot something down, save it, send it, or download it.</p></div></div>
   <div id="notesBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
-  if(!NOTES_LOADED){ try{ NOTES_LIST=await withLoadTimeout(apiLoadNotes(),15000,'Notes'); NOTES_LOADED=true; }catch(e){ toast('Could not load notes: '+(e.message||e)); } }
+  if(!NOTES_LOADED){ try{ NOTES_LIST=await withLoadTimeout(apiLoadNotes(),15000,'Notes'); NOTES_LOADED=true; }catch(e){ toast('Could not load notes: '+(friendlyErr(e))); } }
   const body=document.getElementById('notesBody');
   body.innerHTML=notesBodyHtml();
   bindNotesCtrls(body);
@@ -22158,7 +22178,7 @@ function bindNotesCtrls(container){
     const n=NOTES_LIST.find(x=>x.id===b.dataset.notedel); if(!n) return;
     if(!confirm('Delete "'+(n.title||'Untitled note')+'"?')) return;
     try{ await apiDeleteNote(n.id); NOTES_LIST=NOTES_LIST.filter(x=>x.id!==n.id); const body=document.getElementById('notesBody'); body.innerHTML=notesBodyHtml(); bindNotesCtrls(body); toast('Note deleted'); }
-    catch(e){ toast('Delete failed: '+(e.message||e)); }
+    catch(e){ toast('Delete failed: '+(friendlyErr(e))); }
   });
 }
 function openNoteModal(note){
@@ -22184,7 +22204,7 @@ function openNoteModal(note){
       else NOTES_LIST.unshift(saved);
       toast('Note saved'); ov.remove();
       const body2=document.getElementById('notesBody'); if(body2){ body2.innerHTML=notesBodyHtml(); bindNotesCtrls(body2); }
-    }catch(e){ toast('Save failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save note'; }
+    }catch(e){ toast('Save failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save note'; }
   };
 }
 function openNoteSendModal(note){
@@ -22321,7 +22341,7 @@ function openSmsSenderSettingsModal(){
     if(!v){ toast('Enter a sender name'); return; }
     const btn=document.getElementById('smsSenderSaveBtn'); btn.disabled=true; btn.textContent='Saving…';
     try{ await apiSaveConfig({smsSenderName:v}); toast('Sender name updated'); ov.remove(); paintSmsBody(); }
-    catch(e){ toast('Could not save: '+(e.message||e)); btn.disabled=false; btn.textContent='Save'; }
+    catch(e){ toast('Could not save: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save'; }
   };
 }
 function bindSmsCtrls(){
@@ -22330,7 +22350,7 @@ function bindSmsCtrls(){
     SMS_MODE=b.dataset.smsmode; SMS_SEARCH='';
     if(SMS_MODE==='clients'&&!SMS_CLIENTS_LOADED){
       document.getElementById('smsRecipientArea').innerHTML=`<div class="skel" style="height:60px;border-radius:12px"></div>`;
-      try{ SMS_CLIENTS_LIST=await apiLoadClientContacts(); SMS_CLIENTS_LOADED=true; }catch(e){ toast('Could not load clients: '+(e.message||e)); }
+      try{ SMS_CLIENTS_LIST=await apiLoadClientContacts(); SMS_CLIENTS_LOADED=true; }catch(e){ toast('Could not load clients: '+(friendlyErr(e))); }
     }
     paintSmsBody();
   });
@@ -22510,7 +22530,7 @@ async function apiInsertFundRequest(type,amount,purpose,receiptData,receiptName)
 }
 async function apiDecideFundRequest(id,approve,note){
   if(DEMO_MODE){
-    const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id); if(!fr) throw new Error('Fund request not found');
+    const d=await demoLoad(); const fr=(d.fundRequests||[]).find(x=>x.id===id); if(!fr) throwFriendly('Fund request not found');
     Object.assign(fr,{status:approve?'approved':'rejected',decidedBy:PROFILE.key,decidedByName:PROFILE.name,decidedAt:today()+' '+nowTime(),
       decisionNote:note||null,approvalSignature:approve?getStaffSignature(PROFILE.key):null});
     await demoSave(); return fr;
@@ -22562,7 +22582,7 @@ async function apiDeleteStaffPipeline(staffKey){
 }
 async function apiDecidePipelineDeleteRequest(id,approve,note){
   if(DEMO_MODE){
-    const d=await demoLoad(); const r=(d.pipelineDeleteRequests||[]).find(x=>x.id===id); if(!r) throw new Error('Request not found');
+    const d=await demoLoad(); const r=(d.pipelineDeleteRequests||[]).find(x=>x.id===id); if(!r) throwFriendly('Request not found');
     Object.assign(r,{status:approve?'approved':'rejected',decidedBy:PROFILE.key,decidedByName:PROFILE.name,decidedAt:today()+' '+nowTime(),decisionNote:note||null});
     await demoSave();
     if(approve) await apiDeleteStaffPipeline(r.staffKey);
@@ -22591,7 +22611,7 @@ async function viewExpensesApp(){
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap" id="expTabs"></div>
   <div id="expBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(DEMO_MODE){
-    if(!EXP_LOADED){ try{ FUND_REQUESTS_LIST=await apiLoadFundRequests(); EXP_LOADED=true; }catch(e){ toast('Could not load fund requests: '+(e.message||e)); } }
+    if(!EXP_LOADED){ try{ FUND_REQUESTS_LIST=await apiLoadFundRequests(); EXP_LOADED=true; }catch(e){ toast('Could not load fund requests: '+(friendlyErr(e))); } }
     paintExpensesApp();
     return;
   }
@@ -22600,7 +22620,7 @@ async function viewExpensesApp(){
       [EXP_CATEGORIES_LIST,EXPENSES_LIST,FUND_REQUESTS_LIST,DAILY_BALANCES_LIST,RECURRING_EXPENSES_LIST]=await withLoadTimeout(Promise.all([
         apiLoadExpenseCategories(),apiLoadExpenses(),apiLoadFundRequests(),apiLoadDailyBalances(),apiLoadRecurringExpenses()]),15000,'Expenses');
       EXP_LOADED=true;
-    }catch(e){ toast('Could not load expenses: '+(e.message||e)); }
+    }catch(e){ toast('Could not load expenses: '+(friendlyErr(e))); }
   }
   EXP_TAB='log';
   paintExpensesApp();
@@ -22703,7 +22723,7 @@ function openLogRecurringModal(r){
       const data=isImage?await resizeImageToB64(file,1200,1600,0.8):await readFileAsB64(file,4*1024*1024);
       receiptPending={data,name:file.name};
       document.getElementById('lr_receiptPreview').innerHTML=isImage?`<img src="${data}" style="max-width:140px;border-radius:10px;margin-top:6px"/>`:`<div class="mini" style="margin-top:6px">📎 ${esc(file.name)}</div>`;
-    }catch(e){ toast('Could not attach that file: '+(e.message||e)); }
+    }catch(e){ toast('Could not attach that file: '+(friendlyErr(e))); }
   };
   document.getElementById('lr_save').onclick=async()=>{
     const amount=num(val('lr_amount')); if(!amount||amount<=0){ toast('Enter an amount'); return; }
@@ -22713,7 +22733,7 @@ function openLogRecurringModal(r){
         description:val('lr_desc').trim(),receiptData:receiptPending?receiptPending.data:null,receiptName:receiptPending?receiptPending.name:null});
       EXPENSES_LIST.unshift(rec);
       toast('Expense logged — awaiting approval'); ov.remove(); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Log expense'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Log expense'; }
   };
 }
 // Cash-basis only, explicitly labeled as such -- payments received minus
@@ -22846,7 +22866,7 @@ function openLogSpendModal(f){
       const data=isImage?await resizeImageToB64(file,1200,1600,0.8):await readFileAsB64(file,4*1024*1024);
       receiptPending={data,name:file.name};
       document.getElementById('ls_receiptPreview').innerHTML=isImage?`<img src="${data}" style="max-width:140px;border-radius:10px;margin-top:6px"/>`:`<div class="mini" style="margin-top:6px">📎 ${esc(file.name)}</div>`;
-    }catch(e){ toast('Could not attach that file: '+(e.message||e)); }
+    }catch(e){ toast('Could not attach that file: '+(friendlyErr(e))); }
   };
   document.getElementById('ls_save').onclick=async()=>{
     const amount=num(val('ls_amount')); if(!amount||amount<=0){ toast('Enter an amount'); return; }
@@ -22856,7 +22876,7 @@ function openLogSpendModal(f){
         description:val('ls_desc').trim(),receiptData:receiptPending?receiptPending.data:null,receiptName:receiptPending?receiptPending.name:null,fundRequestId:f.id});
       EXPENSES_LIST.unshift(rec);
       toast('Spend logged — awaiting approval'); ov.remove(); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Log spend'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Log spend'; }
   };
 }
 function expBalanceTabHtml(){
@@ -22893,7 +22913,7 @@ function bindExpensesCtrls(){
       const data=isImage?await resizeImageToB64(file,1200,1600,0.8):await readFileAsB64(file,4*1024*1024);
       EXP_RECEIPT_PENDING={data,name:file.name};
       document.getElementById('exp_receiptPreview').innerHTML=isImage?`<img src="${data}" style="max-width:140px;border-radius:10px;margin-top:6px"/>`:`<div class="mini" style="margin-top:6px">📎 ${esc(file.name)}</div>`;
-    }catch(e){ toast('Could not attach that file: '+(e.message||e)); }
+    }catch(e){ toast('Could not attach that file: '+(friendlyErr(e))); }
   };
   const saveBtn=document.getElementById('expSaveBtn');
   if(saveBtn) saveBtn.onclick=async()=>{
@@ -22905,7 +22925,7 @@ function bindExpensesCtrls(){
         description:val('exp_desc').trim(),receiptData:EXP_RECEIPT_PENDING?EXP_RECEIPT_PENDING.data:null,receiptName:EXP_RECEIPT_PENDING?EXP_RECEIPT_PENDING.name:null});
       EXPENSES_LIST.unshift(rec); EXP_RECEIPT_PENDING=null;
       toast('Expense logged — awaiting approval'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); saveBtn.disabled=false; saveBtn.textContent='Save expense'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); saveBtn.disabled=false; saveBtn.textContent='Save expense'; }
   };
   document.querySelectorAll('[data-expreceipt]').forEach(b=>b.onclick=()=>{
     const e=EXPENSES_LIST.find(x=>x.id===b.dataset.expreceipt); if(!e||!e.receiptData) return;
@@ -22914,13 +22934,13 @@ function bindExpensesCtrls(){
   document.querySelectorAll('[data-expapprove]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
     try{ const updated=await apiDecideExpense(b.dataset.expapprove,true); Object.assign(EXPENSES_LIST.find(x=>x.id===updated.id),updated); toast('Expense approved'); paintExpensesApp(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-expreject]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Reject this expense?')) return;
     b.disabled=true;
     try{ const updated=await apiDecideExpense(b.dataset.expreject,false); Object.assign(EXPENSES_LIST.find(x=>x.id===updated.id),updated); toast('Expense rejected'); paintExpensesApp(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   const frReceiptInput=document.getElementById('fr_receipt');
   if(frReceiptInput) frReceiptInput.onchange=async()=>{
@@ -22930,7 +22950,7 @@ function bindExpensesCtrls(){
       const data=isImage?await resizeImageToB64(file,1200,1600,0.8):await readFileAsB64(file,4*1024*1024);
       FR_RECEIPT_PENDING={data,name:file.name};
       document.getElementById('fr_receiptPreview').innerHTML=isImage?`<img src="${data}" style="max-width:140px;border-radius:10px;margin-top:6px"/>`:`<div class="mini" style="margin-top:6px">📎 ${esc(file.name)}</div>`;
-    }catch(e){ toast('Could not attach that file: '+(e.message||e)); }
+    }catch(e){ toast('Could not attach that file: '+(friendlyErr(e))); }
   };
   document.querySelectorAll('[data-frreceipt]').forEach(b=>b.onclick=()=>{
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.frreceipt); if(!f||!f.receiptData) return;
@@ -22947,18 +22967,18 @@ function bindExpensesCtrls(){
       const rec=await apiInsertFundRequest(type,amount,purpose,FR_RECEIPT_PENDING?FR_RECEIPT_PENDING.data:null,FR_RECEIPT_PENDING?FR_RECEIPT_PENDING.name:null);
       FUND_REQUESTS_LIST.unshift(rec); FR_RECEIPT_PENDING=null;
       toast('Request sent to Management'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); frBtn.disabled=false; frBtn.textContent='Send request'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); frBtn.disabled=false; frBtn.textContent='Send request'; }
   };
   document.querySelectorAll('[data-frapprove]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;
     try{ const updated=await apiDecideFundRequest(b.dataset.frapprove,true); Object.assign(FUND_REQUESTS_LIST.find(x=>x.id===updated.id),updated); toast('Request approved'); paintExpensesApp(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-frreject]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Reject this fund request?')) return;
     b.disabled=true;
     try{ const updated=await apiDecideFundRequest(b.dataset.frreject,false); Object.assign(FUND_REQUESTS_LIST.find(x=>x.id===updated.id),updated); toast('Request rejected'); paintExpensesApp(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-frslip]').forEach(b=>b.onclick=()=>{
     const f=FUND_REQUESTS_LIST.find(x=>x.id===b.dataset.frslip); if(f) buildFundRequestSlipPDF(f);
@@ -22988,7 +23008,7 @@ function bindExpensesCtrls(){
       const rec=await apiAddExpenseCategory(name,budget);
       EXP_CATEGORIES_LIST.push(rec); EXP_CATEGORIES_LIST.sort((a,b)=>a.name.localeCompare(b.name));
       toast('Category added'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); ecAddBtn.disabled=false; ecAddBtn.textContent='Add category'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); ecAddBtn.disabled=false; ecAddBtn.textContent='Add category'; }
   };
   const reAddBtn=document.getElementById('reAddBtn');
   if(reAddBtn) reAddBtn.onclick=async()=>{
@@ -23000,7 +23020,7 @@ function bindExpensesCtrls(){
         description:val('re_desc').trim(),interval:val('re_interval').toLowerCase(),dayOfPeriod:day});
       RECURRING_EXPENSES_LIST.unshift(rec);
       toast('Recurring expense added'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); reAddBtn.disabled=false; reAddBtn.textContent='Add recurring expense'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); reAddBtn.disabled=false; reAddBtn.textContent='Add recurring expense'; }
   };
   document.querySelectorAll('[data-logrecurring]').forEach(b=>b.onclick=()=>{
     const r=RECURRING_EXPENSES_LIST.find(x=>x.id===b.dataset.logrecurring); if(r) openLogRecurringModal(r);
@@ -23009,7 +23029,7 @@ function bindExpensesCtrls(){
     const r=RECURRING_EXPENSES_LIST.find(x=>x.id===b.dataset.togglerecurring); if(!r) return;
     b.disabled=true;
     try{ await apiSetRecurringExpenseActive(r.id,!r.active); r.active=!r.active; toast(r.active?'Resumed':'Paused'); paintExpensesApp(); }
-    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; }
   });
   document.querySelectorAll('[data-savebudget]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.savebudget; const input=document.getElementById('ecb_'+id); const budget=num(input.value)||null;
@@ -23018,7 +23038,7 @@ function bindExpensesCtrls(){
       await apiUpdateExpenseCategoryBudget(id,budget);
       const c=EXP_CATEGORIES_LIST.find(x=>x.id===id); if(c) c.monthly_budget=budget;
       toast('Budget saved'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Save'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Save'; }
   });
   const dbBtn=document.getElementById('dbSaveBtn');
   if(dbBtn) dbBtn.onclick=async()=>{
@@ -23027,7 +23047,7 @@ function bindExpensesCtrls(){
       const rec=await apiUpsertDailyBalance(today(),num(val('db_cash')),num(val('db_momo')),num(val('db_bank')));
       DAILY_BALANCES_LIST=DAILY_BALANCES_LIST.filter(b=>b.date!==rec.date); DAILY_BALANCES_LIST.unshift(rec);
       toast('Balance saved'); paintExpensesApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); dbBtn.disabled=false; dbBtn.textContent='Save today\'s balance'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); dbBtn.disabled=false; dbBtn.textContent='Save today\'s balance'; }
   };
 }
 function buildFundRequestSlipPDF(f){
@@ -23121,7 +23141,7 @@ async function paintReportsHubBody(){
   } else if(REPORTSHUB_TAB==='archive'){
     body.innerHTML=`<div class="skel" style="height:120px;border-radius:16px"></div>`;
     try{ REPORT_ARCHIVE_LIST=await withLoadTimeout(apiLoadReportArchive(),15000,'Report Archive'); REPORT_ARCHIVE_LOADED=true; body.innerHTML=reportArchiveHtml(); bindReportArchiveCtrls(); }
-    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(e.message||'Something went wrong')+' — pull to refresh or tap back and try again.'); }
+    catch(e){ body.innerHTML=emptyState(ic.alertTri,'Could not load the Report Archive',(friendlyErr(e))+' — pull to refresh or tap back and try again.'); }
   } else {
     body.innerHTML=`<div id="mgmtRptBody"></div>`;
     paintMgmtRptBody();
@@ -23153,7 +23173,7 @@ function paintMgmtRptBody(){
       let prior=null, priorData=null;
       if(MGMTRPT_COMPARE){ prior=priorPeriodRange(range); priorData=computeManagementReportData(prior.from,prior.to,fullSiteVisits); }
       buildManagementReportPDF(range,data,prior,priorData);
-    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Generate PDF report';
   };
 }
@@ -23638,7 +23658,7 @@ async function paintStaffReportPreview(){
   const el=document.getElementById('staffRptPreview'); if(!el) return;
   const range=reportPeriodRange(STAFFRPT_PERIOD,STAFFRPT_FROM,STAFFRPT_TO);
   let data; try{ data=await computeStaffReportData(STAFFRPT_STAFF,range.from,range.to); }
-  catch(e){ el.innerHTML=`<div class="empty">Could not load: ${esc(e.message||e)}</div>`; return; }
+  catch(e){ el.innerHTML=`<div class="empty">Could not load: ${esc(friendlyErr(e))}</div>`; return; }
   if(!STAFFRPT_STAFF){
     el.innerHTML=`<div class="sectitle" style="margin-top:0"><h3>Comparison</h3><span class="cnt">${data.perStaffSales.length} staff · ${esc(range.label)}</span></div>
     <div class="list">${data.perStaffSales.map(s=>`<div class="rowcard"><div class="top"><div><div class="nm">${esc(s.name)}</div><div class="meta">${s.leadsAdded} leads · ${s.dealsClosed} deals · ${s.completed} tasks done · ${s.siteVisits} site visits</div></div><div class="amt">${ghs(s.revenue)}</div></div></div>`).join('')}</div>`;
@@ -23675,7 +23695,7 @@ function bindStaffReportCtrls(){
       const doc=buildStaffReportPDF(data,STAFFRPT_STAFF,range);
       if(doc){ const fname=(STAFFRPT_STAFF?'Staff_Report_'+STAFFRPT_STAFF:'Staff_Report_All')+'_'+range.from+'_to_'+range.to+'.pdf';
         const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri); toast('Report downloaded'); }
-    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='⬇ Download PDF report';
   };
 }
@@ -23854,7 +23874,7 @@ function bindNewsCtrls(){
     const audience=audMap[val('an_audience')]||'staff';
     try{ const rec=await apiInsertAnnouncement(title,val('an_body').trim(),announceImageB64,audience);
       DB.announcements.unshift(rec); toast('Posted'); refreshAnnounceBubble(); managerView(); }
-    catch(e){ toast('Failed: '+(e.message||e)); postBtn.disabled=false; postBtn.textContent='Post announcement'; }
+    catch(e){ toast('Failed: '+(friendlyErr(e))); postBtn.disabled=false; postBtn.textContent='Post announcement'; }
   };
   V.querySelectorAll('[data-toggleannounce]').forEach(b=>b.onclick=async()=>{
     const a=DB.announcements.find(x=>x.id===b.dataset.toggleannounce); if(!a) return;
@@ -24101,7 +24121,7 @@ async function viewLeaveApp(){
     if(!LEAVE_REQUESTS_LOAD_PROMISE){
       LEAVE_REQUESTS_LOAD_PROMISE=withLoadTimeout(apiLoadLeaveRequests(),8000,'Leave requests')
         .then(rows=>{ DB.leaveRequests=rows; LEAVE_REQUESTS_LOADED=true; LEAVE_REQUESTS_LOAD_FAILED=false; })
-        .catch(e=>{ LEAVE_REQUESTS_LOAD_FAILED=true; toast(e.message||'Could not load leave requests'); })
+        .catch(e=>{ LEAVE_REQUESTS_LOAD_FAILED=true; toast(friendlyErr(e,'Could not load leave requests')); })
         .finally(()=>{ LEAVE_REQUESTS_LOAD_PROMISE=null; });
     }
     await LEAVE_REQUESTS_LOAD_PROMISE;
@@ -24316,7 +24336,7 @@ function bindLeaveMineCtrls(){
     const id=b.dataset.leaveplandel; const rec=DB.leaveRequests.find(x=>x.id===id); if(!rec) return;
     if(!confirm('Delete this planned leave? This can\'t be undone.')) return;
     try{ await apiDeleteLeaveRequest(id); DB.leaveRequests=DB.leaveRequests.filter(x=>x.id!==id); toast('Deleted'); paintLeaveApp(); }
-    catch(err){ toast('Failed: '+(err.message||err)); }
+    catch(err){ toast('Failed: '+(friendlyErr(err))); }
   });
 }
 async function sendPlannedLeaveNow(id){
@@ -24331,7 +24351,7 @@ async function sendPlannedLeaveNow(id){
     toast('Sent to Management');
     offerSendLeaveLetter(rec);
     paintLeaveApp();
-  }catch(e){ toast('Failed: '+(e.message||e)); }
+  }catch(e){ toast('Failed: '+(friendlyErr(e))); }
 }
 // Re-checked both when the letter modal opens and again right before the insert,
 // since time can pass between the two (a colleague's request could land in between).
@@ -24380,7 +24400,7 @@ function openLeaveApplyModal(){
       ov.remove();
       toast('Added to your leave plan — you\'ll be asked to send it once the date is close');
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save to my leave plan'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save to my leave plan'; }
   };
 }
 function computeConsecutiveWeekdays(startIso,count){
@@ -24436,7 +24456,7 @@ function openEmergencyLeaveModal(){
       toast('Emergency leave sent to Management');
       offerSendLeaveLetter(rec);
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send to Management'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send to Management'; }
   };
 }
 function offerSendLeaveLetter(rec){
@@ -24547,7 +24567,7 @@ function openLeaveReviewModal(id){
         try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
         try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_approved'); }catch(e){}
         paintLeaveApp();
-      }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Approve & sign'; }
+      }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Approve & sign'; }
     };
     document.getElementById('lvDeclineBtn').onclick=()=>openLeaveDeclineReasonModal(rec,ov);
     document.getElementById('lvRescheduleBtn').onclick=()=>openLeaveRescheduleNoteModal(rec,ov);
@@ -24581,7 +24601,7 @@ function openLeaveDeclineReasonModal(rec,parentOv){
       try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
       try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_declined'); }catch(e){}
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Decline & notify'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Decline & notify'; }
   };
 }
 // Reschedule offers Management two ways to resolve a date conflict:
@@ -24664,7 +24684,7 @@ function openLeaveRescheduleNoteModal(rec,parentOv){
       try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
       try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_rescheduled_approved'); }catch(e){}
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Confirm this new date & approve'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Confirm this new date & approve'; }
   };
   document.getElementById('lv_reschedSend').onclick=async()=>{
     const note=val('lv_reschednote').trim();
@@ -24678,7 +24698,7 @@ function openLeaveRescheduleNoteModal(rec,parentOv){
       try{ await apiSendMessage(rec.agentKey,staffMsg); }catch(e){}
       try{ const phone=phoneForStaffKey(rec.agentKey); if(phone) await apiSendSms(phone,staffMsg,'leave_reschedule_requested'); }catch(e){}
       paintLeaveApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Or just send back a note, no date picked'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Or just send back a note, no date picked'; }
   };
 }
 function leaveSettingsHtml(){
@@ -24700,7 +24720,7 @@ function bindLeaveSettingsCtrls(){
     const btn=document.getElementById('lvSaveSettings'); btn.disabled=true; btn.textContent='Saving…';
     const eidObservingStaff=[...document.querySelectorAll('[data-eidstaff]:checked')].map(el=>el.dataset.eidstaff);
     try{ await apiSaveConfig({leaveTotalDays:num(val('lv_totaldays'))||20,eidObservingStaff}); toast('Leave policy updated'); }
-    catch(e){ toast('Save failed: '+(e.message||e)); }
+    catch(e){ toast('Save failed: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='Save';
   };
 }
@@ -24843,7 +24863,7 @@ async function viewMemoApp(){
     if(!MEMOS_LOAD_PROMISE){
       MEMOS_LOAD_PROMISE=withLoadTimeout(apiLoadMemos(),8000,'Memos')
         .then(rows=>{ DB.memos=rows; MEMOS_LOADED=true; MEMOS_LOAD_FAILED=false; })
-        .catch(e=>{ MEMOS_LOAD_FAILED=true; toast(e.message||'Could not load memos'); })
+        .catch(e=>{ MEMOS_LOAD_FAILED=true; toast(friendlyErr(e,'Could not load memos')); })
         .finally(()=>{ MEMOS_LOAD_PROMISE=null; });
     }
     await MEMOS_LOAD_PROMISE;
@@ -24950,7 +24970,7 @@ function bindMemoComposeCtrls(){
       for(const c of ccList){ try{ await apiSendMessage(c.key,'You were cc\'d on a memo from '+PROFILE.name+': "'+subject+'" — open Office › Memorandum to read it.'); }catch(e){} }
       toast('Memo sent to '+recipient.name+(ccList.length?' (cc: '+ccList.map(c=>c.name).join(', ')+')':''));
       memoAppTab='sent'; paintMemoApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send memo'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send memo'; }
   };
   document.getElementById('memoDraftBtn').onclick=async()=>{
     const {recipient,subject,bodyHtml}=gather();
@@ -24968,7 +24988,7 @@ function bindMemoComposeCtrls(){
       }
       toast('Draft saved');
       memoAppTab='drafts'; paintMemoApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Save draft'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Save draft'; }
   };
 }
 function myMemoCcRow(m){ return (m.cc||[]).find(r=>r.staffKey===PROFILE.key); }
@@ -25011,7 +25031,7 @@ function bindMemoDraftCtrls(){
     const id=b.dataset.memodraftdel; const m=DB.memos.find(x=>x.id===id); if(!m) return;
     if(!confirm(`Delete this draft ("${m.subject||'(no subject)'}")? This can't be undone.`)) return;
     try{ await apiDeleteMemo(id); DB.memos=DB.memos.filter(x=>x.id!==id); toast('Draft deleted'); paintMemoApp(); }
-    catch(err){ toast('Failed: '+(err.message||err)); }
+    catch(err){ toast('Failed: '+(friendlyErr(err))); }
   });
   document.querySelectorAll('[data-memodraft]').forEach(b=>b.onclick=()=>{
     const m=DB.memos.find(x=>x.id===b.dataset.memodraft); if(!m) return;
@@ -25026,7 +25046,7 @@ function bindMemoListCtrls(){
     const id=b.dataset.memodel; const m=DB.memos.find(x=>x.id===id); if(!m) return;
     if(!confirm(`Delete this memo ("${m.subject||'(no subject)'}")? This removes it for both sender and recipient and can't be undone.`)) return;
     try{ await apiDeleteMemo(id); DB.memos=DB.memos.filter(x=>x.id!==id); toast('Memo deleted'); paintMemoApp(); }
-    catch(err){ toast('Failed: '+(err.message||err)); }
+    catch(err){ toast('Failed: '+(friendlyErr(err))); }
   });
 }
 function openMemoView(id){
@@ -25131,7 +25151,7 @@ async function viewBannerApp(){
     if(!BANNERS_LOAD_PROMISE){
       BANNERS_LOAD_PROMISE=withLoadTimeout(apiLoadBanners(),8000,'Banners')
         .then(rows=>{ DB.banners=rows; BANNERS_LOADED=true; BANNERS_LOAD_FAILED=false; })
-        .catch(e=>{ BANNERS_LOAD_FAILED=true; toast(e.message||'Could not load banners'); })
+        .catch(e=>{ BANNERS_LOAD_FAILED=true; toast(friendlyErr(e,'Could not load banners')); })
         .finally(()=>{ BANNERS_LOAD_PROMISE=null; });
     }
     await BANNERS_LOAD_PROMISE;
@@ -25385,7 +25405,7 @@ function openBannerModal(){
       DB.banners.unshift(rec);
       try{ await apiLogBannerStatusUpdate(rec.id,{status,note:'Initial entry',images:imageB64?[imageB64]:[]}); }catch(e){}
       toast('Saved'); ov.remove(); paintBannerApp();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Add entry'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Add entry'; }
   };
 }
 // Modeled directly on the Task-detail audit-trail pattern (viewTaskDetail/
@@ -25431,7 +25451,7 @@ function bindBannerDetailCtrls(b){
       await apiDeleteBanner(b.id);
       DB.banners=(DB.banners||[]).filter(x=>x.id!==b.id);
       toast('Banner deleted'); route('bannerapp');
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Delete this banner'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Delete this banner'; }
   };
   let images=[];
   const preview=()=>{ document.getElementById('bd_imgPreview').innerHTML=images.map(src=>`<img src="${src}" style="width:64px;height:64px;object-fit:cover;border-radius:10px"/>`).join(''); };
@@ -25463,7 +25483,7 @@ function bindBannerDetailCtrls(b){
       await apiLogBannerStatusUpdate(b.id,{status,note,images});
       b.status=status; b.area=area; if(images.length) b.image=images[0]; b.updatedAt=new Date().toISOString();
       toast('Status update logged'); viewBannerDetail(b.id);
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Log update'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Log update'; }
   };
 }
 function bannerLogEntryHtml(entry){
@@ -25589,7 +25609,7 @@ function bindBannerMapCtrls(){
         legend.innerHTML=Object.keys(BANNER_STATUS).map(k=>`<span class="chip" style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:${BANNER_STATUS[k].color};display:inline-block"></span>${esc(BANNER_STATUS[k].label)}</span>`).join('');
       } else legend.innerHTML='';
     }
-  }).catch(e=>toast(e.message||'Could not load the map'));
+  }).catch(e=>toast(friendlyErr(e,'Could not load the map')));
 }
 let BNRPT_PERIOD='all', BNRPT_FROM='', BNRPT_TO='', BNRPT_AREA='', BNRPT_STATUS='';
 function bnReportFiltered(){
@@ -25633,7 +25653,7 @@ function bindBannerReportsCtrls(){
     try{
       const doc=await buildBannerReportPDF(bnReportFiltered());
       if(doc) doc.save('Banner_Tracking_Report_'+today()+'.pdf');
-    }catch(e){ toast('Could not build report: '+(e.message||e)); }
+    }catch(e){ toast('Could not build report: '+(friendlyErr(e))); }
     btn.disabled=false; btn.textContent='⬇ Download full report (PDF)';
   };
 }
@@ -25845,7 +25865,7 @@ function openCommissionDisputeModal(monthKey,total){
       const msg=`${PROFILE.name} is raising a concern about their ${monthLabel(monthKey)} commission (currently showing ${ghs(total)}): ${note}`;
       const rec=await apiSendMessage('manager',msg); DB.messages.push(rec);
       toast('Sent to Management'); ov.remove();
-    }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Send to Management'; }
+    }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Send to Management'; }
   };
 }
 let commissionMonthCursor=null;
@@ -26062,7 +26082,7 @@ function renderSiteVisitExperienceForm(token){
       overallRating:+val('overallRating'),npsScore:+val('npsScore'),improvementSuggestions:val('improvementSuggestions'),
       purchaseIntent:val('purchaseIntent'),additionalComments:val('additionalComments')};
     try{
-      if(!sb) throw new Error('offline');
+      if(!sb) throwFriendly('offline');
       let {data,error}=await sb.functions.invoke('site-visit-experience-submit',{body:payload});
       if(error && error.context && typeof error.context.json==='function'){
         try{ data=await error.context.json(); }catch(e2){}
