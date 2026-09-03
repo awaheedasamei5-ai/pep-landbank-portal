@@ -140,11 +140,16 @@ export interface DataSource {
     // emmanuel/elizabeth only, confirmed live) -- stage must be one of the
     // 6 real DOC_STAGE keys or the RPC itself rejects it.
     updateDocStage(id: string, stage: string): Promise<void>;
-    // Plain leads_del RLS DELETE (own lead or manager, confirmed live).
-    // Vacating an allocated plot on a refund/opt-out delete is the
-    // caller's responsibility (see PipelineDetailScreen's danger zone) --
-    // mirrors index.html's deleteLeadConfirm(), which does the same
-    // plot-vacate-then-delete sequence client-side, not inside one RPC.
+    // Fixed 2026-09-03 (master spec's "Pipeline deletion mismatch" --
+    // flagged critical): this used to be a real hard DELETE, which a real
+    // ON DELETE CASCADE on allocation_requests/target_selections/
+    // payment_reminders_log/client_notifications would have destroyed, and
+    // which orphans payments via ON DELETE SET NULL -- all confirmed live.
+    // Now a soft delete (sets deleted_at), matching legacy's real
+    // apiDeleteLead() exactly, not the hard-DELETE deleteLeadConfirm() UI
+    // wrapper this comment used to (wrongly) cite. Vacating an allocated
+    // plot on a refund/opt-out delete stays the caller's own responsibility
+    // (see PipelineDetailScreen's danger zone).
     remove(id: string): Promise<void>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
@@ -621,10 +626,13 @@ function createDemoDataSource(): DataSource {
   return {
     leads: {
       async listForAgent(agentKey) {
-        return demoLoad().leads.filter((l) => l.agent === agentKey);
+        // Soft-deleted leads (deletedAt set) never appear -- matches real
+        // leads_sel RLS, which filters deleted_at IS NULL (confirmed live,
+        // ported to staging this session).
+        return demoLoad().leads.filter((l) => l.agent === agentKey && !l.deletedAt);
       },
       async listAll() {
-        return demoLoad().leads;
+        return demoLoad().leads.filter((l) => !l.deletedAt);
       },
       async create(agentKey, input) {
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
@@ -649,10 +657,10 @@ function createDemoDataSource(): DataSource {
         return lead;
       },
       async get(agentKey, id) {
-        return demoLoad().leads.find((l) => l.agent === agentKey && l.id === id);
+        return demoLoad().leads.find((l) => l.agent === agentKey && l.id === id && !l.deletedAt);
       },
       async listCompany() {
-        return demoLoad().leads.filter((l) => l.agent === 'company');
+        return demoLoad().leads.filter((l) => l.agent === 'company' && !l.deletedAt);
       },
       async assign(id, agentKey) {
         const db = demoLoad();
@@ -696,8 +704,17 @@ function createDemoDataSource(): DataSource {
         demoSave();
       },
       async remove(id) {
+        // Soft delete -- matches the real fix (see the interface's own
+        // comment above). The row stays in db.leads (still joinable by any
+        // code that looks it up by id, e.g. a payment's linked lead name --
+        // matches real production, where a soft-deleted row still
+        // physically exists), just excluded from listForAgent/listAll/get/
+        // listCompany from now on.
         const db = demoLoad();
-        db.leads = db.leads.filter((l) => l.id !== id);
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) return;
+        const updated: Lead = { ...db.leads[index], deletedAt: new Date().toISOString() };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
       },
     },
@@ -2075,7 +2092,14 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
       },
       async remove(id) {
-        const { error } = await requireClient().from('leads').delete().eq('id', id);
+        // Soft delete, not a hard DELETE -- matches legacy's real
+        // apiDeleteLead() (index.html:4622-4629). A real ON DELETE CASCADE
+        // on allocation_requests/target_selections/payment_reminders_log/
+        // client_notifications would destroy their history, and payments
+        // would be orphaned via ON DELETE SET NULL -- all confirmed live.
+        // leads_sel/leads_client_sel RLS already filters deleted_at IS
+        // NULL, so this needs no client-side filtering anywhere else.
+        const { error } = await requireClient().from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
         if (error) throw error;
       },
     },

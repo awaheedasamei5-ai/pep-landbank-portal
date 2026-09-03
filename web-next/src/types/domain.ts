@@ -78,6 +78,17 @@ export interface Lead {
   // comment). Auto-maintained server-side by `leads_track_modification`,
   // a BEFORE UPDATE trigger -- never set directly from the client.
   lastModifiedAt?: string | null;
+  // Real column `deleted_at` (ported to staging 2026-09-03 -- see
+  // PHASE0_INVENTORY.md; live on production, matches legacy's real
+  // apiDeleteLead()). Never a hard DELETE -- a real ON DELETE CASCADE on
+  // allocation_requests/target_selections/payment_reminders_log/
+  // client_notifications would destroy their history, and payments would
+  // be orphaned via ON DELETE SET NULL. leads_sel/leads_client_sel RLS
+  // (confirmed live) already filters deleted_at IS NULL, so a soft-deleted
+  // lead never round-trips through listForAgent()/listAll()/get() at all
+  // -- present on the type only so a caller could show "deleted" state if
+  // some future screen ever fetched by raw id bypassing that filter.
+  deletedAt?: string | null;
 }
 
 // Every field the Pipeline Update accordion's "Save update" can change in

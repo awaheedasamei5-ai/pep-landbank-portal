@@ -21,12 +21,18 @@ export function useLead(id: string) {
     queryKey: ['lead', agentKey, id, viewAll],
     enabled: !!agentKey && !!id,
     queryFn: async () => {
+      // React Query disallows a queryFn resolving to undefined (logs
+      // "Query data cannot be undefined") -- surfaced for real by the
+      // leads soft-delete fix: deleting a lead now correctly makes it
+      // vanish from a subsequent refetch instead of erroring, and this
+      // screen's own `if (!lead) return <div>Lead not found.</div>` guard
+      // needs a real null, not undefined, to satisfy that contract.
       const ds = getDataSource(demoMode);
       if (viewAll) {
         const all = await ds.leads.listAll();
-        return all.find((l) => l.id === id);
+        return all.find((l) => l.id === id) ?? null;
       }
-      return ds.leads.get(agentKey, id);
+      return (await ds.leads.get(agentKey, id)) ?? null;
     },
   });
 }

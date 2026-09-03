@@ -156,6 +156,66 @@ agent and genuinely returns rows for a manager — the behavioral proof
 their own. Live-mode manager sign-in through the real login screen is a
 separate, still-open gap — this only proves the RLS itself is correct.
 
+## 10. Pipeline deletion mismatch — FIXED (flagged critical in the master spec)
+
+The master spec's Section 1 named this a critical, fix-before-feature-work
+item: legacy soft-deletes a lead via `deleted_at` (`apiDeleteLead()`,
+index.html:4622-4629, with a real, well-reasoned comment: a hard DELETE
+would cascade and destroy `allocation_requests`/`target_selections`/
+`payment_reminders_log`/`client_notifications` history via real `ON DELETE
+CASCADE`, and orphan `payments` via `ON DELETE SET NULL`) — confirmed live
+on production, all four cascade rules real. `web-next`'s `leads.remove()`
+was doing a genuine hard `DELETE`, meaning every lead deletion in live mode
+would have silently destroyed that linked history.
+
+**Fixed 2026-09-03:** ported `leads.deleted_at` to staging (it didn't
+exist there either); updated `leads_sel`/`leads_client_sel` to filter
+`deleted_at IS NULL`, matching production exactly; `leads.remove()` (live)
+now does `UPDATE ... SET deleted_at = now()`; demo mode's `remove()` sets
+`deletedAt` instead of splicing the array, and `listForAgent`/`listAll`/
+`get`/`listCompany` all now exclude soft-deleted rows (matching what real
+RLS does automatically in live mode). `tests.run_leads_soft_delete_tests()`
+(4/4) proves the row and its linked `allocation_requests` row both survive
+a soft-delete intact — the actual property that matters, not just that the
+column got set. Verified live in demo mode end to end (deleted a real
+seeded lead via Pipeline Detail's danger zone, confirmed it vanished from
+the list, confirmed via `localStorage` inspection that the record survives
+with `deletedAt` set rather than being removed).
+
+**Bonus, found and fixed along the way:** `leads_upd` had no explicit
+`WITH CHECK` (implicit fallback to its `USING` clause) — given the master
+spec's own separate finding ("RLS needs explicit tests... Supabase
+recommends... explicit UPDATE USING + WITH CHECK"), added one explicitly
+(identical to `USING`, so no behavior change, just no longer implicit).
+
+**Real bug found and fixed as a direct consequence of finally exercising
+this path live:** `useLead`'s query function could resolve to `undefined`
+(a lead that's been soft-deleted, or any not-found case) — React Query
+disallows this ("Query data cannot be undefined"). `PipelineDetailScreen`
+already had a `!lead` guard, but the console error fired regardless. Fixed
+by coercing to `null` in both `useLead` branches (`web-next/src/features/
+pipeline/hooks/useLead.ts`). This exact bug was equally reachable under the
+*old* hard-DELETE behavior — it had just never been exercised by an actual
+delete-then-refetch before now.
+
+**Unrelated, unresolved curiosity, documented rather than silently
+dropped:** during testing, a plain `UPDATE leads SET deleted_at = ...`
+issued from *inside* a plpgsql function (under `authenticated`+JWT
+impersonation) consistently failed with a spurious RLS violation on
+staging, while the identical statement as a top-level query — and updates
+to every other column, and the identical pattern on every other table —
+worked every time. Ruled out: triggers, multi-policy OR-combination,
+implicit-vs-explicit `WITH CHECK`, table ownership/FORCE RLS, table- and
+column-level grants, check constraints, `now()` vs a literal value, and
+same-transaction-as-insert timing. `tests.run_leads_soft_delete_tests()`
+works around it (the row's `deleted_at` is set in an unrestricted context,
+sidestepping the anomaly, since the property actually being tested — the
+`leads_sel` filter — doesn't depend on how the update happened). The real
+application code path (a genuine top-level authenticated request via the
+Supabase client, not nested plpgsql) is unaffected and independently
+verified working, both via direct SQL and live in the browser. Worth a
+fresh-session recheck if it resurfaces elsewhere.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -165,4 +225,5 @@ separate, still-open gap — this only proves the RLS itself is correct.
 5. ~~All four RLS cutovers~~ — done (§4): `payments.manage`, `contracts.generate`, `allocations.manage`, `ops.view_all` — every real hardcoded staff-key array this session found is gone from RLS policy text.
 6. ~~`role_permissions` wired in + management RPCs~~ — done (§4): `set_permission_override`/`clear_permission_override`, 39/39 pgTAP assertions across 7 suites.
 7. ~~Permissions admin screen~~ — done: `/app/mgr/health/permissions`, a grant/revoke matrix over the real permission catalog, calling `set_permission_override`/`clear_permission_override` in live mode. Verified live in demo mode (matrix matches the real 7 seeded grants exactly; a grant→revoke round-trip updates immediately; zero console errors).
-8. Next: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the whole permission model (staging-only today, by design). Live-mode manager sign-in through the real login screen is still unexercised — needs a real manager `auth.users` account, which is account creation (out of scope here) rather than a schema task.
+8. ~~Pipeline deletion mismatch~~ — done (§10): `leads.remove()` is a real soft delete in both demo and live mode now, matching legacy and preventing real FK-cascade data loss. 43/43 pgTAP assertions across 8 suites.
+9. Next: the other critical findings from the master spec's Section 1 not yet addressed — site-visit day-of-week schedule (Mon–Sat 9am + Sun 12pm, currently Tue/Wed/Fri/Sun), leave non-overlap rule, scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
