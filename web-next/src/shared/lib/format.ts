@@ -11,6 +11,14 @@ export function ghs(x: unknown): string {
   return 'GHS ' + num(x).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+// Ported from index.html's normContact() (index.html:13949) -- digits only,
+// so "024 411 2233" and "+233244112233" compare equal. Used to match a
+// pipeline Excel import row against an existing lead without being fooled
+// by punctuation/country-code formatting differences.
+export function normContact(c: unknown): string {
+  return String(c ?? '').replace(/\D/g, '');
+}
+
 export function today(): string {
   return isoDateOnly(new Date());
 }

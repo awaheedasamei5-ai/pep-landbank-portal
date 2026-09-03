@@ -735,6 +735,7 @@ export function seedDemo(): DemoDb {
       { staffKey: 'elizabeth', permissionKey: 'contracts.generate', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
       { staffKey: 'elizabeth', permissionKey: 'ops.view_all', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
     ],
+    importBatches: [],
   };
 }
 

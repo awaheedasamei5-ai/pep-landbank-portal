@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -412,6 +412,15 @@ export interface DataSource {
   downloads: {
     list(viewerKey: string, viewerRole: string): Promise<DownloadRecord[]>;
     log(userKey: string, userName: string, filename: string, kind: string, fileData: string | null): Promise<DownloadRecord>;
+  };
+  // Real table `import_batches` (ported to staging 2026-09-03 -- see
+  // PHASE0_INVENTORY.md; already live on production). Archives every
+  // pipeline Excel import, matching apiInsertImportBatch() (index.html:
+  // 20451-20463). Real import_batches_ins RLS WITH CHECK requires
+  // imported_by = my_key() -- create() always stamps the caller's own
+  // key/name, never a caller-supplied one.
+  importBatches: {
+    create(importedBy: string, importedByName: string, batch: NewImportBatch): Promise<void>;
   };
   // Real tables `achievement_definitions`/`staff_achievements` (confirmed
   // live, already fully seeded on both projects with the same 8 real
@@ -1355,6 +1364,14 @@ function createDemoDataSource(): DataSource {
         return rec;
       },
     },
+    importBatches: {
+      async create(importedBy, importedByName, batch) {
+        const db = demoLoad();
+        const rec: ImportBatch = { id: crypto.randomUUID(), importedBy, importedByName, ...batch, createdAt: new Date().toISOString() };
+        db.importBatches = [rec, ...(db.importBatches ?? [])];
+        demoSave();
+      },
+    },
     achievements: {
       async listDefs() {
         return DEMO_ACHIEVEMENT_DEFS;
@@ -2082,6 +2099,7 @@ function createLiveDataSource(): DataSource {
         if ('tags' in patch) dbPatch.tags = patch.tags;
         if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
         if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
+        if ('priority' in patch) dbPatch.priority = patch.priority;
         if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
         const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
         if (error) throw error;
@@ -2704,6 +2722,26 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('downloads').insert({ user_key: userKey, user_name: userName, filename, kind, file_data: fileData }).select().single();
         if (error) throw error;
         return mapDownloadRow(data);
+      },
+    },
+    importBatches: {
+      async create(importedBy, importedByName, batch) {
+        const { error } = await requireClient()
+          .from('import_batches')
+          .insert({
+            imported_by: importedBy,
+            imported_by_name: importedByName,
+            source_label: batch.sourceLabel,
+            added_count: batch.addedCount,
+            updated_count: batch.updatedCount,
+            unchanged_count: batch.unchangedCount,
+            skipped_count: batch.skippedCount,
+            conflict_count: batch.conflictCount,
+            error_count: batch.errorCount,
+            payment_changes_ignored_count: batch.paymentChangesIgnoredCount,
+            details: batch.details,
+          });
+        if (error) throw error;
       },
     },
     achievements: {

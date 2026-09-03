@@ -9,19 +9,20 @@ import type { Lead } from '../../../types/domain';
 // exactly as built. This only ever writes into the INPUT columns; the
 // formula columns (#, Unit Price, Gross, Net, Interest, Grand, Balance)
 // are already live formulas in the template and recalculate themselves
-// in Excel. Import (round-tripping an edited workbook back into the app)
-// is a separate, larger undertaking and deliberately not built here --
-// this is export-only.
+// in Excel. Import (round-tripping an edited workbook back into the app,
+// reconciling against existing leads instead of duplicating them) is
+// built in pipelineImportLogic.ts / usePipelineImport.ts, reusing the
+// exact column layout exported below so the two stay in lockstep.
 //
-// Three real Lead fields the template writes (priority, nextAction,
-// siteVisit) don't exist anywhere in web-next's Lead type yet -- Sales
-// Desk/Pipeline Detail never surfaced them as editable fields when Leads
-// was first ported, so there is nothing to read. Every write below uses
-// the exact same fallback the reference code already falls back to when
-// a lead has none of these set ('Low' priority, blank next action, 'No'
-// site visit) -- honest given web-next genuinely doesn't capture them,
-// not a shortcut around real data that exists but isn't being read.
-const PL_INPUT_COLS: Record<string, number> = {
+// priority/nextAction/siteVisit all exist on the Lead type but no Sales
+// Desk/Pipeline Detail screen surfaces them as editable fields yet, so
+// export falls back exactly the way index.html's own writeLeadsIntoTemplate
+// does when a lead has none set ('Low' priority, 'No' site visit, blank
+// next action) -- honest given no UI captures them yet, not a shortcut
+// around real data that exists but isn't being read. All three now
+// round-trip correctly (read here, written by a reconciling import in
+// pipelineImportLogic.ts) even though editing them still needs a screen.
+export const PL_INPUT_COLS: Record<string, number> = {
   name: 2,
   contact: 3,
   date: 4,
@@ -37,8 +38,9 @@ const PL_INPUT_COLS: Record<string, number> = {
   notes: 20,
   leadId: 21,
 };
-const PL_DATA_START = 8;
-const PL_DATA_END = 91; // real file's live formula range is B8:B91 -- row 92 is the "how to add a client" note row
+export const PL_DATA_START = 8;
+export const PL_DATA_END = 91; // real file's live formula range is B8:B91 -- row 92 is the "how to add a client" note row
+export const PL_HEADER_ROW = 7;
 
 function xlFormulaOf(cell: ExcelJS.Cell): string | null {
   return cell.formula || null;
@@ -138,8 +140,8 @@ function writeLeadsIntoTemplate(wb: ExcelJS.Workbook, leads: (Lead & { agentTag?
       noPlots: l.noPlots,
       discount: l.discount ?? 0,
       paymentPlan: l.paymentPlan,
-      siteVisit: 'No',
-      priority: 'Low',
+      siteVisit: l.siteVisit || 'No',
+      priority: l.priority || 'Low',
       amtPaid: l.amtPaid,
       nextAction: '',
       notes,

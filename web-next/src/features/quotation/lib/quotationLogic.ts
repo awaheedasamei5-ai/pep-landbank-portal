@@ -38,11 +38,11 @@ export interface QuotationTotals {
   schedule: InstallmentScheduleRow[];
 }
 
-function pricingFor(config: Config, plotType: PlotType): { list: number; disc: number; eq: number } {
+export function pricingFor(config: Config, plotType: PlotType): { list: number; disc: number; eq: number } {
   return plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
 }
 
-function interestFor(config: Config, plan: PaymentPlanKey): number {
+export function interestFor(config: Config, plan: PaymentPlanKey): number {
   const table: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
   return table[plan] ?? 0;
 }

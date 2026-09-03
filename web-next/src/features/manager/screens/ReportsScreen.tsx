@@ -8,6 +8,7 @@ import { useDownloadCompanyReport } from '../hooks/useCompanyReportExcel';
 import { useDownloadAgentPipeline, useDownloadMasterPipeline, usePipelineAgents } from '../hooks/usePipelineExcel';
 import { useDownloadManagementReport } from '../hooks/useManagementReport';
 import { reportPeriodRange, type ReportPeriodKey } from '../lib/managementReportLogic';
+import { PipelineImportCard } from '../components/PipelineImportCard';
 import type { Lead } from '../../../types/domain';
 import styles from './ReportsScreen.module.css';
 
@@ -26,7 +27,11 @@ const PERIOD_OPTIONS: { key: ReportPeriodKey; label: string }[] = [
 // Pipeline / per-agent pipeline .xlsx exports (index.html:20001-20184) --
 // these write into the real uploaded pipeline-template.xlsx, preserving
 // every one of its live formula columns, not a rebuild. Import (round-
-// tripping an edited workbook back into the app) stays out of scope.
+// tripping an edited workbook back into the app, reconciling against
+// existing leads instead of duplicating them -- the master spec's own
+// flagged "Excel import/restore creating duplicates" finding) is built in
+// PipelineImportCard/usePipelineImport/pipelineImportLogic, using this
+// exact template's column layout so it stays in lockstep with export.
 export function ReportsScreen() {
   const { data: leads, isLoading: leadsLoading } = useAllLeadsReport();
   const { data: enquiries } = useAllEnquiriesReport();
@@ -255,6 +260,8 @@ export function ReportsScreen() {
       <div className={styles.card}>
         <ReportRow label="All agents, one workbook" hint={leadsLoading ? 'Loading…' : `${leads?.length ?? 0} clients`} onDownload={() => downloadMasterPipeline.mutate()} downloading={downloadMasterPipeline.isPending} buttonLabel="⬇ .xlsx" />
       </div>
+
+      <PipelineImportCard />
 
       <div className={styles.sectitle}>Just one agent</div>
       <div className={styles.card}>

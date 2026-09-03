@@ -113,6 +113,10 @@ export interface LeadUpdate {
   tags?: string;
   siteVisit?: string;
   depositTarget?: number;
+  // Added for the pipeline Excel import (index.html's importPipelineExcel()
+  // writes this on every reconciled row) -- not previously part of any
+  // web-next write path since no screen exposed it as editable before now.
+  priority?: string;
 }
 
 export interface LeadKyc {
@@ -1176,6 +1180,40 @@ export interface DownloadRecord {
   kind: string;
   fileData: string | null;
   createdAt: string;
+}
+
+// Real table `import_batches` (ported to staging 2026-09-03, already live
+// on production -- see PHASE0_INVENTORY.md) -- the audit trail for every
+// pipeline Excel import, archived by importPipelineExcel() (index.html:
+// 20437-20448) so a human can review exactly what a bulk import did,
+// row-level conflicts and errors included, rather than that detail only
+// ever reaching a console.warn nobody but a developer would see.
+export interface ImportBatch {
+  id: string;
+  importedBy: string;
+  importedByName: string | null;
+  sourceLabel: string;
+  addedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errorCount: number;
+  paymentChangesIgnoredCount: number;
+  details?: unknown;
+  createdAt: string;
+}
+
+export interface NewImportBatch {
+  sourceLabel: string;
+  addedCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errorCount: number;
+  paymentChangesIgnoredCount: number;
+  details: unknown;
 }
 
 // Real tables `achievement_definitions` + `staff_achievements` (confirmed
