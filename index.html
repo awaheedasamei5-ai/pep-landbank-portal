@@ -4667,8 +4667,27 @@ async function apiDeleteEnquiry(id){ if(DEMO_MODE){ const d=await demoLoad(); d.
   const {error}=await sb.from('enquiries').delete().eq('id',id); if(error) throw error; }
 async function apiDeleteComplaint(id){ if(DEMO_MODE){ const d=await demoLoad(); d.complaints=d.complaints.filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('complaints').delete().eq('id',id); if(error) throw error; }
-async function apiDeleteVisit(id){ if(DEMO_MODE){ const d=await demoLoad(); d.sitevisits=d.sitevisits.filter(x=>x.id!==id); await demoSave(); return; }
-  const {error}=await sb.from('site_visits').delete().eq('id',id); if(error) throw error; }
+// Fixed 2026-09-03: once a client's Site Visit Experience invite (and
+// especially a submitted review) exists for a visit, site_visit_id has a
+// real, non-cascading FK from site_visit_experience_invites (and, through
+// it, _submissions) and separately from site_visit_feedback -- a plain
+// DELETE on site_visits was silently rejected by Postgres the moment any
+// of that existed, which read as "the delete icon doesn't work" once a
+// visit had been activated and reviewed. delete_site_visit_full (SECURITY
+// DEFINER, same own/manager/elias+emmanuel+elizabeth gate as site_visits_del)
+// explicitly clears the submission, the invite, and any legacy
+// site_visit_feedback row before deleting the visit itself, so deleting a
+// visit really does remove every trace of its Site Visit Experience data.
+async function apiDeleteVisit(id){
+  if(DEMO_MODE){ const d=await demoLoad();
+    const removedInviteIds=(d.sveInvites||[]).filter(x=>x.siteVisitId===id).map(x=>x.id);
+    d.sitevisits=d.sitevisits.filter(x=>x.id!==id);
+    d.sveInvites=(d.sveInvites||[]).filter(x=>x.siteVisitId!==id);
+    d.sveSubmissions=(d.sveSubmissions||[]).filter(x=>!removedInviteIds.includes(x.inviteId));
+    await demoSave(); return; }
+  const {error}=await sb.rpc('delete_site_visit_full',{p_visit_id:id,p_by:PROFILE.key,p_by_name:PROFILE.name});
+  if(error) throw error;
+}
 // Full-record edits (distinct from the existing status-only apiUpdateComplaintStatus/
 // apiUpdateVisitStatus) -- lets Management correct an entry's own fields, not just
 // its status. RLS already permits this (enquiries_upd/complaints_upd/site_visits_upd
@@ -15277,7 +15296,7 @@ function bindSiteVisitAuthCtrls(){
   if(dlBtn) dlBtn.onclick=()=>buildWeeklyVisitAuthPDF(SVA_FORM,SVA_VISITS);
   document.querySelectorAll('[data-svadelvisit]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.svadelvisit; const v=SVA_VISITS.find(x=>x.id===id); if(!v) return;
-    if(!confirm('Remove '+(v.name||'this client')+" from this day's authorization form? This deletes the site visit record entirely.")) return;
+    if(!confirm('Remove '+(v.name||'this client')+" from this day's authorization form? This deletes the site visit record entirely, including their Site Visit Experience invite and review if any.")) return;
     b.disabled=true;
     try{
       await apiDeleteVisit(id);
@@ -19788,7 +19807,7 @@ function bindVisitCtrls(){
   });
   V.querySelectorAll('[data-delvisit]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.delvisit; const v=DB.sitevisits.find(x=>x.id===id); if(!confirm('Delete this site visit request from '+v.name+'?')) return;
-    try{ await apiDeleteVisit(id); DB.sitevisits=DB.sitevisits.filter(x=>x.id!==id); toast('Site visit deleted'); managerView(); }catch(err){ toast('Delete failed'); } });
+    try{ await apiDeleteVisit(id); DB.sitevisits=DB.sitevisits.filter(x=>x.id!==id); toast('Site visit deleted'); managerView(); }catch(err){ toast('Delete failed: '+friendlyErr(err)); } });
 }
 function card(title,meta,line,note,tags){ return `<div class="rowcard"><div class="top"><div><div class="nm">${esc(title)}</div><div class="meta">${esc(meta)}</div></div></div>${line?`<div class="meta" style="margin-top:6px">${esc(line)}</div>`:''}<div class="foot">${(tags||[]).filter(Boolean).join('')}</div>${note?`<div class="note">${esc(note)}</div>`:''}</div>`; }
 function tg(cls,txt){ return txt?`<span class="tag ${cls}">${esc(txt)}</span>`:''; }
