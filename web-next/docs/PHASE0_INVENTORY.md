@@ -119,16 +119,27 @@ changes are made and tested; production stays read-only for this rebuild).
 
 **Real finding along the way:** staging's `profiles` table currently has
 **zero manager-role rows** — all 4 real profiles (`elizabeth`, `emmanuel`,
-`elias`, `webnexttestuser`) are `role='agent'`. Any pgTAP test that needs to
-simulate an authenticated manager request (as opposed to asserting policy
-shape) has no real manager profile to reference on staging yet, and manager
-sign-in in live mode has likely never been exercised end-to-end against
-staging either. Not fixed here — flagged for whoever does the next
-authenticated-request-style test pass or live-mode manager QA.
+`elias`, `webnexttestuser`) are `role='agent'`. `profiles.id` has a hard FK
+to `auth.users`, so a synthetic unlinked profile row for pgTAP impersonation
+is impossible without creating a real Supabase Auth user — tried first,
+confirmed impossible, not worked around by creating one (out of scope for
+this rebuild, matches the standing account-creation boundary).
+
+**Closed 2026-09-03, without creating any account:** `tests.run_rls_authenticated_tests()`
+reuses the one real, dedicated live-mode test account (`webnexttestuser`,
+real `auth.users` row) and toggles its `role` transiently for the duration
+of the test (always restored afterward, including on a failed assertion,
+via `exception when others`) to actually simulate both a manager and an
+agent request via `set_config('request.jwt.claim.sub', ...)`. 4/4 passing:
+proves audit_events/backups RLS genuinely filters to zero rows for an
+agent and genuinely returns rows for a manager — the behavioral proof
+`run_rls_foundation_tests()`'s policy-shape assertions can't provide on
+their own. Live-mode manager sign-in through the real login screen is a
+separate, still-open gap — this only proves the RLS itself is correct.
 
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
 2. ~~Wire `web-next`'s `DataSource` to `audit_events`/`backups` and build the System Health + Audit Log + Backup & Restore screens~~ — done, verified live in demo mode.
-3. ~~First pgTAP suite~~ — done (§9), 13/13 passing on staging.
-4. Continue Phase 1: role/permission-record table design (real gap, §4), a manager profile on staging (blocks authenticated-request-style pgTAP tests and live-mode manager QA), idempotent-RPC review, error-contract standardization.
+3. ~~First pgTAP suite~~ — done (§9): `run_rls_foundation_tests()` (13/13, schema/policy shape) + `run_rls_authenticated_tests()` (4/4, real manager-vs-agent RLS behavior via the existing `webnexttestuser` test account).
+4. Continue Phase 1: role/permission-record table design (real gap, §4), idempotent-RPC review, error-contract standardization. Live-mode manager sign-in through the real login screen is still unexercised — needs a real manager `auth.users` account, which is account creation (out of scope here) rather than a schema task.
