@@ -1475,6 +1475,11 @@ input[type="file"]{max-width:100%;box-sizing:border-box}
 .monthGridDate{font-size:12.5px;font-weight:700;color:var(--text)}
 .monthGridCount{font-size:9px;font-weight:800;color:#fff;background:var(--green);border-radius:100px;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;padding:0 3px}
 .monthGridCell.has2 .monthGridCount,.monthGridCell.has3 .monthGridCount{background:rgba(255,255,255,.3)}
+/* Site-visit day picker (svDatePickerHtml) -- reuses .monthGrid, adds a
+   locked state for dates that don't match the chosen day-of-week. */
+.monthGridCell.locked{opacity:.28;cursor:default;pointer-events:none}
+.monthGridCell.svSelected{background:linear-gradient(150deg,#818CF8,#4F46E5);border-color:transparent;box-shadow:none}
+.monthGridCell.svSelected .monthGridDate{color:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip2{border:1.5px solid var(--line);background:var(--card);border-radius:100px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--text);transition:.15s}
 .lvCalNav{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
@@ -16268,7 +16273,93 @@ async function saveCmp(sentiment){ const name=val('c_name').trim();
 }
 
 /* ================= SITE VISIT ================= */
+// Fixed 2026-09-03: "Site visit day" used to be a plain day+time label
+// (s_day/cv_day) that never touched the record's real `date` -- every
+// site visit's `date` was hardcoded to the day the form was filled in,
+// not the day the client actually planned to visit. That silently broke
+// Site Visit Authorization's per-day chips (SVA_ALL_WEEK_VISITS is
+// filtered by real `date`, sveAuthAllowedDayIsos/siteVisitAuthBodyHtml)
+// -- a visit requested Monday for "Saturday 9am" showed up under Monday's
+// chip, not Saturday's. Fix: picking a day-of-week now opens a real
+// calendar (reusing .monthGrid) where only matching dates are selectable,
+// and the chosen date becomes the record's actual `date` -- `time` stays
+// the same day+time label string for the PDF's existing checkbox row.
+const SV_DAY_LABELS=['Sunday 12:00pm','Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am'];
+const SV_DAY_NAMES=['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
+let S_VISIT_DOW=null,S_VISIT_MONTH=null,S_VISIT_DATE=null;
+let CV_VISIT_DOW=null,CV_VISIT_MONTH=null,CV_VISIT_DATE=null;
+function svNextOccurrence(dow){
+  const d=new Date(today()+'T00:00:00');
+  while(d.getDay()!==dow) d.setDate(d.getDate()+1);
+  return isoDateOnly(d);
+}
+function svDatePickerHtml(prefix,dow,monthCursor,selectedIso){
+  const parts=monthCursor.split('-').map(Number); const y=parts[0],m=parts[1];
+  const startWeekday=new Date(y,m-1,1).getDay();
+  const daysInMonth=new Date(y,m,0).getDate();
+  const todayIso=today();
+  const cells=[]; for(let i=0;i<startWeekday;i++) cells.push(null);
+  for(let d=1;d<=daysInMonth;d++) cells.push(d);
+  while(cells.length%7!==0) cells.push(null);
+  const monthLabel=new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  return '<div class="rowcard" style="margin-top:6px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<button type="button" class="iconbtn" data-svcalprev="'+prefix+'" style="background:#F1EFE7;border-color:var(--line);color:var(--ink)">‹</button>'
+    +'<div style="font-weight:800;font-size:13px">'+esc(monthLabel)+'</div>'
+    +'<button type="button" class="iconbtn" data-svcalnext="'+prefix+'" style="background:#F1EFE7;border-color:var(--line);color:var(--ink)">›</button>'
+    +'</div>'
+    +'<div class="monthGrid">'
+    +['S','M','T','W','T','F','S'].map(function(w){ return '<div class="monthGridWeekday">'+w+'</div>'; }).join('')
+    +cells.map(function(d){
+        if(d===null) return '<div class="monthGridCell empty"></div>';
+        const iso=monthCursor+'-'+String(d).padStart(2,'0');
+        const cellDow=new Date(y,m-1,d).getDay();
+        if(cellDow!==dow||iso<todayIso) return '<div class="monthGridCell locked"><div class="monthGridDate">'+d+'</div></div>';
+        return '<div class="monthGridCell'+(iso===selectedIso?' svSelected':'')+(iso===todayIso?' today':'')+'" data-svdatecell="'+prefix+'|'+iso+'"><div class="monthGridDate">'+d+'</div></div>';
+      }).join('')
+    +'</div>'
+    +'<div class="mini" style="text-align:center;margin-top:8px">'+(selectedIso?('Visit date: <b style="color:var(--ink)">'+esc(fmtLongDate(selectedIso))+'</b>'):('Only '+esc(SV_DAY_NAMES[dow])+' are selectable.'))+'</div>'
+    +'</div>';
+}
+function svRefreshDayCal(prefix){
+  const dow=prefix==='s'?S_VISIT_DOW:CV_VISIT_DOW, month=prefix==='s'?S_VISIT_MONTH:CV_VISIT_MONTH, dateIso=prefix==='s'?S_VISIT_DATE:CV_VISIT_DATE;
+  const el=document.getElementById(prefix+'_dayCal'); if(el) el.innerHTML=svDatePickerHtml(prefix,dow,month,dateIso);
+  document.querySelectorAll('[data-svdow^="'+prefix+'|"]').forEach(function(b){ b.classList.toggle('on',Number(b.dataset.svdow.split('|')[1])===dow); });
+  bindSvCalCtrls(prefix);
+}
+function bindSvCalCtrls(prefix){
+  document.querySelectorAll('[data-svcalprev="'+prefix+'"]').forEach(function(b){ b.onclick=function(){ svShiftMonth(prefix,-1); }; });
+  document.querySelectorAll('[data-svcalnext="'+prefix+'"]').forEach(function(b){ b.onclick=function(){ svShiftMonth(prefix,1); }; });
+  document.querySelectorAll('[data-svdatecell^="'+prefix+'|"]').forEach(function(b){ b.onclick=function(){
+    const iso=b.dataset.svdatecell.slice(prefix.length+1);
+    if(prefix==='s') S_VISIT_DATE=iso; else CV_VISIT_DATE=iso;
+    svRefreshDayCal(prefix);
+  }; });
+}
+function svShiftMonth(prefix,delta){
+  const cur=prefix==='s'?S_VISIT_MONTH:CV_VISIT_MONTH; const parts=cur.split('-').map(Number);
+  const d=new Date(parts[0],parts[1]-1+delta,1); const next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(prefix==='s') S_VISIT_MONTH=next; else CV_VISIT_MONTH=next;
+  svRefreshDayCal(prefix);
+}
+function svDowClick(prefix,dow){
+  const iso=svNextOccurrence(dow);
+  if(prefix==='s'){ S_VISIT_DOW=dow; S_VISIT_MONTH=iso.slice(0,7); S_VISIT_DATE=iso; }
+  else{ CV_VISIT_DOW=dow; CV_VISIT_MONTH=iso.slice(0,7); CV_VISIT_DATE=iso; }
+  svRefreshDayCal(prefix);
+}
+function svDayPickerHtml(prefix,dow){
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'
+    +SV_DAY_LABELS.map(function(lbl,i){ return '<button type="button" class="chip '+(i===dow?'on':'')+'" data-svdow="'+prefix+'|'+i+'">'+esc(lbl.split(' ')[0])+'</button>'; }).join('')
+    +'</div>'
+    +'<div id="'+prefix+'_dayCal">'+svDatePickerHtml(prefix,dow,prefix==='s'?S_VISIT_MONTH:CV_VISIT_MONTH,prefix==='s'?S_VISIT_DATE:CV_VISIT_DATE)+'</div>';
+}
+function bindSvDayPickerCtrls(prefix){
+  document.querySelectorAll('[data-svdow^="'+prefix+'|"]').forEach(function(b){ b.onclick=function(){ svDowClick(prefix,Number(b.dataset.svdow.split('|')[1])); }; });
+  bindSvCalCtrls(prefix);
+}
 function formSiteVisit(){
+  S_VISIT_DOW=new Date(today()+'T00:00:00').getDay(); S_VISIT_DATE=svNextOccurrence(S_VISIT_DOW); S_VISIT_MONTH=S_VISIT_DATE.slice(0,7);
   V.innerHTML=`${back('home')}<div class="pagehead"><div><div class="eyebrow">Tsopoli site visit request</div><h2>Request a visit</h2><p>Goes to Management for confirmation.</p></div></div>
   <div class="formwrap">
   <div class="sectitle" style="margin-top:0"><h3>1.0 Client personal information</h3></div>
@@ -16284,7 +16375,7 @@ function formSiteVisit(){
 
   <div class="sectitle"><h3>3.0 Visit preferences</h3></div>
   <div class="grid2">${fld('3.1 Mode of transportation',sel('s_trans',['Personal Vehicle','Company Vehicle']))}${fld('3.2 Purpose of visit',sel('s_purpose',['Viewing','Allocation','Picking','Others']))}</div>
-  ${fld('3.3 Site visit day',sel('s_day',['Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am','Sunday 12:00pm']))}
+  ${fld('3.3 Site visit day',svDayPickerHtml('s',S_VISIT_DOW))}
   <div class="grid2">${fld('Number of client accompaniment','<input id="s_ppl" type="number" min="0" value="0"/>','if applicable')}${fld('Who is accompanying?','<input id="s_accompanied" placeholder="e.g. Spouse, Relative"/>','optional — leave blank if none')}</div>
   <div class="rowcard" style="margin:14px 0;padding:12px 14px"><div class="mini">Site visit requested by</div><div style="font-weight:700">${esc(PROFILE.name)}</div></div>
 
@@ -16294,6 +16385,7 @@ function formSiteVisit(){
 
   <div class="formactions"><button class="btn ghost" onclick="route('home')">Cancel</button><button class="btn gold" id="saveSV">Submit request</button></div></div>`;
   document.getElementById('s_interest').onchange=e=>{ document.getElementById('s_interestCustomWrap').classList.toggle('hidden',e.target.value!=='More — enter number of plots'); };
+  bindSvDayPickerCtrls('s');
   document.getElementById('saveSV').onclick=saveSV;
 }
 function siteVisitPlotValue(selectVal,customVal){
@@ -16302,9 +16394,10 @@ function siteVisitPlotValue(selectVal,customVal){
 }
 async function saveSV(){ const name=val('s_name').trim();
   if(!name||!val('s_contact').trim()){ toast('Client name and contact are required'); return; }
+  if(S_VISIT_DOW===null||!S_VISIT_DATE){ toast('Pick a site visit day and date'); return; }
   const btn=document.getElementById('saveSV'); btn.disabled=true; btn.textContent='Sending…';
-  const row={name,contact:val('s_contact').trim(),plot:siteVisitPlotValue(val('s_interest'),val('s_interestCustom')),site:'Royal Palm Enclave, Tsopoli',date:today(),
-    time:val('s_day'),people:num(val('s_ppl')),transport:val('s_trans'),pickup:val('s_pickup').trim(),notes:'',
+  const row={name,contact:val('s_contact').trim(),plot:siteVisitPlotValue(val('s_interest'),val('s_interestCustom')),site:'Royal Palm Enclave, Tsopoli',date:S_VISIT_DATE,
+    time:SV_DAY_LABELS[S_VISIT_DOW],people:num(val('s_ppl')),transport:val('s_trans'),pickup:val('s_pickup').trim(),notes:'',
     placeOfWork:val('s_work').trim(),position:val('s_position').trim(),nationality:val('s_nat').trim(),purpose:val('s_purpose'),
     accompanied:val('s_accompanied').trim(),
     discussion:val('s_disc').trim(),understanding:val('s_understand').trim(),feedback:val('s_feedback').trim(),nextSteps:val('s_next').trim()};
@@ -18895,23 +18988,26 @@ async function offerSendReceipt(lead,payment){
   };
 }
 function formClientSiteVisit(){
+  CV_VISIT_DOW=new Date(today()+'T00:00:00').getDay(); CV_VISIT_DATE=svNextOccurrence(CV_VISIT_DOW); CV_VISIT_MONTH=CV_VISIT_DATE.slice(0,7);
   V.innerHTML=`<div class="pagehead"><div><div class="eyebrow">Tsopoli site visit request</div><h2>Book a visit</h2><p>Goes to Management for confirmation.</p></div></div>
   <div class="formwrap">
     ${fld('Interested in',sel('cv_interest',['0.5 Plot (70x50)','1 Plot (70x100)','2 Plots (70x100)','3 Plots (70x100)','More — enter number of plots']))}
     <div id="cv_interestCustomWrap" class="hidden">${fld('Preferred number of plots','<input id="cv_interestCustom" type="number" min="0.5" step="0.5" placeholder="e.g. 5"/>')}</div>
     <div class="grid2">${fld('Mode of transportation',sel('cv_trans',['Personal Vehicle','Company Vehicle']))}${fld('Purpose of visit',sel('cv_purpose',['Viewing','Allocation','Picking','Others']))}</div>
-    ${fld('Preferred day',sel('cv_day',['Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am','Sunday 12:00pm']))}
+    ${fld('Preferred day',svDayPickerHtml('cv',CV_VISIT_DOW))}
     ${fld('Pick-up location','<input id="cv_pickup"/>','optional')}
     ${fld('Number of people accompanying you','<input id="cv_ppl" type="number" min="0" value="0"/>')}
     ${fld('Who is accompanying you?','<input id="cv_accompanied" placeholder="e.g. Spouse, Relative — leave blank if none"/>','optional')}
     <div class="formactions"><button class="btn gold" id="saveCV">Submit request</button></div>
   </div>`;
   document.getElementById('cv_interest').onchange=e=>{ document.getElementById('cv_interestCustomWrap').classList.toggle('hidden',e.target.value!=='More — enter number of plots'); };
+  bindSvDayPickerCtrls('cv');
   document.getElementById('saveCV').onclick=saveClientVisit;
 }
 async function saveClientVisit(){
+  if(CV_VISIT_DOW===null||!CV_VISIT_DATE){ toast('Pick a preferred day and date'); return; }
   const btn=document.getElementById('saveCV'); btn.disabled=true; btn.textContent='Sending…';
-  const row={plot:siteVisitPlotValue(val('cv_interest'),val('cv_interestCustom')),site:'Royal Palm Enclave, Tsopoli',date:today(),time:val('cv_day'),
+  const row={plot:siteVisitPlotValue(val('cv_interest'),val('cv_interestCustom')),site:'Royal Palm Enclave, Tsopoli',date:CV_VISIT_DATE,time:SV_DAY_LABELS[CV_VISIT_DOW],
     people:num(val('cv_ppl')),transport:val('cv_trans'),purpose:val('cv_purpose'),pickup:val('cv_pickup').trim(),
     accompanied:val('cv_accompanied').trim(),notes:''};
   try{
