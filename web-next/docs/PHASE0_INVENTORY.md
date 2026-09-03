@@ -216,6 +216,37 @@ Supabase client, not nested plpgsql) is unaffected and independently
 verified working, both via direct SQL and live in the browser. Worth a
 fresh-session recheck if it resurfaces elsewhere.
 
+## 11. Site-visit day logic — FIXED (flagged critical in the master spec)
+
+Both `web-next` and legacy's own `SVE_ALLOWED_DAYS` restricted bookable
+site-visit days to Tue/Wed/Fri/Sun (`[2,3,5,0]`) — the master spec's
+Section 1 named this outdated: the real, current business schedule is
+every day of the week, Monday–Saturday 9:00am and Sunday 12:00pm.
+`web-next`'s only real enforcement point was `ALLOWED_DAYS` in
+`siteVisitAuthLogic.ts` (feeding Site Visit Authorization's day-chip
+picker) — updated to all 7 days. The per-day time distinction (9am vs
+Sunday's 12pm) isn't modeled or enforced anywhere in this app (no existing
+UI shows a specific visit time — `AddSiteVisitScreen`'s "Visit time" field
+is free text) and stays out of scope here; this fix corrects which days
+are bookable, not what time on those days.
+
+**Real bug found and fixed along the way, in legacy too:** `weekFridayIso`
+(and the week-visits query built on it, `useWeekSiteVisits` /
+`apiLoadSiteVisitsForWeek`) cut the week off at Friday — meaning a real
+Sunday site visit's costs could never be reconciled in this form even
+under the *old* schedule (Sunday was already an allowed day). Since
+Saturday is now also bookable, this bug would have hidden two real days'
+worth of visits instead of one. Renamed to `weekEndIso` (Monday+6, the
+real Sunday) and both the query and `weekRangeLabel`'s displayed range
+extended to match. Not ported to legacy (out of scope — `index.html` is
+frozen for this rebuild), but worth flagging to whoever eventually touches
+that code path.
+
+Verified live in demo mode: all 7 day-chips render; a real seeded Monday
+visit (previously invisible — Monday was never a valid day under the old
+schedule) now shows correctly; Saturday and Sunday both load their (empty)
+cost-reconciliation form without error; `npm run build`/`tsc` clean.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -226,4 +257,5 @@ fresh-session recheck if it resurfaces elsewhere.
 6. ~~`role_permissions` wired in + management RPCs~~ — done (§4): `set_permission_override`/`clear_permission_override`, 39/39 pgTAP assertions across 7 suites.
 7. ~~Permissions admin screen~~ — done: `/app/mgr/health/permissions`, a grant/revoke matrix over the real permission catalog, calling `set_permission_override`/`clear_permission_override` in live mode. Verified live in demo mode (matrix matches the real 7 seeded grants exactly; a grant→revoke round-trip updates immediately; zero console errors).
 8. ~~Pipeline deletion mismatch~~ — done (§10): `leads.remove()` is a real soft delete in both demo and live mode now, matching legacy and preventing real FK-cascade data loss. 43/43 pgTAP assertions across 8 suites.
-9. Next: the other critical findings from the master spec's Section 1 not yet addressed — site-visit day-of-week schedule (Mon–Sat 9am + Sun 12pm, currently Tue/Wed/Fri/Sun), leave non-overlap rule, scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
+9. ~~Site-visit day logic~~ — done (§11): all 7 days bookable, week-range query bug (Friday cutoff hiding weekend visits) fixed alongside it.
+10. Next: the other critical findings from the master spec's Section 1 not yet addressed — leave non-overlap rule, scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).

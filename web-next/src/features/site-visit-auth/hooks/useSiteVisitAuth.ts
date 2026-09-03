@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { weekFridayIso } from '../lib/siteVisitAuthLogic';
+import { weekEndIso } from '../lib/siteVisitAuthLogic';
 import type { WeeklyVisitFormCostPatch } from '../../../types/domain';
 
 // Real UI gate (canViewClientDatabase in index.html) -- manager or elias/
@@ -20,18 +20,21 @@ export function useWeeklyVisitForm(weekStart: string, visitDate: string) {
   });
 }
 
-// Real site visits for the week (Mon-Fri window, matching
-// apiLoadSiteVisitsForWeek exactly) -- filtered client-side from the same
-// unfiltered listAll() Company Leads/Reports already rely on, real
-// site_visits_sel RLS already scopes this correctly per viewer.
+// Real site visits for the full week (Monday through Sunday). Fixed
+// 2026-09-03: used to stop at Friday (matching legacy's own
+// apiLoadSiteVisitsForWeek), a real pre-existing bug that hid Sunday's
+// visits even under the old Tue/Wed/Fri/Sun schedule -- see weekEndIso's
+// own comment. Filtered client-side from the same unfiltered listAll()
+// Company Leads/Reports already rely on, real site_visits_sel RLS already
+// scopes this correctly per viewer.
 export function useWeekSiteVisits(weekStart: string) {
   const demoMode = useSessionStore((s) => s.demoMode);
-  const friday = weekFridayIso(weekStart);
+  const weekEnd = weekEndIso(weekStart);
   return useQuery({
     queryKey: ['weekSiteVisits', weekStart],
     queryFn: async () => {
       const all = await getDataSource(demoMode).siteVisits.listAll();
-      return all.filter((v) => v.visitDate >= weekStart && v.visitDate <= friday);
+      return all.filter((v) => v.visitDate >= weekStart && v.visitDate <= weekEnd);
     },
   });
 }
