@@ -20,7 +20,7 @@ be designed from scratch."
 
 Production has a real, actively-written audit log:
 
-- **`audit_events`** table: `id, created_at, category, event_type, severity, actor_key, actor_name, entity_type, entity_id, summary, detail jsonb, source`. RLS: `SELECT` restricted to `my_role()='manager'`, **no INSERT policy at all** — the table is written exclusively through a SECURITY DEFINER RPC, which is the correct pattern (RLS-enabled with zero policies denies all direct client access; only the function, running as its owner, can write).
+- **`audit_events`** table: `id, created_at, category, event_type, severity, actor_key, actor_name, entity_type, entity_id, summary, detail jsonb, source`. RLS: `SELECT` restricted to `my_role()='manager'`, **no INSERT policy at all** — the table is written exclusively through a SECURITY DEFINER RPC (RLS-enabled with only a SELECT policy denies all direct client writes; only the function, running as its owner, can write).
 - **`record_audit_event(category, event_type, severity, entity_type, entity_id, summary, detail)`** RPC — the sole write path. Validates `category in ('audit','integrity','error','cron')`, stamps `actor_key`/`actor_name` from the caller's own session server-side (never trusts a client-supplied actor).
 - Client helpers in `index.html`: `logAudit(...)` (narrow set of sensitive call sites — e.g. `config.changed`) and `logClientError(...)` (wired to `window.onerror`/`unhandledrejection`, 60s dedupe per error signature so a render loop can't flood the log).
 - A daily **`scheduled-integrity-check`** Edge Function (cron, 8am) writes `category='integrity'` findings.
@@ -41,9 +41,9 @@ Production has a real, actively-written audit log:
 
 **Correction:** an earlier combined-statement query against staging returned a false negative for `public.backups`. Re-checked directly — the table is fully live on staging too, 30 real rows, correct schema. No staging drift here after all; the only real gap was in `web-next`.
 
-**Gap:** no `web-next` UI at all (no Admin/System Health screen, no Backup & Restore screen).
+**Gap (closed 2026-09-03):** no `web-next` UI existed. Built (System Health + Backup & Restore screens, see below).
 
-**Phase 0/1 action:** build the `web-next` Admin/System Health screen (Section 3.5 of the spec explicitly asks for backup status on that screen) — no schema porting needed, `create_backup`/`restore_backup`/`backups` are already fully usable on staging today.
+**Correction (caught by the pgTAP suite in §9, not manual inspection):** `backups` has exactly **one** RLS policy (`backups_sel`, manager-only SELECT), identical on both projects — not zero as first assumed here by analogy with `audit_events`. This is the *correct* shape (a manager reads the list straight through RLS; only `create_backup`/`restore_backup`, both SECURITY DEFINER, can write) — the first assumption was simply never checked directly. Left as a worked example of why §9 exists.
 
 ## 3. Domain-specific log tables — NOT a gap, already real and already portable
 
@@ -95,8 +95,40 @@ this specification. Per the spec's own Phase 0 instruction to halt new
 feature work until the foundation is in place, this stays uncommitted and
 unshipped until Phase 1 is far enough along to justify returning to it.
 
+## 9. pgTAP — first real suite live (staging only)
+
+`pgtap` extension enabled on staging; `tests.run_rls_foundation_tests()`
+(migration `p1_add_pgtap_rls_foundation_suite`, corrected by
+`p1_fix_pgtap_backups_policy_assertion` + `p1_restore_backup_rpc_checks_in_pgtap_suite`)
+runs 13 assertions — table existence, RLS-enabled, exact policy count,
+manager-scoping, and SECURITY DEFINER status — for `audit_events` and
+`backups`. Deliberately schema/policy-shape assertions only, not simulated
+authenticated requests (that needs `request.jwt.claims` impersonation of a
+real user, out of scope for this first pass). Run it with:
+
+```sql
+select * from tests.run_rls_foundation_tests();
+```
+
+All 13 currently pass. This immediately proved its worth: the first draft
+wrongly assumed `backups` had zero RLS policies (by analogy with
+`audit_events`, never checked directly) — the suite caught it as a failing
+test before it reached this document as a wrong claim left uncorrected. Not
+applied to production (matches the standing rule: staging is where schema
+changes are made and tested; production stays read-only for this rebuild).
+
+**Real finding along the way:** staging's `profiles` table currently has
+**zero manager-role rows** — all 4 real profiles (`elizabeth`, `emmanuel`,
+`elias`, `webnexttestuser`) are `role='agent'`. Any pgTAP test that needs to
+simulate an authenticated manager request (as opposed to asserting policy
+shape) has no real manager profile to reference on staging yet, and manager
+sign-in in live mode has likely never been exercised end-to-end against
+staging either. Not fixed here — flagged for whoever does the next
+authenticated-request-style test pass or live-mode manager QA.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
-2. Wire `web-next`'s `DataSource` to `audit_events`/`backups` and build the System Health + Audit Log + Backup & Restore screens — satisfies the spec's "add health checks" Phase 0 item with real, not synthetic, signal, using infrastructure that's now fully live on both projects.
-3. Move into Phase 1 proper: role/permission-record table design, RLS audit against the real production policy set already inventoried this session, pgTAP suite, idempotent-RPC review, error-contract standardization.
+2. ~~Wire `web-next`'s `DataSource` to `audit_events`/`backups` and build the System Health + Audit Log + Backup & Restore screens~~ — done, verified live in demo mode.
+3. ~~First pgTAP suite~~ — done (§9), 13/13 passing on staging.
+4. Continue Phase 1: role/permission-record table design (real gap, §4), a manager profile on staging (blocks authenticated-request-style pgTAP tests and live-mode manager QA), idempotent-RPC review, error-contract standardization.
