@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -541,5 +541,61 @@ export function mapDownloadRow(r: Record<string, unknown>): DownloadRecord {
     kind: r.kind as string,
     fileData: (r.file_data as string) ?? null,
     createdAt: r.created_at as string,
+  };
+}
+
+export function mapAchievementDefRow(r: Record<string, unknown>): AchievementDef {
+  return {
+    id: r.id as string,
+    key: r.key as string,
+    label: r.label as string,
+    description: (r.description as string) ?? null,
+    icon: (r.icon as string) ?? null,
+    criteriaType: r.criteria_type as AchievementDef['criteriaType'],
+    criteriaConfig: (r.criteria_config as AchievementDef['criteriaConfig']) ?? {},
+    points: Number(r.points ?? 0),
+    active: (r.active as boolean) ?? true,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapStaffAchievementRow(r: Record<string, unknown>): StaffAchievement {
+  return {
+    id: r.id as string,
+    staffKey: r.staff_key as string,
+    staffName: (r.staff_name as string) ?? '',
+    achievementId: r.achievement_id as string,
+    earnedAt: r.earned_at as string,
+    progress: (r.progress as StaffAchievement['progress']) ?? null,
+  };
+}
+
+export function mapAuditEventRow(r: Record<string, unknown>): AuditEvent {
+  return {
+    id: Number(r.id),
+    createdAt: r.created_at as string,
+    category: r.category as AuditEvent['category'],
+    eventType: r.event_type as string,
+    severity: r.severity as AuditEvent['severity'],
+    actorKey: (r.actor_key as string) ?? null,
+    actorName: (r.actor_name as string) ?? null,
+    entityType: (r.entity_type as string) ?? null,
+    entityId: (r.entity_id as string) ?? null,
+    summary: r.summary as string,
+    detail: (r.detail as Record<string, unknown>) ?? null,
+    source: r.source as string,
+  };
+}
+
+export function mapBackupRow(r: Record<string, unknown>): BackupRecord {
+  return {
+    id: r.id as string,
+    createdAt: r.created_at as string,
+    triggerType: r.trigger_type as string,
+    triggeredBy: (r.triggered_by as string) ?? null,
+    triggeredByName: (r.triggered_by_name as string) ?? null,
+    tableCounts: (r.table_counts as Record<string, number>) ?? {},
+    sizeBytes: Number(r.size_bytes ?? 0),
+    checksum: r.checksum as string,
   };
 }

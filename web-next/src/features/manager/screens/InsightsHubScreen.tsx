@@ -39,6 +39,7 @@ export function InsightsHubScreen() {
     { key: 'commission', label: 'Commission', sub: "This month's pool & per-agent breakdown", color: 'teal', icon: 'wallet', onOpen: () => navigate('/app/mgr/commission') },
     { key: 'insights', label: 'Smart Insights', sub: 'Proactive nudges, auto-generated company-wide', color: 'red', icon: 'warning', onOpen: () => navigate('/app/insights') },
     { key: 'vault', label: 'Document Vault', sub: 'Every file downloaded by the team', color: 'blue', icon: 'folder', onOpen: () => navigate('/app/vault') },
+    { key: 'health', label: 'System Health', sub: 'Audit log & automated backups', color: 'purple', icon: 'settings', onOpen: () => navigate('/app/mgr/health') },
   ];
 
   return (

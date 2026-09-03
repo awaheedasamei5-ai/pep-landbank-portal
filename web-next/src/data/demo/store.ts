@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
+import type { AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Referral, ScheduleItem, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -52,9 +52,18 @@ export interface DemoDb {
   fundRequests: FundRequest[];
   weeklyVisitForms: WeeklyVisitForm[];
   downloads: DownloadRecord[];
+  staffAchievements: StaffAchievement[];
+  auditEvents: AuditEvent[];
+  // Each row carries its own restore-time payload (a deep-cloned slice of
+  // DemoDb) alongside the public BackupRecord fields -- source.ts strips
+  // `snapshot` before returning a row from list()/createNow() so the demo
+  // shape matches the live BackupRecord type exactly, but restore() can
+  // still swap it back in, the same real capability as production's
+  // restore_backup() rather than a hollow no-op.
+  backups: (BackupRecord & { snapshot: Partial<DemoDb> })[];
 }
 
-const DEMO_VERSION = 40;
+const DEMO_VERSION = 41;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

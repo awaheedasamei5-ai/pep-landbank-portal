@@ -1,12 +1,15 @@
-import type { AllocationHistoryEvent, AllocationRequest, AttendanceRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import {
+  mapAchievementDefRow,
   mapAllocationRequestRow,
   mapAttendanceRow,
+  mapAuditEventRow,
+  mapBackupRow,
   mapBannerRow,
   mapFundRequestRow,
   mapWeeklyVisitFormRow,
@@ -16,6 +19,7 @@ import {
   mapContractRow,
   mapDownloadRow,
   mapEnquiryRow,
+  mapStaffAchievementRow,
   mapLeaderboardRawRow,
   mapLeadRow,
   mapLeaveRequestRow,
@@ -55,6 +59,21 @@ const DEMO_STAFF: Profile[] = [
   // "reactivate" case to test, not just always-active rows. Key matches
   // production's real 'adams' staff member (confirmed live).
   { key: 'adams', name: 'Adams', role: 'agent', email: 'digitalopsofficer@landbankghana.com', active: false },
+];
+
+// The real 8 achievement definitions (confirmed live, identical on both
+// projects -- staging is already fully seeded, no migration needed).
+// Reused as-is for demo mode rather than inventing placeholder ones,
+// since these ARE the real production data, not a guess.
+const DEMO_ACHIEVEMENT_DEFS: AchievementDef[] = [
+  { id: 'task_master', key: 'task_master', label: 'Task Master', description: null, icon: '🏅', criteriaType: 'tasksCompleted', criteriaConfig: { threshold: 20 }, points: 250, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'site_visit_pro', key: 'site_visit_pro', label: 'Site Visit Pro', description: null, icon: '🏅', criteriaType: 'siteVisits', criteriaConfig: { threshold: 10 }, points: 100, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'deal_closer', key: 'deal_closer', label: 'Deal Closer', description: null, icon: '🏅', criteriaType: 'dealsClosedYear', criteriaConfig: { threshold: 5 }, points: 200, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'punctuality_star', key: 'punctuality_star', label: 'Punctuality Star', description: null, icon: '🏅', criteriaType: 'onTimeDays', criteriaConfig: { threshold: 20 }, points: 100, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'perfect_attendance', key: 'perfect_attendance', label: 'Perfect Attendance', description: null, icon: '🏅', criteriaType: 'daysAttended', criteriaConfig: { threshold: 22 }, points: 150, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'referral_champion', key: 'referral_champion', label: 'Referral Champion', description: null, icon: '🏅', criteriaType: 'referralConversions', criteriaConfig: { threshold: 3 }, points: 150, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'todo_titan', key: 'todo_titan', label: 'To-Do Titan', description: null, icon: '🏅', criteriaType: 'todosCompleted', criteriaConfig: { threshold: 30 }, points: 100, active: true, createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'top_collector', key: 'top_collector', label: 'Top Collector', description: null, icon: '🏅', criteriaType: 'totalCollected', criteriaConfig: { threshold: 100000 }, points: 300, active: true, createdAt: '2026-01-01T00:00:00Z' },
 ];
 
 function applyStaffOverrides(s: Profile, db: DemoDb): Profile {
@@ -378,6 +397,42 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<DownloadRecord[]>;
     log(userKey: string, userName: string, filename: string, kind: string, fileData: string | null): Promise<DownloadRecord>;
   };
+  // Real tables `achievement_definitions`/`staff_achievements` (confirmed
+  // live, already fully seeded on both projects with the same 8 real
+  // definitions -- see the type's own comment in types/domain.ts).
+  // award() is the real upsert-with-ignoreDuplicates pattern
+  // (apiAwardAchievement, index.html:19674-19679) -- returns null when
+  // the achievement was already earned (a silent no-op, not an error),
+  // so a caller can re-run evaluation on every visit without worrying
+  // about double-awarding or double-celebrating.
+  achievements: {
+    listDefs(): Promise<AchievementDef[]>;
+    listEarned(staffKeys: string[]): Promise<StaffAchievement[]>;
+    award(staffKey: string, staffName: string, achievementId: string, progress: { value: number; threshold: number }): Promise<StaffAchievement | null>;
+  };
+  // Real table `audit_events` + RPC `record_audit_event` (ported to
+  // staging this session -- see web-next/docs/PHASE0_INVENTORY.md; live on
+  // production since 2026-08-22). RLS is manager-only SELECT with zero
+  // INSERT policies, so log() must go through the RPC, not a direct
+  // insert -- matches index.html's logAudit()/logClientError(), called
+  // from a narrow, deliberately-chosen set of call sites, never a blanket
+  // instrumentation sweep.
+  audit: {
+    list(filter?: { category?: string; criticalOnly?: boolean }): Promise<AuditEvent[]>;
+    log(eventType: string, severity: AuditEvent['severity'], summary: string, detail?: Record<string, unknown> | null, entityType?: string | null, entityId?: string | null): Promise<void>;
+  };
+  // Real RPCs `create_backup`/`restore_backup` + table `backups`
+  // (confirmed live on both projects -- production runs these on a
+  // 6am/2pm/10pm cron plus a manual trigger, 30 real backups on file).
+  // restore() is manager-gated server-side (the RPC itself raises if the
+  // caller isn't a manager) and takes its own pre-restore safety snapshot
+  // automatically before restoring -- nothing extra to build for safety,
+  // this just surfaces the existing capability.
+  backups: {
+    list(): Promise<BackupRecord[]>;
+    createNow(triggeredBy: string, triggeredByName: string): Promise<BackupRecord>;
+    restore(backupId: string, triggeredBy: string, triggeredByName: string): Promise<void>;
+  };
   // Real column `leads.banner_id` -- how many real leads are attributed to
   // each banner, keyed by banner id. Confirmed live: `leads` RLS already
   // scopes SELECT correctly per caller, so this naturally undercounts for
@@ -493,6 +548,12 @@ export interface DataSource {
     // (not just approved) -- commissionLogic.ts is responsible for
     // filtering to approved before any arithmetic, never this layer.
     commissionData(): Promise<{ payments: Payment[]; leads: Lead[]; staff: { key: string; name: string }[] }>;
+    // Real RPC `staff_referral_conversions(p_from, p_to)` (confirmed live,
+    // both projects) -- how many of each staff member's referrals
+    // actually converted (became a paying lead) in the range, the one
+    // metric leaderboard_rows() doesn't already cover. Only real caller
+    // today is the Referral Champion achievement (Portfolio).
+    referralConversions(fromDate: string, toDate: string): Promise<{ staffKey: string; referralConversions: number }[]>;
   };
   // Staff-authenticated side of Site Visit Experience (distinct from the
   // public RPC-based data/sveClient.ts a visitor uses). Real RLS
@@ -1254,6 +1315,101 @@ function createDemoDataSource(): DataSource {
         return rec;
       },
     },
+    achievements: {
+      async listDefs() {
+        return DEMO_ACHIEVEMENT_DEFS;
+      },
+      async listEarned(staffKeys) {
+        const db = demoLoad();
+        return (db.staffAchievements ?? []).filter((a) => staffKeys.includes(a.staffKey));
+      },
+      async award(staffKey, staffName, achievementId, progress) {
+        const db = demoLoad();
+        db.staffAchievements = db.staffAchievements ?? [];
+        if (db.staffAchievements.some((a) => a.staffKey === staffKey && a.achievementId === achievementId)) return null;
+        const rec: StaffAchievement = { id: crypto.randomUUID(), staffKey, staffName, achievementId, earnedAt: new Date().toISOString(), progress };
+        db.staffAchievements = [rec, ...db.staffAchievements];
+        demoSave();
+        return rec;
+      },
+    },
+    audit: {
+      async list(filter) {
+        const db = demoLoad();
+        return (db.auditEvents ?? [])
+          .filter((e) => !filter?.category || filter.category === 'all' || e.category === filter.category)
+          .filter((e) => !filter?.criticalOnly || e.severity === 'critical')
+          .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async log(eventType, severity, summary, detail, entityType, entityId) {
+        const db = demoLoad();
+        db.auditEvents = db.auditEvents ?? [];
+        const nextId = (db.auditEvents.reduce((max, e) => Math.max(max, e.id), 0) || 0) + 1;
+        const rec: AuditEvent = { id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType, severity, actorKey: null, actorName: null, entityType: entityType ?? null, entityId: entityId ?? null, summary, detail: detail ?? null, source: 'client' };
+        db.auditEvents = [rec, ...db.auditEvents];
+        demoSave();
+      },
+    },
+    backups: {
+      async list() {
+        const db = demoLoad();
+        return (db.backups ?? []).map(({ snapshot: _snapshot, ...rest }) => rest).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async createNow(triggeredBy, triggeredByName) {
+        const db = demoLoad();
+        db.backups = db.backups ?? [];
+        // Same real table set create_backup() snapshots server-side,
+        // narrowed to what DemoDb actually carries -- see restore()'s
+        // matching field list below.
+        const snapshot: Partial<DemoDb> = {
+          leads: db.leads,
+          payments: db.payments,
+          plots: db.plots,
+          enquiries: db.enquiries,
+          complaints: db.complaints,
+          siteVisits: db.siteVisits,
+          allocationRequests: db.allocationRequests,
+          scheduleItems: db.scheduleItems,
+          leaveRequests: db.leaveRequests,
+          memos: db.memos,
+          contracts: db.contracts,
+          contractRequests: db.contractRequests,
+          config: db.config,
+        };
+        const tableCounts: Record<string, number> = Object.fromEntries(Object.entries(snapshot).map(([k, v]) => [k, Array.isArray(v) ? v.length : 1]));
+        const cloned = JSON.parse(JSON.stringify(snapshot)) as Partial<DemoDb>;
+        const sizeBytes = JSON.stringify(cloned).length;
+        const rec: BackupRecord & { snapshot: Partial<DemoDb> } = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          triggerType: 'manual',
+          triggeredBy,
+          triggeredByName,
+          tableCounts,
+          sizeBytes,
+          checksum: sizeBytes.toString(36),
+          snapshot: cloned,
+        };
+        db.backups = [rec, ...db.backups].slice(0, 30);
+        demoSave();
+        const { snapshot: _snapshot, ...publicRec } = rec;
+        return publicRec;
+      },
+      async restore(backupId, triggeredBy, triggeredByName) {
+        const db = demoLoad();
+        const found = (db.backups ?? []).find((b) => b.id === backupId);
+        if (!found) throw new Error('Backup not found');
+        // Real restore_backup() always takes a fresh pre-restore safety
+        // snapshot before touching anything -- ported here too rather than
+        // simplified away, so the demo genuinely exercises the same
+        // safety property, not just the happy path.
+        await getDataSource(true).backups.createNow(triggeredBy, triggeredByName + ' (pre-restore safety backup)');
+        const fresh = demoLoad();
+        Object.assign(fresh, found.snapshot);
+        demoSave();
+        await getDataSource(true).audit.log('backup.restored', 'critical', `Full system backup restored from ${backupId}`, { restoredFrom: backupId }, 'backup', backupId);
+      },
+    },
     allocationRequests: {
       async list(viewerKey, viewerRole) {
         const db = demoLoad();
@@ -1652,6 +1808,22 @@ function createDemoDataSource(): DataSource {
           leads: db.leads,
           staff: DEMO_STAFF.filter((s) => s.role === 'agent').map((s) => ({ key: s.key, name: s.name })),
         };
+      },
+      async referralConversions(fromDate, toDate) {
+        // Same real rule as the live RPC (staff_referral_conversions,
+        // verified live): status='Cleared', clearedAt in range, grouped
+        // by the REFERRER lead's own agent -- not the referral row's
+        // createdByKey.
+        const db = demoLoad();
+        const counts = new Map<string, number>();
+        db.referrals
+          .filter((r) => r.status === 'Cleared' && r.clearedAt && r.clearedAt.slice(0, 10) >= fromDate && r.clearedAt.slice(0, 10) <= toDate)
+          .forEach((r) => {
+            const referrerLead = db.leads.find((l) => l.id === r.referrerLeadId);
+            if (!referrerLead) return;
+            counts.set(referrerLead.agent, (counts.get(referrerLead.agent) ?? 0) + 1);
+          });
+        return [...counts.entries()].map(([staffKey, referralConversions]) => ({ staffKey, referralConversions }));
       },
     },
     sve: {
@@ -2458,6 +2630,74 @@ function createLiveDataSource(): DataSource {
         return mapDownloadRow(data);
       },
     },
+    achievements: {
+      async listDefs() {
+        const { data, error } = await requireClient().from('achievement_definitions').select('*').eq('active', true).order('created_at');
+        if (error) throw error;
+        return (data ?? []).map(mapAchievementDefRow);
+      },
+      async listEarned(staffKeys) {
+        const { data, error } = await requireClient().from('staff_achievements').select('*').in('staff_key', staffKeys);
+        if (error) throw error;
+        return (data ?? []).map(mapStaffAchievementRow);
+      },
+      async award(staffKey, staffName, achievementId, progress) {
+        // Real upsert-with-ignoreDuplicates pattern (apiAwardAchievement,
+        // index.html:19674-19679) -- the unique(staff_key,achievement_id)
+        // constraint makes re-awarding an already-earned achievement a
+        // silent no-op (maybeSingle() returns null, not an error), so
+        // this is safe to call every time evaluation runs.
+        const { data, error } = await requireClient()
+          .from('staff_achievements')
+          .upsert({ staff_key: staffKey, staff_name: staffName, achievement_id: achievementId, progress }, { onConflict: 'staff_key,achievement_id', ignoreDuplicates: true })
+          .select()
+          .maybeSingle();
+        if (error) throw error;
+        return data ? mapStaffAchievementRow(data) : null;
+      },
+    },
+    audit: {
+      async list(filter) {
+        let q = requireClient().from('audit_events').select('*').order('created_at', { ascending: false }).limit(200);
+        if (filter?.category && filter.category !== 'all') q = q.eq('category', filter.category);
+        if (filter?.criticalOnly) q = q.eq('severity', 'critical');
+        const { data, error } = await q;
+        if (error) throw error;
+        return (data ?? []).map(mapAuditEventRow);
+      },
+      async log(eventType, severity, summary, detail, entityType, entityId) {
+        const { error } = await requireClient().rpc('record_audit_event', {
+          p_category: 'audit',
+          p_event_type: eventType,
+          p_severity: severity,
+          p_entity_type: entityType ?? null,
+          p_entity_id: entityId ?? null,
+          p_summary: summary,
+          p_detail: detail ?? null,
+        });
+        // Auditing must never break the calling flow -- matches
+        // logAudit()'s own try/catch in index.html.
+        if (error) console.error('record_audit_event failed', error);
+      },
+    },
+    backups: {
+      async list() {
+        const { data, error } = await requireClient().from('backups').select('id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapBackupRow);
+      },
+      async createNow(triggeredBy, triggeredByName) {
+        const { data: id, error } = await requireClient().rpc('create_backup', { p_trigger: 'manual', p_by: triggeredBy, p_by_name: triggeredByName });
+        if (error) throw error;
+        const { data, error: selError } = await requireClient().from('backups').select('id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum').eq('id', id).single();
+        if (selError) throw selError;
+        return mapBackupRow(data);
+      },
+      async restore(backupId, triggeredBy, triggeredByName) {
+        const { error } = await requireClient().rpc('restore_backup', { p_backup_id: backupId, p_by: triggeredBy, p_by_name: triggeredByName });
+        if (error) throw error;
+      },
+    },
     allocationRequests: {
       async list() {
         // Unfiltered on purpose -- alloc_sel RLS already scopes this
@@ -2795,6 +3035,11 @@ function createLiveDataSource(): DataSource {
           leads: (leadsRes.data ?? []).map(mapLeadRow),
           staff: (staffRes.data ?? []).map((r) => ({ key: r.agent_key as string, name: r.name as string })),
         };
+      },
+      async referralConversions(fromDate, toDate) {
+        const { data, error } = await requireClient().rpc('staff_referral_conversions', { p_from: fromDate, p_to: toDate });
+        if (error) throw error;
+        return (data ?? []).map((r: Record<string, unknown>) => ({ staffKey: r.staff_key as string, referralConversions: Number(r.referral_conversions ?? 0) }));
       },
     },
     sve: {

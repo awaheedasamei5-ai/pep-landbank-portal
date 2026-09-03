@@ -55,6 +55,9 @@ import { SmartInsightsScreen } from '../features/smart-insights/screens/SmartIns
 import { InsightListScreen } from '../features/smart-insights/screens/InsightListScreen';
 import { DocumentVaultScreen } from '../features/document-vault/screens/DocumentVaultScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
+import { SystemHealthScreen } from '../features/system-health/screens/SystemHealthScreen';
+import { AuditLogScreen } from '../features/system-health/screens/AuditLogScreen';
+import { BackupsScreen } from '../features/system-health/screens/BackupsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -157,6 +160,30 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <InsightsHubScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/health',
+        element: (
+          <RequireRole role="manager">
+            <SystemHealthScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/health/audit',
+        element: (
+          <RequireRole role="manager">
+            <AuditLogScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/health/backups',
+        element: (
+          <RequireRole role="manager">
+            <BackupsScreen />
           </RequireRole>
         ),
       },

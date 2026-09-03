@@ -713,6 +713,17 @@ export function seedDemo(): DemoDb {
     fundRequests,
     weeklyVisitForms: [],
     downloads: [],
+    staffAchievements: [],
+    auditEvents: [
+      { id: 3, createdAt: isoPlusDays(t, 0) + 'T08:00:00Z', category: 'integrity', eventType: 'integrity.check', severity: 'critical', actorKey: null, actorName: null, entityType: null, entityId: null, summary: '2 leads have amt_paid greater than grand_total', detail: { count: 2 }, source: 'cron' },
+      { id: 2, createdAt: isoPlusDays(t, -1) + 'T14:22:00Z', category: 'audit', eventType: 'payment.edited', severity: 'warning', actorKey: 'management', actorName: 'Management', entityType: 'payment', entityId: 'demo-payment-1', summary: 'Payment amount corrected from GHS 5,000 to GHS 4,500', detail: { before: 5000, after: 4500 }, source: 'client' },
+      { id: 1, createdAt: isoPlusDays(t, -2) + 'T09:05:00Z', category: 'error', eventType: 'error.uncaught', severity: 'warning', actorKey: 'elias', actorName: 'Elias Torgbuivi', entityType: null, entityId: null, summary: "Cannot read properties of undefined (reading 'length')", detail: { stack: 'demo stack trace', context: 'window.onerror' }, source: 'client' },
+    ],
+    backups: [
+      { id: uid(), createdAt: isoPlusDays(t, 0) + 'T06:00:00Z', triggerType: 'scheduled', triggeredBy: null, triggeredByName: null, tableCounts: { leads: leads.length, payments: payments.length, plots: 415 }, sizeBytes: 84213, checksum: 'demo0checksum', snapshot: {} },
+      { id: uid(), createdAt: isoPlusDays(t, -1) + 'T22:00:00Z', triggerType: 'scheduled', triggeredBy: null, triggeredByName: null, tableCounts: { leads: leads.length, payments: payments.length, plots: 415 }, sizeBytes: 83990, checksum: 'demo1checksum', snapshot: {} },
+      { id: uid(), createdAt: isoPlusDays(t, -1) + 'T14:00:00Z', triggerType: 'manual', triggeredBy: 'management', triggeredByName: 'Management', tableCounts: { leads: leads.length, payments: payments.length, plots: 415 }, sizeBytes: 83988, checksum: 'demo2checksum', snapshot: {} },
+    ],
   };
 }
 

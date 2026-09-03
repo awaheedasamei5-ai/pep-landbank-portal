@@ -1166,3 +1166,76 @@ export interface DownloadRecord {
   fileData: string | null;
   createdAt: string;
 }
+
+// Real tables `achievement_definitions` + `staff_achievements` (confirmed
+// live, both projects, already fully seeded with the same 8 real
+// definitions on staging as production -- no migration needed). RLS
+// (confirmed live): any authenticated staff member can read both tables;
+// only a manager can create/edit/delete a definition; a staff member can
+// only self-award their own earned row (or a manager can award on their
+// behalf), enforced by a real unique(staff_key, achievement_id)
+// constraint that makes re-awarding an already-earned one a silent
+// no-op.
+export type AchievementCriteriaType = 'tasksCompleted' | 'siteVisits' | 'dealsClosedYear' | 'onTimeDays' | 'daysAttended' | 'referralConversions' | 'todosCompleted' | 'totalCollected';
+
+export interface AchievementDef {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  criteriaType: AchievementCriteriaType;
+  criteriaConfig: { threshold?: number };
+  points: number;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface StaffAchievement {
+  id: string;
+  staffKey: string;
+  staffName: string;
+  achievementId: string;
+  earnedAt: string;
+  progress: { value?: number; threshold?: number } | null;
+}
+
+// Real table `audit_events` + RPC `record_audit_event` (ported to staging
+// 2026-09-03 -- see web-next/docs/PHASE0_INVENTORY.md; already live on
+// production since 2026-08-22). RLS: manager-only SELECT, zero INSERT
+// policies -- the RPC (SECURITY DEFINER) is the sole write path, so there's
+// no client-writable `id`/`actorKey`/`createdAt` to worry about matching.
+export type AuditCategory = 'audit' | 'integrity' | 'error' | 'cron';
+export type AuditSeverity = 'info' | 'warning' | 'critical';
+
+export interface AuditEvent {
+  id: number;
+  createdAt: string;
+  category: AuditCategory;
+  eventType: string;
+  severity: AuditSeverity;
+  actorKey: string | null;
+  actorName: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  summary: string;
+  detail: Record<string, unknown> | null;
+  source: string;
+}
+
+// Real table `backups` + RPCs `create_backup`/`restore_backup` (confirmed
+// live on both projects -- production runs these on a 6am/2pm/10pm cron,
+// staging already carries 30 real rows from the same schedule). Deliberately
+// excludes `snapshot` (the actual JSONB table dump) -- that's only ever
+// read server-side by restore_backup() via its own `p_backup_id`, never
+// meant to round-trip through the client.
+export interface BackupRecord {
+  id: string;
+  createdAt: string;
+  triggerType: string;
+  triggeredBy: string | null;
+  triggeredByName: string | null;
+  tableCounts: Record<string, number>;
+  sizeBytes: number;
+  checksum: string;
+}
