@@ -1,15 +1,18 @@
-import { ghanaHolidayMapForYear, isWeekendIso, nextWorkingDayIso, prevWorkingDayIso } from '../../../shared/lib/ghanaHolidays';
+import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
 import type { Config, LeaveRequest } from '../../../types/domain';
 
 // Faithful port of index.html's leave-quota calendar engine (index.html:
-// 23684-23697, 24040-24051) -- quota tracking, and the same colleague-
-// conflict rule (a date is blocked if it's the same day OR the working
-// day immediately before/after one of theirs, so nobody can pick a day
-// adjacent to a colleague's leave either). The 'planned' pre-request
-// stage, emergency leave's deduct-quota opt-out, and the reschedule flow
-// are deliberately out of scope -- every request here goes straight to
-// 'pending' (see LeaveRequest's own domain.ts comment), so "blocking"
-// here is simply pending-or-approved, not the real three-state list.
+// 23684-23697, 24040-24051) -- quota tracking. Fixed 2026-09-03 (master
+// spec's Section 1, "Leave logic is wrong for the requested rule" --
+// flagged critical): the colleague-conflict rule used to also block the
+// working day immediately before/after a colleague's leave, so nobody
+// could pick a day adjacent to theirs either. The real, requested rule is
+// non-overlap only -- if one person returns Tuesday, another may start
+// Wednesday. The 'planned' pre-request stage, emergency leave's
+// deduct-quota opt-out, and the reschedule flow are deliberately out of
+// scope -- every request here goes straight to 'pending' (see
+// LeaveRequest's own domain.ts comment), so "blocking" here is simply
+// pending-or-approved, not the real three-state list.
 export function leaveIsBlocking(status: LeaveRequest['status']): boolean {
   return status === 'pending' || status === 'approved';
 }
@@ -22,20 +25,14 @@ export function leaveDaysRemaining(config: Config, requests: LeaveRequest[], age
   return Math.max(0, (config.leaveTotalDays || 20) - leaveDaysUsed(requests, agentKey, year));
 }
 
-// Every OTHER staff member's pending/approved leave date, plus the
-// working day immediately before/after each, so nobody can pick a day
-// that's adjacent to a colleague's leave either.
+// Every OTHER staff member's pending/approved leave date -- pure overlap
+// only (see this file's header comment for why the old adjacent-day
+// blocking was removed).
 export function leaveConflictDatesFromOthers(requests: LeaveRequest[], agentKey: string): Set<string> {
   const blocked = new Set<string>();
   requests
     .filter((r) => r.agentKey !== agentKey && leaveIsBlocking(r.status))
-    .forEach((r) => {
-      (r.dates || []).forEach((d) => {
-        blocked.add(d);
-        blocked.add(nextWorkingDayIso(d));
-        blocked.add(prevWorkingDayIso(d));
-      });
-    });
+    .forEach((r) => (r.dates || []).forEach((d) => blocked.add(d)));
   return blocked;
 }
 
@@ -50,7 +47,7 @@ export function leaveDatesConflictReason(config: Config, requests: LeaveRequest[
     if (isWeekendIso(d)) return `${d} is a weekend — leave can only be taken Monday to Friday.`;
     const h = holidays.get(d);
     if (h && !(h.isEid && observesEid)) return `${d} is a public holiday (${h.name}).`;
-    if (otherConflicts.has(d)) return `${d} conflicts with a colleague's leave (same or adjacent working day).`;
+    if (otherConflicts.has(d)) return `${d} conflicts with a colleague's leave.`;
   }
   return null;
 }

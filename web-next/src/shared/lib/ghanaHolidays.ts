@@ -100,14 +100,3 @@ export function isWeekendIso(iso: string): boolean {
   return dow === 0 || dow === 6;
 }
 
-export function nextWorkingDayIso(iso: string): string {
-  let d = isoPlusDays(iso, 1);
-  while (isWeekendIso(d)) d = isoPlusDays(d, 1);
-  return d;
-}
-
-export function prevWorkingDayIso(iso: string): string {
-  let d = isoPlusDays(iso, -1);
-  while (isWeekendIso(d)) d = isoPlusDays(d, -1);
-  return d;
-}

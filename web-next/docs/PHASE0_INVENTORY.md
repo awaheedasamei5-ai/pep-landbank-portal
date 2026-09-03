@@ -247,6 +247,28 @@ visit (previously invisible — Monday was never a valid day under the old
 schedule) now shows correctly; Saturday and Sunday both load their (empty)
 cost-reconciliation form without error; `npm run build`/`tsc` clean.
 
+## 12. Leave non-overlap rule — FIXED (flagged critical in the master spec)
+
+`leaveConflictDatesFromOthers` used to also block the working day
+immediately before/after a colleague's leave dates, so nobody could pick a
+day adjacent to theirs either (`web-next/src/features/leave/lib/
+leaveLogic.ts`, ported faithfully from `index.html`'s own calendar engine
+at the time). The master spec's Section 1 named the real, requested rule:
+non-overlap only — if one person returns Tuesday, another may start
+Wednesday. Fixed by removing the `nextWorkingDayIso`/`prevWorkingDayIso`
+additions entirely; the conflict set is now just each colleague's raw
+`dates`. Those two now-unused helpers were removed from `shared/lib/
+ghanaHolidays.ts` rather than left dead. Not ported to legacy (frozen for
+this rebuild) — worth flagging to whoever eventually touches that code
+path.
+
+Verified by direct code review (the fix is a two-line removal, easy to
+confirm by reading) plus `tsc`/`npm run build` clean and the Leave screen
+smoke-tested live with zero new console errors — a convenient future-dated
+two-colleague adjacency scenario doesn't exist in the current demo seed
+data (the only seeded cross-staff leave conflict is in the past), so the
+exact boundary case wasn't independently reproduced live this pass.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -258,4 +280,5 @@ cost-reconciliation form without error; `npm run build`/`tsc` clean.
 7. ~~Permissions admin screen~~ — done: `/app/mgr/health/permissions`, a grant/revoke matrix over the real permission catalog, calling `set_permission_override`/`clear_permission_override` in live mode. Verified live in demo mode (matrix matches the real 7 seeded grants exactly; a grant→revoke round-trip updates immediately; zero console errors).
 8. ~~Pipeline deletion mismatch~~ — done (§10): `leads.remove()` is a real soft delete in both demo and live mode now, matching legacy and preventing real FK-cascade data loss. 43/43 pgTAP assertions across 8 suites.
 9. ~~Site-visit day logic~~ — done (§11): all 7 days bookable, week-range query bug (Friday cutoff hiding weekend visits) fixed alongside it.
-10. Next: the other critical findings from the master spec's Section 1 not yet addressed — leave non-overlap rule, scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
+10. ~~Leave non-overlap rule~~ — done (§12): adjacent-day blocking removed, pure overlap only.
+11. Next: the other critical findings from the master spec's Section 1 not yet addressed — scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
