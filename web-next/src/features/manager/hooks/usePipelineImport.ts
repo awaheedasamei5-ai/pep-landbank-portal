@@ -3,64 +3,69 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from './useConfigSettings';
-import { useCanLogPayments } from '../../payments/hooks/useLogPayment';
-import type { Config } from '../../../types/domain';
-import { findExistingLead, planImportRows, readImportRows, resolveImportColumns, scanImportRows, type ImportPlanItem, type ParsedImportRow } from '../lib/pipelineImportLogic';
+import type { Config, Lead } from '../../../types/domain';
+import {
+  IMPORT_SCHEMA_VERSION,
+  planImportRows,
+  readImportRows,
+  readWorkbookMeta,
+  resolveLeadsColumns,
+  scanImportRows,
+  type ImportPlanItem,
+  type ParsedImportRow,
+  type ScanBuckets,
+} from '../lib/pipelineImportLogic';
 
-// Faithful port of index.html's startPipelineImport -> openImportPreviewModal
-// -> importPipelineExcel flow (index.html:20292-20450), scoped to Master
-// Pipeline / company-wide import (this lives in Reports, manager-only --
-// see ReportsScreen's own comment). scan() and commit() each do their OWN
-// fresh `leads.listAll()` fetch rather than sharing one, matching legacy
-// exactly: scanImportFile and importPipelineExcel never share a fetch
-// either, so a file reviewed in the preview modal is re-validated against
-// whatever's actually live by the time the user confirms, not a snapshot
-// that might be stale by then.
+// Scan (read-only preview) and commit mutations for the canonical-workbook
+// import, per spec 5.2's numbered algorithm. Both re-fetch leads AND the
+// staff roster fresh (never share one array between scan and commit, and
+// never trust whatever's already in the query cache) -- an import
+// reviewed in the preview card must be re-validated against whatever's
+// actually live by the time the user confirms, not a snapshot that might
+// already be stale.
 
-async function loadWorkbookSheet(file: File) {
+async function loadLeadsWorksheet(file: File) {
   const buf = await file.arrayBuffer();
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
-  const ws = wb.getWorksheet('💼 Pipeline') || wb.getWorksheet('Pipeline') || wb.worksheets[0];
-  if (!ws) throw new Error('Could not find the Pipeline sheet in that file');
-  const exportedAt = wb.created ? new Date(wb.created) : null;
-  return { ws, exportedAt };
-}
-
-// Unfiltered (every real profile, not just role==='agent') -- elias/
-// emmanuel/elizabeth can own leads too, and legacy's own nameToAgentKey
-// (index.html:20341-20342) is built from the unfiltered DB.profiles for
-// exactly that reason. useTeamRoster() filters to agents only, which
-// would silently fail to resolve a tagged row owned by one of those three.
-async function buildNameToAgentKey(demoMode: boolean): Promise<Record<string, string>> {
-  const staff = await getDataSource(demoMode).staff.listAll();
-  const map: Record<string, string> = {};
-  staff.forEach((s) => {
-    if (s.name && s.key) map[s.name.trim().toLowerCase()] = s.key;
-  });
-  return map;
+  const ws = wb.getWorksheet('LEADS');
+  if (!ws) throw new Error('Could not find the LEADS sheet in that file -- is this a Palmstead pipeline export?');
+  const meta = readWorkbookMeta(wb);
+  if (meta.schemaVersion && meta.schemaVersion !== IMPORT_SCHEMA_VERSION) {
+    throw new Error(`This file was exported from an older/newer version of the workbook (schema v${meta.schemaVersion}, expected v${IMPORT_SCHEMA_VERSION}). Please re-export a fresh copy.`);
+  }
+  const exportedAt = meta.exportedAt ? new Date(meta.exportedAt) : null;
+  return { ws, exportedAt, sourceLabel: meta.sourceLabel };
 }
 
 export interface ImportScanOutcome {
   rows: ParsedImportRow[];
   exportedAt: Date | null;
-  toAdd: number;
-  toUpdate: number;
-  skipped: number;
-  warnings: string[];
+  possiblyDeletedLeads: Lead[];
+  buckets: ScanBuckets;
 }
 
 export function useScanPipelineImport() {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useMutation({
     mutationFn: async (file: File): Promise<ImportScanOutcome> => {
-      const { ws, exportedAt } = await loadWorkbookSheet(file);
-      const cols = resolveImportColumns(ws);
-      const nameToAgentKey = await buildNameToAgentKey(demoMode);
-      const rows = readImportRows(ws, cols, nameToAgentKey);
-      const freshLeads = await getDataSource(demoMode).leads.listAll();
-      const scan = scanImportRows(rows, freshLeads);
-      return { rows, exportedAt, ...scan };
+      const { ws, exportedAt } = await loadLeadsWorksheet(file);
+      const cols = resolveLeadsColumns(ws);
+      if (!cols.leadId || !cols.name) throw new Error('This file is missing expected LEADS columns -- is this a Palmstead pipeline export?');
+      const rows = readImportRows(ws, cols);
+      const ds = getDataSource(demoMode);
+      const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
+      // 'company' is a real, legitimate agent_key (Company Leads -- clients
+      // who came to the company directly, not through a specific agent),
+      // not a staff profile -- staff.listAll() never returns it, so it must
+      // be added explicitly or every unedited Company Leads row would be
+      // wrongly flagged Invalid on a plain re-upload. Real bug caught live
+      // while testing, not by inspection.
+      const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
+      const buckets = scanImportRows(rows, freshLeads, validStaffKeys);
+      const fileIds = new Set(rows.map((r) => r.leadId).filter(Boolean));
+      const possiblyDeletedLeads = freshLeads.filter((l) => !fileIds.has(l.id));
+      return { rows, exportedAt, possiblyDeletedLeads, buckets };
     },
   });
 }
@@ -69,69 +74,100 @@ export interface ImportCommitResult {
   added: number;
   updated: number;
   unchanged: number;
-  skipped: number;
-  conflicts: number;
+  needsReview: number;
+  invalid: number;
+  duplicateIds: number;
+  archived: number;
   errors: string[];
-  paymentChangesIgnored: number;
+}
+
+export interface FieldChange {
+  leadId: string;
+  name: string;
+  field: string;
+  oldValue: unknown;
+  newValue: unknown;
+}
+
+function diffFields(row: ParsedImportRow, existing: Lead): FieldChange[] {
+  const pairs: [string, unknown, unknown][] = [
+    ['staffKey', existing.agent, row.staffKey || existing.agent],
+    ['name', existing.name, row.name],
+    ['contact', existing.contact, row.contact],
+    ['stage', existing.stage, row.stage || existing.stage],
+    ['plotType', existing.plotType, row.plotType || existing.plotType],
+    ['noPlots', existing.noPlots, row.noPlots ?? existing.noPlots],
+    ['unitPrice', existing.unitPrice, row.unitPrice ?? existing.unitPrice],
+    ['discount', existing.discount ?? 0, row.discount ?? existing.discount ?? 0],
+    ['paymentPlan', existing.paymentPlan, row.paymentPlan || existing.paymentPlan],
+    ['source', existing.leadSource ?? '', row.source],
+    ['priority', existing.priority || 'Low', row.priority || 'Low'],
+    ['nextAction', existing.nextAction || '', row.nextAction],
+    ['siteVisit', existing.siteVisit || 'No', row.siteVisit || 'No'],
+    ['notes', existing.notes || '', row.notes],
+  ];
+  return pairs.filter(([, before, after]) => before !== after).map(([field, before, after]) => ({ leadId: existing.id, name: existing.name, field, oldValue: before, newValue: after }));
 }
 
 export function useCommitPipelineImport() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
-  const canManagePayments = useCanLogPayments();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ rows, exportedAt }: { rows: ParsedImportRow[]; exportedAt: Date | null }): Promise<ImportCommitResult> => {
+    mutationFn: async ({ rows, exportedAt, archiveMissing }: { rows: ParsedImportRow[]; exportedAt: Date | null; archiveMissing: boolean }): Promise<ImportCommitResult> => {
       if (!config) throw new Error('Pricing configuration is not loaded yet -- try again in a moment.');
       if (!profile) throw new Error('Not signed in.');
       const ds = getDataSource(demoMode);
-      // Re-fetched fresh here too (see file header) -- NOT the same array
-      // the scan step returned, in case time passed while the user
-      // reviewed the preview modal.
-      const freshLeads = await ds.leads.listAll();
-      const plan = planImportRows(rows, freshLeads, config as Config, canManagePayments, exportedAt);
+      const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
+      // 'company' is a real, legitimate agent_key (Company Leads -- clients
+      // who came to the company directly, not through a specific agent),
+      // not a staff profile -- staff.listAll() never returns it, so it must
+      // be added explicitly or every unedited Company Leads row would be
+      // wrongly flagged Invalid on a plain re-upload. Real bug caught live
+      // while testing, not by inspection.
+      const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
+      const plan = planImportRows(rows, freshLeads, config as Config, validStaffKeys, profile.key, exportedAt);
 
       let added = 0;
       let updated = 0;
       let unchanged = 0;
-      let skipped = 0;
-      let paymentChangesIgnored = 0;
-      const conflicts: { leadId: string; name: string }[] = [];
+      let needsReview = 0;
+      let invalid = 0;
+      let duplicateIds = 0;
+      let archived = 0;
       const errors: string[] = [];
+      const fieldChanges: FieldChange[] = [];
+      const needsReviewDetails: { row: number; name: string; reason: string }[] = [];
+      const invalidDetails: { row: number; name: string; errors: string[] }[] = [];
+      const conflictDetails: { leadId: string; name: string }[] = [];
 
       for (const item of plan) {
         try {
-          if (item.kind === 'skip') {
-            skipped++;
+          if (item.kind === 'skip') continue;
+          if (item.kind === 'duplicateId') {
+            duplicateIds++;
+          } else if (item.kind === 'invalid') {
+            invalid++;
+            invalidDetails.push({ row: item.row.rowNumber, name: item.row.name, errors: item.errors });
+          } else if (item.kind === 'needsReview') {
+            needsReview++;
+            needsReviewDetails.push({ row: item.row.rowNumber, name: item.row.name, reason: item.reason });
           } else if (item.kind === 'unchanged') {
             unchanged++;
           } else if (item.kind === 'conflict') {
-            conflicts.push({ leadId: item.existing.id, name: item.existing.name });
+            conflictDetails.push({ leadId: item.existing.id, name: item.existing.name });
           } else if (item.kind === 'insert') {
-            if (!canManagePayments && item.row.amtPaid > 0) paymentChangesIgnored++;
-            // input.amtPaid already carries the right final value (0 if the
-            // importer can't manage payments) -- a brand-new row has no
-            // "before" balance to log a delta payment against, so unlike
-            // the update branch below this doesn't also create a payments
-            // row; the number on the lead is correct either way.
             const created = await ds.leads.create(item.agentKey || profile.key, item.input);
             await ds.leads.update(created.id, item.followupPatch);
             added++;
-          } else {
-            const existingBefore = findExistingLead(item.row, freshLeads);
-            if (!canManagePayments && item.row.amtPaid !== (existingBefore?.amtPaid ?? 0)) paymentChangesIgnored++;
-            // payments.create({status:'approved'}) independently re-reads
-            // the lead's current amt_paid/grand_total and bumps them itself
-            // (mirrors applyApprovedPaymentToLead()), which would also
-            // re-derive stage from the payment -- so it must run BEFORE the
-            // authoritative patch below, not after, or the file's explicit
-            // stage (and, harmlessly but pointlessly, amtPaid) would be
-            // clobbered by that auto-derivation instead of winning as the
-            // final write the way legacy's raw column update always does.
-            if (item.amtPaidIncrease > 0) {
-              await ds.payments.create({ leadId: item.existing.id, amount: item.amtPaidIncrease }, item.row.name, item.existing.agent, 'approved');
-            }
+            fieldChanges.push({ leadId: created.id, name: item.row.name, field: '(new client)', oldValue: null, newValue: item.row.name });
+          } else if (item.kind === 'update') {
+            fieldChanges.push(...diffFields(item.row, item.existing));
+            // Reassignment goes through the dedicated assign() RPC, not the
+            // plain field patch -- same reasoning as everywhere else in
+            // this app that a staff-ownership change is its own operation.
+            if (item.reassignToAgentKey) await ds.leads.assign(item.existing.id, item.reassignToAgentKey);
             await ds.leads.update(item.existing.id, item.patch);
             updated++;
           }
@@ -140,22 +176,37 @@ export function useCommitPipelineImport() {
         }
       }
 
+      const archivedLeads: { id: string; name: string }[] = [];
+      if (archiveMissing) {
+        const fileIds = new Set(rows.map((r) => r.leadId).filter(Boolean));
+        const toArchive = freshLeads.filter((l) => !fileIds.has(l.id));
+        for (const lead of toArchive) {
+          try {
+            await ds.leads.remove(lead.id);
+            archived++;
+            archivedLeads.push({ id: lead.id, name: lead.name });
+          } catch (e) {
+            errors.push(`Archiving ${lead.name}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+      }
+
       await ds.importBatches.create(profile.key, profile.name, {
-        sourceLabel: 'Master Pipeline (company-wide)',
+        sourceLabel: 'Master Pipeline (company-wide, canonical workbook)',
         addedCount: added,
         updatedCount: updated,
         unchangedCount: unchanged,
-        skippedCount: skipped,
-        conflictCount: conflicts.length,
+        skippedCount: needsReview + invalid + duplicateIds,
+        conflictCount: conflictDetails.length,
         errorCount: errors.length,
-        paymentChangesIgnoredCount: paymentChangesIgnored,
-        details: { conflicts, errors },
+        paymentChangesIgnoredCount: 0,
+        details: { fieldChanges, needsReview: needsReviewDetails, invalid: invalidDetails, conflicts: conflictDetails, archived: archivedLeads, errors },
       });
 
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['reportsLeads'] });
 
-      return { added, updated, unchanged, skipped, conflicts: conflicts.length, errors, paymentChangesIgnored };
+      return { added, updated, unchanged, needsReview, invalid, duplicateIds, archived, errors };
     },
   });
 }

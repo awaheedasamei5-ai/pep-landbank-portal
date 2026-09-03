@@ -2100,6 +2100,7 @@ function createLiveDataSource(): DataSource {
         if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
         if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
         if ('priority' in patch) dbPatch.priority = patch.priority;
+        if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
         if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
         const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
         if (error) throw error;

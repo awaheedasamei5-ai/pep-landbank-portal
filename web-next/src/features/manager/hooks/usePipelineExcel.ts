@@ -4,7 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { downloadBlob, arrayBufferToDataUri } from '../../../shared/lib/download';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { today } from '../../../shared/lib/format';
-import { agentPipelineFilename, buildAgentPipelineExcel, buildMasterPipelineExcel, masterPipelineFilename } from '../lib/pipelineTemplateExcel';
+import { buildCanonicalPipelineWorkbook, canonicalPipelineFilename } from '../lib/pipelineCanonicalWorkbook';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -25,34 +25,55 @@ export function usePipelineAgents() {
 
 export function useDownloadMasterPipeline() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async () => {
+      if (!profile) throw new Error('Not signed in.');
       const ds = getDataSource(demoMode);
-      const [leads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
-      const nameByKey = new Map(staff.map((s) => [s.key, s.name]));
-      const tagged = leads.map((l) => ({ ...l, agentTag: nameByKey.get(l.agent) ?? l.agent }));
-      const buffer = await buildMasterPipelineExcel(tagged);
-      const filename = masterPipelineFilename(today());
+      const [leads, payments, allocations, staff] = await Promise.all([ds.leads.listAll(), ds.payments.listAll(), ds.allocationRequests.list(profile.key, profile.role), ds.staff.listAll()]);
+      const { buffer } = await buildCanonicalPipelineWorkbook({
+        leads,
+        payments,
+        allocations,
+        staff: staff.map((s) => ({ key: s.key, name: s.name })),
+        exportedByKey: profile.key,
+        exportedByName: profile.name,
+        sourceLabel: 'Master Pipeline (company-wide)',
+      });
+      const filename = canonicalPipelineFilename('Master', today());
       downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
       logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
-      return tagged.length;
+      return leads.length;
     },
   });
 }
 
 export function useDownloadAgentPipeline() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ agentKey, agentName }: { agentKey: string; agentName: string }) => {
-      const leads = await getDataSource(demoMode).leads.listAll();
-      const agentLeads = leads.filter((l) => l.agent === agentKey);
-      const buffer = await buildAgentPipelineExcel(agentLeads);
-      const filename = agentPipelineFilename(agentName, today());
+      if (!profile) throw new Error('Not signed in.');
+      const ds = getDataSource(demoMode);
+      const [allLeads, allPayments, allocations, staff] = await Promise.all([ds.leads.listAll(), ds.payments.listAll(), ds.allocationRequests.list(profile.key, profile.role), ds.staff.listAll()]);
+      const leads = allLeads.filter((l) => l.agent === agentKey);
+      const leadIds = new Set(leads.map((l) => l.id));
+      const payments = allPayments.filter((p) => leadIds.has(p.leadId));
+      const { buffer } = await buildCanonicalPipelineWorkbook({
+        leads,
+        payments,
+        allocations: allocations.filter((a) => a.agentKey === agentKey),
+        staff: staff.map((s) => ({ key: s.key, name: s.name })),
+        exportedByKey: profile.key,
+        exportedByName: profile.name,
+        sourceLabel: `${agentName}'s pipeline`,
+      });
+      const filename = canonicalPipelineFilename(agentName, today());
       downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
       logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
-      return agentLeads.length;
+      return leads.length;
     },
   });
 }

@@ -117,6 +117,9 @@ export interface LeadUpdate {
   // writes this on every reconciled row) -- not previously part of any
   // web-next write path since no screen exposed it as editable before now.
   priority?: string;
+  // Added for the pipeline Excel import's canonical LEADS sheet ("Source"
+  // column, spec 5.1) -- same reasoning as priority above.
+  leadSource?: string;
 }
 
 export interface LeadKyc {

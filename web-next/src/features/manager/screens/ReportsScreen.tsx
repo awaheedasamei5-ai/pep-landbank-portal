@@ -22,16 +22,15 @@ const PERIOD_OPTIONS: { key: ReportPeriodKey; label: string }[] = [
 ];
 
 // Port of mgrReports()'s "Individual sheets" CSV section + client search
-// (index.html:19967-20055), the styled Company Report .xlsx workbook
-// (downloadCompanyExcel(), index.html:20524-20623), and the Master
-// Pipeline / per-agent pipeline .xlsx exports (index.html:20001-20184) --
-// these write into the real uploaded pipeline-template.xlsx, preserving
-// every one of its live formula columns, not a rebuild. Import (round-
-// tripping an edited workbook back into the app, reconciling against
-// existing leads instead of duplicating them -- the master spec's own
-// flagged "Excel import/restore creating duplicates" finding) is built in
-// PipelineImportCard/usePipelineImport/pipelineImportLogic, using this
-// exact template's column layout so it stays in lockstep with export.
+// (index.html:19967-20055) and the styled Company Report .xlsx workbook
+// (downloadCompanyExcel(), index.html:20524-20623). The Master Pipeline /
+// per-agent pipeline export+import (pipelineCanonicalWorkbook.ts,
+// PipelineImportCard/usePipelineImport/pipelineImportLogic) is a from-
+// scratch canonical workbook generated entirely in code, per the Master
+// Rebuild Specification Section 5: "Do not use the supplied reference
+// workbook as the live interchange schema." An earlier pass here loaded
+// and populated the uploaded pipeline-template.xlsx directly -- exactly
+// what that section forbids -- and has been replaced.
 export function ReportsScreen() {
   const { data: leads, isLoading: leadsLoading } = useAllLeadsReport();
   const { data: enquiries } = useAllEnquiriesReport();
@@ -255,7 +254,7 @@ export function ReportsScreen() {
 
       <div className={styles.sectitle}>Master Pipeline</div>
       <p className={styles.sub} style={{ margin: '0 0 10px' }}>
-        Every client from every agent, combined into the exact same pipeline template &mdash; same columns, same colours, same formulas, sorted A&ndash;Z.
+        Every client from every agent, in the canonical LEADS/PAYMENTS/ALLOCATIONS/INSTRUCTIONS workbook &mdash; sorted A&ndash;Z, ready to edit and re-import below.
       </p>
       <div className={styles.card}>
         <ReportRow label="All agents, one workbook" hint={leadsLoading ? 'Loading…' : `${leads?.length ?? 0} clients`} onDownload={() => downloadMasterPipeline.mutate()} downloading={downloadMasterPipeline.isPending} buttonLabel="⬇ .xlsx" />
@@ -273,7 +272,7 @@ export function ReportsScreen() {
           ))}
         </select>
         <ReportRow
-          label="Same template, just filtered"
+          label="Same workbook, just filtered"
           hint="Pick an agent above to download only their clients"
           onDownload={() => {
             const key = selectedAgentKey || pipelineAgents?.[0]?.key;
