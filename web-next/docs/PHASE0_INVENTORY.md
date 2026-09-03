@@ -269,6 +269,49 @@ two-colleague adjacency scenario doesn't exist in the current demo seed
 data (the only seeded cross-staff leave conflict is in the past), so the
 exact boundary case wasn't independently reproduced live this pass.
 
+## 13. Pipeline Excel import — BUILT (flagged critical in the master spec, "creates duplicates instead of reconciling")
+
+`web-next` had no import path at all yet (`pipelineTemplateExcel.ts`'s own
+comment used to say so explicitly) — the real risk wasn't a live defect in
+today's code, it was that building an import feature the naive way (fetch
+once, always insert) would reintroduce the exact bug legacy's own
+`importPipelineExcel` already fixed on its side. Confirmed both legacy's
+import and `restore_backup` already reconcile/clear-before-reinsert
+correctly — the gap was purely "doesn't exist yet in `web-next`."
+
+Faithful port of `resolveImportColumns`/`scanImportFile`/
+`importPipelineExcel` (index.html:20196-20450) — `pipelineImportLogic.ts`
+(pure column-resolution + name+contact→Lead ID→name-only reconciliation,
+always against a fresh fetch), `usePipelineImport.ts` (scan/commit
+mutations), `PipelineImportCard.tsx` (inline card in Reports, manager-only/
+company-wide, next to the existing Master Pipeline export). Ported
+`import_batches` to staging for the audit trail; added `LeadUpdate.priority`
+(existing `Lead` field, no write path before now); exported `pricingFor`/
+`interestFor` from `quotationLogic.ts` for reuse; fixed
+`pipelineTemplateExcel.ts`'s export to read real `priority`/`siteVisit`
+values now that they round-trip.
+
+**Two real bugs caught before/via live testing, not just code review:**
+(1) `payments.create({status:'approved'})` independently re-reads and bumps
+the lead's `amt_paid`/`stage` itself — had to run BEFORE the authoritative
+per-row patch, not after, or the file's explicit stage would be silently
+overwritten by auto-derivation. (2) `computeLeadQuotationTotals(config,
+lead)` treats ANY non-null `lead.grandTotal` (0 included — the field isn't
+nullable) as an already-decided override and returns it unchanged instead
+of recomputing; the first live test produced `grandTotal: 0` on every
+imported row. Fixed by computing net/grand directly rather than routing
+through that function.
+
+Verified live in demo mode end-to-end: exported the real Master Pipeline
+workbook via the app's own download, edited it with a real ExcelJS edit
+(bumped an existing lead's discount+stage, added one brand-new row), fed it
+through the actual file input. Scan: 1 new/9 existing/0 skipped. Commit: 1
+added/1 updated/8 unchanged, correct fresh net/grand totals, zero
+duplicates. Re-uploading the exact same exported file a second time — the
+specific property this fix is about — came back 0 added/0 updated/10
+unchanged, lead count and every name's row count unchanged. `tsc`/build/
+lint all clean.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -281,4 +324,5 @@ exact boundary case wasn't independently reproduced live this pass.
 8. ~~Pipeline deletion mismatch~~ — done (§10): `leads.remove()` is a real soft delete in both demo and live mode now, matching legacy and preventing real FK-cascade data loss. 43/43 pgTAP assertions across 8 suites.
 9. ~~Site-visit day logic~~ — done (§11): all 7 days bookable, week-range query bug (Friday cutoff hiding weekend visits) fixed alongside it.
 10. ~~Leave non-overlap rule~~ — done (§12): adjacent-day blocking removed, pure overlap only.
-11. Next: the other critical findings from the master spec's Section 1 not yet addressed — scheduled-job health/retry observability, Excel import/restore creating duplicates instead of reconciling. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
+11. ~~Excel import creates duplicates instead of reconciling~~ — done (§13): built the import feature `web-next` never had, ported legacy's already-correct reconciliation logic rather than reintroducing the bug naively.
+12. Next: the other critical findings from the master spec's Section 1 not yet addressed — scheduled-job health/retry observability. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
