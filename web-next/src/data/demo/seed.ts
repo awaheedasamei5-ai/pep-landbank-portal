@@ -724,6 +724,17 @@ export function seedDemo(): DemoDb {
       { id: uid(), createdAt: isoPlusDays(t, -1) + 'T22:00:00Z', triggerType: 'scheduled', triggeredBy: null, triggeredByName: null, tableCounts: { leads: leads.length, payments: payments.length, plots: 415 }, sizeBytes: 83990, checksum: 'demo1checksum', snapshot: {} },
       { id: uid(), createdAt: isoPlusDays(t, -1) + 'T14:00:00Z', triggerType: 'manual', triggeredBy: 'management', triggeredByName: 'Management', tableCounts: { leads: leads.length, payments: payments.length, plots: 415 }, sizeBytes: 83988, checksum: 'demo2checksum', snapshot: {} },
     ],
+    // Real grants (confirmed live on staging -- see PHASE0_INVENTORY.md §4),
+    // reused as-is rather than inventing placeholder overrides.
+    permissionOverrides: [
+      { staffKey: 'elias', permissionKey: 'payments.manage', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'elias', permissionKey: 'allocations.manage', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'elias', permissionKey: 'ops.view_all', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'emmanuel', permissionKey: 'allocations.manage', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'emmanuel', permissionKey: 'ops.view_all', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'elizabeth', permissionKey: 'contracts.generate', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+      { staffKey: 'elizabeth', permissionKey: 'ops.view_all', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
+    ],
   };
 }
 

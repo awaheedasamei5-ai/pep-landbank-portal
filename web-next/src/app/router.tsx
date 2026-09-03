@@ -58,6 +58,7 @@ import { NotesScreen } from '../features/notes/screens/NotesScreen';
 import { SystemHealthScreen } from '../features/system-health/screens/SystemHealthScreen';
 import { AuditLogScreen } from '../features/system-health/screens/AuditLogScreen';
 import { BackupsScreen } from '../features/system-health/screens/BackupsScreen';
+import { PermissionsScreen } from '../features/system-health/screens/PermissionsScreen';
 
 // Two disjoint trees: the authenticated /app/* tree (RequireAuth-wrapped)
 // and a small public tree (/visit-feedback/:token -- the Site Visit
@@ -184,6 +185,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <BackupsScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/health/permissions',
+        element: (
+          <RequireRole role="manager">
+            <PermissionsScreen />
           </RequireRole>
         ),
       },

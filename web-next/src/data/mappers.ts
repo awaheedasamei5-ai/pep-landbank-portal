@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, Profile, Referral, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -584,6 +584,24 @@ export function mapAuditEventRow(r: Record<string, unknown>): AuditEvent {
     summary: r.summary as string,
     detail: (r.detail as Record<string, unknown>) ?? null,
     source: r.source as string,
+  };
+}
+
+export function mapPermissionDefRow(r: Record<string, unknown>): PermissionDef {
+  return {
+    key: r.key as string,
+    label: r.label as string,
+    description: (r.description as string) ?? null,
+  };
+}
+
+export function mapPermissionOverrideRow(r: Record<string, unknown>): PermissionOverride {
+  return {
+    staffKey: r.staff_key as string,
+    permissionKey: r.permission_key as string,
+    granted: r.granted as boolean,
+    grantedBy: (r.granted_by as string) ?? null,
+    grantedAt: r.granted_at as string,
   };
 }
 

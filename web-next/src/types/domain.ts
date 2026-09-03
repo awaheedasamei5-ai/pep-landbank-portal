@@ -1239,3 +1239,27 @@ export interface BackupRecord {
   sizeBytes: number;
   checksum: string;
 }
+
+// Real tables `permissions`/`role_permissions`/`staff_permission_overrides`
+// + RPC `has_permission` (staging only, ported 2026-09-03 -- see
+// PHASE0_INVENTORY.md §4). Replaces the hardcoded staff-key arrays this
+// session found baked into payments/contracts/allocations/site_visits RLS
+// (all four already cut over on staging). The UI only ever exposes a
+// binary "does this staff member have this permission" toggle per cell --
+// the schema also supports an explicit `granted:false` override (distinct
+// from "no override, falls back to role default"), but that's a real edge
+// case with no UI need yet, so grant()/clear() below are the only two
+// actions surfaced (matching set_permission_override/clear_permission_override).
+export interface PermissionDef {
+  key: string;
+  label: string;
+  description: string | null;
+}
+
+export interface PermissionOverride {
+  staffKey: string;
+  permissionKey: string;
+  granted: boolean;
+  grantedBy: string | null;
+  grantedAt: string;
+}

@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -11,6 +11,8 @@ import {
   mapAuditEventRow,
   mapBackupRow,
   mapBannerRow,
+  mapPermissionDefRow,
+  mapPermissionOverrideRow,
   mapFundRequestRow,
   mapWeeklyVisitFormRow,
   mapChatMessageRow,
@@ -74,6 +76,15 @@ const DEMO_ACHIEVEMENT_DEFS: AchievementDef[] = [
   { id: 'referral_champion', key: 'referral_champion', label: 'Referral Champion', description: null, icon: '🏅', criteriaType: 'referralConversions', criteriaConfig: { threshold: 3 }, points: 150, active: true, createdAt: '2026-01-01T00:00:00Z' },
   { id: 'todo_titan', key: 'todo_titan', label: 'To-Do Titan', description: null, icon: '🏅', criteriaType: 'todosCompleted', criteriaConfig: { threshold: 30 }, points: 100, active: true, createdAt: '2026-01-01T00:00:00Z' },
   { id: 'top_collector', key: 'top_collector', label: 'Top Collector', description: null, icon: '🏅', criteriaType: 'totalCollected', criteriaConfig: { threshold: 100000 }, points: 300, active: true, createdAt: '2026-01-01T00:00:00Z' },
+];
+
+// The real 4 permission keys (confirmed live on staging -- see
+// PHASE0_INVENTORY.md §4), reused as-is rather than inventing placeholders.
+const DEMO_PERMISSION_DEFS: PermissionDef[] = [
+  { key: 'payments.manage', label: 'Manage payments', description: 'Log, edit, delete payments' },
+  { key: 'contracts.generate', label: 'Generate contracts', description: 'Create Contract of Sale records' },
+  { key: 'allocations.manage', label: 'Manage plot allocations', description: 'Suggest/confirm/revert allocation requests' },
+  { key: 'ops.view_all', label: 'View all staff back-office data', description: 'Cross-staff visibility on payments/contracts/site visits' },
 ];
 
 function applyStaffOverrides(s: Profile, db: DemoDb): Profile {
@@ -432,6 +443,18 @@ export interface DataSource {
     list(): Promise<BackupRecord[]>;
     createNow(triggeredBy: string, triggeredByName: string): Promise<BackupRecord>;
     restore(backupId: string, triggeredBy: string, triggeredByName: string): Promise<void>;
+  };
+  // Real tables `permissions`/`staff_permission_overrides` + RPCs
+  // `set_permission_override`/`clear_permission_override` (staging only,
+  // ported this session -- see PHASE0_INVENTORY.md §4). grant()/clear()
+  // are the only two actions surfaced -- see the PermissionOverride type's
+  // own comment in types/domain.ts for why an explicit granted:false
+  // override isn't exposed here.
+  permissions: {
+    listDefs(): Promise<PermissionDef[]>;
+    listOverrides(): Promise<PermissionOverride[]>;
+    grant(staffKey: string, permissionKey: string, grantedBy: string): Promise<void>;
+    clear(staffKey: string, permissionKey: string): Promise<void>;
   };
   // Real column `leads.banner_id` -- how many real leads are attributed to
   // each banner, keyed by banner id. Confirmed live: `leads` RLS already
@@ -1408,6 +1431,35 @@ function createDemoDataSource(): DataSource {
         Object.assign(fresh, found.snapshot);
         demoSave();
         await getDataSource(true).audit.log('backup.restored', 'critical', `Full system backup restored from ${backupId}`, { restoredFrom: backupId }, 'backup', backupId);
+      },
+    },
+    permissions: {
+      async listDefs() {
+        return DEMO_PERMISSION_DEFS;
+      },
+      async listOverrides() {
+        const db = demoLoad();
+        return db.permissionOverrides ?? [];
+      },
+      async grant(staffKey, permissionKey, grantedBy) {
+        const db = demoLoad();
+        db.permissionOverrides = db.permissionOverrides ?? [];
+        const existing = db.permissionOverrides.find((o) => o.staffKey === staffKey && o.permissionKey === permissionKey);
+        if (existing) {
+          existing.granted = true;
+          existing.grantedBy = grantedBy;
+          existing.grantedAt = new Date().toISOString();
+        } else {
+          db.permissionOverrides = [...db.permissionOverrides, { staffKey, permissionKey, granted: true, grantedBy, grantedAt: new Date().toISOString() }];
+        }
+        demoSave();
+        await getDataSource(true).audit.log('permission_override.granted', 'warning', `${grantedBy} granted permission "${permissionKey}" to ${staffKey}`, { staffKey, permissionKey, granted: true }, 'staff_permission_override', staffKey);
+      },
+      async clear(staffKey, permissionKey) {
+        const db = demoLoad();
+        db.permissionOverrides = (db.permissionOverrides ?? []).filter((o) => !(o.staffKey === staffKey && o.permissionKey === permissionKey));
+        demoSave();
+        await getDataSource(true).audit.log('permission_override.cleared', 'warning', `permission "${permissionKey}" override for ${staffKey} cleared`, { staffKey, permissionKey }, 'staff_permission_override', staffKey);
       },
     },
     allocationRequests: {
@@ -2695,6 +2747,26 @@ function createLiveDataSource(): DataSource {
       },
       async restore(backupId, triggeredBy, triggeredByName) {
         const { error } = await requireClient().rpc('restore_backup', { p_backup_id: backupId, p_by: triggeredBy, p_by_name: triggeredByName });
+        if (error) throw error;
+      },
+    },
+    permissions: {
+      async listDefs() {
+        const { data, error } = await requireClient().from('permissions').select('*').order('key');
+        if (error) throw error;
+        return (data ?? []).map(mapPermissionDefRow);
+      },
+      async listOverrides() {
+        const { data, error } = await requireClient().from('staff_permission_overrides').select('*');
+        if (error) throw error;
+        return (data ?? []).map(mapPermissionOverrideRow);
+      },
+      async grant(staffKey, permissionKey) {
+        const { error } = await requireClient().rpc('set_permission_override', { p_staff_key: staffKey, p_permission_key: permissionKey, p_granted: true });
+        if (error) throw error;
+      },
+      async clear(staffKey, permissionKey) {
+        const { error } = await requireClient().rpc('clear_permission_override', { p_staff_key: staffKey, p_permission_key: permissionKey });
         if (error) throw error;
       },
     },

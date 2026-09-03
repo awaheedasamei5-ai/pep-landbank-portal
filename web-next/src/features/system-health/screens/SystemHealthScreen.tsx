@@ -63,6 +63,13 @@ export function SystemHealthScreen() {
                 {health.lastBackup ? ` · ${fmtBytes(health.lastBackup.sizeBytes)} latest` : ''}
               </span>
             </button>
+            <button type="button" className={styles.card} onClick={() => navigate('/app/mgr/health/permissions')}>
+              <span className={styles.cardIcon}>
+                <Icon name="settings" size={20} />
+              </span>
+              <span className={styles.cardTitle}>Permissions</span>
+              <span className={styles.cardSub}>Grant/revoke matrix for who can do what beyond agent/manager</span>
+            </button>
           </div>
         </>
       )}
