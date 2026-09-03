@@ -2901,13 +2901,23 @@ function currentWeekStartIso(){ return isoDateOnly(mondayOfDate(new Date())); }
 function weekLockInstant(weekStartIso){ const d=new Date(weekStartIso+'T00:00:00'); d.setDate(d.getDate()+4); return d; }
 function isWeekLocked(weekStartIso){ return new Date()>=weekLockInstant(weekStartIso); }
 function weekFridayIso(weekStartIso){ return isoDateOnly(weekLockInstant(weekStartIso)); }
+// Fixed 2026-09-03: apiLoadSiteVisitsForWeek used to query through
+// weekFridayIso (Friday), which already silently hid a real Sunday visit's
+// costs from the Site Visit Authorization form even under the old
+// Tue/Wed/Fri/Sun schedule (Sunday was already a real visit day). Now that
+// every day of the week is a real visit day, that same bug would have hidden
+// Saturday's visits too -- this is a separate concept from weekLockInstant/
+// weekFridayIso above (that pair is about when the weekly cost form itself
+// locks for editing, not which visits exist) so it gets its own helper
+// rather than widening weekFridayIso's meaning.
+function weekEndIso(weekStartIso){ const d=new Date(weekStartIso+'T00:00:00'); d.setDate(d.getDate()+6); return isoDateOnly(d); }
 function weekRangeLabel(weekStartIso){
-  const s=new Date(weekStartIso+'T00:00:00'); const e=new Date(s); e.setDate(e.getDate()+4);
+  const s=new Date(weekStartIso+'T00:00:00'); const e=new Date(s); e.setDate(e.getDate()+6);
   const fmt=d=>d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
   return fmt(s)+' – '+fmt(e)+', '+e.getFullYear();
 }
-// Site Visit Auth's date picker -- real site visits only ever happen
-// Tue/Wed/Fri/Sun (SVE_ALLOWED_DAYS). weekStartIso is always a Monday
+// Site Visit Auth's date picker -- real site visits now happen every day
+// of the week (SVE_ALLOWED_DAYS, fixed 2026-09-03). weekStartIso is always a Monday
 // (mondayOfDate), so walking all 7 days out to weekStartIso+6 correctly
 // reaches that same week's Sunday as its last day (isoPlusDays is defined
 // later in the file but hoisted, same as any other function declaration).
@@ -3948,9 +3958,9 @@ async function apiFinalizeWeeklyVisitForm(id){
   return mapWeeklyVisitForm(data);
 }
 async function apiLoadSiteVisitsForWeek(weekStart){
-  const friday=weekFridayIso(weekStart);
-  if(DEMO_MODE){ const d=await demoLoad(); return (d.sitevisits||[]).filter(v=>v.date>=weekStart&&v.date<=friday).map(v=>({...v})); }
-  const {data,error}=await sb.from('site_visits').select('*').gte('visit_date',weekStart).lte('visit_date',friday).order('created_at');
+  const weekEnd=weekEndIso(weekStart);
+  if(DEMO_MODE){ const d=await demoLoad(); return (d.sitevisits||[]).filter(v=>v.date>=weekStart&&v.date<=weekEnd).map(v=>({...v})); }
+  const {data,error}=await sb.from('site_visits').select('*').gte('visit_date',weekStart).lte('visit_date',weekEnd).order('created_at');
   if(error) throw error;
   return (data||[]).map(mapSV);
 }
@@ -10643,7 +10653,7 @@ function viewPipeline(){
     <button id="xlImportBtn">${ic.upload}Import edited file</button>
     <button id="importHistoryBtn">${ic.doc}Import history</button>
     ${PROFILE.role==='manager'?`<button id="pipeBackupBtn">${ic.update}Back up clients</button><button id="pipeRestoreBtn">${ic.update}Restore backup</button>`
-      :`<button id="reqBackupBtn">${ic.update}Request backup</button><button id="reqRestoreBtn">${ic.update}Request restore</button>`}
+      :`<button id="reqBackupBtn">${ic.update}Request backup</button><button id="reqRestoreBtn">${ic.update}Request restore</button><button id="pipeDeleteReqBtn" style="color:#B91C1C">${ic.trash||''}Delete my whole pipeline</button>`}
     <input type="file" id="xlImportFile" accept=".xlsx" class="hidden"/>
     ${PROFILE.role==='manager'?'<input type="file" id="pipeRestoreFile" accept=".json" class="hidden"/>':''}
   </div>
@@ -10676,8 +10686,38 @@ function viewPipeline(){
   } else {
     document.getElementById('reqBackupBtn').onclick=()=>requestPipelineOp('backup');
     document.getElementById('reqRestoreBtn').onclick=()=>requestPipelineOp('restore');
+    document.getElementById('pipeDeleteReqBtn').onclick=openPipelineDeleteRequestModal;
   }
   paintPipe();
+}
+// New 2026-09-03: a staff member's own request to have their whole
+// pipeline permanently deleted -- reason required, goes to Management as
+// a real tracked request (pipeline_delete_requests), never deletes
+// anything itself. Modeled on the fund_requests submit flow
+// (viewExpensesApp's frSaveBtn handler) -- same "reason required before
+// the button will even submit" discipline.
+function openPipelineDeleteRequestModal(){
+  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='announceOverlay';
+  ov.innerHTML=`<div id="announceModal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px;color:#B91C1C">Delete my whole pipeline?</div><button id="closePipeDelReq" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
+    <div class="mini" style="margin-bottom:12px">This sends a request to Management. Nothing is deleted yet — Management reviews your reason and decides whether to approve it. If approved, every one of your leads, payments, contracts, site visits and similar records is permanently removed.</div>
+    ${fld('Reason *','<textarea id="pdr_reason" rows="3" placeholder="Why do you want your pipeline deleted?"></textarea>')}
+    <div class="formactions"><button class="btn primary" id="pdr_send" style="width:100%;background:#B91C1C">Send request to Management</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  makeModalAccessible(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('closePipeDelReq').onclick=()=>ov.remove();
+  document.getElementById('pdr_send').onclick=async()=>{
+    const reason=val('pdr_reason').trim();
+    if(!reason){ toast('Please give a reason'); return; }
+    const btn=document.getElementById('pdr_send'); btn.disabled=true; btn.textContent='Sending…';
+    try{
+      await apiInsertPipelineDeleteRequest(PROFILE.key,PROFILE.name,reason);
+      toast('Request sent to Management'); ov.remove();
+    }catch(e){ toast('Could not send request: '+(e.message||e)); btn.disabled=false; btn.textContent='Send request to Management'; }
+  };
 }
 async function requestPipelineOp(kind){
   const label=kind==='backup'?'a backup':'a restore';
@@ -10869,8 +10909,18 @@ function renderRestorePicker(data){
 
 /* ================= AGENT DETAIL (management: one agent's full client breakdown) ================= */
 function agentDetailView(agentKey){
-  const staff=STAFF_LIST.find(s=>s.key===agentKey);
-  const list=DB.leads.filter(l=>l.agent===agentKey);
+  // 'company' is reachable here for the first time as of 2026-09-03 (the
+  // new Company Needs row on Management Overview's "By agent" chart) --
+  // there's no matching STAFF_LIST entry for it, so give it a real label
+  // instead of falling through to the raw key string.
+  const staff=agentKey==='company'?{name:'Company Needs'}:STAFF_LIST.find(s=>s.key===agentKey);
+  // Same demo-mode gap fixed in mgrOverview's Company Needs row: DB.leads
+  // isn't a manager-flattened array in demo mode (demoMem.leads is a
+  // per-agent dictionary, no 'company' bucket), so this view would
+  // otherwise silently show 0 leads for the new Company Needs bar in demo
+  // mode even when real company leads exist. Every other real agentKey is
+  // unaffected -- DB.leads already works correctly for those in both modes.
+  const list=(DEMO_MODE&&agentKey==='company')?(demoMem?.leads?.company||[]):DB.leads.filter(l=>l.agent===agentKey);
   const k=kpisOf(list);
   const thisMonth=today().slice(0,7);
   const wonMonth=list.filter(l=>isFullyPaid(l) && monthKey(l.date)===thisMonth).length;
@@ -15236,10 +15286,14 @@ const SVE_REVIEW_QUESTIONS=[
   {key:'additionalNotes',label:'Any additional notes for Management?',type:'textarea'}
 ];
 let SVE_WEEK_START=null, SVE_SELECTED_DAY=null;
-// Real client site visits only ever happen Tue/Wed/Fri/Sun -- JS Date.getDay()
-// values (0=Sun). Both the day-of-week chips below AND Logistics' own picker
-// (sveAuthAllowedDayIsos, near siteVisitAuthBodyHtml) filter to this same set.
-const SVE_ALLOWED_DAYS=[2,3,5,0];
+// Fixed 2026-09-03: real client site visits used to only ever happen
+// Tue/Wed/Fri/Sun -- the real, current business schedule is every day of
+// the week, Monday-Saturday 9:00am and Sunday 12:00pm. JS Date.getDay()
+// values (0=Sun) -- all 7 kept here (not deleted) so a future schedule
+// change is a one-line edit again. Both the day-of-week chips below AND
+// Logistics' own picker (sveAuthAllowedDayIsos, near siteVisitAuthBodyHtml)
+// filter to this same set.
+const SVE_ALLOWED_DAYS=[0,1,2,3,4,5,6];
 // Same week-nav shape as Logistics (SVA_WEEK_START/weekRangeLabel/weekWorkdayIsos)
 // -- but real client site visits happen any day, not just Mon-Fri, so this
 // walks all 7 days of the week then keeps only the allowed ones.
@@ -15249,8 +15303,9 @@ function sveWeekDayIsos(weekStart){
     .filter(iso=>SVE_ALLOWED_DAYS.includes(new Date(iso+'T00:00:00').getDay()));
 }
 // Walks forward day-by-day from a given date to the nearest allowed site-visit
-// day (at most 6 steps, since Sunday is always allowed) -- used to snap the
-// default selected day off of today() when today isn't one of the 4.
+// day -- kept even though every day is allowed today (returns fromIso itself
+// on the first check), so a future schedule change doesn't have to re-add
+// this snapping logic from scratch.
 function nearestAllowedSveDay(fromIso){
   let d=new Date(fromIso+'T00:00:00');
   for(let i=0;i<7;i++){ if(SVE_ALLOWED_DAYS.includes(d.getDay())) return isoDateOnly(d); d.setDate(d.getDate()+1); }
@@ -15927,6 +15982,7 @@ function downloadRecordPDF(kind,rec){
   if(kind==='complaint'){ buildComplaintFormPDF(rec); return; }
 }
 function buildEnquiryFormPDF(rec,asDataUri){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth();
   let y=pdfHeader(doc,'CLIENT ENQUIRY');
@@ -15960,6 +16016,7 @@ function buildEnquiryFormPDF(rec,asDataUri){
   { const fname='Enquiry_'+(rec.name||'client').replace(/\s+/g,'_')+'.pdf'; const uri=doc.output('datauristring'); doc.save(fname); logDownload(fname,'pdf',uri); }
 }
 function buildComplaintFormPDF(rec,asDataUri){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth();
   let y=pdfHeader(doc,'CLIENT FEEDBACK');
@@ -16027,6 +16084,7 @@ function pdfCheckRow(doc,y,pageW,options,selected){
   return y+lh+2;
 }
 function buildSiteVisitFormPDF(rec,asDataUri){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth();
   let y=pdfHeader(doc,'SITE VISIT REQUEST FORM');
@@ -16059,7 +16117,7 @@ function buildSiteVisitFormPDF(rec,asDataUri){
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(100,112,133); doc.text('3.2 PURPOSE OF VISIT',12,y); y+=4.5;
   y=pdfCheckRow(doc,y,pageW,['Viewing','Allocation','Picking','Others'],rec.purpose)+2;
   doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(100,112,133); doc.text('3.3 SITE VISIT DAY',12,y); y+=4.5;
-  y=pdfCheckRow(doc,y,pageW,['Tuesday 9:00am','Wednesday 9:00am','Friday 9:00am','Sunday 12:00pm'],rec.time)+5;
+  y=pdfCheckRow(doc,y,pageW,['Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am','Sunday 12:00pm'],rec.time)+5;
 
   h1=pdfLabeledPair(doc,12,y,88,'Number of client accompaniment',rec.people);
   h2=pdfLabeledPair(doc,108,y,88,'Site visit requested by',rec.agentName);
@@ -16226,7 +16284,7 @@ function formSiteVisit(){
 
   <div class="sectitle"><h3>3.0 Visit preferences</h3></div>
   <div class="grid2">${fld('3.1 Mode of transportation',sel('s_trans',['Personal Vehicle','Company Vehicle']))}${fld('3.2 Purpose of visit',sel('s_purpose',['Viewing','Allocation','Picking','Others']))}</div>
-  ${fld('3.3 Site visit day',sel('s_day',['Tuesday 9:00am','Wednesday 9:00am','Friday 9:00am','Sunday 12:00pm']))}
+  ${fld('3.3 Site visit day',sel('s_day',['Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am','Sunday 12:00pm']))}
   <div class="grid2">${fld('Number of client accompaniment','<input id="s_ppl" type="number" min="0" value="0"/>','if applicable')}${fld('Who is accompanying?','<input id="s_accompanied" placeholder="e.g. Spouse, Relative"/>','optional — leave blank if none')}</div>
   <div class="rowcard" style="margin:14px 0;padding:12px 14px"><div class="mini">Site visit requested by</div><div style="font-weight:700">${esc(PROFILE.name)}</div></div>
 
@@ -18736,6 +18794,7 @@ function buildClientStatementPDF(){
 // buildClientStatementPDF reads. Returns the PDF as base64 (no data: prefix) for
 // emailing, instead of triggering a browser download.
 function buildPersonBackupStatementPDF(personName,leads,payments,asOfLabel){
+  if(typeof window.jspdf==='undefined'){ toast('PDF library failed to load — check your connection.'); return null; }
   const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
   const pageW=doc.internal.pageSize.getWidth();
   const siteName=CONFIG.quoteSiteName||'Royal Palm Enclave, Tsopoli';
@@ -18841,7 +18900,7 @@ function formClientSiteVisit(){
     ${fld('Interested in',sel('cv_interest',['0.5 Plot (70x50)','1 Plot (70x100)','2 Plots (70x100)','3 Plots (70x100)','More — enter number of plots']))}
     <div id="cv_interestCustomWrap" class="hidden">${fld('Preferred number of plots','<input id="cv_interestCustom" type="number" min="0.5" step="0.5" placeholder="e.g. 5"/>')}</div>
     <div class="grid2">${fld('Mode of transportation',sel('cv_trans',['Personal Vehicle','Company Vehicle']))}${fld('Purpose of visit',sel('cv_purpose',['Viewing','Allocation','Picking','Others']))}</div>
-    ${fld('Preferred day',sel('cv_day',['Tuesday 9:00am','Wednesday 9:00am','Friday 9:00am','Sunday 12:00pm']))}
+    ${fld('Preferred day',sel('cv_day',['Monday 9:00am','Tuesday 9:00am','Wednesday 9:00am','Thursday 9:00am','Friday 9:00am','Saturday 9:00am','Sunday 12:00pm']))}
     ${fld('Pick-up location','<input id="cv_pickup"/>','optional')}
     ${fld('Number of people accompanying you','<input id="cv_ppl" type="number" min="0" value="0"/>')}
     ${fld('Who is accompanying you?','<input id="cv_accompanied" placeholder="e.g. Spouse, Relative — leave blank if none"/>','optional')}
@@ -19331,13 +19390,31 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
       <div style="flex:1;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${STAGE_COLORS[s]};border-radius:100px"></div></div>
       <div style="width:28px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto">${n}</div>
     </button>`; }).join('');
-  const agentVals=agents.map(a=>kpisOf(a.list).val);
+  // Fixed 2026-09-03: Company Needs (agent==='company' -- leads sourced by
+  // the company directly, not owned by any one staff member) added as one
+  // more row on THIS chart only. Deliberately not folded into
+  // allAgentLists() itself (used everywhere -- Leaderboard, Reports, Data
+  // Check -- which must keep excluding it exactly as before) and
+  // deliberately NOT added to tot.* (the hero "Total leads"/"Pipeline
+  // value" stats above stay company-owned-by-staff only, unchanged) --
+  // this is purely a visibility fix for the by-agent breakdown, not a
+  // change to what counts as company-wide totals.
+  // Real bug caught in testing: DB.leads isn't a manager-flattened array
+  // in demo mode the way it is live (apiLoadAll's manager branch) --
+  // demoMem.leads is a per-agent dictionary with no 'company' bucket at
+  // all, so filtering DB.leads directly silently found nothing in demo
+  // mode. Mirrors allAgentLists()'s own DEMO_MODE-vs-live branching
+  // instead of assuming DB.leads is populated the same way in both.
+  const companyNeedsList=DEMO_MODE?(demoMem?.leads?.company||[]):DB.leads.filter(l=>l.agent==='company');
+  const agentsWithCompany=[...agents,{key:'company',name:'Company Needs',list:companyNeedsList}];
+  const agentVals=agentsWithCompany.map(a=>kpisOf(a.list).val);
   const agentMax=Math.max(1,...agentVals);
-  const rows=agents.map(a=>{ const k=kpisOf(a.list); tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi;
+  const rows=agentsWithCompany.map(a=>{ const k=kpisOf(a.list);
+    if(a.key!=='company'){ tot.leads+=k.leads;tot.val+=k.val;tot.coll+=k.coll;tot.out+=k.out;tot.sv+=k.sv;tot.hi+=k.hi; }
     const pct=k.val?Math.max(4,Math.round(k.val/agentMax*100)):0;
     return `<button class="blockrow" data-agentkey="${esc(a.key)}" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;width:100%;background:none;border:none;cursor:pointer;text-align:left">
       <div style="width:88px;font-size:12px;color:var(--text);font-weight:600;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.name)}</div>
-      <div style="flex:1;min-width:24px;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--leaf),var(--green));border-radius:100px"></div></div>
+      <div style="flex:1;min-width:24px;height:14px;background:var(--paper);border-radius:100px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${a.key==='company'?'linear-gradient(90deg,#818CF8,#6366F1)':'linear-gradient(90deg,var(--leaf),var(--green))'};border-radius:100px"></div></div>
       <div style="min-width:76px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;flex:0 0 auto;white-space:nowrap">${ghs(k.val)}</div>
     </button>`; }).join('');
 
@@ -19363,6 +19440,7 @@ function mgrOverview(){ let tot={leads:0,val:0,coll:0,out:0,sv:0,hi:0};
     </div>
   </div>
   <div class="dashFlow">
+    <div id="mgrPipeDelReqs"></div>
     <div id="mgrTeamStreak"><div class="skel" style="height:70px;border-radius:16px"></div></div>
     ${renderBannerSlideshow()}
     <div class="sectitle" style="margin-top:0"><h3>Today at a glance</h3></div>
@@ -19396,6 +19474,42 @@ function bindOverviewCtrls(){
   const quoteBtn=document.getElementById('heroQuoteChipMgr'); if(quoteBtn) quoteBtn.onclick=openQuotationRequest;
   paintMgrOpsToday();
   paintTeamStreakToday();
+  paintPipelineDeleteRequests();
+}
+// New 2026-09-03: pending "delete my whole pipeline" requests, shown right
+// at the top of the manager dashboard (not buried in a settings screen) --
+// a real, permanent, irreversible action deserves high visibility, same
+// reasoning as paintTeamStreakToday's own placement just below it. Renders
+// nothing at all when there's nothing pending, same empty-collapses
+// pattern as that function.
+async function paintPipelineDeleteRequests(){
+  const body=document.getElementById('mgrPipeDelReqs'); if(!body) return;
+  let all=[];
+  try{ all=await apiLoadPipelineDeleteRequests(); }catch(e){}
+  const pending=all.filter(r=>r.status==='pending');
+  if(!pending.length){ body.innerHTML=''; return; }
+  body.innerHTML=`<div class="rowcard" style="border-color:#FCA5A5;margin-bottom:14px">
+    <div style="font-weight:800;color:#B91C1C;margin-bottom:2px">⚠ Pipeline deletion request${pending.length===1?'':'s'} waiting</div>
+    ${pending.map(r=>`<div style="padding:10px 0;border-top:1px solid var(--line)">
+      <div style="font-weight:700">${esc(r.staffName)}</div>
+      <div class="mini" style="margin:3px 0 8px">${esc(r.reason)}</div>
+      <div style="display:flex;gap:8px"><button class="chip" data-pdrreject="${esc(r.id)}" style="color:var(--danger)">Reject</button><button class="btn primary" data-pdrapprove="${esc(r.id)}" style="flex:1;background:#B91C1C">Approve &amp; delete permanently</button></div>
+    </div>`).join('')}
+  </div>`;
+  body.querySelectorAll('[data-pdrreject]').forEach(b=>b.onclick=async()=>{
+    const note=prompt('Reason for rejecting this request (shown to the staff member)?')||'';
+    b.disabled=true;
+    try{ await apiDecidePipelineDeleteRequest(b.dataset.pdrreject,false,note); toast('Request rejected'); paintPipelineDeleteRequests(); }
+    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; }
+  });
+  body.querySelectorAll('[data-pdrapprove]').forEach(b=>b.onclick=async()=>{
+    const r=pending.find(x=>x.id===b.dataset.pdrapprove); if(!r) return;
+    if(!confirm(`Permanently delete ${r.staffName}'s whole pipeline — every lead, payment, contract and site visit? This cannot be undone from the app (only by restoring the automatic pre-delete safety backup).`)) return;
+    if(prompt('Type DELETE to confirm')!=='DELETE'){ toast('Cancelled — text did not match'); return; }
+    b.disabled=true; b.textContent='Deleting…';
+    try{ await apiDecidePipelineDeleteRequest(b.dataset.pdrapprove,true); toast(r.staffName+"'s pipeline deleted"); paintPipelineDeleteRequests(); managerView(); }
+    catch(e){ toast('Failed: '+(e.message||e)); b.disabled=false; b.textContent='Approve & delete permanently'; }
+  });
 }
 // mgrOverview() itself is synchronous (its HTML is assigned directly to
 // body.innerHTML by the caller), so the team day-grid -- which needs a real
@@ -21451,6 +21565,16 @@ async function apiRestoreBackupNow(id){
   const {data,error}=await sb.rpc('restore_backup',{p_backup_id:id,p_by:PROFILE.key,p_by_name:PROFILE.name});
   if(error) throw error; return data;
 }
+// New 2026-09-03: restore only the selected staff key(s)' own rows from a
+// backup, leaving everyone else's current data untouched -- see
+// restore_backup_for_staff()'s own comment for exactly which tables this
+// covers and why (leads/payments/site_visits/contracts and similar clean
+// single-owner business records; deliberately not plots, profiles, team
+// discussion, or shared logistics forms).
+async function apiRestoreBackupForStaff(id,staffKeys){
+  const {data,error}=await sb.rpc('restore_backup_for_staff',{p_backup_id:id,p_staff_keys:staffKeys,p_by:PROFILE.key,p_by_name:PROFILE.name});
+  if(error) throw error; return data;
+}
 function fmtBytes(n){ n=num(n); if(n<1024) return n+' B'; if(n<1024*1024) return (n/1024).toFixed(1)+' KB'; return (n/1024/1024).toFixed(2)+' MB'; }
 function fmtBackupWhen(iso){ if(!iso) return ''; const d=new Date(iso); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
 function backupTriggerTag(t){
@@ -21593,6 +21717,7 @@ async function openBackupSendModal(backupId,whenLabel){
         if(!email){ failed++; continue; }
         extracted=extractPersonFromBackupSnapshot(snapshot,BKSEND_TYPE,person);
         const pdfB64=buildPersonBackupStatementPDF(person.name,extracted.leads,extracted.payments,whenLabel);
+        if(!pdfB64){ failed++; continue; }
         const subject='Your statement as of '+whenLabel;
         const html='<p>Hello '+esc(person.name)+',</p><p>Attached is your account statement as it stood on <b>'+esc(whenLabel)+'</b>, requested by Management.</p>';
         const r=await apiSendEmail(email,subject,html,[{filename:'Statement_'+person.name.replace(/\s+/g,'_')+'.pdf',content:pdfB64}]);
@@ -21604,12 +21729,24 @@ async function openBackupSendModal(backupId,whenLabel){
     btn.disabled=false; btn.textContent='Send';
   };
 }
+// Fixed 2026-09-03: this used to only ever offer a full company-wide
+// restore. Now opens with a staff picker first -- "All staff" reproduces
+// the exact original behavior (real restore_backup(), unchanged); picking
+// one or more specific staff switches to restore_backup_for_staff(),
+// which only touches those staff members' own rows across the tables
+// listed in that function's own comment, leaving everyone else untouched.
 function openRestoreConfirmModal(backupId,whenLabel){
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
+  const agents=(DEMO_MODE?STAFF_LIST:DB.profiles).filter(s=>s.role==='agent');
   ov.innerHTML=`<div id="announceModal">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-weight:800;font-size:16px;color:#B91C1C">Restore backup from ${esc(whenLabel)}?</div><button id="closeRestoreConfirm" style="background:none;border:none;color:var(--muted);cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0">${ic.close}</button></div>
-    <div class="mini" style="margin-bottom:12px;color:#B91C1C;font-weight:600">This replaces every current lead, plot, payment, contract, pricing record, task and similar business record with what's in this backup. Anything entered after ${esc(whenLabel)} in those tables will be lost.</div>
+    ${fld('Restore for','<select id="rc_scope"><option value="all">All staff — full company restore</option><option value="some">Just the staff I select below</option></select>')}
+    <div id="rc_staffPicker" class="hidden" style="margin-bottom:12px;max-height:160px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:8px">
+      ${agents.map(a=>`<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px"><input type="checkbox" class="rc_staffchk" value="${esc(a.key||a.agent_key)}"/> ${esc(a.name)}</label>`).join('')}
+    </div>
+    <div id="rc_warnAll" class="mini" style="margin-bottom:12px;color:#B91C1C;font-weight:600">This replaces every current lead, plot, payment, contract, pricing record, task and similar business record with what's in this backup. Anything entered after ${esc(whenLabel)} in those tables will be lost.</div>
+    <div id="rc_warnSome" class="mini hidden" style="margin-bottom:12px;color:#B91C1C;font-weight:600">This replaces the selected staff member(s)' own leads, payments, site visits, contracts and similar records with what's in this backup — everyone else's current data is untouched.</div>
     <div class="mini" style="margin-bottom:14px">A fresh safety backup of the current data is taken automatically first, so this can always be undone by restoring that safety backup afterwards.</div>
     ${fld('Type RESTORE to confirm','<input id="rc_confirm" placeholder="RESTORE" autocomplete="off"/>')}
     <div class="formactions"><button class="btn primary" id="rc_go" style="width:100%;background:#B91C1C" disabled>Restore now</button></div>
@@ -21618,12 +21755,23 @@ function openRestoreConfirmModal(backupId,whenLabel){
   makeModalAccessible(ov);
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
   document.getElementById('closeRestoreConfirm').onclick=()=>ov.remove();
+  const scopeSel=document.getElementById('rc_scope');
+  scopeSel.onchange=()=>{
+    const some=scopeSel.value==='some';
+    document.getElementById('rc_staffPicker').classList.toggle('hidden',!some);
+    document.getElementById('rc_warnAll').classList.toggle('hidden',some);
+    document.getElementById('rc_warnSome').classList.toggle('hidden',!some);
+  };
   const input=document.getElementById('rc_confirm'), goBtn=document.getElementById('rc_go');
   input.oninput=()=>{ goBtn.disabled=input.value.trim()!=='RESTORE'; };
   goBtn.onclick=async()=>{
+    const some=scopeSel.value==='some';
+    const staffKeys=[...document.querySelectorAll('.rc_staffchk:checked')].map(c=>c.value);
+    if(some&&!staffKeys.length){ toast('Pick at least one staff member, or switch to "All staff"'); return; }
     goBtn.disabled=true; goBtn.textContent='Restoring…';
     try{
-      await apiRestoreBackupNow(backupId);
+      if(some) await apiRestoreBackupForStaff(backupId,staffKeys);
+      else await apiRestoreBackupNow(backupId);
       toast('Restore complete'); ov.remove();
       await withLoadTimeout(apiLoadAll(),20000,'Restore'); BACKUPS_LOADED=false; BACKUPS_LIST=await withLoadTimeout(apiLoadBackups(),15000,'Backups'); BACKUPS_LOADED=true;
       managerView();
@@ -22274,6 +22422,60 @@ async function apiDecideFundRequest(id,approve,note){
   const sig=approve?getStaffSignature(PROFILE.key):null;
   const {data,error}=await sb.from('fund_requests').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null,approval_signature:sig}).eq('id',id).select().single();
   if(error) throw error; return mapFundReq(data);
+}
+// New 2026-09-03: "delete my whole pipeline" request -> approval ->
+// real deletion, modeled directly on the fund_requests functions above.
+function mapPipeDelReq(r){ return {id:r.id,staffKey:r.staff_key,staffName:r.staff_name,reason:r.reason,status:r.status,
+  requestedAt:r.requested_at,decidedBy:r.decided_by,decidedByName:r.decided_by_name,decidedAt:r.decided_at,decisionNote:r.decision_note}; }
+async function apiInsertPipelineDeleteRequest(staffKey,staffName,reason){
+  if(DEMO_MODE){
+    const d=await demoLoad(); d.pipelineDeleteRequests=d.pipelineDeleteRequests||[];
+    const rec={id:uid(),staffKey,staffName,reason,status:'pending',requestedAt:today()+' '+nowTime(),decidedBy:null,decidedByName:null,decidedAt:null,decisionNote:null};
+    d.pipelineDeleteRequests.unshift(rec); await demoSave(); return rec;
+  }
+  const {data,error}=await sb.from('pipeline_delete_requests').insert({staff_key:staffKey,staff_name:staffName,reason}).select().single();
+  if(error) throw error; return mapPipeDelReq(data);
+}
+async function apiLoadPipelineDeleteRequests(){
+  if(DEMO_MODE){ const d=await demoLoad(); return d.pipelineDeleteRequests||[]; }
+  const {data,error}=await sb.from('pipeline_delete_requests').select('*').order('requested_at',{ascending:false});
+  if(error) throw error; return (data||[]).map(mapPipeDelReq);
+}
+// Real destructive step -- only ever called right after an approval
+// decision (never on its own, and never on reject). Demo mode replicates
+// the real function's real effect (leads/payments/contracts/site visits/
+// complaints/enquiries/activity all cleared for that staff key -- but not
+// plots, matching the live RPC's own deliberate exclusion) rather than a
+// no-op, so this can genuinely be exercised end to end in testing.
+async function apiDeleteStaffPipeline(staffKey){
+  if(DEMO_MODE){
+    const d=await demoLoad();
+    d.leads=d.leads||{}; d.leads[staffKey]=[];
+    d.payments=(d.payments||[]).filter(p=>p.agentKey!==staffKey);
+    d.contracts=(d.contracts||[]).filter(c=>c.agentKey!==staffKey);
+    d.contractRequests=(d.contractRequests||[]).filter(c=>c.requestedBy!==staffKey);
+    d.sitevisits=(d.sitevisits||[]).filter(v=>v.agentKey!==staffKey);
+    d.complaints=(d.complaints||[]).filter(c=>c.agentKey!==staffKey);
+    d.enquiries=(d.enquiries||[]).filter(e=>e.agentKey!==staffKey);
+    d.activity=(d.activity||[]).filter(a=>a.agentKey!==staffKey);
+    await demoSave();
+    return {staff_key:staffKey};
+  }
+  const {data,error}=await sb.rpc('delete_staff_pipeline',{p_staff_key:staffKey,p_by:PROFILE.key,p_by_name:PROFILE.name});
+  if(error) throw error; return data;
+}
+async function apiDecidePipelineDeleteRequest(id,approve,note){
+  if(DEMO_MODE){
+    const d=await demoLoad(); const r=(d.pipelineDeleteRequests||[]).find(x=>x.id===id); if(!r) throw new Error('Request not found');
+    Object.assign(r,{status:approve?'approved':'rejected',decidedBy:PROFILE.key,decidedByName:PROFILE.name,decidedAt:today()+' '+nowTime(),decisionNote:note||null});
+    await demoSave();
+    if(approve) await apiDeleteStaffPipeline(r.staffKey);
+    return r;
+  }
+  const {data,error}=await sb.from('pipeline_delete_requests').update({status:approve?'approved':'rejected',decided_by:PROFILE.key,decided_by_name:PROFILE.name,decided_at:new Date().toISOString(),decision_note:note||null}).eq('id',id).select().single();
+  if(error) throw error;
+  if(approve) await apiDeleteStaffPipeline(data.staff_key);
+  return mapPipeDelReq(data);
 }
 async function apiLoadDailyBalances(){ const {data,error}=await sb.from('daily_balances').select('*').order('balance_date',{ascending:false}).limit(60); if(error) throw error; return (data||[]).map(mapDailyBalance); }
 async function apiUpsertDailyBalance(date,cash,momo,bank){
@@ -25105,6 +25307,8 @@ function viewBannerDetail(bannerId){
   </div>
   <div class="sectitle" style="margin-top:0"><h3>Log a status update</h3></div>
   <div class="formwrap" style="margin-bottom:16px">
+    ${fld('Area',`<input id="bd_area" list="bdAreaList" value="${esc(b.area||'')}" placeholder="e.g. Spintex"/>`)}
+    <datalist id="bdAreaList">${[...new Set((DB.banners||[]).map(x=>x.area).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}"></option>`).join('')}</datalist>
     ${fld('New status',sel('bd_status',Object.keys(BANNER_STATUS).map(k=>BANNER_STATUS[k].label),st.label))}
     ${fld('Photos',`<div style="display:flex;gap:8px">
       <button type="button" class="btn ghost" id="bd_takePhotoBtn" style="flex:1">📷 Take photo</button>
@@ -25148,10 +25352,20 @@ function bindBannerDetailCtrls(b){
     const labelToKey={}; Object.keys(BANNER_STATUS).forEach(k=>labelToKey[BANNER_STATUS[k].label]=k);
     const status=labelToKey[val('bd_status')]||b.status;
     const note=val('bd_note').trim();
+    const area=val('bd_area').trim();
+    if(!area){ toast('Area is required'); return; }
     const btn=document.getElementById('bdSaveBtn'); btn.disabled=true; btn.textContent='Saving…';
     try{
+      // Area is a plain field on the banner itself, not part of the
+      // append-only status_log history (unlike status/photos/note) --
+      // fixed 2026-09-03: banners.area was already a real, required column
+      // but this "update a banner" flow had no way to ever change it after
+      // creation (openBannerModal is create-only). Saved separately via
+      // apiUpdateBanner, alongside (not instead of) the existing status-log
+      // write, since the two are independent concerns.
+      if(area!==(b.area||'')) await apiUpdateBanner(b.id,{area});
       await apiLogBannerStatusUpdate(b.id,{status,note,images});
-      b.status=status; if(images.length) b.image=images[0]; b.updatedAt=new Date().toISOString();
+      b.status=status; b.area=area; if(images.length) b.image=images[0]; b.updatedAt=new Date().toISOString();
       toast('Status update logged'); viewBannerDetail(b.id);
     }catch(e){ toast('Failed: '+(e.message||e)); btn.disabled=false; btn.textContent='Log update'; }
   };
@@ -25173,49 +25387,112 @@ async function loadBannerTimeline(b){
   const cnt=document.getElementById('bdHistCount'); if(cnt) cnt.textContent=log.length;
   wrap.innerHTML=log.length?log.map(bannerLogEntryHtml).join(''):emptyState(ic.grid,'No history yet','');
 }
+// Fixed 2026-09-03 -- new Map & Route capability, replacing the old
+// single-color/single-area-route version:
+// (1) a colour-mode toggle: "Status" (unchanged -- the original 4-status
+//     palette) vs "Area" (new -- every distinct area gets its own stable
+//     colour, so selecting one area shows just that colour, and "All
+//     areas" shows every area at once with a legend).
+// (2) an independent status-category filter (needs maintenance/scouted
+//     location/being replaced) that narrows the pin set AND drives its own
+//     route -- combinable with the area filter, not exclusive to it.
+// (3) routing generalized to any filtered set, not just "by area" --
+//     chunks into multiple Google Maps deep-links past the real 10-stop
+//     waypoint cap (Google's own URL limit) instead of silently dropping
+//     banners past #10 the way the old single-route version did.
+const BANNER_AREA_PALETTE=['#DC2626','#2563EB','#65A30D','#7C3AED','#EA580C','#0891B2','#DB2777','#CA8A04','#059669','#4F46E5','#9333EA','#0D9488'];
+// Real bug caught in testing: a hash-of-the-string approach (h%palette.length)
+// collided for real area names with only 3 real areas in play (two different
+// areas landed on the same colour), defeating the whole point of "unique
+// colour per area". Fixed to assign colours by each area's position in the
+// full, sorted, deduped area list instead -- guaranteed collision-free up to
+// BANNER_AREA_PALETTE.length distinct areas (12 today, comfortably above the
+// real current count of 7), and still fully deterministic/stable across
+// reloads since it's derived from DB.banners itself, not session state.
+function bannerAreaColor(area){
+  const areas=[...new Set(DB.banners.map(b=>b.area).filter(Boolean))].sort();
+  const idx=areas.indexOf(area);
+  return BANNER_AREA_PALETTE[(idx<0?0:idx)%BANNER_AREA_PALETTE.length];
+}
+let bnMapColorMode='status'; // 'status' | 'area'
+let bnMapStatusFilter=''; // '' (all) or a BANNER_STATUS key
+function bannerMapFilteredBanners(){
+  return DB.banners.filter(b=>b.lat!=null&&b.lng!=null)
+    .filter(b=>!bannerAreaFilter||bannerAreaFilter==='All areas'||b.area===bannerAreaFilter)
+    .filter(b=>!bnMapStatusFilter||b.status===bnMapStatusFilter);
+}
 function bannerMapHtml(){
   const withCoords=DB.banners.filter(b=>b.lat!=null&&b.lng!=null);
   const noCoords=DB.banners.length-withCoords.length;
+  const areas=[...new Set(DB.banners.map(b=>b.area).filter(Boolean))].sort();
+  const statusOpts=['All statuses',...Object.keys(BANNER_STATUS).filter(k=>k!=='placed').map(k=>BANNER_STATUS[k].label)];
   return `
   <div class="formwrap" style="margin-bottom:14px">
-  <div class="grid2">${fld('Find by name',sel('bnRoute_pick',['Select a banner…',...withCoords.map(b=>b.name+' — '+b.area)]))}${fld('Or by area',sel('bnRoute_area',['All areas',...[...new Set(DB.banners.map(b=>b.area).filter(Boolean))].sort()]))}</div>
+  <div class="grid2">${fld('Colour by',sel('bnRoute_colorMode',['Status','Area'],bnMapColorMode==='area'?'Area':'Status'))}${fld('Area',sel('bnRoute_area',['All areas',...areas],bannerAreaFilter||'All areas'))}</div>
+  <div class="grid2">${fld('Find by name',sel('bnRoute_pick',['Select a banner…',...withCoords.map(b=>b.name+' — '+b.area)]))}${fld('Status filter',sel('bnRoute_statusFilter',statusOpts))}</div>
   <div class="formactions"><button class="btn primary" id="bnGetDirections" style="width:100%">🧭 Get directions (opens Google Maps)</button></div>
-  <p class="mini" style="margin:8px 0 0">Picking a single banner routes straight there. Picking an area routes through every mapped banner in it, in order.</p>
+  <p class="mini" style="margin:8px 0 0">Picking a single banner routes straight there. Otherwise the route covers every mapped banner matching your Area + Status filter, in stops of up to 10 (Google Maps' own limit) -- more than 10 opens as multiple route links.</p>
+  <div id="bnRouteLinks" style="margin-top:8px"></div>
   </div>
   <div id="bnMapContainer" style="height:360px;border-radius:16px;overflow:hidden;border:1px solid var(--line)"></div>
+  <div id="bnMapLegend" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
   ${noCoords?`<p class="mini" style="margin-top:10px">${noCoords} ${noCoords===1?'entry has':'entries have'} no coordinates yet and won't show on the map.</p>`:''}`;
 }
+function bnBuildRouteLinks(banners){
+  const box=document.getElementById('bnRouteLinks'); if(!box) return;
+  if(!banners.length){ box.innerHTML=''; return; }
+  const chunks=[]; for(let i=0;i<banners.length;i+=10) chunks.push(banners.slice(i,i+10));
+  box.innerHTML=chunks.map((chunk,i)=>{
+    const destination=chunk[chunk.length-1];
+    const waypoints=chunk.slice(0,-1).map(b=>b.lat+','+b.lng).join('|');
+    let url='https://www.google.com/maps/dir/?api=1&destination='+destination.lat+','+destination.lng;
+    if(waypoints) url+='&waypoints='+encodeURIComponent(waypoints);
+    const label=chunks.length>1?`Stops ${i*10+1}-${i*10+chunk.length} →`:`Open route (${chunk.length} stop${chunk.length===1?'':'s'}) →`;
+    return `<a class="chip" href="${url}" target="_blank" rel="noopener" style="margin:0 6px 6px 0;display:inline-block">${esc(label)}</a>`;
+  }).join('');
+}
 function bindBannerMapCtrls(){
+  document.getElementById('bnRoute_colorMode').onchange=()=>{ bnMapColorMode=val('bnRoute_colorMode')==='Area'?'area':'status'; bindBannerMapCtrls(); };
+  document.getElementById('bnRoute_area').onchange=()=>{ bannerAreaFilter=val('bnRoute_area'); bindBannerMapCtrls(); };
+  document.getElementById('bnRoute_statusFilter').onchange=()=>{
+    const label=val('bnRoute_statusFilter');
+    bnMapStatusFilter=Object.keys(BANNER_STATUS).find(k=>BANNER_STATUS[k].label===label)||'';
+    bindBannerMapCtrls();
+  };
   document.getElementById('bnGetDirections').onclick=()=>{
-    const pickVal=val('bnRoute_pick'); const areaVal=val('bnRoute_area');
+    const pickVal=val('bnRoute_pick');
     if(pickVal&&pickVal!=='Select a banner…'){
       const b=DB.banners.find(x=>(x.name+' — '+x.area)===pickVal);
       if(!b||b.lat==null){ toast('That banner has no coordinates saved'); return; }
       window.open('https://www.google.com/maps/dir/?api=1&destination='+b.lat+','+b.lng,'_blank');
       return;
     }
-    const areaBanners=DB.banners.filter(b=>b.lat!=null&&b.lng!=null&&(areaVal==='All areas'||b.area===areaVal));
-    if(!areaBanners.length){ toast('No mapped banners in that area'); return; }
-    const stops=areaBanners.slice(0,10);
-    const destination=stops[stops.length-1];
-    const waypoints=stops.slice(0,-1).map(b=>b.lat+','+b.lng).join('|');
-    let url='https://www.google.com/maps/dir/?api=1&destination='+destination.lat+','+destination.lng;
-    if(waypoints) url+='&waypoints='+encodeURIComponent(waypoints);
-    window.open(url,'_blank');
+    const matched=bannerMapFilteredBanners();
+    if(!matched.length){ toast('No mapped banners match that filter'); return; }
+    bnBuildRouteLinks(matched);
   };
   ensureLeafletLoaded().then(()=>{
-    const withCoords=DB.banners.filter(b=>b.lat!=null&&b.lng!=null);
+    const shown=bannerMapFilteredBanners();
     const container=document.getElementById('bnMapContainer'); if(!container) return;
     if(bannerMapInstance){ bannerMapInstance.remove(); bannerMapInstance=null; }
-    const center=withCoords.length?[withCoords[0].lat,withCoords[0].lng]:[5.6037,-0.1870];
-    bannerMapInstance=L.map(container).setView(center,withCoords.length?12:11);
+    const center=shown.length?[shown[0].lat,shown[0].lng]:[5.6037,-0.1870];
+    bannerMapInstance=L.map(container).setView(center,shown.length?12:11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(bannerMapInstance);
-    withCoords.forEach(b=>{
+    shown.forEach(b=>{
+      const fillColor=bnMapColorMode==='area'?bannerAreaColor(b.area):(BANNER_STATUS[b.status]||BANNER_STATUS.placed).color;
       const st=BANNER_STATUS[b.status]||BANNER_STATUS.placed;
-      const marker=L.circleMarker([b.lat,b.lng],{radius:8,color:'#fff',weight:2,fillColor:st.color,fillOpacity:0.9}).addTo(bannerMapInstance);
+      const marker=L.circleMarker([b.lat,b.lng],{radius:8,color:'#fff',weight:2,fillColor,fillOpacity:0.9}).addTo(bannerMapInstance);
       marker.bindPopup('<b>'+esc(b.name)+'</b><br>'+esc(b.area)+'<br>'+esc(st.label)+'<br><a href="https://www.google.com/maps/dir/?api=1&destination='+b.lat+','+b.lng+'" target="_blank" rel="noopener">Directions →</a>');
     });
-    if(withCoords.length>1){ const bounds=L.latLngBounds(withCoords.map(b=>[b.lat,b.lng])); bannerMapInstance.fitBounds(bounds,{padding:[30,30]}); }
+    if(shown.length>1){ const bounds=L.latLngBounds(shown.map(b=>[b.lat,b.lng])); bannerMapInstance.fitBounds(bounds,{padding:[30,30]}); }
+    const legend=document.getElementById('bnMapLegend'); if(legend){
+      if(bnMapColorMode==='area'&&(!bannerAreaFilter||bannerAreaFilter==='All areas')){
+        const areasShown=[...new Set(shown.map(b=>b.area).filter(Boolean))].sort();
+        legend.innerHTML=areasShown.map(a=>`<span class="chip" style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:${bannerAreaColor(a)};display:inline-block"></span>${esc(a)}</span>`).join('');
+      } else if(bnMapColorMode==='status'){
+        legend.innerHTML=Object.keys(BANNER_STATUS).map(k=>`<span class="chip" style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:${BANNER_STATUS[k].color};display:inline-block"></span>${esc(BANNER_STATUS[k].label)}</span>`).join('');
+      } else legend.innerHTML='';
+    }
   }).catch(e=>toast(e.message||'Could not load the map'));
 }
 let BNRPT_PERIOD='all', BNRPT_FROM='', BNRPT_TO='', BNRPT_AREA='', BNRPT_STATUS='';
