@@ -312,6 +312,41 @@ specific property this fix is about — came back 0 added/0 updated/10
 unchanged, lead count and every name's row count unchanged. `tsc`/build/
 lint all clean.
 
+**Correction, same day:** this entire design was wrong — it loaded and
+populated `public/pipeline-template.xlsx` (the real uploaded reference
+workbook), exactly what the master spec's Section 5 explicitly forbids:
+*"Do not use the supplied reference workbook as the live interchange
+schema... its formulas, dashboards, manual conventions and inconsistent
+fields are not a safe synchronization protocol."* Caught by the user, not
+by re-reading the spec first — a real process failure worth naming
+plainly rather than glossing over. Rebuilt from scratch per spec 5.1/5.2:
+`pipelineCanonicalWorkbook.ts` generates the whole workbook in code (no
+file loaded) with the four named sheets (LEADS the only two-way one,
+PAYMENTS/ALLOCATIONS reference-only, INSTRUCTIONS) plus a hidden
+`_METADATA` sheet (export ID, exported_at/by, schema version, checksum);
+`pipelineImportLogic.ts`'s matching order flipped to Lead-ID-first per
+spec (previously name+contact-first with ID as fallback — backwards);
+added a genuine Needs Review bucket for ambiguous/unresolvable rows,
+duplicate-Lead-ID-in-file blocking, possibly-deleted detection with an
+explicit opt-in archive (never automatic), and field-level batch audit.
+Payments confirmed fully locked with the user directly (no
+correction/reversal path at all, overriding the spec's own suggestion of
+one) — verified live by deliberately sneaking an Amount Paid edit through
+an otherwise-valid row and confirming it was silently ignored. Two more
+real bugs caught live during this rebuild: `'company'` (Company Leads'
+real, non-staff `agent_key`) isn't returned by `staff.listAll()`, so
+every untouched Company Leads row was wrongly flagged Invalid on
+re-upload until added explicitly; and the row reader's original
+stop-after-5-blank-rows heuristic silently dropped any new row placed
+in the ~50-row range the dropdowns are deliberately extended into for
+exactly that purpose. Full re-verification (one file covering every
+path: normal update, payment-lock bypass attempt, Staff Key reassignment
+via `leads.assign()`, an invalid row, a duplicate ID, a deleted-then-
+archived row, a brand-new insert) matched expectations exactly; a second
+re-export/re-import round-trip came back fully idempotent (0 new/0
+updated). Deleted `pipeline-template.xlsx` and `pipelineTemplateExcel.ts`
+— nothing loads a template file anywhere in this app any more.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
