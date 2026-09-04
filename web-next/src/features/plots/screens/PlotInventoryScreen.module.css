@@ -12,7 +12,12 @@
 }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 980px; padding: 28px 32px 40px; }
+  /* No max-width here on purpose -- unlike a form/detail screen, a tile
+     board should use the full row width it's given (more tiles per row
+     on a wider window), not sit capped in a narrow column with empty
+     space beside it. That 980px cap (copy-pasted from a form-width
+     screen) was the real cause of the dead space on wide viewports. */
+  .wrap { padding: 28px 32px 40px; }
   .grid2 { max-width: 480px; }
   /* Same flex split-view fix as Pipeline/Client Database's own -- the
      list and the drawer are real flex siblings (.pageRowSplit, this
@@ -202,25 +207,22 @@
 
 .tileGroup { display: flex; gap: 4px; }
 
-/* Bigger, roomier card style (per real reference design) -- swapped from
-   the earlier compact 76px chip for legible plot number + price at a
-   glance without a hover/zoom. */
 .tile {
-  min-width: 128px;
-  flex: 0 0 auto;
-  min-height: 74px;
-  border-radius: 12px;
+  width: 76px;
+  min-height: 58px;
+  border-radius: 10px;
   border: 1.5px solid transparent;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 2px;
   cursor: pointer;
-  padding: 14px 16px;
+  padding: 4px;
   box-sizing: border-box;
 }
-.tileNumber { font-family: var(--font-mono); font-weight: 800; font-size: 15px; }
-.tilePrice { font-family: var(--font-mono); font-size: 12px; opacity: .85; }
+.tileNumber { font-family: var(--font-mono); font-weight: 800; font-size: 12px; }
+.tilePrice { font-family: var(--font-mono); font-size: 9.5px; opacity: .85; }
 
 .tile_Available { background: var(--c-success-bg); border-color: var(--c-success-soft); color: var(--c-success); }
 .tile_Available:hover { border-color: var(--c-success); }
