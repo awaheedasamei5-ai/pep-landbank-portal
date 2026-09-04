@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useLeads } from '../hooks/useLeads';
@@ -63,7 +63,19 @@ function exportLeadsCsv(leads: Lead[]) {
 // working Edit affordance + status badge on every row.
 export function PipelineListScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
+  // Real fix, caught live: the detail route is now nested under this
+  // one (see router.tsx's own comment) so the list stays mounted while
+  // the drawer is open -- necessary for the desktop split view to have
+  // an actual list behind it, not empty canvas. But on mobile the
+  // detail screen is meant to fully REPLACE the list (a distinct
+  // full-screen navigation), not stack below it -- this hides the
+  // list's own content below 1024px whenever a lead's own nested route
+  // is active, while it stays mounted (so scroll position/filters
+  // aren't lost) and fully visible again once desktop's own CSS takes
+  // over.
+  const hasDetailOpen = /^\/app\/sales\/pipeline\/[^/]+$/.test(location.pathname);
   const { data: leads, isLoading } = useLeads();
   const { data: siteVisits } = useSiteVisits();
   const { data: staff } = useStaffDirectory();
@@ -144,7 +156,8 @@ export function PipelineListScreen() {
   }
 
   return (
-    <div className={styles.wrap}>
+    <>
+    <div className={`${styles.wrap} ${hasDetailOpen ? styles.wrapHiddenMobile : ''}`}>
       <div className={styles.head}>
         <div>
           <h1 className={styles.title}>My pipeline</h1>
@@ -431,5 +444,13 @@ export function PipelineListScreen() {
         </button>
       )}
     </div>
+    {/* Nested route for a lead's own detail drawer -- see router.tsx's
+        own comment. Sibling of .wrap (not inside it) so it renders
+        regardless of hasDetailOpen's mobile-hide toggle above.
+        PipelineDetailScreen positions itself as a fixed panel (desktop)
+        or a plain full-page screen (mobile, via display:contents on its
+        own wrappers). */}
+    <Outlet />
+    </>
   );
 }

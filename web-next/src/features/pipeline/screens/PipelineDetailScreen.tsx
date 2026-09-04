@@ -108,14 +108,18 @@ export function PipelineDetailScreen() {
   // for lead inspection on desktop... Details: Side drawer" (vs. mobile's
   // own "Bottom sheet/full-screen"). Route/component are unchanged (no
   // renamed URLs, no restructured data fetching) -- only the desktop
-  // presentation differs: a fixed right-anchored panel over a dimmed
-  // backdrop that click-closes back to the list, instead of full-page
-  // navigation eating the whole canvas for what's meant to be a quick
-  // inspection. Below 1024px, drawerBackdrop/drawerPanel are inert wrappers
-  // (see their own CSS) -- this renders byte-for-byte the same as before.
+  // presentation differs: a fixed right-anchored panel, non-modal (see
+  // the CSS file's own comment for why there's no dimming backdrop) --
+  // the list stays visible and usable to its left, closed via the
+  // explicit button below rather than a click-outside backdrop. Below
+  // 1024px, drawerBackdrop/drawerPanel are inert wrappers (see their own
+  // CSS) -- this renders byte-for-byte the same as before.
   return (
-    <div className={styles.drawerBackdrop} onClick={() => navigate('/app/sales/pipeline')}>
-      <div className={styles.drawerPanel} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.drawerBackdrop}>
+      <div className={styles.drawerPanel}>
+        <button type="button" className={styles.closeDrawerBtn} onClick={() => navigate('/app/sales/pipeline')} aria-label="Close" title="Close">
+          ✕
+        </button>
         <div className={styles.wrap}>
           <div className={styles.head}>
         <div className={styles.avatar}>{initials}</div>

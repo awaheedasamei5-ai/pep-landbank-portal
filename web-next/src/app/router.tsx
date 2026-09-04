@@ -230,9 +230,21 @@ export const router = createBrowserRouter([
         path: 'sales',
         element: <SalesDeskScreen />,
       },
-      { path: 'sales/pipeline', element: <PipelineListScreen /> },
+      {
+        // Nested (not sibling, as :id used to be) so PipelineListScreen
+        // stays mounted -- via its own <Outlet/> -- while the detail
+        // drawer is open. Real fix, caught live: a sibling route means
+        // the router unmounts the list entirely when navigating to a
+        // lead, so the "non-modal split view" drawer had nothing real
+        // behind it, just empty canvas cosmetically dimmed/undimmed.
+        // 'new' stays a separate top-level route (unaffected -- React
+        // Router ranks the static 'new' segment above the dynamic :id
+        // regardless of nesting).
+        path: 'sales/pipeline',
+        element: <PipelineListScreen />,
+        children: [{ path: ':id', element: <PipelineDetailScreen /> }],
+      },
       { path: 'sales/pipeline/new', element: <AddLeadScreen /> },
-      { path: 'sales/pipeline/:id', element: <PipelineDetailScreen /> },
       { path: 'sales/plots', element: <PlotInventoryScreen /> },
       { path: 'sales/plots/reconciliation', element: <PlotReconciliationScreen /> },
       { path: 'sales/clients', element: <ClientDatabaseScreen /> },

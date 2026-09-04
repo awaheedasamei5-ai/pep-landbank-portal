@@ -1,5 +1,15 @@
 .wrap { padding: 20px 16px 90px; }
 
+/* Below 1024px, a lead's own detail route fully replaces the list (a
+   distinct full-screen navigation) rather than stacking below it --
+   stays mounted (state/scroll preserved), just hidden. At >=1024px the
+   split-view drawer wants the list visible beside it, so this reverts
+   to normal. */
+.wrapHiddenMobile { display: none; }
+@media (width >= 1024px) {
+  .wrapHiddenMobile { display: block; }
+}
+
 .head {
   display: flex;
   align-items: flex-start;

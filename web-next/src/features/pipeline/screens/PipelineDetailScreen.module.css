@@ -1,20 +1,23 @@
 /* Premium UI spec: "Details: Side drawer" on desktop, full page/bottom
    sheet on mobile. Inert below 1024px (display:contents drops both
    wrappers from the box model entirely, so mobile renders exactly the
-   plain full-page .wrap it always did -- no backdrop, no fixed
-   positioning, no click-to-close). */
+   plain full-page .wrap it always did).
+
+   Real correction, caught live by the user: the first version of this
+   used a dimming full-screen backdrop (a MODAL takeover) -- the list
+   behind it went dark and unusable, so the space beside the drawer read
+   as dead/wasted instead of useful. Fixed to a real non-modal split
+   view instead (the pattern Gmail's reading pane / Linear's issue list
+   +detail panel both use for "inspect while browsing"): no backdrop,
+   no dimming, no click-catcher at all -- the list stays fully visible
+   AND interactive to the left of the drawer, so a user can click
+   straight into a different lead without closing this one first. The
+   drawer closes via its own explicit button instead of click-outside,
+   since there's no longer an "outside" surface to catch that click. */
 .drawerBackdrop { display: contents; }
 .drawerPanel { display: contents; }
 
 @media (width >= 1024px) {
-  .drawerBackdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgb(20 22 43 / 45%);
-    z-index: 60;
-    animation: fadeIn 180ms var(--ease-out);
-  }
   .drawerPanel {
     display: block;
     position: fixed;
@@ -24,17 +27,42 @@
     width: 520px;
     max-width: 92vw;
     background: var(--c-paper);
-    box-shadow: -18px 0 44px rgb(20 22 50 / 22%);
+    border-left: 1px solid var(--c-line);
+    box-shadow: -18px 0 44px rgb(20 22 50 / 14%);
     overflow-y: auto;
+    z-index: 60;
     animation: slideIn 220ms var(--ease-out);
   }
 }
 
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideIn { from { transform: translateX(24px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawerBackdrop, .drawerPanel { animation: none; }
+  .drawerPanel { animation: none; }
+}
+
+.closeDrawerBtn {
+  display: none;
+}
+
+@media (width >= 1024px) {
+  .closeDrawerBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--c-line);
+    background: var(--c-card);
+    color: var(--c-muted);
+    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    right: 16px;
+    font-size: 15px;
+  }
+  .closeDrawerBtn:hover { color: var(--c-danger); border-color: var(--c-danger); }
 }
 
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
