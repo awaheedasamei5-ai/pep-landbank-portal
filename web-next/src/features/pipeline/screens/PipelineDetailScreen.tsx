@@ -104,9 +104,20 @@ export function PipelineDetailScreen() {
     { label: 'Full balance', value: balance },
   ].filter((q) => q.value > 0);
 
+  // Premium UI Rebuild spec, Section 6.C/13: "Use a drawer/detail panel
+  // for lead inspection on desktop... Details: Side drawer" (vs. mobile's
+  // own "Bottom sheet/full-screen"). Route/component are unchanged (no
+  // renamed URLs, no restructured data fetching) -- only the desktop
+  // presentation differs: a fixed right-anchored panel over a dimmed
+  // backdrop that click-closes back to the list, instead of full-page
+  // navigation eating the whole canvas for what's meant to be a quick
+  // inspection. Below 1024px, drawerBackdrop/drawerPanel are inert wrappers
+  // (see their own CSS) -- this renders byte-for-byte the same as before.
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
+    <div className={styles.drawerBackdrop} onClick={() => navigate('/app/sales/pipeline')}>
+      <div className={styles.drawerPanel} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.wrap}>
+          <div className={styles.head}>
         <div className={styles.avatar}>{initials}</div>
         <div>
           <div className={styles.eyebrow}>Updating</div>
@@ -217,9 +228,11 @@ export function PipelineDetailScreen() {
       <DocumentationSection lead={lead} />
       <DangerZoneSection lead={lead} onDeleted={() => navigate('/app/sales/pipeline')} />
 
-      <button type="button" className={styles.backBtn} onClick={() => navigate('/app/sales/pipeline')}>
-        ← Back
-      </button>
+          <button type="button" className={styles.backBtn} onClick={() => navigate('/app/sales/pipeline')}>
+            ← Back
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

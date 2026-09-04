@@ -1,3 +1,42 @@
+/* Premium UI spec: "Details: Side drawer" on desktop, full page/bottom
+   sheet on mobile. Inert below 1024px (display:contents drops both
+   wrappers from the box model entirely, so mobile renders exactly the
+   plain full-page .wrap it always did -- no backdrop, no fixed
+   positioning, no click-to-close). */
+.drawerBackdrop { display: contents; }
+.drawerPanel { display: contents; }
+
+@media (width >= 1024px) {
+  .drawerBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgb(20 22 43 / 45%);
+    z-index: 60;
+    animation: fadeIn 180ms var(--ease-out);
+  }
+  .drawerPanel {
+    display: block;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 520px;
+    max-width: 92vw;
+    background: var(--c-paper);
+    box-shadow: -18px 0 44px rgb(20 22 50 / 22%);
+    overflow-y: auto;
+    animation: slideIn 220ms var(--ease-out);
+  }
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerBackdrop, .drawerPanel { animation: none; }
+}
+
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
 .head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 
