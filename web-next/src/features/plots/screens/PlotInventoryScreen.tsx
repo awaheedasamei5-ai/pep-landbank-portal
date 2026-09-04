@@ -169,6 +169,18 @@ export function PlotInventoryScreen() {
               {s}
             </span>
           ))}
+          {/* The two Allocated color variants aren't their own status (the
+              real plots.status column has no such value), so they don't
+              belong in PLOT_STATUSES/DOT_CLASS -- called out here instead
+              so the tile colors aren't left unexplained. */}
+          <span className={styles.legendItem}>
+            <span className={`${styles.legendDot} ${styles.dotAllocatedSplit}`} />
+            Allocated · split
+          </span>
+          <span className={styles.legendItem}>
+            <span className={`${styles.legendDot} ${styles.dotAllocatedPartial}`} />
+            Allocated · partial
+          </span>
         </div>
 
         <div className={styles.searchRow}>
@@ -440,12 +452,27 @@ function tileFractionLabel(p: Plot): string | null {
   return p.plotType === 'Half Plot' ? '½' : null;
 }
 
-function PlotTile({ p, navigate }: { p: Plot; navigate: ReturnType<typeof useNavigate> }) {
+// Allocated tiles otherwise all render in the same flat ink color
+// regardless of type -- a Full Plot sale looks identical to a real
+// half-of-a-split sale or a partial-fraction sale. Two extra blue
+// variants (kept in the same family, distinct from each other) mark
+// "this one's allocated but it's part of a split" vs "this one's
+// allocated but it's a partial fraction," on top of the corner fraction
+// badge and the split pairs' own tileGroup pairing.
+function tileVisualStatus(p: Plot, inSplit: boolean): string {
+  if (p.status === 'Allocated') {
+    if (inSplit) return 'AllocatedSplit';
+    if (p.plotType === 'Partial Plot') return 'AllocatedPartial';
+  }
+  return p.status.replace(/\s/g, '');
+}
+
+function PlotTile({ p, navigate, inSplit = false }: { p: Plot; navigate: ReturnType<typeof useNavigate>; inSplit?: boolean }) {
   const fraction = tileFractionLabel(p);
   return (
     <button
       type="button"
-      className={`${styles.tile} ${styles[`tile_${p.status.replace(/\s/g, '')}`]}`}
+      className={`${styles.tile} ${styles[`tile_${tileVisualStatus(p, inSplit)}`]}`}
       onClick={() => navigate(`/app/sales/plots/${p.id}`)}
       title={`${p.plotNumber} · ${p.plotType} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}`}
     >
@@ -487,7 +514,7 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
                     {entry.units.map((unit) => (
                       <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
                         {unit.tiles.map((p) => (
-                          <PlotTile key={p.id} p={p} navigate={navigate} />
+                          <PlotTile key={p.id} p={p} navigate={navigate} inSplit={unit.tiles.length > 1} />
                         ))}
                       </div>
                     ))}
@@ -501,7 +528,7 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
                   <div className={styles.tilesBox}>
                     <div className={entry.units[0].tiles.length > 1 ? styles.tileGroup : undefined}>
                       {entry.units[0].tiles.map((p) => (
-                        <PlotTile key={p.id} p={p} navigate={navigate} />
+                        <PlotTile key={p.id} p={p} navigate={navigate} inSplit={entry.units[0].tiles.length > 1} />
                       ))}
                     </div>
                   </div>
