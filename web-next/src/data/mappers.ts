@@ -62,18 +62,23 @@ export function mapPaymentRow(r: Record<string, unknown>): Payment {
   };
 }
 
-const DB_TO_DOMAIN_STATUS: Record<string, ScheduleItemStatus> = { open: 'open', done: 'closed', cancelled: 'cancelled', rescheduled: 'rescheduled' };
-const DOMAIN_TO_DB_STATUS: Record<ScheduleItemStatus, string> = { open: 'open', closed: 'done', cancelled: 'cancelled', rescheduled: 'rescheduled' };
+const DB_TO_DOMAIN_STATUS: Record<string, ScheduleItemStatus> = { open: 'open', in_progress: 'in_progress', done: 'closed', cancelled: 'cancelled', rescheduled: 'rescheduled' };
+const DOMAIN_TO_DB_STATUS: Record<ScheduleItemStatus, string> = { open: 'open', in_progress: 'in_progress', closed: 'done', cancelled: 'cancelled', rescheduled: 'rescheduled' };
 
 export function mapScheduleItemRow(r: Record<string, unknown>): ScheduleItem {
   return {
     id: r.id as string,
     kind: r.kind as ScheduleItem['kind'],
     ownerKey: r.owner_key as string,
+    ownerName: (r.owner_name as string) ?? undefined,
     assignedTo: (r.assigned_to as string) ?? (r.owner_key as string),
+    assignedToName: (r.assigned_to_name as string) ?? undefined,
     date: (r.item_date as string) ?? (r.due_date as string),
     status: DB_TO_DOMAIN_STATUS[r.status as string] ?? 'open',
     title: r.title as string,
+    description: (r.description as string) ?? null,
+    category: (r.category as string) ?? null,
+    priority: (r.priority as string) ?? null,
   };
 }
 

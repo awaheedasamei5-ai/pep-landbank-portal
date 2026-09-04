@@ -208,16 +208,44 @@ export interface PaymentDecisionResult {
   newBalance: number;
 }
 
-export type ScheduleItemStatus = 'open' | 'closed' | 'cancelled' | 'rescheduled';
+// Real DB check constraint (schedule_items_status_check, confirmed live):
+// open/in_progress/done/cancelled/rescheduled. 'closed' here is this app's
+// own domain name for DB 'done' (see mapScheduleItemRow's translation
+// table) -- kept as-is rather than renamed, so every existing My Day call
+// site touching a todo's status is untouched. 'in_progress' is new --
+// previously collapsed into 'open' by the mapper (never distinguished
+// anywhere in web-next, since only My Day's todos existed before Task
+// Board), so an in-progress task would have shown as not-yet-started.
+export type ScheduleItemStatus = 'open' | 'in_progress' | 'closed' | 'cancelled' | 'rescheduled';
 
+// Extended for Task Board (Master Spec Section 10.2's task model, scoped
+// down -- see TaskBoardScreen's own comment for what's deliberately not
+// built yet: dependencies, recurrence UI, meetings, linked lead/site
+// visit). Every field below already exists as a real column on
+// schedule_items; My Day's plain todo rows just never needed them.
 export interface ScheduleItem {
   id: string;
   kind: 'todo' | 'task';
   ownerKey: string;
+  ownerName?: string;
   assignedTo: string;
+  assignedToName?: string;
   date: string;
   status: ScheduleItemStatus;
   title: string;
+  description?: string | null;
+  category?: string | null;
+  priority?: string | null;
+}
+
+export interface NewTask {
+  title: string;
+  description?: string;
+  category?: string;
+  priority?: string;
+  assignedTo: string;
+  assignedToName: string;
+  dueDate?: string;
 }
 
 export interface StreakRow {

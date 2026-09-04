@@ -98,6 +98,12 @@ export function seedDemo(): DemoDb {
   const scheduleItems: DemoDb['scheduleItems'] = [
     { id: uid(), kind: 'todo', ownerKey: AGENT_KEY, assignedTo: AGENT_KEY, date: t, status: 'closed', title: 'Follow up with Mercy on balance' },
     { id: uid(), kind: 'todo', ownerKey: AGENT_KEY, assignedTo: AGENT_KEY, date: t, status: 'open', title: 'Call Abena about site visit' },
+    // Task Board seed -- kind='task', deliberately distinct from the todos
+    // above (see TaskBoardScreen's own comment on why the two never mix).
+    // One of each real column so the board isn't empty on first load.
+    { id: uid(), kind: 'task', ownerKey: 'manager', ownerName: 'Management', assignedTo: AGENT_KEY, assignedToName: 'Elias Torgbuivi', date: isoPlusDays(t, 3), status: 'open', title: 'Prepare Q3 site visit summary', description: 'Pull last quarter\'s SVE feedback into one page for the Monday review.', category: 'Documentation', priority: 'Medium' },
+    { id: uid(), kind: 'task', ownerKey: AGENT_KEY, ownerName: 'Elias Torgbuivi', assignedTo: AGENT_KEY, assignedToName: 'Elias Torgbuivi', date: isoPlusDays(t, 1), status: 'in_progress', title: 'Chase Abena Boateng balance', category: 'Follow-up', priority: 'High' },
+    { id: uid(), kind: 'task', ownerKey: 'manager', ownerName: 'Management', assignedTo: 'emmanuel', assignedToName: 'Emmanuel Owusu', date: isoPlusDays(t, -2), status: 'closed', title: 'Submit signed contract for Yaw Sarpong', category: 'Admin', priority: 'Medium' },
   ];
 
   // Last 6 days met (today intentionally left out of history -- the app

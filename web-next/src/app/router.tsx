@@ -10,6 +10,7 @@ import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
 import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetailScreen';
 import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
+import { TaskBoardScreen } from '../features/ops-tracker/screens/TaskBoardScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
 import { ClientDatabaseScreen } from '../features/clients/screens/ClientDatabaseScreen';
 import { SiteVisitsScreen } from '../features/site-visits/screens/SiteVisitsScreen';
@@ -237,6 +238,7 @@ export const router = createBrowserRouter([
       { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },
       { path: 'office/myday', element: <MyDayScreen /> },
+      { path: 'office/tasks', element: <TaskBoardScreen /> },
       { path: 'office/attendance', element: <AttendanceScreen /> },
       { path: 'office/memos', element: <MemosScreen /> },
       { path: 'office/memos/new', element: <ComposeMemoScreen /> },

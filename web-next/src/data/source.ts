@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -235,6 +235,20 @@ export interface DataSource {
     // (not owner_key), so this needs no read-side change at all.
     create(agentKey: string, date: string, title: string, assignedTo?: string): Promise<ScheduleItem>;
     updateStatus(id: string, status: ScheduleItemStatus): Promise<ScheduleItem>;
+    // Task Board (kind='task', distinct from My Day's kind='todo' rows
+    // above -- same table, always filtered apart). listAllTasks() is
+    // manager-only (gated client-side, matching every other company-wide
+    // list in this DataSource); listTasksForAgent() is what a staff
+    // member's own board shows, same shape either way.
+    listTasksForAgent(agentKey: string): Promise<ScheduleItem[]>;
+    listAllTasks(): Promise<ScheduleItem[]>;
+    createTask(ownerKey: string, ownerName: string, input: NewTask): Promise<ScheduleItem>;
+    // Real reassignment (owner_key never changes -- matches create()'s own
+    // owner/assignee split above); byKey/byName are stamped as
+    // assigned_by/assigned_by_name so a reassign is attributable, per the
+    // master spec's "records who reassigned and why" -- the "why" itself
+    // isn't collected yet (no reason field wired into this pass).
+    reassignTask(id: string, toKey: string, toName: string, byKey: string, byName: string): Promise<ScheduleItem>;
   };
   streaks: {
     history(staffKey: string, days: number): Promise<StreakRow[]>;
@@ -879,7 +893,12 @@ function createDemoDataSource(): DataSource {
     },
     scheduleItems: {
       async listForAgentOnDate(agentKey, date) {
-        return demoLoad().scheduleItems.filter((s) => s.assignedTo === agentKey && s.date === date);
+        // kind==='todo' filter added alongside Task Board -- previously
+        // harmless (no kind='task' demo rows existed yet), but with real
+        // task rows now seedable this would otherwise leak tasks into My
+        // Day's todo list, unlike live mode's query which always filtered
+        // by kind already.
+        return demoLoad().scheduleItems.filter((s) => s.kind === 'todo' && s.assignedTo === agentKey && s.date === date);
       },
       async create(agentKey, date, title, assignedTo) {
         const item: ScheduleItem = {
@@ -901,6 +920,42 @@ function createDemoDataSource(): DataSource {
         const item = db.scheduleItems.find((s) => s.id === id);
         if (!item) throw new Error('Schedule item not found');
         item.status = status;
+        demoSave();
+        return item;
+      },
+      async listTasksForAgent(agentKey) {
+        return demoLoad()
+          .scheduleItems.filter((s) => s.kind === 'task' && s.assignedTo === agentKey);
+      },
+      async listAllTasks() {
+        return demoLoad().scheduleItems.filter((s) => s.kind === 'task');
+      },
+      async createTask(ownerKey, ownerName, input) {
+        const item: ScheduleItem = {
+          id: Math.random().toString(36).slice(2, 10),
+          kind: 'task',
+          ownerKey,
+          ownerName,
+          assignedTo: input.assignedTo,
+          assignedToName: input.assignedToName,
+          date: input.dueDate ?? new Date().toISOString().slice(0, 10),
+          status: 'open',
+          title: input.title,
+          description: input.description ?? null,
+          category: input.category ?? null,
+          priority: input.priority ?? null,
+        };
+        const db = demoLoad();
+        db.scheduleItems.push(item);
+        demoSave();
+        return item;
+      },
+      async reassignTask(id, toKey, toName) {
+        const db = demoLoad();
+        const item = db.scheduleItems.find((s) => s.id === id);
+        if (!item) throw new Error('Task not found');
+        item.assignedTo = toKey;
+        item.assignedToName = toName;
         demoSave();
         return item;
       },
@@ -2298,6 +2353,49 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient()
           .from('schedule_items')
           .update({ status: domainStatusToDb(status) })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapScheduleItemRow(data);
+      },
+      async listTasksForAgent(agentKey) {
+        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'task').eq('assigned_to', agentKey).order('due_date', { ascending: true, nullsFirst: false });
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemRow);
+      },
+      async listAllTasks() {
+        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'task').order('due_date', { ascending: true, nullsFirst: false });
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemRow);
+      },
+      async createTask(ownerKey, ownerName, input) {
+        const { data, error } = await requireClient()
+          .from('schedule_items')
+          .insert({
+            kind: 'task',
+            owner_key: ownerKey,
+            owner_name: ownerName,
+            assigned_to: input.assignedTo,
+            assigned_to_name: input.assignedToName,
+            assigned_by: ownerKey,
+            assigned_by_name: ownerName,
+            title: input.title,
+            description: input.description ?? null,
+            category: input.category ?? null,
+            priority: input.priority ?? null,
+            due_date: input.dueDate ?? null,
+            status: 'open',
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapScheduleItemRow(data);
+      },
+      async reassignTask(id, toKey, toName, byKey, byName) {
+        const { data, error } = await requireClient()
+          .from('schedule_items')
+          .update({ assigned_to: toKey, assigned_to_name: toName, assigned_by: byKey, assigned_by_name: byName })
           .eq('id', id)
           .select()
           .single();

@@ -16,7 +16,8 @@ export function OfficeDeskScreen() {
   const canViewStaffReport = useCanViewStaffReport();
 
   const items: TileItem[] = [
-    { key: 'duties', label: 'Operations Tracker', sub: "Your tasks, and today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
+    { key: 'duties', label: 'My Day', sub: "Today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
+    { key: 'taskboard', label: 'Task Board', sub: 'Assign & track ongoing work, kanban-style', color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/tasks') },
     { key: 'memo', label: 'Memorandum', sub: 'Internal correspondence', color: 'teal', icon: 'note', onOpen: () => navigate('/app/office/memos') },
     { key: 'attendance', label: 'Attendance', sub: 'Sign in & out for the day', color: 'blue', icon: 'check', onOpen: () => navigate('/app/office/attendance') },
     ...(canLogPayments
