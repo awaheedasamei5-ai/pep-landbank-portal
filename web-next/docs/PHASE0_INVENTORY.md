@@ -391,6 +391,49 @@ page reload silently wiped and reseeded all demo data. Fixed by having
 Verified by injecting a fake failure scenario and confirming it survived
 a real reload (proving the fix, not just the absence of the old symptom).
 
+## 15. Error contract — DONE (Master Rebuild Spec Section 3.4)
+
+"No raw Postgres/Supabase error may be shown to staff. Translate known
+errors into plain English." Untouched in `web-next` until now (legacy
+`index.html` got its own equivalent sweep earlier this session).
+
+`shared/lib/friendlyError.ts` — same real-error categories as legacy's
+`friendlyErr()` (RLS violation, unique/foreign-key/not-null constraint,
+expired session, network failure, timeout), adapted for Supabase-js's
+actual `PostgrestError` shape (`.code`, not just a bare string). Swept
+every `e instanceof Error ? e.message : 'fallback'` catch-block pattern
+found across the app — 9 screens, 15 call sites (`AllocationRequestsScreen`,
+`BannerTrackingScreen`, `ExpensesScreen`, `PipelineImportCard`,
+`usePipelineImport.ts`, `PipelineDetailScreen`, `PlotInventoryScreen`,
+`SveFeedbackScreen`, `ReferralsScreen`, `SiteVisitAuthScreen`) — plus the
+one remaining `mutation.error instanceof Error ? ... : ...` render
+pattern, to go through it instead.
+
+**Real regression caught and fixed, same class as legacy's own sweep hit
+first:** several call sites in the pipeline-import flow already throw
+hand-written, already-clean messages (e.g. "This file was exported from
+an older/newer version of the workbook... please re-export a fresh
+copy."). An outer `friendlyError()` call doesn't recognize hand-written
+text as a known raw-error shape, so without a fix it would silently
+replace those messages with the generic fallback — a real loss of
+useful, specific text. Added `friendlyErrorObj()` (marks an `Error` as
+pre-approved for display) and converted `usePipelineImport.ts`'s 5 real
+`throw new Error(...)` sites to it, matching legacy's `throwFriendly()`
+fix exactly.
+
+Checked, not assumed, that the hooks feeding the 9 fixed screens don't
+carry the same regression risk — confirmed clean for all of them; the
+one hand-crafted throw found nearby (`useReceipt.ts`'s "Config not
+loaded yet") doesn't flow through any of the new `friendlyError()` calls
+at all (that call site has no try/catch yet at all — a separate,
+pre-existing gap, left alone rather than expanding scope).
+
+Verified live: `friendlyError()` unit-checked directly for every
+category plus the friendly-marker passthrough; then a real UI trigger
+(uploaded an `.xlsx` with no LEADS sheet to Reports' pipeline import)
+confirmed the exact hand-written message renders unmangled end-to-end,
+not just in isolation. `tsc`/build/lint all clean.
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -405,4 +448,7 @@ a real reload (proving the fix, not just the absence of the old symptom).
 10. ~~Leave non-overlap rule~~ — done (§12): adjacent-day blocking removed, pure overlap only.
 11. ~~Excel import creates duplicates instead of reconciling~~ — done (§13): built the import feature `web-next` never had, ported legacy's already-correct reconciliation logic rather than reintroducing the bug naively.
 12. ~~Scheduled-job observability~~ — mostly done (§14): Scheduled Jobs panel + last-report row built and wired to real data. `send-todo-alarms`'s crash-logging fix is written but not yet deployed to production (held pending a separate approved turn).
-13. Next: deploy the `send-todo-alarms` observability fix to production when approved. Also still open: a manual "run now" action for a failing job, idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
+13. ~~Error-contract standardization~~ — done (§15): `friendlyError()` swept across every raw-error-display site found (9 screens, 15 call sites, plus one mutation-render pattern); a real regression (hand-written messages getting mangled by the new sweep) caught and fixed the same way legacy's own sweep fixed it.
+14. Next: a manual "run now" action for a failing scheduled job, idempotent-RPC review (spec 3.1's "all destructive/financial/permission changes are idempotent" — not yet audited in `web-next`), planning the actual production cutover of the permission model (staging-only today, by design), live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here), and deploying the `send-todo-alarms` observability fix to production whenever approved.
+
+**Standing rule, stated explicitly by the user 2026-09-04:** nothing on `rebuild` merges into `main`/production until asked, separate from and narrower than the general "continue with V2" autonomy grant — applies to the `send-todo-alarms` deploy above too.
