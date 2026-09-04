@@ -351,6 +351,22 @@ export interface Config {
   // caller to pass explicitly (the RPC takes points as a free parameter,
   // not a lookup, so a manager can still override it per referral).
   referralPointsPerReferral: number;
+  // Real columns office_lat/office_lng/office_radius_meters/
+  // attendance_cutoff_time/work_start_time (confirmed live on both
+  // projects, real values e.g. 5.602694/-0.064479/297m/09:00) --
+  // work_end_time was already mapped above as workEndTime, these are new.
+  // Never mapped anywhere before this -- AttendanceScreen's late/off-site
+  // used to be pure self-report (a checkbox nobody was required to check)
+  // even though the real geofence/cutoff config to compute both for real
+  // has existed the whole time. officeLat/officeLng are null when the
+  // office location has never been set (fresh installs) -- AttendanceScreen
+  // must fall back to self-report only in that case, never treat a
+  // missing config as "0,0 is the office."
+  officeLat: number | null;
+  officeLng: number | null;
+  officeRadiusMeters: number;
+  attendanceCutoffTime: string;
+  workStartTime: string;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
@@ -630,11 +646,14 @@ export interface NewEnquiry {
 // the app itself must check "does today's row already exist" before
 // inserting, and "is sign_out_at already set" before updating, since the
 // unique index would otherwise surface as a raw constraint-violation error.
-// There's also no shift-start-time or office-geofence-radius config
-// anywhere in the schema -- late/off-site are real columns but nothing
-// computes them automatically, so they're self-reported (a checkbox +
-// reason), not derived from geolocation math that isn't backed by any
-// real reference point.
+// Corrected 2026-09-04: office_lat/office_lng/office_radius_meters/
+// attendance_cutoff_time DO exist on app_config (confirmed live) -- an
+// earlier pass here wrongly assumed they didn't and left late/off-site
+// pure self-report. AttendanceScreen now computes both for real (Config's
+// geofence + cutoff-time, via shared/lib/geolocation.ts's haversineMeters)
+// and forces a reason when either is genuinely true, matching
+// index.html's own checkOffSite()/late-cutoff logic; these columns still
+// just store whatever was determined, self-reported or computed.
 export interface AttendanceRecord {
   id: string;
   staffKey: string;
@@ -663,6 +682,10 @@ export interface SignInInput {
   reason?: string;
   late?: boolean;
   lateReason?: string;
+  // Real column sign_in_photo (confirmed live) -- a resized JPEG data URI,
+  // matching index.html's captureSelfie()/resizeImageToB64 pattern. Never
+  // populated before this -- the column existed, nothing wrote to it.
+  photo?: string;
 }
 
 export interface SignOutInput {

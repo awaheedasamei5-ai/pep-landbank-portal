@@ -88,6 +88,24 @@
 }
 .hint { font-size: 11px; color: var(--c-muted); margin-top: 6px; }
 
+.selfiePreview {
+  width: 88px;
+  height: 88px;
+  border-radius: 14px;
+  object-fit: cover;
+  margin: 8px 0;
+  display: block;
+  border: 1px solid var(--c-line);
+}
+
+.historyPhoto {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  object-fit: cover;
+}
+
 .confirmBtn {
   width: 100%;
   padding: 13px;

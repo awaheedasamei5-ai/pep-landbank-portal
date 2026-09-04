@@ -564,9 +564,10 @@ export interface DataSource {
   // rows), one row per (staff_key, work_date) enforced by a real unique
   // index. No RPC exists -- signIn/signOut here do the "does today's row
   // exist" / "is sign_out_at already set" checks the app itself must make
-  // instead of relying on a server-side function. See AttendanceRecord's
-  // comment in types/domain.ts for why late/off-site are self-reported
-  // rather than computed.
+  // instead of relying on a server-side function. Late/off-site ARE now
+  // computed client-side (AttendanceScreen, using Config's office geofence
+  // + cutoff-time columns) rather than pure self-report -- this layer just
+  // persists whatever the caller determined, same as before.
   attendance: {
     today(staffKey: string): Promise<AttendanceRecord | null>;
     history(staffKey: string, days: number): Promise<AttendanceRecord[]>;
@@ -1811,7 +1812,7 @@ function createDemoDataSource(): DataSource {
           signOutReason: null,
           isOffSiteIn: input.offSite ?? false,
           isOffSiteOut: null,
-          signInPhoto: null,
+          signInPhoto: input.photo ?? null,
         };
         db.attendance.push(record);
         demoSave();
@@ -3168,6 +3169,7 @@ function createLiveDataSource(): DataSource {
             is_off_site_in: input.offSite ?? false,
             sign_in_reason: input.offSite ? (input.reason ?? null) : null,
             late_reason: input.late ? (input.lateReason ?? null) : null,
+            sign_in_photo: input.photo ?? null,
           })
           .select()
           .single();

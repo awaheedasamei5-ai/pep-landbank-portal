@@ -168,6 +168,12 @@ export function seedDemo(): DemoDb {
     workDays: [1, 2, 3, 4, 5],
     eidObservingStaff: ['adams'],
     referralPointsPerReferral: 50,
+    // Real production values (confirmed live) -- see Config's own comment.
+    officeLat: 5.602694,
+    officeLng: -0.064479,
+    officeRadiusMeters: 297,
+    attendanceCutoffTime: '09:00',
+    workStartTime: '08:00',
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS

@@ -507,6 +507,11 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     workDays: (r.work_days as number[]) ?? [1, 2, 3, 4, 5],
     eidObservingStaff: (r.eid_observing_staff as string[]) ?? [],
     referralPointsPerReferral: Number(r.referral_points_per_referral ?? 50),
+    officeLat: r.office_lat != null ? Number(r.office_lat) : null,
+    officeLng: r.office_lng != null ? Number(r.office_lng) : null,
+    officeRadiusMeters: Number(r.office_radius_meters ?? 250),
+    attendanceCutoffTime: (r.attendance_cutoff_time as string) ?? '09:00',
+    workStartTime: (r.work_start_time as string) ?? '08:00',
   };
 }
 
