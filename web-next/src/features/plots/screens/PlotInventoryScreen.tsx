@@ -39,13 +39,16 @@ const DOT_CLASS: Record<PlotStatus, string> = {
 };
 const DEFAULT_SITE = 'Royal Palm Enclave, Tsopoli';
 
+const PLOT_CLASSIFICATIONS: PlotClassification[] = ['Full Plot', 'Half Plot', 'Partial Plot'];
+
 interface Filters {
   status: PlotStatus | '';
   section: string;
+  plotType: PlotClassification | '';
   priceMin: string;
   priceMax: string;
 }
-const EMPTY_FILTERS: Filters = { status: '', section: '', priceMin: '', priceMax: '' };
+const EMPTY_FILTERS: Filters = { status: '', section: '', plotType: '', priceMin: '', priceMax: '' };
 
 // Real write capability (plots_ins/plots_upd/plots_del RLS, manager/elias/
 // emmanuel only, confirmed live) plus the real split_plot_for_half_sale RPC.
@@ -106,6 +109,7 @@ export function PlotInventoryScreen() {
     if (q && !p.plotNumber.toLowerCase().includes(q) && !(p.clientName ?? '').toLowerCase().includes(q)) return false;
     if (filters.status && p.status !== filters.status) return false;
     if (filters.section && p.section !== filters.section) return false;
+    if (filters.plotType && p.plotType !== filters.plotType) return false;
     if (filters.priceMin && (p.price ?? 0) < Number(filters.priceMin)) return false;
     if (filters.priceMax && (p.price ?? 0) > Number(filters.priceMax)) return false;
     return true;
@@ -200,6 +204,17 @@ export function PlotInventoryScreen() {
                   {sections.map((s) => (
                     <option key={s} value={s}>
                       {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span>Plot type</span>
+                <select value={filters.plotType} onChange={(e) => setFilters((f) => ({ ...f, plotType: e.target.value as PlotClassification | '' }))}>
+                  <option value="">Any</option>
+                  {PLOT_CLASSIFICATIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
                     </option>
                   ))}
                 </select>
