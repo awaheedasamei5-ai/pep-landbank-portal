@@ -1,0 +1,14 @@
+{
+  "name": "Palmstead",
+  "short_name": "Palmstead",
+  "description": "PEP Landbank -- pipeline, payments, allocation and operations, in one app.",
+  "start_url": "/app/home",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F7F7FC",
+  "theme_color": "#1E1B4B",
+  "icons": [
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

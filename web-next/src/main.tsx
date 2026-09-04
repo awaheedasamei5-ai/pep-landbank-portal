@@ -5,8 +5,10 @@ import './shared/styles/tokens.css';
 import { AppProviders } from './app/providers';
 import { router } from './app/router';
 import { initErrorReporting } from './shared/lib/errorReporting';
+import { registerServiceWorker } from './shared/lib/serviceWorker';
 
 initErrorReporting();
+registerServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

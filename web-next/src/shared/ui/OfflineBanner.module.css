@@ -1,0 +1,22 @@
+.banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.offline {
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+}
+
+.syncing {
+  background: var(--c-accent-bg);
+  color: var(--c-accent);
+}

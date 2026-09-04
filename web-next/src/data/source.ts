@@ -457,6 +457,15 @@ export interface DataSource {
     list(filter?: { category?: string; criticalOnly?: boolean }): Promise<AuditEvent[]>;
     log(eventType: string, severity: AuditEvent['severity'], summary: string, detail?: Record<string, unknown> | null, entityType?: string | null, entityId?: string | null): Promise<void>;
   };
+  // Real table `push_subscriptions` (confirmed live on both projects with
+  // full RLS -- ps_ins_staff/ps_upd_staff gated on owner_kind='staff' AND
+  // owner_id=my_key()). save() upserts on endpoint, matching
+  // apiSaveWebPushSubscription (index.html:5785-5800) exactly -- a
+  // resubscribe (same device, new push service registration) must
+  // replace the old row rather than duplicate it.
+  pushSubscriptions: {
+    save(ownerKind: 'staff' | 'client', ownerId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
+  };
   // Real RPCs `create_backup`/`restore_backup` + table `backups`
   // (confirmed live on both projects -- production runs these on a
   // 6am/2pm/10pm cron plus a manual trigger, 30 real backups on file).
@@ -1422,6 +1431,14 @@ function createDemoDataSource(): DataSource {
         const rec: AuditEvent = { id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType, severity, actorKey: null, actorName: null, entityType: entityType ?? null, entityId: entityId ?? null, summary, detail: detail ?? null, source: 'client' };
         db.auditEvents = [rec, ...db.auditEvents];
         demoSave();
+      },
+    },
+    pushSubscriptions: {
+      async save() {
+        // Demo mode has no real push service to register with (and no
+        // server-side push_subscriptions table to write to) -- the
+        // subscribe flow itself already short-circuits before calling
+        // this in demo mode, this is just here to satisfy the interface.
       },
     },
     backups: {
@@ -2817,6 +2834,14 @@ function createLiveDataSource(): DataSource {
         // Auditing must never break the calling flow -- matches
         // logAudit()'s own try/catch in index.html.
         if (error) console.error('record_audit_event failed', error);
+      },
+    },
+    pushSubscriptions: {
+      async save(ownerKind, ownerId, sub) {
+        const { error } = await requireClient()
+          .from('push_subscriptions')
+          .upsert({ owner_kind: ownerKind, owner_id: ownerId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth }, { onConflict: 'endpoint' });
+        if (error) throw error;
       },
     },
     backups: {

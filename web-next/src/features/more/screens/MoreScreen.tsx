@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { demoReset } from '../../../data/demo/store';
 import { useUpdateSignature } from '../hooks/useSignature';
+import { useEnablePushNotifications, getPushSupportState, type PushSupportState } from '../hooks/usePushNotifications';
 import styles from './MoreScreen.module.css';
 
 function initials(name: string): string {
@@ -24,6 +25,17 @@ export function MoreScreen() {
   const logout = useSessionStore((s) => s.logout);
   const updateSignature = useUpdateSignature();
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [pushState, setPushState] = useState<PushSupportState>(() => getPushSupportState());
+  const enablePush = useEnablePushNotifications();
+
+  async function handleEnablePush() {
+    try {
+      await enablePush.mutateAsync();
+      setPushState(getPushSupportState());
+    } catch {
+      setPushState(getPushSupportState());
+    }
+  }
 
   async function handleSignatureFile(file: File | null) {
     try {
@@ -85,6 +97,27 @@ export function MoreScreen() {
             <button type="button" className={`${styles.actionBtn} ${confirmingReset ? styles.warn : ''}`} onClick={handleResetClick}>
               {confirmingReset ? 'Confirm reset' : 'Reset'}
             </button>
+          </div>
+        )}
+        {pushState !== 'unsupported' && (
+          <div className={styles.row}>
+            <div>
+              <div className={styles.rowLabel}>Push notifications</div>
+              <div className={styles.rowSub}>
+                {pushState === 'granted'
+                  ? 'Enabled on this device'
+                  : pushState === 'denied'
+                    ? 'Blocked -- enable notifications for this site in your browser settings'
+                    : 'Get alerted here even when the app is closed'}
+              </div>
+            </div>
+            {pushState === 'granted' ? (
+              <span className={styles.pill}>On</span>
+            ) : (
+              <button type="button" className={styles.actionBtn} disabled={pushState === 'denied' || enablePush.isPending} onClick={handleEnablePush}>
+                {enablePush.isPending ? 'Enabling...' : 'Enable'}
+              </button>
+            )}
           </div>
         )}
       </div>

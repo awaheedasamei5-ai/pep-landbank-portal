@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router';
 import { BottomNav } from '../shared/ui/BottomNav';
+import { OfflineBanner } from '../shared/ui/OfflineBanner';
 import { useChatRealtime } from '../features/chat/hooks/useChat';
 import { useDashboardRealtime } from '../features/dashboard/hooks/useDashboardRealtime';
 
@@ -19,6 +20,7 @@ export function AppShell() {
   const isChatThread = /^\/app\/chat\/.+/.test(location.pathname);
   return (
     <div>
+      <OfflineBanner />
       <Outlet />
       {!isChatThread && <BottomNav />}
     </div>
