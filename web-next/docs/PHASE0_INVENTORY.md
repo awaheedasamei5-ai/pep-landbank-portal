@@ -347,6 +347,50 @@ re-export/re-import round-trip came back fully idempotent (0 new/0
 updated). Deleted `pipeline-template.xlsx` and `pipelineTemplateExcel.ts`
 — nothing loads a template file anywhere in this app any more.
 
+## 14. Scheduled-job observability — MOSTLY DONE (flagged critical in the master spec)
+
+Spec Section 1's "Scheduled job gap" + Section 3.5's System Health
+checklist ("scheduled jobs", "last successful report", "retry counts,
+last error"). Before building anything, checked real deployed state
+first (the lesson from §13's correction) rather than assuming from this
+doc's own stale account: production already has real, substantial
+monitoring for 3 of 4 non-backup jobs — `daily-reminders`,
+`daily-management-report`, and `scheduled-integrity-check` all already
+log `category='cron'` audit events on crash, and `daily-management-report`
+additionally writes a full `report_archive` row (date, generation/email
+status, checksum, error_detail, retry_count) on every run. `web-next`
+just never read any of it.
+
+Ported `report_archive` to staging. Added `DataSource.reportArchive
+.list()` (manager-only SELECT RLS, service-role-only write, same shape
+as `audit_events`/`backups`). `useSystemHealth.ts` now also reads the
+existing `cron` audit category and computes health per job by matching
+known job slugs against recent critical `cron.failed` summaries (no live
+`pg_cron.job` read — that schema isn't PostgREST-exposed; cadences are
+hand-maintained constants, same treatment `backupOverdue` already gives
+its own cadence). `SystemHealthScreen` gained a Scheduled Jobs list
+(per-job Healthy/Failing + real failure text) and a Last Report row.
+
+**Still open:** `send-todo-alarms` (the per-minute to-do-push job) is the
+one real job with zero crash observability — the fix (add the same
+`category='cron'` logging the other 3 already use) is written but held
+for a separate turn; this pass's production-deploy question was
+specifically declined for now, so staging/web-next work went ahead
+without it. No "retry" or "dead-letter" automation was built — these are
+simple re-runnable trigger-and-done jobs, not a queue-consumer with
+discrete messages to requeue, so a literal dead-letter queue would be
+the wrong shape; a manual "run now" action from System Health is the
+practical equivalent and hasn't been built yet either.
+
+**Real bug caught live, unrelated to the task itself:** `data/demo/
+seed.ts` hardcoded a stale `version: 40` literal, completely
+disconnected from `data/demo/store.ts`'s `DEMO_VERSION` (long since
+bumped to 44) — the reseed guard could never match, so every demo-mode
+page reload silently wiped and reseeded all demo data. Fixed by having
+`demoLoad()` stamp the real version onto a freshly seeded object itself.
+Verified by injecting a fake failure scenario and confirming it survived
+a real reload (proving the fix, not just the absence of the old symptom).
+
 ## Next actions (in order)
 
 1. ~~Port `audit_events` + `record_audit_event` to staging~~ — done (migration `p0_port_audit_events_to_staging`).
@@ -360,4 +404,5 @@ updated). Deleted `pipeline-template.xlsx` and `pipelineTemplateExcel.ts`
 9. ~~Site-visit day logic~~ — done (§11): all 7 days bookable, week-range query bug (Friday cutoff hiding weekend visits) fixed alongside it.
 10. ~~Leave non-overlap rule~~ — done (§12): adjacent-day blocking removed, pure overlap only.
 11. ~~Excel import creates duplicates instead of reconciling~~ — done (§13): built the import feature `web-next` never had, ported legacy's already-correct reconciliation logic rather than reintroducing the bug naively.
-12. Next: the other critical findings from the master spec's Section 1 not yet addressed — scheduled-job health/retry observability. Also still open: idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
+12. ~~Scheduled-job observability~~ — mostly done (§14): Scheduled Jobs panel + last-report row built and wired to real data. `send-todo-alarms`'s crash-logging fix is written but not yet deployed to production (held pending a separate approved turn).
+13. Next: deploy the `send-todo-alarms` observability fix to production when approved. Also still open: a manual "run now" action for a failing job, idempotent-RPC review, error-contract standardization, planning the actual production cutover of the permission model (staging-only today, by design), and live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here).
