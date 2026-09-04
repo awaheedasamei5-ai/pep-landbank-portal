@@ -68,7 +68,7 @@ export interface DemoDb {
   activityLog: ActivityLogEntry[];
 }
 
-const DEMO_VERSION = 49;
+const DEMO_VERSION = 50;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;
