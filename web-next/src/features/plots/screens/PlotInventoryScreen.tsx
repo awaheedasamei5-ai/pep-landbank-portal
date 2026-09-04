@@ -286,6 +286,43 @@ export function PlotInventoryScreen() {
 // bug Master Spec 7.2 rules out ("A split is atomic and cannot leave half
 // the transaction completed"). A plot that has real children is never
 // shown as its own tile, regardless of what its status column says.
+// Natural plot-number order (A1, A2, ... A10, A11, not lexicographic
+// A1, A10, A11, A2) -- the board has no other explicit ordering, and both
+// the "read the block in order" expectation and the owner-adjacency
+// clustering below (which reasons about consecutive plot numbers) depend
+// on tiles actually being laid out in numeric sequence.
+function plotSeq(p: Plot): number | null {
+  const m = p.plotNumber.match(/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+function naturalPlotSort(a: Plot, b: Plot): number {
+  const sa = plotSeq(a);
+  const sb = plotSeq(b);
+  if (sa != null && sb != null && sa !== sb) return sa - sb;
+  return a.plotNumber.localeCompare(b.plotNumber);
+}
+
+// A real historical split pair -- two different real owners who each
+// bought one physical piece of what was originally one plot (e.g. "H2 A"
+// / "H2 B", two different customers, confirmed against the real workbook
+// -- see plotsRoyalPalm.ts's own comment). Deliberately NOT triggered by
+// an "A"/"B" suffix alone: most such pairs in the real data (D22A/D22B,
+// F8 A/F8 B, I12A/I12B, J24A/J24B, K18A/K18B, L1 A/L1 B, L16A/L16B,
+// L17A/L17B) are two completely separate Full Plots that just share a
+// numbering convenience, confirmed by checking each one individually
+// against the source sheet -- pairing on the suffix alone would have
+// wrongly grouped 8 unrelated full-price plots. The real, generalizable
+// signal is: neither side is a Full Plot (a genuine split always divides
+// into fractional units), and their plot numbers share a root after
+// stripping a recognized split-suffix.
+function splitPairRoot(p: Plot): string | null {
+  if (p.plotType === 'Full Plot') return null;
+  const trimmed = p.plotNumber.trim();
+  const m = trimmed.match(/^(.*?)\s*(?:[AB]|1\/2|2\/2)$/i);
+  if (!m) return null;
+  return `${p.section ?? ''}|${m[1].trim().toLowerCase()}`;
+}
+
 function boardUnits(plots: Plot[]): { key: string; tiles: Plot[] }[] {
   const parentIds = new Set(plots.map((p) => p.parentPlotId).filter((id): id is string => !!id));
   const map = new Map<string, Plot[]>();
@@ -295,7 +332,128 @@ function boardUnits(plots: Plot[]): { key: string; tiles: Plot[] }[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
-  return [...map.entries()].map(([key, tiles]) => ({ key, tiles }));
+  const units = [...map.entries()].map(([key, tiles]) => ({ key, tiles })).sort((a, b) => naturalPlotSort(a.tiles[0], b.tiles[0]));
+
+  // Second pass: merge two still-solo units into one real historical
+  // split-pair tile group when they share a splitPairRoot -- same visual
+  // treatment (.tileGroup) as an app-driven parentPlotId split, since
+  // both are "two real halves of one original plot," just from different
+  // sources (historical import vs this app's own split action).
+  const byRoot = new Map<string, typeof units>();
+  for (const u of units) {
+    if (u.tiles.length !== 1) continue;
+    const root = splitPairRoot(u.tiles[0]);
+    if (!root) continue;
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root)!.push(u);
+  }
+  const merged = new Set<string>();
+  const result: typeof units = [];
+  for (const u of units) {
+    if (merged.has(u.key)) continue;
+    const root = u.tiles.length === 1 ? splitPairRoot(u.tiles[0]) : null;
+    const pair = root ? byRoot.get(root) : undefined;
+    if (pair && pair.length === 2 && pair[0].key === u.key) {
+      result.push({ key: root!, tiles: [pair[0].tiles[0], pair[1].tiles[0]] });
+      merged.add(pair[0].key);
+      merged.add(pair[1].key);
+    } else if (!merged.has(u.key)) {
+      result.push(u);
+    }
+  }
+  return result;
+}
+
+// Master Spec-adjacent, real-data-driven feature: 70 real owners in the
+// actual Royal Palm data hold 2+ plots with close plot numbers in the
+// same block (confirmed by scanning the source workbook) -- e.g. one
+// person owning A25/A26/A27/A28. Groups consecutive board units (already
+// in natural plot-number order) that share the same real owner and whose
+// plot numbers are within 2 of each other, so a visitor sees "these N
+// tiles belong to one person" without clicking through each one.
+// Deliberately only clusters solo (non-split-pair) units and only
+// Allocated ones -- an owner key only exists once a plot is sold.
+function ownerKeyFor(p: Plot): string | null {
+  if (p.status !== 'Allocated') return null;
+  return p.customerCode || p.clientName || null;
+}
+interface BoardEntry {
+  cluster: boolean;
+  units: { key: string; tiles: Plot[] }[];
+  ownerLabel?: string;
+}
+function clusterByOwner(units: { key: string; tiles: Plot[] }[]): BoardEntry[] {
+  const result: BoardEntry[] = [];
+  let i = 0;
+  while (i < units.length) {
+    const u = units[i];
+    const owner = u.tiles.length === 1 ? ownerKeyFor(u.tiles[0]) : null;
+    if (!owner) {
+      result.push({ cluster: false, units: [u] });
+      i++;
+      continue;
+    }
+    const run = [u];
+    let j = i + 1;
+    while (j < units.length) {
+      const nu = units[j];
+      const nOwner = nu.tiles.length === 1 ? ownerKeyFor(nu.tiles[0]) : null;
+      if (nOwner !== owner) break;
+      const prevSeq = plotSeq(run[run.length - 1].tiles[0]);
+      const curSeq = plotSeq(nu.tiles[0]);
+      if (prevSeq == null || curSeq == null || curSeq - prevSeq > 2) break;
+      run.push(nu);
+      j++;
+    }
+    if (run.length >= 2) {
+      result.push({ cluster: true, units: run, ownerLabel: run[0].tiles[0].clientName ?? owner });
+      i = j;
+    } else {
+      result.push({ cluster: false, units: [u] });
+      i++;
+    }
+  }
+  return result;
+}
+
+// Half/Partial Plot tiles otherwise look pixel-identical to a Full Plot
+// tile of the same status -- same size, same color-by-status, nothing on
+// the compact tile itself said "this one's smaller." A corner fraction
+// badge (½ for a real Half Plot, the real percentage for a Partial Plot's
+// real factor) makes that visible on a normal glance, not just on click
+// or after filtering by Plot type.
+function tileFractionLabel(p: Plot): string | null {
+  if (p.plotType === 'Full Plot') return null;
+  // Prefer the real physical area over `factor` -- `factor` is sometimes
+  // relative to the row's own sub-unit rather than a full plot (e.g. the
+  // real "C13 1/2"/"C13 2/2" uneven split both carry factor=1, which
+  // would wrongly read "100%" on what's actually a 79%/21% split; their
+  // real areaSqft correctly gives 79%/21%). Fall back to factor only when
+  // no real dimensions are on file (the historical rows where the sheet's
+  // own width/length were an unadjusted placeholder, not a measurement).
+  if (p.areaSqft != null) {
+    const pct = Math.round((p.areaSqft / 7000) * 100);
+    if (pct < 100) return `${pct}%`;
+  } else if (p.factor != null && p.factor < 1) {
+    return `${Math.round(p.factor * 100)}%`;
+  }
+  return p.plotType === 'Half Plot' ? '½' : null;
+}
+
+function PlotTile({ p, navigate }: { p: Plot; navigate: ReturnType<typeof useNavigate> }) {
+  const fraction = tileFractionLabel(p);
+  return (
+    <button
+      type="button"
+      className={`${styles.tile} ${styles[`tile_${p.status.replace(/\s/g, '')}`]}`}
+      onClick={() => navigate(`/app/sales/plots/${p.id}`)}
+      title={`${p.plotNumber} · ${p.plotType} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}`}
+    >
+      {fraction && <span className={styles.tileFraction}>{fraction}</span>}
+      <span className={styles.tileNumber}>{p.plotNumber}</span>
+      {p.price != null && <span className={styles.tilePrice}>{ghs(p.price)}</span>}
+    </button>
+  );
 }
 
 function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate> }) {
@@ -311,22 +469,28 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
         <div key={section} className={styles.boardSection}>
           <div className={styles.boardSectionLabel}>Block {section}</div>
           <div className={styles.boardGrid}>
-            {boardUnits(secPlots).map((unit) => (
-              <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
-                {unit.tiles.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`${styles.tile} ${styles[`tile_${p.status.replace(/\s/g, '')}`]}`}
-                    onClick={() => navigate(`/app/sales/plots/${p.id}`)}
-                    title={`${p.plotNumber} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}`}
-                  >
-                    <span className={styles.tileNumber}>{p.plotNumber}</span>
-                    {p.price != null && <span className={styles.tilePrice}>{ghs(p.price)}</span>}
-                  </button>
-                ))}
-              </div>
-            ))}
+            {clusterByOwner(boardUnits(secPlots)).map((entry) =>
+              entry.cluster ? (
+                <div key={entry.units[0].key} className={styles.ownerCluster} title={`${entry.ownerLabel} owns these ${entry.units.length} plots`}>
+                  <span className={styles.ownerClusterLabel}>{entry.ownerLabel}</span>
+                  <div className={styles.ownerClusterTiles}>
+                    {entry.units.map((unit) => (
+                      <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
+                        {unit.tiles.map((p) => (
+                          <PlotTile key={p.id} p={p} navigate={navigate} />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div key={entry.units[0].key} className={entry.units[0].tiles.length > 1 ? styles.tileGroup : undefined}>
+                  {entry.units[0].tiles.map((p) => (
+                    <PlotTile key={p.id} p={p} navigate={navigate} />
+                  ))}
+                </div>
+              ),
+            )}
           </div>
         </div>
       ))}
