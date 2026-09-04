@@ -1,5 +1,9 @@
 .wrap { padding: 20px 16px 90px; }
 
+@media (width >= 1024px) {
+  .wrap { max-width: 640px; padding: 28px 32px 40px; }
+}
+
 .eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--c-muted); }
 .title { font-size: 22px; margin: 4px 0 0; }
 .sub { color: var(--c-muted); margin: 6px 0 18px; font-size: 13px; line-height: 1.45; }

@@ -1,4 +1,8 @@
 .wrap { padding: 20px 16px 90px; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 760px; padding: 28px 32px 40px; }
+}
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 10px; font-size: 13px; }
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 18px; font-size: 13.5px; }

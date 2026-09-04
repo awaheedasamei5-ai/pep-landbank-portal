@@ -2,6 +2,14 @@
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 16px; font-size: 13.5px; }
 
+/* Real exception to the "short screens stay narrow" default every other
+   screen in this pass got: 4 real 210px-wide kanban columns need ~900px
+   to show without horizontal scroll, so this widens instead of just
+   centering the existing 480px card. */
+@media (width >= 1024px) {
+  .wrap { max-width: 960px; padding: 28px 32px 40px; }
+}
+
 .newBtn {
   width: 100%;
   background: var(--c-accent);
