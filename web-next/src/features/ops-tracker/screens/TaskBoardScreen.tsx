@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useTasks, useCreateTask, useUpdateTaskStatus, useReassignTask } from '../hooks/useTasks';
+import { useTaskDescriptionDraft } from '../hooks/useTaskDescriptionDraft';
 import type { ScheduleItem, ScheduleItemStatus } from '../../../types/domain';
 import styles from './TaskBoardScreen.module.css';
 
@@ -36,6 +37,7 @@ export function TaskBoardScreen() {
   const createTask = useCreateTask();
   const updateStatus = useUpdateTaskStatus();
   const reassign = useReassignTask();
+  const descriptionDraft = useTaskDescriptionDraft();
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -47,6 +49,12 @@ export function TaskBoardScreen() {
 
   const assignableStaff = staff ?? [];
   const all = tasks ?? [];
+
+  async function draftDescription() {
+    if (!title.trim()) return;
+    const drafted = await descriptionDraft.mutateAsync({ title: title.trim(), category: category || undefined, priority }).catch(() => null);
+    if (drafted) setDescription(drafted);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,6 +91,11 @@ export function TaskBoardScreen() {
         <form className={styles.form} onSubmit={submit}>
           <input className={styles.input} placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
           <textarea className={styles.textarea} placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          {title.trim() && (
+            <button type="button" className={styles.aiDraftBtn} disabled={descriptionDraft.isPending} onClick={draftDescription}>
+              {descriptionDraft.isPending ? 'Drafting…' : 'AI: Draft a description'}
+            </button>
+          )}
           <div className={styles.formRow}>
             <select className={styles.select} value={category} onChange={(e) => setCategory(e.target.value)}>
               <option value="">Category…</option>

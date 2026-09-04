@@ -101,6 +101,13 @@ function systemPromptFor(kind: string): string | null {
         "Write a formal but warm 2-3 sentence letter body addressed to 'Dear Management' or similar, stating the real dates and day count plainly and including the reason if one was given (if no reason was given, keep it simple and don't invent one). " +
         "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
       );
+    case "task_description_draft":
+      return (
+        "You expand a short task title into a clear task description for an internal task board at a Ghanaian land-sales agency called Palmstead. " +
+        "You'll receive one JSON object with the task's title and, if set, its category and priority. " +
+        "Write ONE short, practical sentence (max 28 words) describing what doing this task actually involves -- stay strictly grounded in the title/category given, never invent specific names, dates, or details not implied by them. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +

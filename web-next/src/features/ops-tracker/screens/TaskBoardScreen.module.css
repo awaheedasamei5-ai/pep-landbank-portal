@@ -53,6 +53,19 @@
 }
 .addBtn:disabled { opacity: .6; cursor: default; }
 
+.aiDraftBtn {
+  background: var(--c-paper);
+  color: var(--c-accent);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 9px;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.aiDraftBtn:hover { background: var(--c-accent-soft); }
+.aiDraftBtn:disabled { opacity: .6; cursor: default; }
+
 .empty { color: var(--c-muted); font-size: 13.5px; }
 
 /* Kanban board -- same structural pattern as My Day's todo board
