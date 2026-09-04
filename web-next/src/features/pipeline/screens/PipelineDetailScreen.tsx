@@ -11,10 +11,13 @@ import { computeDepositStatus, computeMonthlySchedule } from '../lib/pipelineLog
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 import { StageBadge } from '../components/StageBadge';
-import { useCanViewDocStage, useDeleteLead, useLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
+import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
+import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import styles from './PipelineDetailScreen.module.css';
+
+const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 
 const DOC_STAGES = [
   { key: 'allocation', label: 'Allocation' },
@@ -139,6 +142,7 @@ export function PipelineDetailScreen() {
       </div>
 
       <ClientSection lead={lead} />
+      <LeadDetailsSection lead={lead} />
       {config && <PlotPricingSection lead={lead} config={config} />}
       {config && <DepositScheduleSection lead={lead} config={config} payments={leadPayments} />}
       <FollowUpSection lead={lead} />
@@ -206,6 +210,10 @@ export function PipelineDetailScreen() {
         </div>
       </div>
 
+      <SiteVisitsSection lead={lead} />
+      <ActivitySection leadId={lead.id} />
+      <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
+
       <DocumentationSection lead={lead} />
       <DangerZoneSection lead={lead} onDeleted={() => navigate('/app/sales/pipeline')} />
 
@@ -268,6 +276,116 @@ function ClientSection({ lead }: { lead: Lead }) {
           onClick={() => {
             setError(null);
             update.mutateAsync({ id: lead.id, patch: { name: name.trim(), contact: contact.trim(), expectedVersion: lead.version ?? undefined } }).then(
+              () => setEditing(false),
+              (e) => setError(friendlyError(e, 'Failed to save')),
+            );
+          }}
+        >
+          {update.isPending ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Master Spec Section 4's lead-record gap: source/priority/assigned-staff
+// are real columns (Lead.leadSource/priority/agent) with no UI anywhere
+// before now -- confirmed by grep, not assumed.
+function LeadDetailsSection({ lead }: { lead: Lead }) {
+  const profile = useSessionStore((s) => s.profile);
+  const update = useUpdateLead();
+  const assignLead = useAssignLead();
+  const { data: staff } = useStaffDirectory();
+  const [editing, setEditing] = useState(false);
+  const [source, setSource] = useState(lead.leadSource ?? '');
+  const [priority, setPriority] = useState(lead.priority ?? '');
+  const [reassigning, setReassigning] = useState(false);
+  const [assignTo, setAssignTo] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const staffName = staff?.find((s) => s.key === lead.agent)?.name ?? lead.agent;
+  const isManager = profile?.role === 'manager';
+
+  if (!editing) {
+    return (
+      <div className={styles.section}>
+        <div className={styles.sectionHeadRow}>
+          <h2 className={styles.sectionTitle}>Lead details</h2>
+          <button type="button" className={styles.editLink} onClick={() => setEditing(true)}>
+            Edit
+          </button>
+        </div>
+        <div className={styles.readRow}>
+          <span className={styles.readLabel}>Source</span>
+          <span>{lead.leadSource || '—'}</span>
+        </div>
+        <div className={styles.readRow}>
+          <span className={styles.readLabel}>Priority</span>
+          <span>{lead.priority || '—'}</span>
+        </div>
+        <div className={styles.readRow}>
+          <span className={styles.readLabel}>Assigned to</span>
+          <span>{staffName}</span>
+        </div>
+        {isManager && !reassigning && (
+          <button type="button" className={styles.editLink} onClick={() => setReassigning(true)}>
+            Reassign
+          </button>
+        )}
+        {isManager && reassigning && (
+          <div className={styles.actionsRow}>
+            <select className={styles.input} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
+              <option value="">Select staff…</option>
+              {(staff ?? []).map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={styles.btn}
+              style={{ flex: 1 }}
+              disabled={!assignTo || assignLead.isPending}
+              onClick={() => assignLead.mutateAsync({ id: lead.id, agentKey: assignTo }).then(() => setReassigning(false))}
+            >
+              {assignLead.isPending ? 'Reassigning…' : 'Confirm'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Lead details</h2>
+      <div className={styles.field}>
+        <label className={styles.label}>Source</label>
+        <input className={styles.input} placeholder="e.g. Referral, Walk-in, Facebook" value={source} onChange={(e) => setSource(e.target.value)} />
+      </div>
+      <div className={styles.field}>
+        <label className={styles.label}>Priority</label>
+        <select className={styles.input} value={priority} onChange={(e) => setPriority(e.target.value)}>
+          <option value="">Not set</option>
+          {PRIORITIES.map((p) => (
+            <option key={p}>{p}</option>
+          ))}
+        </select>
+      </div>
+      {error && <p className={styles.errorMsg}>{error}</p>}
+      <div className={styles.actionsRow}>
+        <button type="button" className={styles.cancelBtn} onClick={() => setEditing(false)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={styles.btn}
+          style={{ flex: 1 }}
+          disabled={update.isPending}
+          onClick={() => {
+            setError(null);
+            update.mutateAsync({ id: lead.id, patch: { leadSource: source.trim() || undefined, priority: priority || undefined, expectedVersion: lead.version ?? undefined } }).then(
               () => setEditing(false),
               (e) => setError(friendlyError(e, 'Failed to save')),
             );
@@ -636,6 +754,90 @@ function FollowUpDraftBox({ lead }: { lead: Lead }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Master Spec Section 4's Site Visits lead-record section -- real
+// site_visits.lead_id FK (see SiteVisit.leadId's own comment), not a
+// name-match guess at read time.
+function SiteVisitsSection({ lead }: { lead: Lead }) {
+  const navigate = useNavigate();
+  const { data: visits } = useSiteVisitsForLead(lead.id);
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeadRow}>
+        <h2 className={styles.sectionTitle}>Site visits</h2>
+        <button
+          type="button"
+          className={styles.editLink}
+          onClick={() => navigate(`/app/sales/sitevisits/new?leadId=${lead.id}&name=${encodeURIComponent(lead.name)}&contact=${encodeURIComponent(lead.contact)}`)}
+        >
+          Log a visit
+        </button>
+      </div>
+      {(!visits || visits.length === 0) && <p className={styles.emptyMsg}>No site visits logged for this lead yet.</p>}
+      {visits?.map((v) => (
+        <div className={styles.readRow} key={v.id}>
+          <span className={styles.readLabel}>
+            {v.visitDate} {v.visitTime ? `· ${v.visitTime}` : ''}
+          </span>
+          <span>
+            {v.site}
+            {v.plot ? ` · ${v.plot}` : ''} · {v.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Master Spec Section 4's combined Activity timeline -- real
+// activity_log.lead_id FK, populated by the payment-decision RPCs
+// (approve/decline/needs-correction/resubmit) and manual writes.
+function ActivitySection({ leadId }: { leadId: string }) {
+  const { data: entries } = useActivityForLead(leadId);
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Activity</h2>
+      {(!entries || entries.length === 0) && <p className={styles.emptyMsg}>No activity recorded for this lead yet.</p>}
+      {entries?.map((a) => (
+        <div className={styles.historyRow} key={a.id}>
+          <div className={styles.historyMain}>
+            <div className={styles.historyDate}>{a.action}</div>
+            {a.detail && <div className={styles.readLabel}>{a.detail}</div>}
+          </div>
+          <span className={styles.readLabel}>{a.createdAt.slice(0, 10)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Master Spec Section 4's Audit Trail section -- manager-only per
+// audit_events' own RLS. Merges entity_type='lead' events (archive/
+// restore) with entity_type='payment' events for this lead's own
+// payments (approve/decline/needs-correction/resubmit).
+function AuditTrailSection({ leadId, paymentIds }: { leadId: string; paymentIds: string[] }) {
+  const profile = useSessionStore((s) => s.profile);
+  const { data: events } = useAuditForLead(leadId, paymentIds);
+
+  if (profile?.role !== 'manager') return null;
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Audit trail</h2>
+      {(!events || events.length === 0) && <p className={styles.emptyMsg}>No audit events for this lead yet.</p>}
+      {events?.map((e) => (
+        <div className={styles.historyRow} key={e.id}>
+          <div className={styles.historyMain}>
+            <div className={styles.historyDate}>{e.summary}</div>
+          </div>
+          <span className={styles.readLabel}>{e.createdAt.slice(0, 10)}</span>
+        </div>
+      ))}
     </div>
   );
 }

@@ -34,8 +34,9 @@ export function useCreateSiteVisit() {
       }
       return rec;
     },
-    onSuccess: () => {
+    onSuccess: (rec) => {
       queryClient.invalidateQueries({ queryKey: ['siteVisits', agentKey] });
+      if (rec.leadId) queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead', rec.leadId] });
     },
   });
 }

@@ -225,6 +225,7 @@ export function seedDemo(): DemoDb {
       notes: null,
       status: 'Pending',
       createdAt: isoPlusDays(t, -12),
+      leadId: leads.find((l) => l.name === 'Mercy Owusu')!.id,
     },
     {
       id: uid(),
@@ -252,6 +253,40 @@ export function seedDemo(): DemoDb {
       notes: null,
       status: 'Pending',
       createdAt: isoPlusDays(t, -3),
+      leadId: leads.find((l) => l.name === 'Abena Boateng')!.id,
+    },
+  ];
+
+  // Real activity_log rows tied to a lead via the new lead_id FK -- gives
+  // Pipeline Detail's Activity section something real to show in demo
+  // mode, matching the shape approve_payment/decline_payment/etc. write
+  // live (see PHASE0_INVENTORY.md #29).
+  const activityLog: DemoDb['activityLog'] = [
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      client: 'Mercy Owusu',
+      action: 'Payment approved',
+      detail: 'GHS 24,000 approved by Elias Torgbuivi',
+      note: null,
+      method: null,
+      follow: null,
+      createdAt: isoPlusDays(t, -17),
+      leadId: leads.find((l) => l.name === 'Mercy Owusu')!.id,
+    },
+    {
+      id: uid(),
+      agentKey: AGENT_KEY,
+      agentName: 'Elias Torgbuivi',
+      client: 'Mercy Owusu',
+      action: 'Site visit logged',
+      detail: 'First site inspection before committing to half-plot deposit',
+      note: null,
+      method: null,
+      follow: null,
+      createdAt: isoPlusDays(t, -12),
+      leadId: leads.find((l) => l.name === 'Mercy Owusu')!.id,
     },
   ];
 
@@ -735,6 +770,7 @@ export function seedDemo(): DemoDb {
     weeklyVisitForms: [],
     downloads: [],
     staffAchievements: [],
+    activityLog,
     auditEvents: [
       { id: 3, createdAt: isoPlusDays(t, 0) + 'T08:00:00Z', category: 'integrity', eventType: 'integrity.check', severity: 'critical', actorKey: null, actorName: null, entityType: null, entityId: null, summary: '2 leads have amt_paid greater than grand_total', detail: { count: 2 }, source: 'cron' },
       { id: 2, createdAt: isoPlusDays(t, -1) + 'T14:22:00Z', category: 'audit', eventType: 'payment.edited', severity: 'warning', actorKey: 'management', actorName: 'Management', entityType: 'payment', entityId: 'demo-payment-1', summary: 'Payment amount corrected from GHS 5,000 to GHS 4,500', detail: { before: 5000, after: 4500 }, source: 'client' },

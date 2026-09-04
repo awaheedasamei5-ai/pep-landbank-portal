@@ -612,6 +612,14 @@ export interface SiteVisit {
   notes: string | null;
   status: string;
   createdAt: string;
+  // Real column added this session (site_visits.lead_id) -- closes Master
+  // Spec Section 4's named gap: "no FK from site_visits to a lead at all
+  // today." Nullable: a site visit can genuinely happen for a walk-in
+  // prospect with no pipeline record yet, so linking stays optional, not
+  // mandatory. Historical rows were backfilled by an exact name+contact
+  // match against `leads`; new ones are set explicitly by the picker on
+  // AddSiteVisitScreen instead of relying on fuzzy matching going forward.
+  leadId: string | null;
 }
 
 export interface NewSiteVisit {
@@ -633,6 +641,28 @@ export interface NewSiteVisit {
   source?: string;
   accompanied?: string;
   notes?: string;
+  leadId?: string;
+}
+
+// Real table `activity_log` (this is the CRM contact-log, distinct from
+// `audit_events` -- see PHASE0_INVENTORY.md #3). `leadId` is a real
+// column added this session, backfilled by exact-name match against
+// `leads` for historical rows; every new write from the four payment
+// RPCs (approve/decline/flag-correction/resubmit) sets it explicitly.
+// Feeds Pipeline Detail's new Activity section (Master Spec Section 4's
+// "combined activity timeline").
+export interface ActivityLogEntry {
+  id: string;
+  agentKey: string;
+  agentName: string | null;
+  client: string;
+  action: string;
+  detail: string | null;
+  note: string | null;
+  method: string | null;
+  follow: string | null;
+  createdAt: string;
+  leadId: string | null;
 }
 
 // Real table (confirmed live, 15 columns, 1 real row). CONFIRMED LIVE BUG

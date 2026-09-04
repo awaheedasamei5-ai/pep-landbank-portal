@@ -94,6 +94,7 @@ export function useDeleteLead() {
       qc.invalidateQueries({ queryKey: ['lead'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['leadsArchived'] });
+      qc.invalidateQueries({ queryKey: ['auditForLead'] });
     },
   });
 }
@@ -118,6 +119,38 @@ export function useRestoreLead() {
       qc.invalidateQueries({ queryKey: ['lead'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['leadsArchived'] });
+    },
+  });
+}
+
+// Master Spec Section 4's lead-record sections: Site Visits (real FK,
+// see SiteVisit.leadId's own comment), a combined Activity timeline
+// (real activity_log.lead_id FK), and a manager-only Audit trail (merges
+// audit_events for the lead itself with events for its own payments --
+// two queries, since RLS/entity_type doesn't let one request span both).
+export function useSiteVisitsForLead(leadId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['siteVisitsForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).siteVisits.listForLead(leadId) });
+}
+
+export function useActivityForLead(leadId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['activityForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).activityLog.listForLead(leadId) });
+}
+
+export function useAuditForLead(leadId: string, paymentIds: string[]) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  return useQuery({
+    queryKey: ['auditForLead', leadId, paymentIds.join(',')],
+    enabled: !!leadId && profile?.role === 'manager',
+    queryFn: async () => {
+      const ds = getDataSource(demoMode);
+      const [leadEvents, paymentEvents] = await Promise.all([
+        ds.audit.list({ entityType: 'lead', entityIds: [leadId] }),
+        paymentIds.length > 0 ? ds.audit.list({ entityType: 'payment', entityIds: paymentIds }) : Promise.resolve([]),
+      ]);
+      return [...leadEvents, ...paymentEvents].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
   });
 }

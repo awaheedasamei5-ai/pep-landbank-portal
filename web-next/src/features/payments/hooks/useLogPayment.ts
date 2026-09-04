@@ -35,6 +35,8 @@ function useInvalidatePaymentEffects() {
     queryClient.invalidateQueries({ queryKey: ['payments'] });
     queryClient.invalidateQueries({ queryKey: ['paymentsPending'] });
     queryClient.invalidateQueries({ queryKey: ['paymentsNeedsCorrection'] });
+    queryClient.invalidateQueries({ queryKey: ['activityForLead'] });
+    queryClient.invalidateQueries({ queryKey: ['auditForLead'] });
     queryClient.invalidateQueries({ queryKey: ['pipelineSummary'] });
     queryClient.invalidateQueries({ queryKey: ['managerOverview'] });
   };

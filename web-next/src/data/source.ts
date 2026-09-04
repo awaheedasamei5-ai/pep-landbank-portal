@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -7,6 +7,7 @@ import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import {
   mapAchievementDefRow,
+  mapActivityLogRow,
   mapAllocationRequestRow,
   mapAttendanceRow,
   mapAuditEventRow,
@@ -323,6 +324,20 @@ export interface DataSource {
     // below already relies on this same fact for the SVE staff screen).
     listAll(): Promise<SiteVisit[]>;
     create(agentKey: string, agentName: string, input: NewSiteVisit): Promise<SiteVisit>;
+    // Master Spec Section 4's Site Visits lead-record section -- real
+    // site_visits.lead_id FK, not a fuzzy name/contact match at read time.
+    listForLead(leadId: string): Promise<SiteVisit[]>;
+  };
+  // Master Spec Section 4's "combined activity timeline" lead-record
+  // section. Real activity_log.lead_id FK (added this session, see
+  // ActivityLogEntry's own comment). RLS (activity_log_ins/sel, confirmed
+  // live) already lets any authenticated caller insert their own
+  // agent_key row and read own-or-manager -- log() is a direct insert,
+  // not an RPC, matching that real permission shape (no privileged write
+  // path needed, unlike audit_events).
+  activityLog: {
+    listForLead(leadId: string): Promise<ActivityLogEntry[]>;
+    log(agentKey: string, agentName: string, client: string, action: string, detail?: string | null, leadId?: string | null): Promise<void>;
   };
   // Deliberately read-only-plus-create: no "mark cleared"/payout method
   // exists on this interface at all. See the Referral type's comment in
@@ -493,7 +508,11 @@ export interface DataSource {
   // from a narrow, deliberately-chosen set of call sites, never a blanket
   // instrumentation sweep.
   audit: {
-    list(filter?: { category?: string; criticalOnly?: boolean }): Promise<AuditEvent[]>;
+    // entityType/entityIds -- Master Spec Section 4's lead-record Audit
+    // Trail section. Manager-only per audit_events' own RLS (unchanged);
+    // the UI calls this once for entityType='lead' and once for
+    // entityType='payment' (that lead's own payment ids) and merges.
+    list(filter?: { category?: string; criticalOnly?: boolean; entityType?: string; entityIds?: string[] }): Promise<AuditEvent[]>;
     log(eventType: string, severity: AuditEvent['severity'], summary: string, detail?: Record<string, unknown> | null, entityType?: string | null, entityId?: string | null): Promise<void>;
   };
   // Real table `push_subscriptions` (confirmed live on both projects with
@@ -812,6 +831,9 @@ function createDemoDataSource(): DataSource {
         if (index === -1) return;
         const updated: Lead = { ...db.leads[index], deletedAt: new Date().toISOString(), deletionReason: reason, deletedBy, deletedByName };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        db.auditEvents = db.auditEvents ?? [];
+        const nextId = (db.auditEvents.reduce((max, e) => Math.max(max, e.id), 0) || 0) + 1;
+        db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.archived', severity: 'warning', actorKey: deletedBy, actorName: deletedByName, entityType: 'lead', entityId: id, summary: `${deletedByName} archived a lead — ${reason}`, detail: { reason, deletedBy }, source: 'client' }, ...db.auditEvents];
         demoSave();
       },
       async listArchived() {
@@ -823,6 +845,9 @@ function createDemoDataSource(): DataSource {
         if (index === -1) throw new Error('Lead not found');
         const updated: Lead = { ...db.leads[index], deletedAt: null };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        db.auditEvents = db.auditEvents ?? [];
+        const nextId = (db.auditEvents.reduce((max, e) => Math.max(max, e.id), 0) || 0) + 1;
+        db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.restored', severity: 'info', actorKey: null, actorName: null, entityType: 'lead', entityId: id, summary: `${updated.name} was restored from the archive`, detail: null, source: 'client' }, ...db.auditEvents];
         demoSave();
         return updated;
       },
@@ -1188,11 +1213,40 @@ function createDemoDataSource(): DataSource {
           notes: input.notes ?? null,
           status: 'Pending',
           createdAt: new Date().toISOString(),
+          leadId: input.leadId ?? null,
         };
         const db = demoLoad();
         db.siteVisits.push(visit);
         demoSave();
         return visit;
+      },
+      async listForLead(leadId) {
+        return demoLoad().siteVisits.filter((v) => v.leadId === leadId);
+      },
+    },
+    activityLog: {
+      async listForLead(leadId) {
+        const db = demoLoad();
+        return (db.activityLog ?? []).filter((a) => a.leadId === leadId);
+      },
+      async log(agentKey, agentName, client, action, detail, leadId) {
+        const db = demoLoad();
+        db.activityLog = db.activityLog ?? [];
+        const entry: ActivityLogEntry = {
+          id: Math.random().toString(36).slice(2, 10),
+          agentKey,
+          agentName,
+          client,
+          action,
+          detail: detail ?? null,
+          note: null,
+          method: null,
+          follow: null,
+          createdAt: new Date().toISOString(),
+          leadId: leadId ?? null,
+        };
+        db.activityLog = [entry, ...db.activityLog];
+        demoSave();
       },
     },
     referrals: {
@@ -1595,6 +1649,8 @@ function createDemoDataSource(): DataSource {
         return (db.auditEvents ?? [])
           .filter((e) => !filter?.category || filter.category === 'all' || e.category === filter.category)
           .filter((e) => !filter?.criticalOnly || e.severity === 'critical')
+          .filter((e) => !filter?.entityType || e.entityType === filter.entityType)
+          .filter((e) => !filter?.entityIds || (e.entityId != null && filter.entityIds.includes(e.entityId)))
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
       },
       async log(eventType, severity, summary, detail, entityType, entityId) {
@@ -2373,6 +2429,16 @@ function createLiveDataSource(): DataSource {
           .update({ deleted_at: new Date().toISOString(), deletion_reason: reason, deleted_by: deletedBy, deleted_by_name: deletedByName })
           .eq('id', id);
         if (error) throw error;
+        // Real audit trail (Master Spec Section 4's Audit Trail section) --
+        // a reason-required deletion is exactly the kind of business-
+        // critical write §26 already required for payments; this closes
+        // the same gap for leads. Fire-and-forget, matches audit.log()'s
+        // own never-block-the-caller contract.
+        requireClient()
+          .rpc('record_audit_event', { p_category: 'audit', p_event_type: 'lead.archived', p_severity: 'warning', p_entity_type: 'lead', p_entity_id: id, p_summary: `${deletedByName} archived a lead — ${reason}`, p_detail: { reason, deletedBy } })
+          .then(({ error: auditError }) => {
+            if (auditError) console.error('record_audit_event failed', auditError);
+          });
       },
       async listArchived() {
         // Explicit filter needed here even though RLS already restricts
@@ -2386,6 +2452,11 @@ function createLiveDataSource(): DataSource {
       async restore(id) {
         const { data, error } = await requireClient().from('leads').update({ deleted_at: null }).eq('id', id).select().single();
         if (error) throw error;
+        requireClient()
+          .rpc('record_audit_event', { p_category: 'audit', p_event_type: 'lead.restored', p_severity: 'info', p_entity_type: 'lead', p_entity_id: id, p_summary: `${data.name} was restored from the archive`, p_detail: null })
+          .then(({ error: auditError }) => {
+            if (auditError) console.error('record_audit_event failed', auditError);
+          });
         return mapLeadRow(data);
       },
     },
@@ -2732,11 +2803,31 @@ function createLiveDataSource(): DataSource {
             source: input.source ?? null,
             accompanied: input.accompanied ?? null,
             notes: input.notes ?? null,
+            lead_id: input.leadId ?? null,
           })
           .select()
           .single();
         if (error) throw error;
         return mapSiteVisitRow(data);
+      },
+      async listForLead(leadId) {
+        const { data, error } = await requireClient().from('site_visits').select('*').eq('lead_id', leadId).order('visit_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapSiteVisitRow);
+      },
+    },
+    activityLog: {
+      async listForLead(leadId) {
+        const { data, error } = await requireClient().from('activity_log').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapActivityLogRow);
+      },
+      async log(agentKey, agentName, client, action, detail, leadId) {
+        const { error } = await requireClient()
+          .from('activity_log')
+          .insert({ agent_key: agentKey, agent_name: agentName, client, action, detail: detail ?? null, lead_id: leadId ?? null });
+        // Never blocks the calling flow, same discipline as audit.log().
+        if (error) console.error('activity_log insert failed', error);
       },
     },
     referrals: {
@@ -3123,6 +3214,8 @@ function createLiveDataSource(): DataSource {
         let q = requireClient().from('audit_events').select('*').order('created_at', { ascending: false }).limit(200);
         if (filter?.category && filter.category !== 'all') q = q.eq('category', filter.category);
         if (filter?.criticalOnly) q = q.eq('severity', 'critical');
+        if (filter?.entityType) q = q.eq('entity_type', filter.entityType);
+        if (filter?.entityIds) q = q.in('entity_id', filter.entityIds);
         const { data, error } = await q;
         if (error) throw error;
         return (data ?? []).map(mapAuditEventRow);

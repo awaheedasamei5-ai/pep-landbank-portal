@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import { useCreateSiteVisit } from '../hooks/useSiteVisits';
 import styles from './AddSiteVisitScreen.module.css';
@@ -33,6 +33,13 @@ type FormValues = z.infer<typeof schema>;
 
 export function AddSiteVisitScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Optional prefill from Pipeline Detail's "Log a visit" link -- links
+  // this visit to a real lead via the new site_visits.lead_id FK instead
+  // of leaving it to a name/contact guess later (Master Spec Section 4).
+  const leadId = searchParams.get('leadId') ?? undefined;
+  const prefillName = searchParams.get('name') ?? '';
+  const prefillContact = searchParams.get('contact') ?? '';
   const createSiteVisit = useCreateSiteVisit();
   const {
     register,
@@ -40,15 +47,16 @@ export function AddSiteVisitScreen() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { visitDate: new Date().toISOString().slice(0, 10) },
+    defaultValues: { visitDate: new Date().toISOString().slice(0, 10), name: prefillName, contact: prefillContact },
   });
 
   async function onSubmit(values: FormValues) {
     await createSiteVisit.mutateAsync({
       ...values,
       people: values.people ? Number(values.people) : undefined,
+      leadId,
     });
-    navigate('/app/sales/sitevisits');
+    navigate(leadId ? `/app/sales/pipeline/${leadId}` : '/app/sales/sitevisits');
   }
 
   return (
