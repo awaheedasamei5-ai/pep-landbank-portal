@@ -63,7 +63,7 @@ export function useScanPipelineImport() {
       // wrongly flagged Invalid on a plain re-upload. Real bug caught live
       // while testing, not by inspection.
       const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
-      const buckets = scanImportRows(rows, freshLeads, validStaffKeys);
+      const buckets = scanImportRows(rows, freshLeads, validStaffKeys, exportedAt);
       const fileIds = new Set(rows.map((r) => r.leadId).filter(Boolean));
       const possiblyDeletedLeads = freshLeads.filter((l) => !fileIds.has(l.id));
       return { rows, exportedAt, possiblyDeletedLeads, buckets };

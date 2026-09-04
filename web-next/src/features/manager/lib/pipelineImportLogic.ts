@@ -201,6 +201,14 @@ export interface ScanBuckets {
   skipped: number;
   duplicateIdsInFile: number;
   possiblyDeleted: number;
+  // Master Spec Section 5.3's "Two users edit the same lead: second import
+  // detects version conflict and asks for resolution" -- computed by
+  // commit-time planImportRows() all along (isStaleConflict), but never
+  // surfaced in the PREVIEW the spec's own 5.2/step 9 requires ("X new, Y
+  // updated... A conflicts"), so a conflicted row silently looked like an
+  // ordinary update until after commit. scanImportRows now detects the
+  // exact same condition at preview time.
+  conflicts: number;
 }
 
 function fieldsChanged(row: ParsedImportRow, existing: Lead): boolean {
@@ -222,8 +230,8 @@ function fieldsChanged(row: ParsedImportRow, existing: Lead): boolean {
   );
 }
 
-export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], validStaffKeys: Set<string>): ScanBuckets {
-  const buckets: ScanBuckets = { toAdd: 0, toUpdate: 0, unchanged: 0, needsReview: 0, invalid: 0, skipped: 0, duplicateIdsInFile: 0, possiblyDeleted: 0 };
+export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], validStaffKeys: Set<string>, exportedAt: Date | null): ScanBuckets {
+  const buckets: ScanBuckets = { toAdd: 0, toUpdate: 0, unchanged: 0, needsReview: 0, invalid: 0, skipped: 0, duplicateIdsInFile: 0, possiblyDeleted: 0, conflicts: 0 };
   const seenIds = new Map<string, number>();
   rows.forEach((row) => {
     if (row.leadId) seenIds.set(row.leadId, (seenIds.get(row.leadId) ?? 0) + 1);
@@ -251,8 +259,13 @@ export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], vali
       buckets.toAdd++;
     } else {
       coveredIds.add(match.existing.id);
-      if (fieldsChanged(row, match.existing)) buckets.toUpdate++;
-      else buckets.unchanged++;
+      if (!fieldsChanged(row, match.existing)) {
+        buckets.unchanged++;
+      } else if (exportedAt && match.existing.lastModifiedAt && new Date(match.existing.lastModifiedAt) > exportedAt) {
+        buckets.conflicts++;
+      } else {
+        buckets.toUpdate++;
+      }
     }
   }
   buckets.possiblyDeleted = freshLeads.filter((l) => !coveredIds.has(l.id) && !rows.some((r) => r.leadId === l.id)).length;

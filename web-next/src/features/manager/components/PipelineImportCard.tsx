@@ -53,7 +53,7 @@ export function PipelineImportCard() {
   }
 
   const b = scanResult?.buckets;
-  const hasBlockers = !!b && (b.needsReview > 0 || b.invalid > 0 || b.duplicateIdsInFile > 0);
+  const hasBlockers = !!b && (b.needsReview > 0 || b.invalid > 0 || b.duplicateIdsInFile > 0 || b.conflicts > 0);
 
   return (
     <>
@@ -94,11 +94,21 @@ export function PipelineImportCard() {
                 <div className={styles.importKpiValue}>{b.duplicateIdsInFile}</div>
                 <div className={styles.importKpiLabel}>Duplicate ID</div>
               </div>
+              <div className={styles.importKpi}>
+                <div className={styles.importKpiValue}>{b.conflicts}</div>
+                <div className={styles.importKpiLabel}>Conflicts</div>
+              </div>
             </div>
+
+            {b.conflicts > 0 && (
+              <p className={styles.importErrorText}>
+                {b.conflicts} row{b.conflicts === 1 ? '' : 's'} {b.conflicts === 1 ? 'has' : 'have'} been edited live in the app since this file was exported &mdash; those changes are held back too, so this file&apos;s version can&apos;t silently overwrite them. Export a fresh copy to see the current data before deciding what to do with those rows.
+              </p>
+            )}
 
             {hasBlockers && (
               <p className={styles.importResultLine}>
-                Rows marked <strong>Needs review</strong>, <strong>Invalid</strong>, or <strong>Duplicate ID</strong> are held back and never applied &mdash; fix them in the file and re-upload, or import the rest now and handle those separately.
+                Rows marked <strong>Needs review</strong>, <strong>Invalid</strong>, <strong>Duplicate ID</strong>, or <strong>Conflicts</strong> are held back and never applied &mdash; fix them in the file and re-upload, or import the rest now and handle those separately.
               </p>
             )}
 
