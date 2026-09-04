@@ -24,8 +24,12 @@
   /* margin-right: auto overrides AppShell's own centering (meant for
      narrow single-card screens, not this one) so the shrunk list hugs
      the sidebar's edge with the freed-up space sitting to its right,
-     under the drawer, instead of being centered into an overlap. */
-  .wrapWithDrawer { max-width: calc(100% - 540px); margin-right: auto; }
+     under the drawer, instead of being centered into an overlap.
+     height+overflow-y give the panel its own scrollbar (real fix, asked
+     for live: "a side scroll panel... so when the list gets long we can
+     scroll to the end") -- matches the drawer's own independent scroll
+     instead of relying on the whole page growing taller. */
+  .wrapWithDrawer { max-width: calc(100% - 540px); margin-right: auto; height: 100vh; overflow-y: auto; box-sizing: border-box; }
 }
 
 .head {
@@ -82,13 +86,24 @@
 
 /* Stage funnel tabs -- real spec vocabulary (New/Discovery/Qualified/
    Negotiation/Closed-Won/Lost), horizontally scrollable so it never wraps
-   awkwardly on a narrow phone. */
+   awkwardly on a narrow phone. Real fix, caught live: "Filters" used to
+   be the last item INSIDE this same scrolling row, so narrowing the
+   panel (e.g. for the drawer) scrolled it out of reach with no visible
+   hint it was still there. .stageTabsRow now holds the scrollable pills
+   and the always-visible Filters button as separate flex children, so
+   Filters can never be scrolled away. */
+.stageTabsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
 .stageTabs {
   display: flex;
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 4px;
-  margin-bottom: 10px;
+  min-width: 0;
   scrollbar-width: none;
 }
 .stageTabs::-webkit-scrollbar { display: none; }
@@ -109,7 +124,6 @@
 
 .filterToggle {
   flex-shrink: 0;
-  margin-left: auto;
   padding: 7px 13px;
   border-radius: var(--r-pill);
   border: 1px dashed var(--c-line);

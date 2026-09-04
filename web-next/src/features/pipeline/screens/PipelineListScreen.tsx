@@ -189,6 +189,13 @@ export function PipelineListScreen() {
         </PipePillStrip>
       </div>
 
+      {/* Real fix, caught live by the user: "Filters" used to sit inside
+          the same horizontally-scrolling stage-pill row, so it scrolled
+          out of view (and out of reach) the moment the list panel
+          narrowed for the drawer. Pulled out as its own always-visible
+          sibling instead -- the stage pills scroll on their own, Filters
+          never does. */}
+      <div className={styles.stageTabsRow}>
       <div className={styles.stageTabs}>
         <button type="button" className={`${styles.stageTab} ${filters.stage === '' ? styles.stageTabOn : ''}`} onClick={() => setFilters((f) => ({ ...f, stage: '' }))}>
           All
@@ -203,9 +210,10 @@ export function PipelineListScreen() {
             {STAGE_FUNNEL_LABELS[s]}
           </button>
         ))}
-        <button type="button" className={styles.filterToggle} onClick={() => setShowFilters((v) => !v)}>
-          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-        </button>
+      </div>
+      <button type="button" className={styles.filterToggle} onClick={() => setShowFilters((v) => !v)}>
+        Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+      </button>
       </div>
 
       {showFilters && (
