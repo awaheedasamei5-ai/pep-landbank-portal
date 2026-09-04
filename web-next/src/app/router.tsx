@@ -54,6 +54,7 @@ import { InsightsHubScreen } from '../features/manager/screens/InsightsHubScreen
 import { SmartInsightsScreen } from '../features/smart-insights/screens/SmartInsightsScreen';
 import { InsightListScreen } from '../features/smart-insights/screens/InsightListScreen';
 import { DocumentVaultScreen } from '../features/document-vault/screens/DocumentVaultScreen';
+import { PortfolioScreen } from '../features/portfolio/screens/PortfolioScreen';
 import { NotesScreen } from '../features/notes/screens/NotesScreen';
 import { SystemHealthScreen } from '../features/system-health/screens/SystemHealthScreen';
 import { AuditLogScreen } from '../features/system-health/screens/AuditLogScreen';
@@ -263,6 +264,7 @@ export const router = createBrowserRouter([
       { path: 'insights', element: <SmartInsightsScreen /> },
       { path: 'insights/:kind', element: <InsightListScreen /> },
       { path: 'vault', element: <DocumentVaultScreen /> },
+      { path: 'portfolio', element: <PortfolioScreen /> },
     ],
   },
 ]);

@@ -93,6 +93,15 @@ export function MoreScreen() {
       <div className={styles.card}>
         <div className={styles.row}>
           <div>
+            <div className={styles.rowLabel}>My Portfolio</div>
+            <div className={styles.rowSub}>Your rank, gap to the next spot, and every achievement badge earned</div>
+          </div>
+          <button type="button" className={styles.actionBtn} onClick={() => navigate('/app/portfolio')}>
+            Open
+          </button>
+        </div>
+        <div className={styles.row}>
+          <div>
             <div className={styles.rowLabel}>Smart Insights</div>
             <div className={styles.rowSub}>Proactive nudges auto-generated from {profile.role === 'manager' ? 'company-wide' : 'your'} live data</div>
           </div>
