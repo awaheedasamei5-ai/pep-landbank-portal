@@ -14,6 +14,21 @@
 
 .messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 
+/* Premium UI spec, Section 13: "Desktop: Wide thread layout" -- keeping
+   the existing full-screen thread behavior (spec's own explicit
+   instruction, unlike Pipeline Detail which wanted a drawer instead),
+   but real bubbles at 78% of an uncapped ~1000px canvas would stretch
+   uncomfortably wide. Caps the reading column instead, same real-chat-
+   app pattern (Slack/WhatsApp Web) rather than full-bleed text. */
+@media (width >= 1024px) {
+  .messages, .composer {
+    max-width: 760px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+}
+
 .bubbleRow { display: flex; }
 .bubbleRowMine { justify-content: flex-end; }
 
