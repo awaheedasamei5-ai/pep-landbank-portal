@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { BackupRecord } from '../../../types/domain';
 import { useBackups } from '../hooks/useBackups';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './BackupsScreen.module.css';
 
 function fmtDate(iso: string): string {
@@ -88,7 +89,7 @@ export function BackupsScreen() {
                 {restore.isPending ? 'Restoring…' : 'Restore now'}
               </button>
             </div>
-            {restore.isError && <p className={styles.modalError}>Restore failed: {(restore.error as Error)?.message ?? 'unknown error'}</p>}
+            {restore.isError && <p className={styles.modalError}>Restore failed: {friendlyError(restore.error)}</p>}
           </div>
         </div>
       )}

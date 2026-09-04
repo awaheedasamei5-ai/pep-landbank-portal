@@ -7,6 +7,7 @@ import { ghs } from '../../../shared/lib/format';
 import type { Lead, Payment } from '../../../types/domain';
 import { useAllLeads, useApprovePayment, useCanLogPayments, useCreatePayment, useDeclinePayment, usePendingPayments, useUploadPaymentProof } from '../hooks/useLogPayment';
 import { useProofUrl } from '../hooks/useReceipt';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './LogPaymentScreen.module.css';
 
 const PAYMENT_METHODS = ['Ecobank', 'Stanbic Bank', 'MTN MoMo', 'Vodafone Cash', 'Hubtel', 'Cash', 'Other'] as const;
@@ -35,6 +36,7 @@ export function LogPaymentScreen() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [done, setDone] = useState(false);
   const [proofFile, setProofFile] = useState<File | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
@@ -60,12 +62,19 @@ export function LogPaymentScreen() {
 
   async function onSubmit(values: FormOutput) {
     if (!selectedLead) return;
-    const payment = await createPayment.mutateAsync({
-      input: { leadId: selectedLead.id, amount: values.amount, paymentDate: values.paymentDate, paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined, note: values.note },
-      leadName: selectedLead.name,
-      leadAgentKey: selectedLead.agent,
-      leadContact: selectedLead.contact,
-    });
+    setSubmitError(null);
+    let payment: Payment;
+    try {
+      payment = await createPayment.mutateAsync({
+        input: { leadId: selectedLead.id, amount: values.amount, paymentDate: values.paymentDate, paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined, note: values.note },
+        leadName: selectedLead.name,
+        leadAgentKey: selectedLead.agent,
+        leadContact: selectedLead.contact,
+      });
+    } catch (e) {
+      setSubmitError(friendlyError(e, 'Failed to save this payment'));
+      return;
+    }
     // Uploaded as a separate step after the payment itself is created --
     // a failed upload (bad connection, oversized photo) shouldn't lose the
     // logged payment; management can still request the physical receipt.
@@ -152,6 +161,7 @@ export function LogPaymentScreen() {
                 {proofFile && <div className={styles.fileHint}>{proofFile.name}</div>}
                 <p className={styles.fileHelp}>Attach a photo of the physical receipt so Management can check it against the amount before approving.</p>
               </div>
+              {submitError && <div className={styles.err}>{submitError}</div>}
               <button type="submit" className={styles.submitBtn} disabled={createPayment.isPending}>
                 {createPayment.isPending ? 'Saving…' : done ? 'Saved ✓' : 'Save payment'}
               </button>
@@ -198,6 +208,9 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
             <img className={styles.proofImg} src={proofUrl} alt="Attached receipt proof" />
           </a>
         </div>
+      )}
+      {(approve.isError || decline.isError) && (
+        <div className={styles.err}>{friendlyError(approve.error ?? decline.error, 'Failed to record this decision')}</div>
       )}
       {canDecide && !declining && (
         <div className={styles.pendingActions}>

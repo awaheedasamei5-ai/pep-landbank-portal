@@ -4,6 +4,7 @@ import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useSystemHealth } from '../hooks/useSystemHealth';
 import { useSystemHealthSummary } from '../hooks/useSystemHealthSummary';
 import { useAiProviderStatus } from '../hooks/useAiProviderStatus';
+import { useDbConnectivityStatus, useRealtimeStatus, useSmsProviderStatus, useEmailProviderStatus } from '../hooks/useInfraStatus';
 import styles from './SystemHealthScreen.module.css';
 
 function fmtDate(iso: string): string {
@@ -25,6 +26,10 @@ export function SystemHealthScreen() {
   const health = useSystemHealth();
   const { data: summary } = useSystemHealthSummary(health);
   const { data: aiStatus } = useAiProviderStatus();
+  const { data: dbStatus } = useDbConnectivityStatus();
+  const realtimeStatus = useRealtimeStatus();
+  const { data: smsStatus } = useSmsProviderStatus();
+  const { data: emailStatus } = useEmailProviderStatus();
 
   return (
     <div className={styles.wrap}>
@@ -60,8 +65,45 @@ export function SystemHealthScreen() {
             </div>
           )}
 
-          <div className={styles.sectionTitle}>Scheduled jobs</div>
+          <div className={styles.sectionTitle}>Infrastructure</div>
           <div className={styles.jobList}>
+            <div className={styles.jobRow}>
+              <div>
+                <div className={styles.jobName}>Database connectivity</div>
+                <div className={styles.jobCadence}>{dbStatus ? `Round-trip ${dbStatus.latencyMs}ms` : 'Checking…'}</div>
+              </div>
+              <span className={`${styles.jobStatus} ${dbStatus?.status === 'ok' ? styles.jobStatusOk : dbStatus?.status === 'error' ? styles.jobStatusFail : ''}`}>
+                {dbStatus?.status === 'ok' ? 'Connected' : dbStatus?.status === 'error' ? 'Unreachable' : 'Checking…'}
+              </span>
+            </div>
+            <div className={styles.jobRow}>
+              <div>
+                <div className={styles.jobName}>Realtime</div>
+                <div className={styles.jobCadence}>Live cross-device sync</div>
+              </div>
+              <span className={`${styles.jobStatus} ${realtimeStatus === 'ok' ? styles.jobStatusOk : realtimeStatus === 'error' ? styles.jobStatusFail : ''}`}>
+                {realtimeStatus === 'ok' ? 'Connected' : realtimeStatus === 'error' ? 'Unreachable' : 'Checking…'}
+              </span>
+            </div>
+            <div className={styles.jobRow}>
+              <div>
+                <div className={styles.jobName}>SMS provider (Arkesel)</div>
+                <div className={styles.jobCadence}>{smsStatus ? `${smsStatus.recentTotal - smsStatus.recentFailures}/${smsStatus.recentTotal} of last ${smsStatus.recentTotal} sent` : 'Checking…'}</div>
+              </div>
+              <span className={`${styles.jobStatus} ${smsStatus?.status === 'ok' ? styles.jobStatusOk : smsStatus?.status === 'error' ? styles.jobStatusFail : ''}`}>
+                {smsStatus?.status === 'ok' ? 'Healthy' : smsStatus?.status === 'error' ? 'Failing' : smsStatus?.recentTotal === 0 ? 'No recent sends' : 'Checking…'}
+              </span>
+            </div>
+            {smsStatus && smsStatus.recentFailures > 0 && smsStatus.lastError && <div className={styles.jobFailDetail}>{smsStatus.lastError}</div>}
+            <div className={styles.jobRow}>
+              <div>
+                <div className={styles.jobName}>Email provider</div>
+                <div className={styles.jobCadence}>{emailStatus ? `${emailStatus.recentTotal - emailStatus.recentFailures}/${emailStatus.recentTotal} of last ${emailStatus.recentTotal} reports sent` : 'Checking…'}</div>
+              </div>
+              <span className={`${styles.jobStatus} ${emailStatus?.status === 'ok' ? styles.jobStatusOk : emailStatus?.status === 'error' ? styles.jobStatusFail : ''}`}>
+                {emailStatus?.status === 'ok' ? 'Healthy' : emailStatus?.status === 'error' ? 'Failing' : emailStatus?.recentTotal === 0 ? 'No recent reports' : 'Checking…'}
+              </span>
+            </div>
             <div className={styles.jobRow}>
               <div>
                 <div className={styles.jobName}>AI provider (Groq)</div>
@@ -71,6 +113,10 @@ export function SystemHealthScreen() {
                 {aiStatus === 'connected' ? 'Connected' : aiStatus === 'not_configured' ? 'Not configured' : aiStatus === 'unreachable' ? 'Unreachable' : 'Checking…'}
               </span>
             </div>
+          </div>
+
+          <div className={styles.sectionTitle}>Scheduled jobs</div>
+          <div className={styles.jobList}>
             <div className={styles.jobRow}>
               <div>
                 <div className={styles.jobName}>Daily management report</div>

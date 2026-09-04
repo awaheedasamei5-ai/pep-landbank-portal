@@ -20,10 +20,17 @@ import type { AuditEvent } from '../../../types/domain';
 // "expected every 8h" as a known business fact, not a live pg_cron read.
 // Reading cron.job directly would need a new production RPC/view (cron.job
 // lives outside PostgREST's exposed schemas) -- deliberately not added
-// this pass; these four names/cadences are the real ones confirmed live
-// (send-todo-alarms, daily-reminders, scheduled-integrity-check,
-// monthly-commission-check -- the backup jobs get their own `backups`-
-// sourced card, not this list).
+// this pass.
+//
+// Corrected 2026-09-06 against a live `select jobname,command from cron.job`
+// on staging: cron.job's real 5 entries are backup-6am/2pm/10pm (already
+// covered by the dedicated backup card above, not duplicated here),
+// send-todo-alarms-every-minute, and monthly-commission-check. The
+// previous list also carried 'daily-reminders' and 'scheduled-integrity-
+// check' entries that matched no deployed Edge Function and no cron.job
+// row at all -- pure fiction that would always render "Healthy" for jobs
+// that don't exist, a real "no dead controls" violation (spec Section
+// 24.3). Removed rather than kept as decoration.
 //
 // staleAfterHours: how long a real failure keeps the job flagged red. Not
 // literally "how overdue is the next run" -- there's no matching
@@ -35,8 +42,6 @@ import type { AuditEvent } from '../../../types/domain';
 // eventually stops being highlighted.
 const CRON_JOBS: { key: string; label: string; cadenceLabel: string; staleAfterHours: number; matchesSummary: (s: string) => boolean }[] = [
   { key: 'send-todo-alarms', label: 'To-do push alarms', cadenceLabel: 'Every minute', staleAfterHours: 0.25, matchesSummary: (s) => s.includes('send-todo-alarms') },
-  { key: 'daily-reminders', label: 'Birthdays & payment reminders', cadenceLabel: 'Daily, 7:00am', staleAfterHours: 27, matchesSummary: (s) => s.includes('daily-reminders') },
-  { key: 'scheduled-integrity-check', label: 'Data integrity check', cadenceLabel: 'Daily, 8:00am', staleAfterHours: 27, matchesSummary: (s) => s.includes('scheduled-integrity-check') },
   { key: 'monthly-commission-check', label: 'Monthly commission finalize', cadenceLabel: 'Checked daily, acts once per month', staleAfterHours: 800, matchesSummary: (s) => s.includes('run_monthly_commission_check') || s.includes('monthly-commission') },
 ];
 

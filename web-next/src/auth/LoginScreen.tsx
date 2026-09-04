@@ -9,6 +9,7 @@ import { useSendResetCode, useConfirmReset } from './usePasswordReset';
 import { useJoinPortal } from './useJoinPortal';
 import { useLoginGreeting } from './useLoginGreeting';
 import { isConfigured } from '../shared/lib/env';
+import { friendlyError } from '../shared/lib/friendlyError';
 import { fetchStaffDirectory, type StaffDirectoryEntry } from '../data/staffDirectoryClient';
 import { pinLockExists } from '../shared/lib/pinLock';
 import styles from './LoginScreen.module.css';
@@ -239,7 +240,7 @@ export function LoginScreen() {
             ) : (
               <input className={styles.input} type="password" placeholder="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />
             )}
-            {activeError && <p className={styles.error}>{(activeError as Error).message}</p>}
+            {activeError && <p className={styles.error}>{friendlyError(activeError)}</p>}
             <button type="submit" className={styles.btnAgent} disabled={isPending}>
               {isPending ? (useLoginMode === 'pin' ? 'Unlocking…' : 'Signing in…') : 'Sign in'}
             </button>
@@ -272,7 +273,7 @@ export function LoginScreen() {
             ) : resetStep === 'email' ? (
               <form onSubmit={submitSendCode}>
                 <input className={styles.input} type="email" placeholder="Your work email" autoComplete="username" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required autoFocus />
-                {sendResetCode.isError && <p className={styles.error}>{(sendResetCode.error as Error).message}</p>}
+                {sendResetCode.isError && <p className={styles.error}>{friendlyError(sendResetCode.error)}</p>}
                 <button type="submit" className={styles.btnAgent} disabled={sendResetCode.isPending}>
                   {sendResetCode.isPending ? 'Sending…' : 'Send code'}
                 </button>
@@ -286,7 +287,7 @@ export function LoginScreen() {
                 <input className={styles.input} placeholder="6-digit code" inputMode="numeric" value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 10))} required autoFocus />
                 <input className={styles.input} type="password" placeholder="New password" autoComplete="new-password" value={resetPw1} onChange={(e) => setResetPw1(e.target.value)} required />
                 <input className={styles.input} type="password" placeholder="Confirm new password" autoComplete="new-password" value={resetPw2} onChange={(e) => setResetPw2(e.target.value)} required />
-                {(resetPwMismatch || confirmReset.isError) && <p className={styles.error}>{resetPwMismatch ?? (confirmReset.error as Error).message}</p>}
+                {(resetPwMismatch || confirmReset.isError) && <p className={styles.error}>{resetPwMismatch ?? friendlyError(confirmReset.error)}</p>}
                 <button type="submit" className={styles.btnAgent} disabled={confirmReset.isPending}>
                   {confirmReset.isPending ? 'Setting password…' : 'Set new password'}
                 </button>
@@ -314,7 +315,7 @@ export function LoginScreen() {
                 <input className={styles.input} type="email" placeholder="Work email" autoComplete="username" value={joinEmail} onChange={(e) => setJoinEmail(e.target.value)} required />
                 <input className={styles.input} type="password" placeholder="Password" autoComplete="new-password" value={joinPw1} onChange={(e) => setJoinPw1(e.target.value)} required />
                 <input className={styles.input} type="password" placeholder="Confirm password" autoComplete="new-password" value={joinPw2} onChange={(e) => setJoinPw2(e.target.value)} required />
-                {(joinPwMismatch || joinPortal.isError) && <p className={styles.error}>{joinPwMismatch ?? (joinPortal.error as Error).message}</p>}
+                {(joinPwMismatch || joinPortal.isError) && <p className={styles.error}>{joinPwMismatch ?? friendlyError(joinPortal.error)}</p>}
                 <button type="submit" className={styles.btnAgent} disabled={joinPortal.isPending}>
                   {joinPortal.isPending ? 'Creating account…' : 'Create my account'}
                 </button>

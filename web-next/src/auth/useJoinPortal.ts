@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { getSupabaseClient } from '../data/client';
 import { mapProfileRow } from '../data/mappers';
+import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import { useSessionStore } from './useSessionStore';
 
 // Port of index.html's self-service "join the portal" flow (openJoinCard/
@@ -30,9 +31,9 @@ export function useJoinPortal() {
         // maps that one known case to the real, specific explanation
         // rather than showing someone a raw plumbing error.
         if (/database error saving new user/i.test(error.message)) {
-          throw new Error("This email hasn't been invited yet. Ask your manager to add you first.");
+          throw friendlyErrorObj("This email hasn't been invited yet. Ask your manager to add you first.");
         }
-        throw new Error(error.message || 'Could not create account.');
+        throw friendlyErrorObj(error.message || 'Could not create account.');
       }
       if (!data.session) {
         // Email confirmation is required on this project -- a real,
@@ -42,7 +43,7 @@ export function useJoinPortal() {
 
       const { data: row, error: profileErr } = await client.from('profiles').select('*').eq('id', data.user!.id).maybeSingle();
       if (profileErr || !row) {
-        throw new Error('Account created, but no staff profile was set up. Contact management.');
+        throw friendlyErrorObj('Account created, but no staff profile was set up. Contact management.');
       }
       const profile = mapProfileRow(row);
       loginLive(profile);

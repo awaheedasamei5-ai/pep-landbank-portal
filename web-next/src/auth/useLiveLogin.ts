@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { getSupabaseClient } from '../data/client';
 import { mapProfileRow } from '../data/mappers';
+import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import { useSessionStore } from './useSessionStore';
 
 // Real Supabase Auth sign-in (index.html's own doLogin(), email/password
@@ -28,17 +29,21 @@ export function useLiveLogin() {
 
       const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error || !data.user) {
-        throw new Error(error?.message ? `Sign-in failed: ${error.message}` : 'Wrong email or password.');
+        // GoTrue's own message ("Invalid login credentials", "Email not
+        // confirmed") is already written for an end user, not a raw driver
+        // string -- marked friendly so it passes through unedited rather
+        // than colliding with friendlyError()'s raw-shape pattern matching.
+        throw friendlyErrorObj(error?.message || 'Wrong email or password.');
       }
 
       const { data: row, error: profileErr } = await client.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
       if (profileErr || !row) {
         await client.auth.signOut();
-        throw new Error('Signed in, but no staff profile is set up for this account yet.');
+        throw friendlyErrorObj('Signed in, but no staff profile is set up for this account yet.');
       }
       if (row.active === false) {
         await client.auth.signOut();
-        throw new Error('This account has been deactivated. Contact management.');
+        throw friendlyErrorObj('This account has been deactivated. Contact management.');
       }
 
       const profile = mapProfileRow(row);
