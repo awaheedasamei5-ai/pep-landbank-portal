@@ -11,7 +11,7 @@ import { computeDepositStatus, computeMonthlySchedule } from '../lib/pipelineLog
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 import { StageBadge } from '../components/StageBadge';
-import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
+import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
@@ -601,6 +601,7 @@ function DepositScheduleSection({ lead, config, payments }: { lead: Lead; config
 
 function FollowUpSection({ lead }: { lead: Lead }) {
   const update = useUpdateLead();
+  const logActivity = useLogActivity();
   const [editing, setEditing] = useState(false);
   const [markLost, setMarkLost] = useState(lead.stage === 'Lost');
   const [nextAction, setNextAction] = useState(lead.nextAction ?? '');
@@ -698,7 +699,12 @@ function FollowUpSection({ lead }: { lead: Lead }) {
                 },
               })
               .then(
-                () => setEditing(false),
+                () => {
+                  if (markLost !== (lead.stage === 'Lost')) {
+                    logActivity(lead.name, markLost ? 'Stage changed to Lost' : 'Stage reopened from Lost', markLost ? 'Marked Lost from the Follow-up section' : null, lead.id);
+                  }
+                  setEditing(false);
+                },
                 (e) => setError(friendlyError(e, 'Failed to save')),
               );
           }}

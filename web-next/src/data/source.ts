@@ -806,7 +806,11 @@ function createDemoDataSource(): DataSource {
         const db = demoLoad();
         const index = db.leads.findIndex((l) => l.id === id);
         if (index === -1) throw new Error('Lead not found');
-        const updated: Lead = { ...db.leads[index], ...patch };
+        // lastModifiedAt mirrors the real trigger-maintained column so
+        // demo mode's stale-lead detection (getInsightLists' cold check)
+        // is exercised by the same real-activity signal live mode uses,
+        // not silently stuck on creation date forever.
+        const updated: Lead = { ...db.leads[index], ...patch, lastModifiedAt: new Date().toISOString() };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
         return updated;
@@ -815,7 +819,7 @@ function createDemoDataSource(): DataSource {
         const db = demoLoad();
         const index = db.leads.findIndex((l) => l.id === id);
         if (index === -1) throw new Error('Lead not found');
-        const updated: Lead = { ...db.leads[index], docStage: stage, docStageUpdatedAt: new Date().toISOString() };
+        const updated: Lead = { ...db.leads[index], docStage: stage, docStageUpdatedAt: new Date().toISOString(), lastModifiedAt: new Date().toISOString() };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
       },
@@ -913,7 +917,7 @@ function createDemoDataSource(): DataSource {
         if (leadIndex !== -1) {
           const amtPaid = db.leads[leadIndex].amtPaid + updated.amount;
           const stage = deriveStageFromPayment(amtPaid, db.leads[leadIndex].grandTotal);
-          const updatedLead = { ...db.leads[leadIndex], amtPaid, stage };
+          const updatedLead = { ...db.leads[leadIndex], amtPaid, stage, lastModifiedAt: new Date().toISOString() };
           db.leads = [...db.leads.slice(0, leadIndex), updatedLead, ...db.leads.slice(leadIndex + 1)];
           newAmtPaid = amtPaid;
           newBalance = Math.max(updatedLead.grandTotal - amtPaid, 0);

@@ -3,6 +3,7 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import type { Lead, NewLead } from '../../../types/domain';
 import { friendlyError } from '../../../shared/lib/friendlyError';
+import { isoPlusDays, today } from '../../../shared/lib/format';
 
 export function useLeads() {
   const profile = useSessionStore((s) => s.profile);
@@ -37,6 +38,21 @@ export function useCreateLead() {
     mutationFn: async (input: NewLead): Promise<{ lead: Lead; depositError: string | null }> => {
       const ds = getDataSource(demoMode);
       const lead = await ds.leads.create(agentKey, input);
+      // Master Spec Section 4's lifecycle-automation gap: a brand-new lead
+      // previously got no built-in reminder to actually follow up, unlike
+      // every other real workflow in this app. Fire-and-forget -- a real
+      // but non-fatal miss, same discipline as useLogDownload/logActivity,
+      // so it never blocks or fails the lead creation itself.
+      ds.scheduleItems
+        .createTask(agentKey, profile?.name ?? '', {
+          title: `Follow up with ${input.name}`,
+          category: 'Follow-up',
+          priority: 'Medium',
+          assignedTo: agentKey,
+          assignedToName: profile?.name ?? '',
+          dueDate: isoPlusDays(today(), 3),
+        })
+        .catch(() => {});
       let depositError: string | null = null;
       if (input.amtPaid > 0) {
         const canLog = profile?.role === 'manager' || profile?.key === 'elias';
@@ -59,6 +75,7 @@ export function useCreateLead() {
       queryClient.invalidateQueries({ queryKey: ['leads', agentKey] });
       queryClient.invalidateQueries({ queryKey: ['pipelineSummary', agentKey] });
       queryClient.invalidateQueries({ queryKey: ['paymentsPending'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', agentKey] });
     },
   });
 }

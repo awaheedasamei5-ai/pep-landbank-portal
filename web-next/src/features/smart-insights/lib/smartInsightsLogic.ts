@@ -38,9 +38,22 @@ function pctPaid(l: Lead): number {
   return Math.round((l.amtPaid / l.grandTotal) * 100);
 }
 
+// Master Spec Section 4's lifecycle-automation gap: this used to key
+// off l.date (creation date) alone, so a lead untouched for years but
+// created recently read as "fresh," and one created long ago but worked
+// on yesterday read as permanently cold. leads.last_modified_at is a
+// real, already-existing trigger-maintained column (bumped on every
+// UPDATE -- stage changes, payments via approve_payment, doc-stage,
+// tags/next-action edits) -- falls back to creation date only for the
+// rare row that predates the trigger or in demo mode, where it's never
+// set at all.
+function lastActivityIso(l: Lead): string {
+  return (l.lastModifiedAt ?? l.date).slice(0, 10);
+}
+
 export function getInsightLists(leads: Lead[]): Record<InsightKind, PctLead[]> {
   const active = leads.filter(isActive);
-  const cold = active.filter((l) => !(l.nextAction ?? '').trim() && daysSince(l.date) >= 10);
+  const cold = active.filter((l) => !(l.nextAction ?? '').trim() && daysSince(lastActivityIso(l)) >= 10);
   const nearTrigger = active
     .filter((l) => l.grandTotal > 0 && pctPaid(l) >= 20 && pctPaid(l) < 30)
     .map((l) => ({ ...l, __pct: pctPaid(l) }))

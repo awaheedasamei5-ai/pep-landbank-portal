@@ -138,6 +138,24 @@ export function useActivityForLead(leadId: string) {
   return useQuery({ queryKey: ['activityForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).activityLog.listForLead(leadId) });
 }
 
+// Master Spec Section 4's lifecycle-automation gap: a manual stage
+// change (e.g. FollowUpSection's "Mark as Lost") previously left no
+// trace anywhere -- fire-and-forget, matches useLogDownload's own
+// never-block-the-caller contract, since a missed log entry is real but
+// non-fatal, unlike a failed lead update itself.
+export function useLogActivity() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const qc = useQueryClient();
+  return (client: string, action: string, detail: string | null, leadId: string) => {
+    if (!profile) return;
+    getDataSource(demoMode)
+      .activityLog.log(profile.key, profile.name, client, action, detail, leadId)
+      .then(() => qc.invalidateQueries({ queryKey: ['activityForLead', leadId] }))
+      .catch(() => {});
+  };
+}
+
 export function useAuditForLead(leadId: string, paymentIds: string[]) {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
