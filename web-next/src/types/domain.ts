@@ -177,6 +177,13 @@ export interface NewLead {
   noPlots: number;
   unitPrice: number;
   paymentPlan: PaymentPlan;
+  // NOT written directly to leads.amt_paid (Master Spec Section 4.4: "Never
+  // let ordinary staff directly edit amt_paid as a free field. Payments
+  // are ledger events"). A caller passing a nonzero amount here gets a
+  // real Payment row created right after the lead itself, through the
+  // exact same pending/auto-approve rule Log Payment already uses -- see
+  // useCreateLead's own comment. The lead is always inserted with
+  // amt_paid=0 regardless of what's passed here.
   amtPaid: number;
   notes?: string;
 }

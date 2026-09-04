@@ -7,6 +7,7 @@ import { ghs } from '../../../shared/lib/format';
 import type { Lead, Payment } from '../../../types/domain';
 import { useAllLeads, useApprovePayment, useCanLogPayments, useCreatePayment, useDeclinePayment, usePendingPayments, useUploadPaymentProof } from '../hooks/useLogPayment';
 import { useProofUrl } from '../hooks/useReceipt';
+import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './LogPaymentScreen.module.css';
 
@@ -37,16 +38,23 @@ export function LogPaymentScreen() {
   const [done, setDone] = useState(false);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmOverpay, setConfirmOverpay] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
     defaultValues: { paymentDate: new Date().toISOString().slice(0, 10) },
   });
+
+  const enteredAmount = Number(watch('amount')) || 0;
+  const currentBalance = selectedLead ? Math.max(selectedLead.grandTotal - selectedLead.amtPaid, 0) : 0;
+  const balanceAfter = Math.max(currentBalance - enteredAmount, 0);
+  const isOverpaying = enteredAmount > currentBalance && currentBalance > 0 || (currentBalance === 0 && enteredAmount > 0);
 
   if (!canLog) {
     return (
@@ -62,6 +70,7 @@ export function LogPaymentScreen() {
 
   async function onSubmit(values: FormOutput) {
     if (!selectedLead) return;
+    if (isOverpaying && !confirmOverpay) return;
     setSubmitError(null);
     let payment: Payment;
     try {
@@ -87,6 +96,7 @@ export function LogPaymentScreen() {
     setSelectedLead(null);
     setQuery('');
     setProofFile(null);
+    setConfirmOverpay(false);
   }
 
   return (
@@ -122,7 +132,7 @@ export function LogPaymentScreen() {
               <div>
                 <div className={styles.pickerName}>{selectedLead.name}</div>
                 <div className={styles.pickerMeta}>
-                  Balance: {ghs(Math.max(selectedLead.grandTotal - selectedLead.amtPaid, 0))} of {ghs(selectedLead.grandTotal)}
+                  Balance: {ghs(currentBalance)} of {ghs(selectedLead.grandTotal)}
                 </div>
               </div>
               <button type="button" className={styles.changeBtn} onClick={() => setSelectedLead(null)}>
@@ -134,7 +144,7 @@ export function LogPaymentScreen() {
               <div className={styles.grid2}>
                 <div className={styles.field}>
                   <label className={styles.label}>Amount (GHS) *</label>
-                  <input className={styles.input} type="number" {...register('amount')} />
+                  <input className={styles.input} type="number" {...register('amount', { onChange: () => setConfirmOverpay(false) })} />
                   {errors.amount && <div className={styles.err}>{errors.amount.message}</div>}
                 </div>
                 <div className={styles.field}>
@@ -142,6 +152,19 @@ export function LogPaymentScreen() {
                   <input className={styles.input} type="date" {...register('paymentDate')} />
                 </div>
               </div>
+              {enteredAmount > 0 && (
+                <div className={styles.balancePreview}>
+                  <span>Balance before: {ghs(currentBalance)}</span>
+                  <span>→</span>
+                  <span className={isOverpaying ? styles.balanceWarn : undefined}>Balance after: {ghs(balanceAfter)}</span>
+                </div>
+              )}
+              {isOverpaying && (
+                <label className={styles.overpayRow}>
+                  <input type="checkbox" checked={confirmOverpay} onChange={(e) => setConfirmOverpay(e.target.checked)} />
+                  This amount is more than {selectedLead.name}&apos;s remaining balance ({ghs(currentBalance)}). I confirm this is correct.
+                </label>
+              )}
               <div className={styles.field}>
                 <label className={styles.label}>Payment method</label>
                 <select className={styles.select} {...register('paymentMethod')} defaultValue="">
@@ -162,7 +185,7 @@ export function LogPaymentScreen() {
                 <p className={styles.fileHelp}>Attach a photo of the physical receipt so Management can check it against the amount before approving.</p>
               </div>
               {submitError && <div className={styles.err}>{submitError}</div>}
-              <button type="submit" className={styles.submitBtn} disabled={createPayment.isPending}>
+              <button type="submit" className={styles.submitBtn} disabled={createPayment.isPending || (isOverpaying && !confirmOverpay)}>
                 {createPayment.isPending ? 'Saving…' : done ? 'Saved ✓' : 'Save payment'}
               </button>
               {profile?.role !== 'manager' && <p className={styles.hint}>This will be pending until a manager approves it.</p>}
@@ -182,12 +205,19 @@ export function LogPaymentScreen() {
 }
 
 function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lead: Lead | null; canDecide: boolean }) {
-  const { id: paymentId, clientName, amount, date, note, receiptProofPath } = payment;
+  const { id: paymentId, clientName, amount, date, note, receiptProofPath, agentKey, paymentMethod } = payment;
   const approve = useApprovePayment();
   const decline = useDeclinePayment();
   const { data: proofUrl } = useProofUrl(receiptProofPath);
+  const { data: staff } = useStaffDirectory();
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
+
+  const staffName = staff?.find((s) => s.key === agentKey)?.name ?? agentKey;
+  const currentBalance = lead ? Math.max(lead.grandTotal - lead.amtPaid, 0) : null;
+  const proposedBalance = currentBalance != null ? Math.max(currentBalance - amount, 0) : null;
+  const reasonRequired = reason.trim().length === 0;
 
   return (
     <div className={styles.pendingCard}>
@@ -195,12 +225,20 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
         <div>
           <div className={styles.pendingName}>{clientName}</div>
           <div className={styles.pendingMeta}>
-            {date}
+            {date} · logged by {staffName}
+            {paymentMethod ? ` · ${paymentMethod}` : ''}
             {note ? ` · ${note}` : ''}
           </div>
         </div>
         <div className={styles.pendingAmount}>{ghs(amount)}</div>
       </div>
+      {currentBalance != null && proposedBalance != null && (
+        <div className={styles.balancePreview}>
+          <span>Balance now: {ghs(currentBalance)}</span>
+          <span>→</span>
+          <span>If approved: {ghs(proposedBalance)}</span>
+        </div>
+      )}
       {proofUrl && (
         <div className={styles.proofWrap}>
           <div className={styles.proofLabel}>Attached receipt photo -- check it matches {ghs(amount)}</div>
@@ -212,25 +250,43 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
       {(approve.isError || decline.isError) && (
         <div className={styles.err}>{friendlyError(approve.error ?? decline.error, 'Failed to record this decision')}</div>
       )}
-      {canDecide && !declining && (
+      {canDecide && !declining && !confirmingApprove && (
         <div className={styles.pendingActions}>
-          <button type="button" className={styles.approveBtn} disabled={approve.isPending} onClick={() => approve.mutate({ paymentId, leadName: clientName, leadContact: lead?.contact, amount })}>
-            {approve.isPending ? 'Approving…' : 'Approve'}
+          <button type="button" className={styles.approveBtn} onClick={() => setConfirmingApprove(true)}>
+            Approve
           </button>
           <button type="button" className={styles.declineBtn} onClick={() => setDeclining(true)}>
             Decline
           </button>
         </div>
       )}
+      {canDecide && confirmingApprove && (
+        <>
+          <p className={styles.confirmText}>Approve {ghs(amount)} for {clientName}? This cannot be undone.</p>
+          <div className={styles.pendingActions}>
+            <button
+              type="button"
+              className={styles.approveBtn}
+              disabled={approve.isPending}
+              onClick={() => approve.mutate({ paymentId, leadName: clientName, leadContact: lead?.contact, amount })}
+            >
+              {approve.isPending ? 'Approving…' : 'Confirm approve'}
+            </button>
+            <button type="button" className={styles.changeBtn} onClick={() => setConfirmingApprove(false)} disabled={approve.isPending}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
       {canDecide && declining && (
         <>
-          <input className={styles.reasonInput} placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input className={styles.reasonInput} placeholder="Reason for declining (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div className={styles.pendingActions}>
             <button
               type="button"
               className={styles.declineBtn}
-              disabled={decline.isPending}
-              onClick={() => decline.mutate({ paymentId, reason: reason || undefined })}
+              disabled={decline.isPending || reasonRequired}
+              onClick={() => decline.mutate({ paymentId, reason: reason.trim() })}
             >
               {decline.isPending ? 'Declining…' : 'Confirm decline'}
             </button>

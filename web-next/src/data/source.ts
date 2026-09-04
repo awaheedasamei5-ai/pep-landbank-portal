@@ -706,6 +706,9 @@ function createDemoDataSource(): DataSource {
         return demoLoad().leads.filter((l) => !l.deletedAt);
       },
       async create(agentKey, input) {
+        // Same rule as live mode -- see live leads.create()'s comment.
+        // amt_paid always starts at 0 here regardless of input.amtPaid;
+        // useCreateLead creates a real Payment row for a nonzero deposit.
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
         const lead: Lead = {
           id: Math.random().toString(36).slice(2, 10),
@@ -717,9 +720,9 @@ function createDemoDataSource(): DataSource {
           noPlots: input.noPlots,
           unitPrice: input.unitPrice,
           paymentPlan: input.paymentPlan,
-          amtPaid: input.amtPaid,
+          amtPaid: 0,
           grandTotal,
-          stage: deriveStageFromPayment(input.amtPaid, grandTotal),
+          stage: deriveStageFromPayment(0, grandTotal),
           notes: input.notes,
         };
         const db = demoLoad();
@@ -2192,8 +2195,14 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapLeadRow);
       },
       async create(agentKey, input) {
+        // Master Spec Section 4.4: amt_paid is never a free field written
+        // from form input -- always starts at 0 regardless of what the
+        // caller's `input.amtPaid` says. A nonzero opening deposit becomes
+        // a real Payment row instead, created by useCreateLead right after
+        // this resolves (see that hook's own comment for why it isn't
+        // folded into one call here: the lead must exist first to supply
+        // payments.create() a real leadId).
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
-        const stage = deriveStageFromPayment(input.amtPaid, grandTotal);
         const { data, error } = await requireClient()
           .from('leads')
           .insert({
@@ -2204,10 +2213,10 @@ function createLiveDataSource(): DataSource {
             no_plots: input.noPlots,
             unit_price: input.unitPrice,
             payment_plan: input.paymentPlan,
-            amt_paid: input.amtPaid,
+            amt_paid: 0,
             grand_total: grandTotal,
-            balance: Math.max(grandTotal - input.amtPaid, 0),
-            stage,
+            balance: grandTotal,
+            stage: deriveStageFromPayment(0, grandTotal),
             notes: input.notes ?? null,
           })
           .select()

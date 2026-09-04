@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateLead } from '../hooks/useLeads';
 import { computeGrandTotal } from '../lib/pipelineLogic';
 import { ghs } from '../../../shared/lib/format';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import styles from './AddLeadScreen.module.css';
 
 // Simplified port of formAddLead()/readLeadForm() (index.html:14132-14182).
@@ -29,7 +31,9 @@ type FormOutput = z.output<typeof schema>;
 
 export function AddLeadScreen() {
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
   const createLead = useCreateLead();
+  const [depositNotice, setDepositNotice] = useState<{ leadId: string; message: string } | null>(null);
   const {
     register,
     handleSubmit,
@@ -40,13 +44,38 @@ export function AddLeadScreen() {
     defaultValues: { plotType: 'Full Plot', noPlots: 1, paymentPlan: 'Full Payment', amtPaid: 0 },
   });
 
+  // Master Spec Section 4.4: amt_paid is never a free field -- only
+  // Elias/Management can actually log a payment at all (real payments_ins
+  // RLS), so an ordinary agent never sees this field; the lead is simply
+  // created with nothing paid yet, and payments come in through Log
+  // Payment afterward like every other payment does.
+  const canLogDeposit = profile?.role === 'manager' || profile?.key === 'elias';
+
   const unitPrice = watch('unitPrice') || 0;
   const noPlots = watch('noPlots') || 0;
   const grandTotal = computeGrandTotal(Number(unitPrice), Number(noPlots));
 
   async function onSubmit(values: FormOutput) {
-    await createLead.mutateAsync(values);
+    const { lead, depositError } = await createLead.mutateAsync(values);
+    if (depositError) {
+      setDepositNotice({ leadId: lead.id, message: depositError });
+      return;
+    }
     navigate('/app/sales/pipeline');
+  }
+
+  if (depositNotice) {
+    return (
+      <div className={styles.wrap}>
+        <h1 className={styles.title}>Lead saved</h1>
+        <p className={styles.err} style={{ marginTop: 8 }}>{depositNotice.message}</p>
+        <div className={styles.actions} style={{ marginTop: 16 }}>
+          <button type="button" className={styles.save} onClick={() => navigate(`/app/sales/pipeline/${depositNotice.leadId}`)}>
+            Open the lead
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -82,7 +111,7 @@ export function AddLeadScreen() {
           <input className={styles.input} type="number" {...register('unitPrice')} />
           {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
         </div>
-        <div className={styles.grid2}>
+        <div className={canLogDeposit ? styles.grid2 : undefined}>
           <div className={styles.field}>
             <label className={styles.label}>Payment plan</label>
             <select className={styles.select} {...register('paymentPlan')}>
@@ -93,10 +122,13 @@ export function AddLeadScreen() {
               <option>12 Months</option>
             </select>
           </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Amount already paid</label>
-            <input className={styles.input} type="number" {...register('amtPaid')} />
-          </div>
+          {canLogDeposit && (
+            <div className={styles.field}>
+              <label className={styles.label}>Amount already paid</label>
+              <input className={styles.input} type="number" {...register('amtPaid')} />
+              <p className={styles.hint}>Recorded as a real payment against this lead, same as Log Payment.</p>
+            </div>
+          )}
         </div>
         <div className={styles.field}>
           <label className={styles.label}>Notes</label>
