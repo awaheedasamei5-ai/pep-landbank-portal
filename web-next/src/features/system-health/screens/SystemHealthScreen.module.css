@@ -16,6 +16,32 @@
   margin: 10px 0;
 }
 
+.aiSummary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: var(--c-text);
+  line-height: 1.5;
+  box-shadow: var(--shadow);
+}
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+  margin-top: 1px;
+}
+
 .cardGrid { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 
 .card {

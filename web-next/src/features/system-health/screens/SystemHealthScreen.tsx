@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router';
 import { Icon } from '../../../shared/ui/Icon';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useSystemHealth } from '../hooks/useSystemHealth';
+import { useSystemHealthSummary } from '../hooks/useSystemHealthSummary';
+import { useAiProviderStatus } from '../hooks/useAiProviderStatus';
 import styles from './SystemHealthScreen.module.css';
 
 function fmtDate(iso: string): string {
@@ -21,6 +23,8 @@ function fmtBytes(n: number): string {
 export function SystemHealthScreen() {
   const navigate = useNavigate();
   const health = useSystemHealth();
+  const { data: summary } = useSystemHealthSummary(health);
+  const { data: aiStatus } = useAiProviderStatus();
 
   return (
     <div className={styles.wrap}>
@@ -49,8 +53,24 @@ export function SystemHealthScreen() {
             </div>
           )}
 
+          {summary && (
+            <div className={styles.aiSummary}>
+              <span className={styles.aiBadge}>AI</span>
+              <span>{summary}</span>
+            </div>
+          )}
+
           <div className={styles.sectionTitle}>Scheduled jobs</div>
           <div className={styles.jobList}>
+            <div className={styles.jobRow}>
+              <div>
+                <div className={styles.jobName}>AI provider (Groq)</div>
+                <div className={styles.jobCadence}>Powers every AI feature across the app</div>
+              </div>
+              <span className={`${styles.jobStatus} ${aiStatus === 'connected' ? styles.jobStatusOk : styles.jobStatusFail}`}>
+                {aiStatus === 'connected' ? 'Connected' : aiStatus === 'not_configured' ? 'Not configured' : aiStatus === 'unreachable' ? 'Unreachable' : 'Checking…'}
+              </span>
+            </div>
             <div className={styles.jobRow}>
               <div>
                 <div className={styles.jobName}>Daily management report</div>

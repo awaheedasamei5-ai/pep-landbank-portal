@@ -122,6 +122,13 @@ function systemPromptFor(kind: string): string | null {
         "Reply with ONE short sentence (max 30 words), second person, citing the real numbers given -- never invent a figure not in the data, and never mention any client by name since you're never given one. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "system_health_summary":
+      return (
+        "You narrate the results of an automated system-health check for a Ghanaian land-sales agency called Palmstead's internal admin app -- purely technical/operational data, never client or staff personal information. " +
+        "You'll receive one JSON object with the real count of critical audit events, how many scheduled jobs are currently failing, whether the daily management report ran on time, whether the latest backup is overdue, and the total backup count on file. " +
+        "Reply with ONE short sentence (max 30 words) in plain, natural English naming what most deserves attention right now, or confirming everything looks healthy if nothing does -- cite the real numbers/flags given, but describe them in plain words, never echo a JSON field name like 'criticalCount' verbatim in your reply. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
@@ -146,6 +153,18 @@ Deno.serve(async (req: Request) => {
   }
   try {
     const { kind, context } = (await req.json()) as AiRequest;
+
+    // Fast path for System Health's "AI provider" status row (Master Spec
+    // line 217, a real named gap until now) -- reports whether the secret
+    // is configured without spending a real Groq call just to answer a
+    // yes/no health check.
+    if (kind === "health_check") {
+      return new Response(JSON.stringify({ configured: !!Deno.env.get("GROQ_API_KEY") }), {
+        status: 200,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      });
+    }
+
     const systemPrompt = kind ? systemPromptFor(kind) : null;
     if (!systemPrompt) {
       return new Response(JSON.stringify({ error: `Unknown insight kind: ${kind}` }), {
