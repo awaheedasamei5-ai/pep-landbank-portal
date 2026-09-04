@@ -203,7 +203,7 @@
 
 .boardSection { margin-bottom: 18px; }
 .boardSectionLabel { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
-.boardGrid { display: flex; flex-wrap: wrap; gap: 10px; }
+.boardGrid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
 
 .tileGroup { display: flex; gap: 4px; }
 
@@ -244,36 +244,51 @@
 }
 .tile_Allocated .tileFraction, .tile_Disputed .tileFraction { background: rgb(255 255 255 / 22%); }
 
-/* Owner-adjacency cluster -- wraps consecutive same-owner tiles (real
-   pattern: 70 owners in the actual data hold 2+ close-numbered plots in
-   one block) in a shared outline with the owner's name as a caption, so
-   "these tiles are one person's" reads without clicking through each
-   one. Green is deliberately reused from the status legend's own
-   Available color -- safe because a cluster only ever wraps Allocated
-   (dark) tiles, an owner key only exists once a plot is sold, so the two
-   never appear on the same tile. */
-.ownerCluster {
-  position: relative;
-  border: 2px solid var(--c-success);
-  border-radius: 12px;
-  padding: 13px 6px 6px;
-  margin-top: 6px;
-}
-.ownerClusterLabel {
-  position: absolute;
-  top: -9px;
-  left: 8px;
-  background: var(--c-paper);
-  padding: 0 6px;
+/* Every board unit -- clustered or solo -- is one of these, each with
+   the identical fixed-height caption row above its tiles. That's the
+   real fix for the alignment bug the user caught live: only clusters
+   used to reserve vertical space for a label, so their tiles visibly
+   sat lower than a solo tile's in the same wrapped row. Reserving that
+   same 15px for every unit (empty for solo ones) means every tile,
+   grouped or not, starts at the same Y position. */
+.boardUnitSlot { display: flex; flex-direction: column; gap: 3px; }
+.unitCaption {
+  display: block;
+  height: 12px;
+  line-height: 12px;
   font-size: 10px;
   font-weight: 700;
   color: var(--c-success);
-  max-width: min(220px, 90%);
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ownerClusterTiles { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Owner-adjacency cluster -- wraps consecutive same-owner tiles (real
+   pattern: 70 owners in the actual data hold 2+ close-numbered plots in
+   one block) in a shared outline, its .unitCaption sibling above
+   carrying the owner's name, so "these tiles are one person's" reads
+   without clicking through each one. Green is deliberately reused from
+   the status legend's own Available color -- safe because a cluster
+   only ever wraps Allocated (dark) tiles, an owner key only exists once
+   a plot is sold, so the two never appear on the same tile.
+
+   .tilesBox is shared with the solo case below on purpose: same
+   padding/border-width box model with the border just toggled
+   transparent, so a solo tile's content sits at the exact same offset
+   as a clustered one's -- the border/padding alone was enough to put
+   clusters 8px lower than solo tiles in the same wrapped row, caught
+   live even after the caption-height fix above. */
+.ownerCluster { border-color: var(--c-success); }
+.tilesBox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 6px;
+}
 
 .tile_Available { background: var(--c-success-bg); border-color: var(--c-success-soft); color: var(--c-success); }
 .tile_Available:hover { border-color: var(--c-success); }

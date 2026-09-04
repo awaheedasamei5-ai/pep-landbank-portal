@@ -469,11 +469,21 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
         <div key={section} className={styles.boardSection}>
           <div className={styles.boardSectionLabel}>Block {section}</div>
           <div className={styles.boardGrid}>
+            {/* Every entry -- clustered or solo -- reserves the exact same
+                fixed-height caption row above its tiles (empty when
+                there's no owner label), so a solo tile's own tiles start
+                at the identical Y position as a clustered one's, instead
+                of clusters sitting visibly lower because only they had a
+                caption eating into the row's vertical space. Caught live
+                by the user (screenshot showed the two visibly out of
+                line) -- this is the fix, not a cosmetic nudge. */}
             {clusterByOwner(boardUnits(secPlots)).map((entry) =>
               entry.cluster ? (
-                <div key={entry.units[0].key} className={styles.ownerCluster} title={`${entry.ownerLabel} owns these ${entry.units.length} plots`}>
-                  <span className={styles.ownerClusterLabel}>{entry.ownerLabel}</span>
-                  <div className={styles.ownerClusterTiles}>
+                <div key={entry.units[0].key} className={styles.boardUnitSlot}>
+                  <span className={styles.unitCaption} title={`${entry.ownerLabel} owns these ${entry.units.length} plots`}>
+                    {entry.ownerLabel}
+                  </span>
+                  <div className={`${styles.tilesBox} ${styles.ownerCluster}`}>
                     {entry.units.map((unit) => (
                       <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
                         {unit.tiles.map((p) => (
@@ -484,10 +494,17 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
                   </div>
                 </div>
               ) : (
-                <div key={entry.units[0].key} className={entry.units[0].tiles.length > 1 ? styles.tileGroup : undefined}>
-                  {entry.units[0].tiles.map((p) => (
-                    <PlotTile key={p.id} p={p} navigate={navigate} />
-                  ))}
+                <div key={entry.units[0].key} className={styles.boardUnitSlot}>
+                  <span className={styles.unitCaption} aria-hidden="true">
+                    {' '}
+                  </span>
+                  <div className={styles.tilesBox}>
+                    <div className={entry.units[0].tiles.length > 1 ? styles.tileGroup : undefined}>
+                      {entry.units[0].tiles.map((p) => (
+                        <PlotTile key={p.id} p={p} navigate={navigate} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ),
             )}
