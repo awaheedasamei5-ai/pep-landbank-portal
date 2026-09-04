@@ -1,0 +1,7 @@
+.wrap { padding: 20px 16px 90px; }
+.title { font-size: 22px; margin-bottom: 4px; }
+.sub { color: var(--c-muted); margin-top: 0; margin-bottom: 20px; font-size: 13.5px; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 680px; padding: 28px 32px 40px; }
+}

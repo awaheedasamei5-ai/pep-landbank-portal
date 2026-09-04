@@ -50,6 +50,34 @@
   color: var(--c-muted);
   line-height: 1.35;
 }
+
+.textCol { display: flex; flex-direction: column; gap: 2px; }
+.chev { display: none; color: var(--c-faint); flex-shrink: 0; }
+
+/* Premium UI Rebuild spec: "use a section header + compact app rows/
+   commands rather than emoji cards or repeated generic tiles" -- the
+   colorful 2/3-column tile grid is right for mobile (spec's own
+   reference principle: "mobile can use... grouped colorful modules")
+   but reads as a generic app-launcher on a wide screen. Desktop swaps
+   to a single-column list of dense rows: icon + label/sub inline + a
+   trailing chevron, the same visual language Sidebar's own nav items
+   already use, so a hub screen feels like a continuation of the shell
+   rather than a different product. */
+@media (width >= 1024px) {
+  .grid { grid-template-columns: 1fr; gap: 2px; max-width: 640px; }
+  .tile {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border-color: transparent;
+    box-shadow: none;
+  }
+  .tile:hover:not(:disabled) { background: var(--c-paper); }
+  .badge { width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; }
+  .chev { display: flex; }
+}
 .purple { background: linear-gradient(150deg, #A78BFA, #7C3AED); }
 .teal { background: linear-gradient(150deg, #5EEAD4, #0D9488); }
 .blue { background: linear-gradient(150deg, #60A5FA, #2563EB); }

@@ -4,6 +4,7 @@ import { useCanManageExpenses } from '../../expenses/hooks/useFundRequests';
 import { useCanViewSiteVisitAuth } from '../../site-visit-auth/hooks/useSiteVisitAuth';
 import { useCanViewStaffReport } from '../../staff-report/hooks/useStaffReport';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
+import styles from './OfficeDeskScreen.module.css';
 
 // Port of officeDeskGroups()'s items (index.html:8965-8994) -- "Operations
 // Tracker" is the only tile wired for this slice; the rest are inert
@@ -40,9 +41,9 @@ export function OfficeDeskScreen() {
   ];
 
   return (
-    <div style={{ padding: '20px 16px 90px' }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Office</h1>
-      <p style={{ color: 'var(--c-muted)', marginTop: 0, marginBottom: 20, fontSize: 13.5 }}>Documents, operations &amp; feedback</p>
+    <div className={styles.wrap}>
+      <h1 className={styles.title}>Office</h1>
+      <p className={styles.sub}>Documents, operations &amp; feedback</p>
       <TileGrid items={items} />
     </div>
   );

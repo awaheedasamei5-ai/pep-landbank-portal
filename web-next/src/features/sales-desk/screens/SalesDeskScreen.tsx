@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useCanManageCompanyLeads } from '../../company-leads/hooks/useCompanyLeads';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
+import styles from './SalesDeskScreen.module.css';
 
 // Port of salesDeskGroupsForAgent()'s items (index.html:8843-8860) --
 // "My pipeline" is the only tile actually wired for Phase 2; the rest are
@@ -32,9 +33,9 @@ export function SalesDeskScreen() {
   ];
 
   return (
-    <div style={{ padding: '20px 16px 90px' }}>
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Sales</h1>
-      <p style={{ color: 'var(--c-muted)', marginTop: 0, marginBottom: 20, fontSize: 13.5 }}>Leads, pipeline &amp; client touchpoints</p>
+    <div className={styles.wrap}>
+      <h1 className={styles.title}>Sales</h1>
+      <p className={styles.sub}>Leads, pipeline &amp; client touchpoints</p>
       <TileGrid items={items} />
     </div>
   );

@@ -24,8 +24,13 @@ export function TileGrid({ items }: { items: TileItem[] }) {
           <span className={`${styles.badge} ${styles[it.color]}`}>
             <Icon name={it.icon} size={20} />
           </span>
-          <span className={styles.label}>{it.label}</span>
-          {it.sub && <span className={styles.sub}>{it.sub}</span>}
+          <span className={styles.textCol}>
+            <span className={styles.label}>{it.label}</span>
+            {it.sub && <span className={styles.sub}>{it.sub}</span>}
+          </span>
+          <span className={styles.chev}>
+            <Icon name="chevronRight" size={16} />
+          </span>
         </button>
       ))}
     </div>
