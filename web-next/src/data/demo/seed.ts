@@ -175,6 +175,7 @@ export function seedDemo(): DemoDb {
     officeRadiusMeters: 297,
     attendanceCutoffTime: '09:00',
     workStartTime: '08:00',
+    allocationThresholdPct: 30,
   };
 
   // Real access to this resource is manager + elias/emmanuel-only (RLS

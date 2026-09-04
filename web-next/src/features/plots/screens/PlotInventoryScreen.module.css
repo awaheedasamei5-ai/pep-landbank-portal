@@ -113,6 +113,20 @@
 .legendItem { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--c-muted); }
 .legendDot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
+.sectionChips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; margin-bottom: 10px; }
+.sectionChip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sectionChipActive { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+
 .searchRow { display: flex; gap: 8px; margin-bottom: 10px; }
 .searchWrap { position: relative; flex: 1; min-width: 0; }
 .searchIcon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--c-faint); pointer-events: none; display: flex; }

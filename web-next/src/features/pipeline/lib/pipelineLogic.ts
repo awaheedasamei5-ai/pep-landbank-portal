@@ -59,16 +59,22 @@ export interface DepositStatus {
 }
 
 // Ported from index.html's computeDepositStatus() (index.html:2704-2725).
-// Default deposit target is 30% of NET (list minus discount, interest NOT
-// included) -- confirmed by that function's own comment against a real
-// test case with non-zero interest (GHS 48,000 list, GHS 3,000 interest,
-// deposit must read GHS 14,400 = 30% of net, not 15,300 = 30% of grand).
-// Only ever falls back to that default when no explicit depositTarget is
-// on file; a real, already-set target is used exactly as stored.
+// Default deposit target is allocationThresholdPct% of NET (list minus
+// discount, interest NOT included) -- confirmed by that function's own
+// original comment against a real test case with non-zero interest (GHS
+// 48,000 list, GHS 3,000 interest, deposit must read GHS 14,400 = 30% of
+// net, not 15,300 = 30% of grand). Only ever falls back to that default
+// when no explicit depositTarget is on file; a real, already-set target
+// is used exactly as stored. This is also Master Spec 7.3's own
+// allocation-eligibility threshold ("30% of grand total, subject to
+// management configuration") -- the same real business concept as the
+// deposit target already computed here, not a second parallel one, so
+// `complete` below doubles as "eligible to request allocation" (see
+// useCreateAllocationRequest's own gate).
 export function computeDepositStatus(config: Config, lead: Lead, paymentsForLead: Payment[]): DepositStatus {
   const totals = computeLeadQuotationTotals(config, lead);
   const net = lead.netTotal != null ? lead.netTotal : totals.net;
-  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * 0.3);
+  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * (config.allocationThresholdPct / 100));
   const sorted = [...paymentsForLead].sort((a, b) => a.date.localeCompare(b.date));
   let cum = 0;
   let clearedDate: string | null = null;

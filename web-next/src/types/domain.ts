@@ -399,6 +399,11 @@ export interface Config {
   techFullPlotWidthFt: number;
   techHalfPlotLengthFt: number;
   techHalfPlotWidthFt: number;
+  // Real column `allocation_threshold_pct` (added this session -- Master
+  // Spec 7.3's "Default allocation threshold: 30% of grand total, subject
+  // to management configuration" had no config field anywhere until now;
+  // every allocation-eligibility check reads this, never a hardcoded 30).
+  allocationThresholdPct: number;
   // Real columns leave_total_days/work_days/eid_observing_staff
   // (confirmed live) -- feed the leave-quota calendar engine
   // (shared/lib/ghanaHolidays.ts, features/leave/lib/leaveLogic.ts).

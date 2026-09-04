@@ -183,6 +183,23 @@ export function PlotInventoryScreen() {
           </span>
         </div>
 
+        {/* Master Spec 8: "section selector" on both desktop and mobile --
+            with 15 real blocks and 415 plots, scrolling past every block to
+            reach one isn't a real substitute. Reuses the existing Section
+            filter as one-tap chips instead of a second, separate concept. */}
+        {sections.length > 0 && (
+          <div className={styles.sectionChips}>
+            <button type="button" className={`${styles.sectionChip} ${!filters.section ? styles.sectionChipActive : ''}`} onClick={() => setFilters((f) => ({ ...f, section: '' }))}>
+              All
+            </button>
+            {sections.map((s) => (
+              <button key={s} type="button" className={`${styles.sectionChip} ${filters.section === s ? styles.sectionChipActive : ''}`} onClick={() => setFilters((f) => ({ ...f, section: f.section === s ? '' : s }))}>
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className={styles.searchRow}>
           <div className={styles.searchWrap}>
             <span className={styles.searchIcon}>

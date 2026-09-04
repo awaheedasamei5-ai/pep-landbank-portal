@@ -4,8 +4,10 @@ import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
+import { useAllLeads } from '../../payments/hooks/useLogPayment';
+import { usePayments } from '../../pipeline/hooks/usePayments';
 import { usePlots, useSplitPlot } from '../../plots/hooks/usePlots';
-import { allocationUnitsNeeded } from '../../pipeline/lib/pipelineLogic';
+import { allocationUnitsNeeded, computeDepositStatus } from '../../pipeline/lib/pipelineLogic';
 import { suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import {
@@ -18,6 +20,7 @@ import {
   useFlagAllocation,
   useResolveAllocationFlag,
   useRevertAllocation,
+  useSendBackAllocation,
   useSuggestAllocationPlots,
 } from '../hooks/useAllocationRequests';
 import type { AllocationRequest, Lead } from '../../../types/domain';
@@ -96,17 +99,25 @@ export function AllocationRequestsScreen() {
   );
 }
 
+// Master Spec 7.3's eligibility gate applies here too, not just on the
+// lead's own page (PipelineDetailScreen's AllocationEligibilitySection) --
+// otherwise the threshold is trivially bypassed by using this picker
+// instead. Same computeDepositStatus check, same config.allocationThresholdPct.
 function NewRequestForm({ onDone }: { onDone: () => void }) {
   const { data: leads } = useLeads();
+  const { data: config } = useConfig();
   const create = useCreateAllocationRequest();
   const [query, setQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const { data: leadPayments } = usePayments(selectedLead?.id ?? '');
 
   const q = query.trim().toLowerCase();
   const matches = q ? (leads ?? []).filter((l) => l.name.toLowerCase().includes(q) || l.contact.includes(q)).slice(0, 8) : [];
 
+  const dep = selectedLead && config ? computeDepositStatus(config, selectedLead, leadPayments ?? []) : null;
+
   async function submit() {
-    if (!selectedLead) return;
+    if (!selectedLead || !dep?.complete) return;
     await create.mutateAsync({ leadId: selectedLead.id });
     onDone();
   }
@@ -138,7 +149,12 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
               Change
             </button>
           </div>
-          <button type="button" className={styles.submitBtn} disabled={create.isPending} onClick={submit}>
+          {dep && !dep.complete && (
+            <p className={styles.noMatch}>
+              {ghs(dep.paid)} of {ghs(dep.target)} ({config?.allocationThresholdPct}% target) paid — {ghs(dep.remaining)} more needed before this client is eligible for allocation.
+            </p>
+          )}
+          <button type="button" className={styles.submitBtn} disabled={!dep?.complete || create.isPending} onClick={submit}>
             {create.isPending ? 'Sending…' : 'Send request'}
           </button>
         </>
@@ -147,9 +163,19 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+// Real bug found live while testing the suggestion engine's split-fallback
+// (2026-09-07): this used useLeads() (listForAgent, scoped to the VIEWER's
+// own leads), so a manager reviewing another agent's request always got
+// lead=null here -- the suggestion engine then silently fell back to
+// units=['Full Plot'], the wrong unit count/type for any request that
+// wasn't the viewing manager's own. Same real payments_sel-style RLS
+// reasoning as useAllLeads' own listForAgent/listAll call sites elsewhere
+// (an agent calling the "unfiltered" query still only gets their own rows
+// back, enforced server-side) -- switching this to useAllLeads() fixes
+// management's view without narrowing what a regular agent already saw.
 function RequestRow({ request, canAllocate }: { request: AllocationRequest; canAllocate: boolean }) {
   const profile = useSessionStore((s) => s.profile);
-  const { data: leads } = useLeads();
+  const { data: leads } = useAllLeads();
   const [open, setOpen] = useState(false);
   const lead = (leads ?? []).find((l) => l.id === request.leadId) ?? null;
 
@@ -440,8 +466,11 @@ function FixResubmit({ request }: { request: AllocationRequest }) {
 
 function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Lead | null }) {
   const confirm = useConfirmAllocation();
+  const sendBack = useSendBackAllocation();
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sendingBack, setSendingBack] = useState(false);
+  const [reason, setReason] = useState('');
 
   const plots = (request.suggestedPlots ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   const units = allocationUnitsNeeded(lead?.plotType ?? 'Full Plot', lead?.noPlots ?? 1);
@@ -456,6 +485,39 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
     }
   }
 
+  // Master Spec 7.5: "Management approves one suggestion or sends back
+  // with reason." Reverts to Pending with the reason recorded on the
+  // existing flag_reason field -- reopens the exact same "fix and
+  // resubmit" panel staff already see for a suggestion-stage data problem.
+  if (sendingBack) {
+    return (
+      <div className={styles.suggestForm}>
+        <label className={styles.fieldLabel}>Why is this being sent back?</label>
+        <textarea className={styles.input} placeholder="e.g. Client wants a corner plot, none of these three qualify" value={reason} onChange={(e) => setReason(e.target.value)} style={{ minHeight: 60 }} />
+        {error && <p className={styles.errorMsg}>{error}</p>}
+        <div className={styles.allocateActions} style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className={styles.dangerBtn}
+            disabled={!reason.trim() || sendBack.isPending}
+            onClick={() => {
+              setError(null);
+              sendBack.mutateAsync({ id: request.id, reason: reason.trim() }).then(
+                () => setSendingBack(false),
+                (e) => setError(friendlyError(e, 'Failed to send back')),
+              );
+            }}
+          >
+            {sendBack.isPending ? 'Sending back…' : 'Send back to staff'}
+          </button>
+          <button type="button" className={styles.cancelBtn} onClick={() => setSendingBack(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (multi) {
     return (
       <div className={styles.suggestForm}>
@@ -466,9 +528,14 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
           </div>
         ))}
         {error && <p className={styles.errorMsg}>{error}</p>}
-        <button type="button" className={styles.confirmBtn} disabled={confirm.isPending} onClick={() => doConfirm(plots.join(','))}>
-          {confirm.isPending ? 'Confirming…' : `Confirm all ${plots.length} approved`}
-        </button>
+        <div className={styles.allocateActions}>
+          <button type="button" className={styles.confirmBtn} disabled={confirm.isPending} onClick={() => doConfirm(plots.join(','))}>
+            {confirm.isPending ? 'Confirming…' : `Confirm all ${plots.length} approved`}
+          </button>
+          <button type="button" className={styles.cancelBtn} onClick={() => setSendingBack(true)}>
+            Send back
+          </button>
+        </div>
       </div>
     );
   }
@@ -482,9 +549,14 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
         </label>
       ))}
       {error && <p className={styles.errorMsg}>{error}</p>}
-      <button type="button" className={styles.confirmBtn} disabled={!selected || confirm.isPending} onClick={() => selected && doConfirm(selected)}>
-        {confirm.isPending ? 'Confirming…' : 'Confirm approved plot'}
-      </button>
+      <div className={styles.allocateActions}>
+        <button type="button" className={styles.confirmBtn} disabled={!selected || confirm.isPending} onClick={() => selected && doConfirm(selected)}>
+          {confirm.isPending ? 'Confirming…' : 'Confirm approved plot'}
+        </button>
+        <button type="button" className={styles.cancelBtn} onClick={() => setSendingBack(true)}>
+          Send back
+        </button>
+      </div>
     </div>
   );
 }

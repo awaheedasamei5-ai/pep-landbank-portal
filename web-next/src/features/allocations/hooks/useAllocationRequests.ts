@@ -132,3 +132,17 @@ export function useResolveAllocationFlag() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
   });
 }
+
+// Master Spec 7.5: Management can send a suggestion set back with a
+// reason instead of confirming one -- reverts to Pending so staff see
+// the same "fix and resubmit" panel already built for the flag-at-
+// suggestion-stage path.
+export function useSendBackAllocation() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).allocationRequests.sendBack(id, reason, profile?.name ?? ''),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}

@@ -43,10 +43,12 @@ function SettingsForm({ config }: { config: Config }) {
   const [commFull, setCommFull] = useState(String(config.commissionFullCap));
   const [commHalf, setCommHalf] = useState(String(config.commissionHalfCap));
   const [commPool, setCommPool] = useState(String(config.commissionPoolPerPlot));
-  const [savedSection, setSavedSection] = useState<'weights' | 'commission' | null>(null);
+  const [allocThreshold, setAllocThreshold] = useState(String(config.allocationThresholdPct));
+  const [savedSection, setSavedSection] = useState<'weights' | 'commission' | 'allocation' | null>(null);
 
   const weightsDirty = JSON.stringify(weights) !== JSON.stringify(config.leaderboardWeights);
   const commissionDirty = commFull !== String(config.commissionFullCap) || commHalf !== String(config.commissionHalfCap) || commPool !== String(config.commissionPoolPerPlot);
+  const allocationDirty = allocThreshold !== String(config.allocationThresholdPct);
 
   function weightField(key: keyof LeaderboardWeights, label: string, hint?: string) {
     return (
@@ -69,6 +71,12 @@ function SettingsForm({ config }: { config: Config }) {
   async function saveCommission() {
     await update.mutateAsync({ commissionFullCap: Number(commFull), commissionHalfCap: Number(commHalf), commissionPoolPerPlot: Number(commPool) });
     setSavedSection('commission');
+    setTimeout(() => setSavedSection(null), 2000);
+  }
+
+  async function saveAllocation() {
+    await update.mutateAsync({ allocationThresholdPct: Number(allocThreshold) });
+    setSavedSection('allocation');
     setTimeout(() => setSavedSection(null), 2000);
   }
 
@@ -117,6 +125,21 @@ function SettingsForm({ config }: { config: Config }) {
         </div>
         <button type="button" className={styles.saveBtn} disabled={!commissionDirty || update.isPending} onClick={saveCommission}>
           {update.isPending && savedSection !== 'weights' ? 'Saving…' : savedSection === 'commission' ? 'Saved ✓' : 'Save commission settings'}
+        </button>
+      </div>
+
+      <div className={styles.sectionCard}>
+        <div className={styles.sectionTitle}>Allocation eligibility</div>
+        <p className={styles.sectionHint}>
+          Master Spec 7.3&apos;s allocation threshold &mdash; a client must have paid at least this share of their grand total before staff can request a plot allocation for them. Also drives the existing deposit target shown on
+          each lead.
+        </p>
+        <div className={styles.field}>
+          <label className={styles.label}>Threshold (% of grand total)</label>
+          <input className={styles.input} type="number" min="0" max="100" value={allocThreshold} onChange={(e) => setAllocThreshold(e.target.value)} />
+        </div>
+        <button type="button" className={styles.saveBtn} disabled={!allocationDirty || update.isPending} onClick={saveAllocation}>
+          {update.isPending && savedSection === null ? 'Saving…' : savedSection === 'allocation' ? 'Saved ✓' : 'Save allocation settings'}
         </button>
       </div>
     </>

@@ -329,7 +329,7 @@ export interface DataSource {
     // only writes the fields the caller actually passes, leaving every
     // other real app_config column (quotation text, pricing, targets,
     // etc. -- all out of scope here) untouched.
-    update(patch: Partial<Pick<Config, 'leaderboardWeights' | 'commissionFullCap' | 'commissionHalfCap' | 'commissionPoolPerPlot'>>): Promise<Config>;
+    update(patch: Partial<Pick<Config, 'leaderboardWeights' | 'commissionFullCap' | 'commissionHalfCap' | 'commissionPoolPerPlot' | 'allocationThresholdPct'>>): Promise<Config>;
   };
   // Real RLS restricts this to manager + specifically the 'elias'/
   // 'emmanuel' staff keys (confirmed live) -- not every agent. Callers
@@ -630,6 +630,16 @@ export interface DataSource {
     remove(id: string): Promise<void>;
     flag(id: string, reason: string, flaggedBy: string): Promise<AllocationRequest>;
     resolveFlag(id: string): Promise<AllocationRequest>;
+    // Master Spec 7.5: "Management approves one suggestion or sends back
+    // with reason" -- only confirm existed before this. Reuses the exact
+    // same flag_reason/flagged_by fields flag() above already writes
+    // (plain columns, not RPC-gated by status), just also reverting
+    // status back to Pending and clearing the old suggestion so staff
+    // re-suggest fresh. That combination is deliberate: a Pending request
+    // with a flag_reason already renders RequestRow's own "fix and
+    // resubmit" panel with zero new UI needed, the same real path staff
+    // already use for a suggestion-stage data problem.
+    sendBack(id: string, reason: string, sentBackBy: string): Promise<AllocationRequest>;
   };
   // Real table `notes` -- a private per-staff scratchpad. notes_sel also
   // lets a manager SELECT anyone's notes (confirmed live), not used here --
@@ -2004,6 +2014,15 @@ function createDemoDataSource(): DataSource {
         demoSave();
         return updated;
       },
+      async sendBack(id, reason, sentBackBy) {
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = { ...db.allocationRequests[index], status: 'Pending', suggestedPlots: null, flagReason: reason, flaggedBy: sentBackBy, flaggedAt: new Date().toISOString() };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
     },
     notes: {
       async listForOwner(ownerKey) {
@@ -2866,6 +2885,7 @@ function createLiveDataSource(): DataSource {
         if (patch.commissionFullCap !== undefined) dbPatch.commission_full_cap = patch.commissionFullCap;
         if (patch.commissionHalfCap !== undefined) dbPatch.commission_half_cap = patch.commissionHalfCap;
         if (patch.commissionPoolPerPlot !== undefined) dbPatch.commission_pool_per_plot = patch.commissionPoolPerPlot;
+        if (patch.allocationThresholdPct !== undefined) dbPatch.allocation_threshold_pct = patch.allocationThresholdPct;
         const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
@@ -3560,6 +3580,16 @@ function createLiveDataSource(): DataSource {
       },
       async resolveFlag(id) {
         const { data, error } = await requireClient().from('allocation_requests').update({ flag_reason: null, flagged_by: null, flagged_at: null }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapAllocationRequestRow(data);
+      },
+      async sendBack(id, reason, sentBackBy) {
+        const { data, error } = await requireClient()
+          .from('allocation_requests')
+          .update({ status: 'Pending', suggested_plots: null, flag_reason: reason, flagged_by: sentBackBy, flagged_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
       },

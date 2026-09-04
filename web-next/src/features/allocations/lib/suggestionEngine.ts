@@ -63,9 +63,32 @@ function candidatesFor(plots: Plot[], plotType: PlotType, site: string | undefin
     .map((plot) => ({ plot, reason: buildReason(plot, plotType, std) }));
 }
 
+// Master Spec 7.4 item 4: "Then prefer combinations that can be safely
+// subdivided." When a Half Plot unit has no direct match, a splittable
+// Available Full Plot is a real fallback -- the candidate itself is the
+// Full Plot (not yet split), and AllocationRequestsScreen's own inline
+// "Split X into two Half Plots" action already appears the moment this
+// plot number lands in a slot, so accepting this suggestion and splitting
+// it is one continuous flow, not a second lookup.
+function splitFallbackCandidatesFor(plots: Plot[], site: string | undefined, exclude: Set<string>): PlotSuggestion[] {
+  return plots
+    .filter((p) => p.status === 'Available' && p.plotType === 'Full Plot' && p.unitKind !== 'half' && !p.parentPlotId && !exclude.has(p.id) && (!site || p.site === site))
+    .sort((a, b) => a.plotNumber.localeCompare(b.plotNumber))
+    .map((plot) => ({
+      plot,
+      reason: `No Half Plot currently Available -- ${plot.plotNumber} is a splittable Full Plot (${plot.widthFt ?? '?'}x${plot.lengthFt ?? '?'}ft, GHS ${plot.price ?? 0}). Split it into two halves to fulfill this unit.`,
+    }));
+}
+
+function candidatesForUnit(plots: Plot[], plotType: PlotType, site: string | undefined, exclude: Set<string>, std: StandardDimensions): PlotSuggestion[] {
+  const direct = candidatesFor(plots, plotType, site, exclude, std);
+  if (direct.length > 0 || plotType !== 'Half Plot') return direct;
+  return splitFallbackCandidatesFor(plots, site, exclude);
+}
+
 // Single-unit request -> up to 3 ranked alternatives (staff picks one).
 export function suggestAlternatives(plots: Plot[], plotType: PlotType, std: StandardDimensions, site?: string): PlotSuggestion[] {
-  return candidatesFor(plots, plotType, site, new Set(), std).slice(0, 3);
+  return candidatesForUnit(plots, plotType, site, new Set(), std).slice(0, 3);
 }
 
 // Multi-unit request -> exactly one complete set, one candidate per unit,
@@ -75,7 +98,7 @@ export function suggestAlternatives(plots: Plot[], plotType: PlotType, std: Stan
 export function suggestSet(plots: Plot[], units: PlotType[], std: StandardDimensions, site?: string): (PlotSuggestion | null)[] {
   const used = new Set<string>();
   return units.map((unit) => {
-    const best = candidatesFor(plots, unit, site, used, std)[0] ?? null;
+    const best = candidatesForUnit(plots, unit, site, used, std)[0] ?? null;
     if (best) used.add(best.plot.id);
     return best;
   });

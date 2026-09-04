@@ -551,6 +551,7 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     officeRadiusMeters: Number(r.office_radius_meters ?? 250),
     attendanceCutoffTime: (r.attendance_cutoff_time as string) ?? '09:00',
     workStartTime: (r.work_start_time as string) ?? '08:00',
+    allocationThresholdPct: Number(r.allocation_threshold_pct ?? 30),
   };
 }
 

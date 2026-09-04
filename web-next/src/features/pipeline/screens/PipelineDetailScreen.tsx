@@ -6,6 +6,7 @@ import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
 import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
 import { usePlots, useUpdatePlot } from '../../plots/hooks/usePlots';
+import { useAllocationRequests, useCreateAllocationRequest } from '../../allocations/hooks/useAllocationRequests';
 import type { Lead, Payment } from '../../../types/domain';
 import { computeDepositStatus, computeMonthlySchedule } from '../lib/pipelineLogic';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -160,6 +161,7 @@ export function PipelineDetailScreen() {
       <LeadDetailsSection lead={lead} />
       {config && <PlotPricingSection lead={lead} config={config} />}
       {config && <DepositScheduleSection lead={lead} config={config} payments={leadPayments} />}
+      {config && <AllocationEligibilitySection lead={lead} config={config} payments={leadPayments} />}
       <FollowUpSection lead={lead} />
 
       {canLog && (
@@ -611,6 +613,69 @@ function DepositScheduleSection({ lead, config, payments }: { lead: Lead; config
         </>
       ) : (
         <p className={styles.helpText}>Deposit cleared — installment schedule not yet available.</p>
+      )}
+    </div>
+  );
+}
+
+// Master Spec 7.3: "Staff clicks Request Allocation... If below threshold,
+// allocation button is disabled with plain-English explanation." The real
+// gate lives here, right on the lead a staff member is actually looking
+// at -- not just on the separate Allocations-tab picker, which now
+// enforces the exact same check (see NewRequestForm) so the threshold
+// can't be bypassed by using that entry point instead.
+function AllocationEligibilitySection({ lead, config, payments }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']>; payments: Payment[] }) {
+  const navigate = useNavigate();
+  const { data: requests } = useAllocationRequests();
+  const create = useCreateAllocationRequest();
+  const [error, setError] = useState<string | null>(null);
+
+  const dep = computeDepositStatus(config, lead, payments);
+  const existing = (requests ?? []).find((r) => r.leadId === lead.id);
+
+  async function request() {
+    setError(null);
+    try {
+      await create.mutateAsync({ leadId: lead.id });
+      navigate('/app/sales/allocations');
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to request allocation'));
+    }
+  }
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Allocation</h2>
+      {existing ? (
+        <p className={styles.helpText}>
+          {existing.status === 'Allocated'
+            ? `Plot ${existing.plotNumber} allocated.`
+            : existing.status === 'Awaiting Authorization'
+              ? 'Allocation request awaiting Management sign-off.'
+              : 'Allocation request submitted — awaiting suggestion.'}{' '}
+          <button type="button" className={styles.editLink} onClick={() => navigate('/app/sales/allocations')}>
+            View in Allocations →
+          </button>
+        </p>
+      ) : dep.complete ? (
+        <>
+          <p className={styles.helpText}>
+            {config.allocationThresholdPct}% deposit threshold met ({ghs(dep.paid)} of {ghs(dep.target)}) — eligible to request allocation.
+          </p>
+          {error && <p className={styles.warnText}>{error}</p>}
+          <button type="button" className={styles.btn} disabled={create.isPending} onClick={request}>
+            {create.isPending ? 'Requesting…' : 'Request Allocation'}
+          </button>
+        </>
+      ) : (
+        <>
+          <button type="button" className={styles.btn} disabled title={`Needs ${config.allocationThresholdPct}% paid before allocation can be requested`}>
+            Request Allocation
+          </button>
+          <p className={styles.helpText}>
+            {ghs(dep.paid)} of {ghs(dep.target)} ({config.allocationThresholdPct}% target) paid — {ghs(dep.remaining)} more needed before this client is eligible for allocation.
+          </p>
+        </>
       )}
     </div>
   );
