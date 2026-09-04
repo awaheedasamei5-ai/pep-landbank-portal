@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCanDecideLeave, useCreateLeaveRequest, useDecideLeaveRequest, useLeaveRequests } from '../hooks/useLeaveRequests';
+import { useLeaveLetterDraft } from '../hooks/useLeaveLetterDraft';
 import { LeaveCalendar } from '../components/LeaveCalendar';
 import { leaveDatesConflictReason, leaveDaysRemaining, leaveDaysUsed } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
@@ -64,11 +65,21 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
   const create = useCreateLeaveRequest();
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
+  const letterDraft = useLeaveLetterDraft();
   const [year, setYear] = useState(() => new Date(today()).getFullYear());
   const [month, setMonth] = useState(() => new Date(today()).getMonth());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [letterText, setLetterText] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  async function draftLetter() {
+    if (!selectedDates.length || !profile) return;
+    const sorted = selectedDates.slice().sort();
+    const drafted = await letterDraft
+      .mutateAsync({ agentName: profile.name, daysCount: sorted.length, firstDate: sorted[0], lastDate: sorted[sorted.length - 1], reason: letterText })
+      .catch(() => null);
+    if (drafted) setLetterText(drafted);
+  }
 
   function toggleDate(iso: string) {
     setSelectedDates((prev) => (prev.includes(iso) ? prev.filter((d) => d !== iso) : [...prev, iso]));
@@ -136,6 +147,11 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
         <p style={{ color: 'var(--c-muted)' }}>Loading…</p>
       )}
       <textarea className={styles.textarea} placeholder="Reason (optional)" value={letterText} onChange={(e) => setLetterText(e.target.value)} />
+      {selectedDates.length > 0 && (
+        <button type="button" className={styles.aiDraftBtn} disabled={letterDraft.isPending} onClick={draftLetter}>
+          {letterDraft.isPending ? 'Drafting…' : 'AI: Draft a leave letter'}
+        </button>
+      )}
       {error && <p className={styles.error}>{error}</p>}
       <button type="button" className={styles.submitBtn} disabled={create.isPending || !config} onClick={submit}>
         {create.isPending ? 'Sending…' : 'Send request'}

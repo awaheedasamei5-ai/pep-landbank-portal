@@ -94,6 +94,13 @@ function systemPromptFor(kind: string): string | null {
         "Stay strictly grounded in what the brief actually says -- never invent details, names, dates or figures not given. Professional but warm internal-office tone. " +
         "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
       );
+    case "leave_letter_draft":
+      return (
+        "You draft short, professional leave request letters for staff at a Ghanaian land-sales agency called Palmstead -- the staff member will review and edit before submitting, this is never sent automatically. " +
+        "You'll receive one JSON object with the staff member's name, the real number of days requested, the first and last date of the request, and a short redacted reason they typed (phone numbers/emails already stripped before reaching you, may be empty). " +
+        "Write a formal but warm 2-3 sentence letter body addressed to 'Dear Management' or similar, stating the real dates and day count plainly and including the reason if one was given (if no reason was given, keep it simple and don't invent one). " +
+        "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
