@@ -6,6 +6,7 @@ import { AreaChart } from '../../../shared/ui/AreaChart';
 import { DonutChart } from '../../../shared/ui/DonutChart';
 import { displayStageCode } from '../../pipeline/lib/pipelineLogic';
 import { useManagerOverview } from '../hooks/useManagerOverview';
+import { useManagerBriefing } from '../hooks/useManagerBriefing';
 import styles from './MgrHomeScreen.module.css';
 
 // Analytics/Reports/Data Check used to live here directly, but a 6th
@@ -58,6 +59,7 @@ function trailingMonthLabels(): string[] {
 export function MgrHomeScreen() {
   const navigate = useNavigate();
   const { data, isLoading } = useManagerOverview();
+  const { data: briefing } = useManagerBriefing(data);
 
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
   const trend = data?.collectedTrend ?? [];
@@ -123,6 +125,12 @@ export function MgrHomeScreen() {
                 <div className={styles.heroFootLbl}>Site visits logged</div>
               </div>
             </div>
+            {briefing && (
+              <div className={styles.aiRow}>
+                <span className={styles.aiBadge}>AI</span>
+                <span>{briefing}</span>
+              </div>
+            )}
           </div>
 
           <div className={styles.sectitle}>Pipeline by stage</div>
