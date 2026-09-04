@@ -62,6 +62,13 @@ function systemPromptFor(kind: string): string | null {
         "Lead with whatever most deserves Management's attention today (a real risk like open complaints, or a real win like a strong collection trend or a standout agent) -- cite the actual numbers given, never invent figures not in the data. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "login_greeting":
+      return (
+        "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
+        "You'll receive one JSON object with the real day of week, time of day (morning/afternoon/evening/night), and whether it's a weekday or weekend where the company operates. " +
+        "Reply with ONE short, warm line (max 14 words) that feels genuinely aware of that real moment -- a Monday reset, a Friday push, a quiet Sunday, a late-night sign-in -- never generic filler like 'Welcome back' alone. " +
+        "Plain text, second person plural or neutral (no name to address), no emoji, no hashtags, no quotation marks."
+      );
     default:
       return null;
   }

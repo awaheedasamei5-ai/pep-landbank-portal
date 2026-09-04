@@ -7,6 +7,7 @@ import { useLiveLogin } from './useLiveLogin';
 import { usePinLogin } from './usePinLogin';
 import { useSendResetCode, useConfirmReset } from './usePasswordReset';
 import { useJoinPortal } from './useJoinPortal';
+import { useLoginGreeting } from './useLoginGreeting';
 import { isConfigured } from '../shared/lib/env';
 import { fetchStaffDirectory, type StaffDirectoryEntry } from '../data/staffDirectoryClient';
 import { pinLockExists } from '../shared/lib/pinLock';
@@ -40,6 +41,7 @@ export function LoginScreen() {
   const sendResetCode = useSendResetCode();
   const confirmReset = useConfirmReset();
   const joinPortal = useJoinPortal();
+  const { data: greeting } = useLoginGreeting();
   const [mode, setMode] = useState<'demo' | 'live' | 'reset' | 'join'>('demo');
   const [joinName, setJoinName] = useState('');
   const [joinEmail, setJoinEmail] = useState('');
@@ -172,6 +174,12 @@ export function LoginScreen() {
     <div className={styles.wrap}>
       <div className={styles.card}>
         <h1 className={styles.title}>Palmstead</h1>
+        {greeting && (
+          <p className={styles.aiGreeting}>
+            <span className={styles.aiGreetingBadge}>AI</span>
+            {greeting}
+          </p>
+        )}
 
         {mode === 'demo' && (
           <>

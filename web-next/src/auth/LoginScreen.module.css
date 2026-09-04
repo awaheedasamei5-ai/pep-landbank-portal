@@ -30,6 +30,40 @@
   margin: 0 0 var(--sp-5);
 }
 
+/* Real Groq-backed line, same "AI" chip pattern as StreakCard/Manager
+   Home's briefing -- shown pre-auth, so it's ambient (day/time-aware),
+   never personalized to a name nobody's picked yet. */
+.aiGreeting {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  text-align: left;
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin: 0 0 var(--sp-5);
+  animation: aiGreetingIn 0.4s ease-out;
+}
+@keyframes aiGreetingIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+.aiGreetingBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+  margin-top: 1px;
+}
+
 .btn {
   display: block;
   width: 100%;
