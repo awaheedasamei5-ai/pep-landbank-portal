@@ -28,13 +28,30 @@ function useInvalidateTasks() {
   return () => queryClient.invalidateQueries({ queryKey: ['tasks', isManager ? 'all' : agentKey] });
 }
 
+// SMS to the assignee when a task lands on someone else -- matches
+// apiInsertTask's real behavior (index.html:5323-5324), fire-and-forget
+// same as every other sms.send() call site.
 export function useCreateTask() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const invalidate = useInvalidateTasks();
 
   return useMutation({
-    mutationFn: (input: NewTask) => getDataSource(demoMode).scheduleItems.createTask(profile?.key ?? '', profile?.name ?? '', input),
+    mutationFn: async (input: NewTask) => {
+      const task = await getDataSource(demoMode).scheduleItems.createTask(profile?.key ?? '', profile?.name ?? '', input);
+      if (input.assignedTo && input.assignedTo !== profile?.key) {
+        const staff = await getDataSource(demoMode)
+          .staff.listAll()
+          .catch(() => []);
+        const phone = staff.find((s) => s.key === input.assignedTo)?.phone;
+        if (phone) {
+          getDataSource(demoMode)
+            .sms.send(phone, `New task from ${profile?.name ?? ''}: "${input.title}". Open Palmstead to view it.`, 'task_assigned', profile?.key ?? null)
+            .catch(() => {});
+        }
+      }
+      return task;
+    },
     onSuccess: invalidate,
   });
 }
