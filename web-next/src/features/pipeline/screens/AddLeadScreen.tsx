@@ -29,6 +29,19 @@ const schema = z.object({
 type FormInput = z.input<typeof schema>;
 type FormOutput = z.output<typeof schema>;
 
+// Premium UI Rebuild spec, Section 6.D/11: "Long forms: two-column
+// desktop grid... financial fields visually distinct... calculated
+// totals should appear immediately... sticky action bar." Real
+// correction, caught live: this was a single flat column of plain
+// inputs on a bare background at any screen width -- centered but with
+// large dead space either side on desktop, and the grand total was a
+// throwaway gray text line despite being the one number this whole
+// form exists to produce. Regrouped into real cards (Client / Plot &
+// pricing / Deposit & notes) that stack on mobile and split into a
+// main+side grid on desktop, with the total promoted to the same
+// dark-gradient hero-card treatment Pipeline Detail's own balance card
+// already uses -- one visual language, not a second style invented for
+// this screen.
 export function AddLeadScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
@@ -53,7 +66,9 @@ export function AddLeadScreen() {
 
   const unitPrice = watch('unitPrice') || 0;
   const noPlots = watch('noPlots') || 0;
+  const amtPaid = watch('amtPaid') || 0;
   const grandTotal = computeGrandTotal(Number(unitPrice), Number(noPlots));
+  const balanceAfter = Math.max(grandTotal - Number(amtPaid), 0);
 
   async function onSubmit(values: FormOutput) {
     const { lead, depositError } = await createLead.mutateAsync(values);
@@ -83,58 +98,93 @@ export function AddLeadScreen() {
       <h1 className={styles.title}>Add to pipeline</h1>
       <p className={styles.sub}>Saved straight into your pipeline.</p>
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className={styles.field}>
-          <label className={styles.label}>Lead name *</label>
-          <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
-          {errors.name && <div className={styles.err}>{errors.name.message}</div>}
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Contact *</label>
-          <input className={styles.input} placeholder="0244…" {...register('contact')} />
-          {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
-        </div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Plot type</label>
-            <select className={styles.select} {...register('plotType')}>
-              <option>Full Plot</option>
-              <option>Half Plot</option>
-            </select>
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>No. of plots</label>
-            <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots')} />
-          </div>
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Unit price (GHS) *</label>
-          <input className={styles.input} type="number" {...register('unitPrice')} />
-          {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
-        </div>
-        <div className={canLogDeposit ? styles.grid2 : undefined}>
-          <div className={styles.field}>
-            <label className={styles.label}>Payment plan</label>
-            <select className={styles.select} {...register('paymentPlan')}>
-              <option>Full Payment</option>
-              <option>3 Months</option>
-              <option>6 Months</option>
-              <option>9 Months</option>
-              <option>12 Months</option>
-            </select>
-          </div>
-          {canLogDeposit && (
-            <div className={styles.field}>
-              <label className={styles.label}>Amount already paid</label>
-              <input className={styles.input} type="number" {...register('amtPaid')} />
-              <p className={styles.hint}>Recorded as a real payment against this lead, same as Log Payment.</p>
+        <div className={styles.grid}>
+          <div className={styles.mainCol}>
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>Client</div>
+              <div className={styles.field}>
+                <label className={styles.label}>Lead name *</label>
+                <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
+                {errors.name && <div className={styles.err}>{errors.name.message}</div>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Contact *</label>
+                <input className={styles.input} placeholder="0244…" {...register('contact')} />
+                {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
+              </div>
             </div>
-          )}
+
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>Plot &amp; pricing</div>
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Plot type</label>
+                  <select className={styles.select} {...register('plotType')}>
+                    <option>Full Plot</option>
+                    <option>Half Plot</option>
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>No. of plots</label>
+                  <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots')} />
+                </div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Unit price (GHS) *</label>
+                <input className={styles.input} type="number" {...register('unitPrice')} />
+                {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Payment plan</label>
+                <select className={styles.select} {...register('paymentPlan')}>
+                  <option>Full Payment</option>
+                  <option>3 Months</option>
+                  <option>6 Months</option>
+                  <option>9 Months</option>
+                  <option>12 Months</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.sideCol}>
+            <div className={styles.totalCard}>
+              <div className={styles.totalLabel}>Grand total</div>
+              <div className={styles.totalValue}>{ghs(grandTotal)}</div>
+              {canLogDeposit && Number(amtPaid) > 0 && (
+                <div className={styles.totalFootRow}>
+                  <div>
+                    <div className={styles.totalFootVal}>{ghs(Number(amtPaid))}</div>
+                    <div className={styles.totalFootLbl}>Paid now</div>
+                  </div>
+                  <div>
+                    <div className={styles.totalFootVal}>{ghs(balanceAfter)}</div>
+                    <div className={styles.totalFootLbl}>Balance</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {canLogDeposit && (
+              <div className={styles.card}>
+                <div className={styles.cardTitle}>Deposit</div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Amount already paid</label>
+                  <input className={styles.input} type="number" {...register('amtPaid')} />
+                  <p className={styles.hint}>Recorded as a real payment against this lead, same as Log Payment.</p>
+                </div>
+              </div>
+            )}
+
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>Notes</div>
+              <div className={styles.field}>
+                <textarea className={styles.textarea} placeholder="Context, preferences, history…" {...register('notes')} />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Notes</label>
-          <input className={styles.input} placeholder="Context, preferences, history…" {...register('notes')} />
-        </div>
-        <p className={styles.grandTotal}>Grand total: {ghs(grandTotal)}</p>
+
         <div className={styles.actions}>
           <button type="button" className={styles.cancel} onClick={() => navigate('/app/sales/pipeline')}>
             Cancel
