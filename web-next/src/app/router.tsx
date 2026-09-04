@@ -24,6 +24,7 @@ import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
 import { SveFeedbackScreen } from '../features/public/sve/SveFeedbackScreen';
 import { ReceiptDownloadScreen } from '../features/public/receipt/ReceiptDownloadScreen';
+import { PublicStatsScreen } from '../features/public/stats/PublicStatsScreen';
 import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
 import { ChatScreen } from '../features/chat/screens/ChatScreen';
 import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
@@ -76,6 +77,11 @@ export const router = createBrowserRouter([
   // data/receiptClient.ts's comment for the get-receipt edge function
   // this talks to.
   { path: '/receipt/:token', element: <ReceiptDownloadScreen /> },
+  // Public, unauthenticated -- Blueprint Phase 9's "Public stats widget".
+  // /stats is the company-wide aggregate; /stats/:token is one staff
+  // member's own personalized numbers (see PublicStatsScreen's comment).
+  { path: '/stats', element: <PublicStatsScreen /> },
+  { path: '/stats/:token', element: <PublicStatsScreen /> },
   {
     path: '/app',
     element: (
