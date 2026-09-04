@@ -28,6 +28,15 @@
 
 .sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 24px 0 14px; }
 
+.grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.mainCol, .sideCol { min-width: 0; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 1180px; padding: 28px 32px 40px; }
+  .grid { grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: start; }
+  .mainCol .sectitle, .sideCol .sectitle { margin-top: 0; }
+}
+
 .card {
   background: var(--c-card);
   border: 1px solid var(--c-line);

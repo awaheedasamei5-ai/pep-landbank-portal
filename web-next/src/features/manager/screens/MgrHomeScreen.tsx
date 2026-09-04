@@ -133,37 +133,47 @@ export function MgrHomeScreen() {
             )}
           </div>
 
-          <div className={styles.sectitle}>Pipeline by stage</div>
-          <div className={`${styles.card} ${styles.donutCard}`}>
-            <DonutChart segments={data.stageFunnel.map((s) => ({ key: s.stage, label: s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage), value: s.count, color: STAGE_COLORS[s.stage] ?? '#94A3B8' }))} centerValue={String(data.stageFunnel.reduce((sum, s) => sum + s.count, 0))} centerLabel="leads" />
-            <div className={styles.legend}>
-              {data.stageFunnel.map((s) => (
-                <button type="button" className={styles.legendRow} key={s.stage} onClick={() => navigate(`/app/mgr/pipeline?stage=${encodeURIComponent(s.stage)}`)}>
-                  <span className={styles.legendDot} style={{ background: STAGE_COLORS[s.stage] ?? '#94A3B8' }} />
-                  <span className={styles.legendLabel}>{s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage)}</span>
-                  <span className={styles.legendValue}>{s.count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.sectitle}>By agent</div>
-          <div className={styles.card}>
-            {data.byAgent.length === 0 && <p style={{ color: 'var(--c-muted)', margin: 0 }}>No leads yet.</p>}
-            {data.byAgent.map((a) => (
-              <button type="button" className={styles.agentRow} key={a.key} onClick={() => navigate(`/app/mgr/pipeline?agent=${encodeURIComponent(a.key)}`)}>
-                <span className={styles.agentAvatar}>{initials(a.name)}</span>
-                <div className={styles.agentMain}>
-                  <div className={styles.agentTopLine}>
-                    <span className={styles.agentName}>{a.name}</span>
-                    <span className={styles.agentValue}>{ghs(a.value)}</span>
-                  </div>
-                  <div className={styles.barTrack}>
-                    <div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((a.value / maxAgentValue) * 100))}%`, background: 'linear-gradient(90deg, var(--c-accent-soft), var(--c-accent))' }} />
-                  </div>
+          {/* Premium UI Rebuild spec, Section 6.A/9: "Replace long stacks
+              of equal-weight cards with a two-column desktop grid."
+              Below 1024px this is a plain stack in the same order as
+              before (pipeline-by-stage, then by-agent) -- mobile
+              unchanged. */}
+          <div className={styles.grid}>
+            <div className={styles.mainCol}>
+              <div className={styles.sectitle}>Pipeline by stage</div>
+              <div className={`${styles.card} ${styles.donutCard}`}>
+                <DonutChart segments={data.stageFunnel.map((s) => ({ key: s.stage, label: s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage), value: s.count, color: STAGE_COLORS[s.stage] ?? '#94A3B8' }))} centerValue={String(data.stageFunnel.reduce((sum, s) => sum + s.count, 0))} centerLabel="leads" />
+                <div className={styles.legend}>
+                  {data.stageFunnel.map((s) => (
+                    <button type="button" className={styles.legendRow} key={s.stage} onClick={() => navigate(`/app/mgr/pipeline?stage=${encodeURIComponent(s.stage)}`)}>
+                      <span className={styles.legendDot} style={{ background: STAGE_COLORS[s.stage] ?? '#94A3B8' }} />
+                      <span className={styles.legendLabel}>{s.stage === 'Lost' ? 'Lost' : displayStageCode(s.stage)}</span>
+                      <span className={styles.legendValue}>{s.count}</span>
+                    </button>
+                  ))}
                 </div>
-              </button>
-            ))}
+              </div>
+            </div>
+            <div className={styles.sideCol}>
+              <div className={styles.sectitle}>By agent</div>
+              <div className={styles.card}>
+                {data.byAgent.length === 0 && <p style={{ color: 'var(--c-muted)', margin: 0 }}>No leads yet.</p>}
+                {data.byAgent.map((a) => (
+                  <button type="button" className={styles.agentRow} key={a.key} onClick={() => navigate(`/app/mgr/pipeline?agent=${encodeURIComponent(a.key)}`)}>
+                    <span className={styles.agentAvatar}>{initials(a.name)}</span>
+                    <div className={styles.agentMain}>
+                      <div className={styles.agentTopLine}>
+                        <span className={styles.agentName}>{a.name}</span>
+                        <span className={styles.agentValue}>{ghs(a.value)}</span>
+                      </div>
+                      <div className={styles.barTrack}>
+                        <div className={styles.barFill} style={{ width: `${Math.max(4, Math.round((a.value / maxAgentValue) * 100))}%`, background: 'linear-gradient(90deg, var(--c-accent-soft), var(--c-accent))' }} />
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </>
       )}
