@@ -506,3 +506,19 @@ Master Spec Section 7. Real correction made mid-task: the plan going in assumed 
 **Real, useful side effect**: block counts on the live table (A:40 on staging / 43 on production, J:29, L:29, O:7...) already diverge from *both* the original workbook counts *and* the site-plan legend counts quoted in the spec — the business has clearly added/split plots since that workbook was compiled. The Section 7.1 discrepancy table in the spec is therefore itself stale; a real Plot Data Reconciliation screen (spec's own ask, §8) would need to reconcile against the table's *current* live counts, not the workbook's — not yet built this pass.
 
 **Not done this pass**: syncing staging's 412 rows to match production's 415 exactly (3 real rows missing, all in section A); the Plot Data Reconciliation screen itself; applying any of this to **production** (schema + dimension backfill both staging-only — a production write needs its own separate go-ahead, not yet asked).
+
+## 21. Live-mode UI depth, closed out (2026-09-04): staff picker, PIN, password reset, real signup security fix
+
+Ported the remaining real `index.html` sign-in features, one session:
+
+- **Staff-picker-before-password** (`data/staffDirectoryClient.ts`) — searches the public `staff_directory` view (name/email/role only, no session needed) rather than typing an email. Verified live: real roster loads, search filters, selection flow works.
+- **PIN quick-unlock** (`shared/lib/pinLock.ts`, `auth/usePinLogin.ts`) — AES-GCM key derived via PBKDF2 (150k iterations), the current session's tokens encrypted and stored device-local, toggled from More > Account. Direct port of `index.html`'s own crypto; the save-then-unlock round trip wasn't click-tested live (no real Auth credentials available in this environment) — verified by code review and a clean build instead.
+- **In-app password reset** (`auth/usePasswordReset.ts`) — email → 6-digit code → new password, no redirect link (`resetPasswordForEmail`/`verifyOtp`/`updateUser`). Verified live short of actually sending a real email to a real person's inbox.
+
+**Real security gap found and fixed** while scoping the last item (manager new-staff-invite flow): `handle_new_auth_user()` created a real `agent` profile for *any* email that called `supabase.auth.signUp()` — `allowed_emails` existed but was never actually checked, on either project. Also found `allowed_emails` had RLS enabled with **zero policies**, so Management's own invite-list screen would have been silently denied every row too. Fixed on staging (migration `p1_gate_signup_by_allowed_emails`): real manager-only RLS added, and the trigger now rejects (rolls back the whole `auth.users` insert) any sign-up whose email isn't invited, consuming the invite on success — the invite is a real one-time-use record now, unlike `index.html`'s version which never expires.
+
+Built on top of the fix: a full Team-screen invite list (add/revoke, manager-only) and a public "join the portal" self-service signup (`auth/useJoinPortal.ts`), reached from the login screen's staff picker.
+
+**Verified live end-to-end through the real Supabase Auth signup flow** (not simulated): an uninvited test email was cleanly rejected with a real, friendly error and left zero orphan rows in either `auth.users` or `profiles`; a real invited test email successfully created a profile and consumed its invite row. Both test accounts were deleted after verification — staging carries no leftover test data from this.
+
+**Not done**: porting the trigger/RLS fix to **production**, which currently still runs the old, unrestricted-signup behavior — needs its own explicit go-ahead given how security-sensitive this change is. Manager new-staff-invite flow is otherwise fully closed; live-mode UI depth as a whole has nothing left open that blocks Phase 12.
