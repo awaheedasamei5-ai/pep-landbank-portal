@@ -30,19 +30,21 @@
   padding: 20px 18px;
   flex-shrink: 0;
 }
+/* Real system mark (bolt-mark.svg, public/) instead of a plain "P" --
+   caught live: the lettermark read as generic/placeholder-ish next to the
+   actual logo. White tile + border keeps the mark legible as its own
+   badge against the sidebar's own near-white background instead of
+   blending into it. */
 .brandMark {
   width: 34px;
   height: 34px;
+  padding: 5px;
+  box-sizing: border-box;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--c-ink), var(--c-ink-2));
-  color: var(--c-accent-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 16px;
+  background: #fff;
+  border: 1px solid var(--c-line);
   flex-shrink: 0;
+  object-fit: contain;
 }
 .brandName {
   font-family: var(--font-display);

@@ -7,7 +7,7 @@ import styles from './SegmentedGauge.module.css';
 // the same idea using this app's own tokens. One arc segment per unit of
 // `max`, filled left-to-right through `value`, so the gauge itself IS the
 // tally, not just a decorated number.
-const PALETTE = ['#2563A8', '#146C43', '#3F9C6C', '#C9A227', '#E7CE7A'];
+const PALETTE = ['#2563A8', '#146C43', '#3F9C6C', '#7C3AED', '#C4A6FF'];
 
 function polarPoint(cx: number, cy: number, r: number, deg: number) {
   const rad = (deg * Math.PI) / 180;
