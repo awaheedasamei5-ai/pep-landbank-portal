@@ -659,34 +659,66 @@ function DocumentationSection({ lead }: { lead: Lead }) {
   );
 }
 
+// Master Spec Section 4.5's exact reason set: Wrong data, Duplicate lead,
+// Client cancelled/refund, Client requested removal, Other (free text).
+// Refund/cancellation is the one that runs the real allocation-reversal
+// workflow (vacating any plot allocated to this client) rather than just
+// archiving the record.
+const DELETE_REASONS = [
+  { key: 'wrong', label: 'Wrong data', detail: "I'll re-create this lead correctly.", runsReversal: false },
+  { key: 'duplicate', label: 'Duplicate lead', detail: 'This client already has another lead record.', runsReversal: false },
+  { key: 'refund', label: 'Client cancelled / refund', detail: 'Any plot allocated to them becomes Available again.', runsReversal: true },
+  { key: 'removal', label: 'Client requested removal', detail: 'The client asked to be taken out of the system.', runsReversal: false },
+  { key: 'other', label: 'Other reason', detail: 'Describe why below.', runsReversal: false },
+] as const;
+type DeleteReasonKey = (typeof DELETE_REASONS)[number]['key'];
+
 function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: () => void }) {
   const del = useDeleteLead();
   const { data: plots } = usePlots();
   const updatePlot = useUpdatePlot();
-  const [reason, setReason] = useState<'wrong' | 'refund' | 'other' | null>(null);
+  const [reasonKey, setReasonKey] = useState<DeleteReasonKey | null>(null);
+  const [otherText, setOtherText] = useState('');
+
+  const selected = DELETE_REASONS.find((r) => r.key === reasonKey);
+  const finalReason = reasonKey === 'other' ? otherText.trim() : (selected?.label ?? '');
 
   async function confirmDelete() {
-    if (reason === 'refund') {
+    if (!finalReason) return;
+    if (selected?.runsReversal) {
       const toVacate = (plots ?? []).filter((p) => p.status === 'Allocated' && p.clientName && p.clientName.trim().toLowerCase() === lead.name.trim().toLowerCase());
       for (const p of toVacate) {
         await updatePlot.mutateAsync({ id: p.id, patch: { status: 'Available', clientName: null, clientContact: null, agentKey: null } }).catch(() => {});
       }
     }
-    await del.mutateAsync(lead.id);
+    await del.mutateAsync({ id: lead.id, reason: finalReason });
     onDeleted();
   }
 
-  if (reason) {
+  if (selected) {
     return (
       <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>Delete {lead.name}?</h2>
-        <p className={styles.helpText}>This can&apos;t be undone.{reason === 'refund' ? ' Any plot allocated to them will automatically become Available again.' : ''}</p>
+        <h2 className={styles.sectionTitle}>Archive {lead.name}?</h2>
+        <p className={styles.helpText}>
+          Management can restore this later, but it leaves the active pipeline immediately.{selected.runsReversal ? ' Any plot allocated to them will automatically become Available again.' : ''}
+        </p>
+        {reasonKey === 'other' && (
+          <textarea
+            className={styles.input}
+            style={{ minHeight: 60, marginTop: 8 }}
+            placeholder="Reason (required)"
+            value={otherText}
+            onChange={(e) => setOtherText(e.target.value)}
+            autoFocus
+          />
+        )}
+        {del.isError && <p className={styles.errorMsg}>{friendlyError(del.error, 'Failed to archive this lead')}</p>}
         <div className={styles.actionsRow}>
-          <button type="button" className={styles.cancelBtn} onClick={() => setReason(null)}>
+          <button type="button" className={styles.cancelBtn} onClick={() => setReasonKey(null)}>
             Cancel
           </button>
-          <button type="button" className={styles.dangerBtn} style={{ flex: 1 }} disabled={del.isPending} onClick={confirmDelete}>
-            {del.isPending ? 'Deleting…' : 'Yes, delete'}
+          <button type="button" className={styles.dangerBtn} style={{ flex: 1 }} disabled={del.isPending || !finalReason} onClick={confirmDelete}>
+            {del.isPending ? 'Archiving…' : 'Yes, archive'}
           </button>
         </div>
       </div>
@@ -696,20 +728,14 @@ function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: () => v
   return (
     <div className={styles.section}>
       <h2 className={styles.sectionTitle}>Danger zone</h2>
-      <p className={styles.helpText}>Permanently removes {lead.name} and their record from the pipeline.</p>
+      <p className={styles.helpText}>Archives {lead.name} out of the active pipeline. Management can see why and restore it.</p>
       <div className={styles.dangerOptions}>
-        <button type="button" className={styles.dangerOptionBtn} onClick={() => setReason('wrong')}>
-          <div className={styles.dangerOptionTitle}>Data was entered wrong</div>
-          <div className={styles.helpText}>I&apos;ll re-create this lead correctly.</div>
-        </button>
-        <button type="button" className={styles.dangerOptionBtn} onClick={() => setReason('refund')}>
-          <div className={styles.dangerOptionTitle}>Client asked for a refund / opted out</div>
-          <div className={styles.helpText}>Any allocated plot becomes Available again.</div>
-        </button>
-        <button type="button" className={styles.dangerOptionBtn} onClick={() => setReason('other')}>
-          <div className={styles.dangerOptionTitle}>Other reason</div>
-          <div className={styles.helpText}>Just delete the record.</div>
-        </button>
+        {DELETE_REASONS.map((r) => (
+          <button type="button" key={r.key} className={styles.dangerOptionBtn} onClick={() => setReasonKey(r.key)}>
+            <div className={styles.dangerOptionTitle}>{r.label}</div>
+            <div className={styles.helpText}>{r.detail}</div>
+          </button>
+        ))}
       </div>
     </div>
   );

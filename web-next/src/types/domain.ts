@@ -111,6 +111,13 @@ export interface Lead {
   // -- present on the type only so a caller could show "deleted" state if
   // some future screen ever fetched by raw id bypassing that filter.
   deletedAt?: string | null;
+  // Real columns deleted_by/deleted_by_name/deletion_reason (added
+  // 2026-09-06, Master Spec Section 4.5) -- who archived this lead, and
+  // the reason they gave. Left in place across a restore (not cleared),
+  // so an un-archived lead still shows its most recent deletion history.
+  deletedBy?: string | null;
+  deletedByName?: string | null;
+  deletionReason?: string | null;
 }
 
 // Every field the Pipeline Update accordion's "Save update" can change in

@@ -3,6 +3,7 @@ import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useLeads } from '../hooks/useLeads';
 import { StageBadge } from '../components/StageBadge';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import styles from './PipelineListScreen.module.css';
 
 function initials(name: string): string {
@@ -22,6 +23,7 @@ function initials(name: string): string {
 // every other Sales Desk screen, not a functional expansion.
 export function PipelineListScreen() {
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
   const { data: leads, isLoading } = useLeads();
 
   const totalValue = (leads ?? []).reduce((s, l) => s + l.grandTotal, 0);
@@ -69,6 +71,11 @@ export function PipelineListScreen() {
         </div>
       ))}
       {leads && leads.length === 0 && <p className={styles.emptyMsg}>No leads yet — add your first one.</p>}
+      {profile?.role === 'manager' && (
+        <button type="button" className={styles.archivedLink} onClick={() => navigate('/app/mgr/pipeline/archived')}>
+          View archived leads →
+        </button>
+      )}
     </div>
   );
 }

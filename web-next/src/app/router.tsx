@@ -7,6 +7,7 @@ import { MgrHomeScreen } from '../features/manager/screens/MgrHomeScreen';
 import { SalesDeskScreen } from '../features/sales-desk/screens/SalesDeskScreen';
 import { PipelineListScreen } from '../features/pipeline/screens/PipelineListScreen';
 import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
+import { ArchivedLeadsScreen } from '../features/pipeline/screens/ArchivedLeadsScreen';
 import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetailScreen';
 import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
@@ -122,6 +123,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <ManagerPipelineScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/pipeline/archived',
+        element: (
+          <RequireRole role="manager">
+            <ArchivedLeadsScreen />
           </RequireRole>
         ),
       },

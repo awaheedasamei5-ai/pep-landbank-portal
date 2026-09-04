@@ -67,14 +67,42 @@ export function useUpdateLeadDocStage() {
   });
 }
 
+// Master Spec Section 4.5: the reason chosen in the danger-zone UI is now
+// actually sent through and persisted, not discarded.
 export function useDeleteLead() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => getDataSource(demoMode).leads.remove(id),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).leads.remove(id, reason, profile?.key ?? '', profile?.name ?? ''),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lead'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['leadsArchived'] });
+    },
+  });
+}
+
+// Manager-only view (real RLS -- see leads_sel's own comment).
+export function useArchivedLeads() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  return useQuery({
+    queryKey: ['leadsArchived'],
+    enabled: profile?.role === 'manager',
+    queryFn: () => getDataSource(demoMode).leads.listArchived(),
+  });
+}
+
+export function useRestoreLead() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).leads.restore(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['leadsArchived'] });
     },
   });
 }

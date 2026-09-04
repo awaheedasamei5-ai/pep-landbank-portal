@@ -152,8 +152,21 @@ export interface DataSource {
     // apiDeleteLead() exactly, not the hard-DELETE deleteLeadConfirm() UI
     // wrapper this comment used to (wrongly) cite. Vacating an allocated
     // plot on a refund/opt-out delete stays the caller's own responsibility
-    // (see PipelineDetailScreen's danger zone).
-    remove(id: string): Promise<void>;
+    // (see PipelineDetailScreen's danger zone). Master Spec Section 4.5:
+    // the chosen reason is now actually persisted (deleted_by/
+    // deleted_by_name/deletion_reason columns, added 2026-09-06 --
+    // previously captured in the UI and silently discarded) so Management
+    // can see why a lead was archived, not just that it was.
+    remove(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<void>;
+    // Manager-only in practice (leads_sel's RLS only lets deleted_at IS NOT
+    // NULL rows through for my_role()='manager') -- every archived lead
+    // with its deletion reason, newest first.
+    listArchived(): Promise<Lead[]>;
+    // Clears deleted_at only; deleted_by/deleted_by_name/deletion_reason
+    // are left in place as a historical record of the most recent
+    // deletion, matching how decidedBy/decidedByName on payments are
+    // never cleared either.
+    restore(id: string): Promise<Lead>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
   // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
@@ -777,7 +790,7 @@ function createDemoDataSource(): DataSource {
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
       },
-      async remove(id) {
+      async remove(id, reason, deletedBy, deletedByName) {
         // Soft delete -- matches the real fix (see the interface's own
         // comment above). The row stays in db.leads (still joinable by any
         // code that looks it up by id, e.g. a payment's linked lead name --
@@ -787,9 +800,21 @@ function createDemoDataSource(): DataSource {
         const db = demoLoad();
         const index = db.leads.findIndex((l) => l.id === id);
         if (index === -1) return;
-        const updated: Lead = { ...db.leads[index], deletedAt: new Date().toISOString() };
+        const updated: Lead = { ...db.leads[index], deletedAt: new Date().toISOString(), deletionReason: reason, deletedBy, deletedByName };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
+      },
+      async listArchived() {
+        return demoLoad().leads.filter((l) => !!l.deletedAt);
+      },
+      async restore(id) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        const updated: Lead = { ...db.leads[index], deletedAt: null };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+        return updated;
       },
     },
     payments: {
@@ -2290,16 +2315,34 @@ function createLiveDataSource(): DataSource {
         const { error } = await requireClient().rpc('update_lead_doc_stage', { p_lead_id: id, p_stage: stage });
         if (error) throw error;
       },
-      async remove(id) {
+      async remove(id, reason, deletedBy, deletedByName) {
         // Soft delete, not a hard DELETE -- matches legacy's real
         // apiDeleteLead() (index.html:4622-4629). A real ON DELETE CASCADE
         // on allocation_requests/target_selections/payment_reminders_log/
         // client_notifications would destroy their history, and payments
         // would be orphaned via ON DELETE SET NULL -- all confirmed live.
         // leads_sel/leads_client_sel RLS already filters deleted_at IS
-        // NULL, so this needs no client-side filtering anywhere else.
-        const { error } = await requireClient().from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+        // NULL for everyone but a manager, so this needs no client-side
+        // filtering anywhere else.
+        const { error } = await requireClient()
+          .from('leads')
+          .update({ deleted_at: new Date().toISOString(), deletion_reason: reason, deleted_by: deletedBy, deleted_by_name: deletedByName })
+          .eq('id', id);
         if (error) throw error;
+      },
+      async listArchived() {
+        // Explicit filter needed here even though RLS already restricts
+        // this to managers -- leads_sel's own WHERE lets BOTH active and
+        // archived rows through for a manager, so a plain select('*')
+        // would mix them.
+        const { data, error } = await requireClient().from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapLeadRow);
+      },
+      async restore(id) {
+        const { data, error } = await requireClient().from('leads').update({ deleted_at: null }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
       },
     },
     payments: {

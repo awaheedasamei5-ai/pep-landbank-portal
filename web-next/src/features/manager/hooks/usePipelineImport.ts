@@ -183,7 +183,7 @@ export function useCommitPipelineImport() {
         const toArchive = freshLeads.filter((l) => !fileIds.has(l.id));
         for (const lead of toArchive) {
           try {
-            await ds.leads.remove(lead.id);
+            await ds.leads.remove(lead.id, 'Missing from a reconciled pipeline import', profile?.key ?? '', profile?.name ?? '');
             archived++;
             archivedLeads.push({ id: lead.id, name: lead.name });
           } catch (e) {
