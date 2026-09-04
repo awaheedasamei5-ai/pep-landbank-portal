@@ -2,17 +2,18 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 // Real LLM-backed intelligence layer -- one function serves every AI
 // feature across the app via a `kind` discriminator, so adding a new
-// AI-powered surface (commission insights, manager briefing, chat
-// suggestions) never needs a new deployment, just a new prompt branch
-// here. Groq (https://console.groq.com), not a paid provider: genuinely
-// free tier, no credit card, 14,400 requests/day, and fast enough
-// (300+ tokens/sec) to feel instant in the UI rather than a spinner.
-// The API key lives ONLY as a server-side Edge Function secret
-// (GROQ_API_KEY) -- never shipped to the client, same discipline as
-// this project's existing send-sms function's ARKESEL_API_KEY. Until
-// that secret is set, every call gracefully returns "not configured
-// yet" (never a 500 that breaks the caller's UI) -- same pattern
-// send-sms already established for a not-yet-configured provider.
+// AI-powered surface (commission insights, chat suggestions) never needs
+// a new deployment, just a new prompt branch here. Groq
+// (https://console.groq.com), not a paid provider: genuinely free tier,
+// no credit card, 14,400 requests/day, and fast enough (300+ tokens/sec)
+// to feel instant in the UI rather than a spinner. The API key lives
+// ONLY as a server-side Edge Function secret (GROQ_API_KEY) -- never
+// shipped to the client, same discipline as this project's existing
+// send-sms function's ARKESEL_API_KEY. Until that secret is set, every
+// call gracefully returns "not configured yet" (never a 500 that breaks
+// the caller's UI) -- same pattern send-sms already established for a
+// not-yet-configured provider. GROQ_API_KEY confirmed live on staging
+// 2026-09-05.
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,11 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+// Groq retired the old llama-3.3-70b-versatile model from this account's
+// available list (confirmed live via /v1/models, 2026-09-05) -- replaced
+// with the openai/gpt-oss family Groq now hosts. 120b for real quality on
+// short business-coaching/summary text.
+const GROQ_MODEL = "openai/gpt-oss-120b";
 
 interface AiRequest {
   kind: string;
@@ -47,6 +52,14 @@ function systemPromptFor(kind: string): string | null {
         "You'll receive one JSON object with the colleague's name, the target date, whether they're on approved or pending leave that day, and how many tasks they already have that day. " +
         "Reply with ONE short, direct sentence (max 24 words) telling the user whether the colleague looks free, busy, or unavailable, and WHY, citing the actual leave status or task count given. " +
         "If nothing in the data suggests a conflict, say plainly that they appear free -- don't invent caution that isn't in the data. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "manager_daily_briefing":
+      return (
+        "You are a sharp, concise chief-of-staff for the Management team at a Ghanaian land-sales agency called Palmstead. " +
+        "You'll receive one JSON object with today's real company-wide numbers: total leads, outstanding balance, fully-paid count, open complaints, total pipeline value, site visits logged, this month's collected amount and its trend vs last month, the pipeline stage funnel, and a ranked list of agents by their pipeline value. " +
+        "Reply with a short briefing of 2-3 sentences (max 60 words total), plain prose, no headers or bullet points. " +
+        "Lead with whatever most deserves Management's attention today (a real risk like open complaints, or a real win like a strong collection trend or a standout agent) -- cite the actual numbers given, never invent figures not in the data. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
     default:
@@ -95,7 +108,13 @@ Deno.serve(async (req: Request) => {
             { role: "user", content: JSON.stringify(context ?? {}) },
           ],
           temperature: 0.6,
-          max_tokens: 60,
+          max_tokens: 300,
+          // gpt-oss is a reasoning model -- without this it burns its whole
+          // token budget on internal chain-of-thought and never emits the
+          // actual reply (confirmed live: finish_reason 'length', 198 of 200
+          // tokens spent on `reasoning`, empty `content`). This task never
+          // needs deep reasoning, just a short, grounded sentence.
+          reasoning_effort: "low",
         }),
         signal: controller.signal,
       });
