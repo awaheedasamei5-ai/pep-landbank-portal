@@ -495,29 +495,55 @@ export interface LeaderboardRow {
 // invented 'Reserved'/'Sold', which never actually occur in real data and
 // silently broke status counts/badges for every real Allocated/Running
 // Search plot).
-export type PlotStatus = 'Available' | 'Running Search' | 'Allocated' | 'Subdivided';
+// Master Spec 7.2's own status vocabulary (Reserved/Held for Approval/
+// Available/Allocated/Blocked/Disputed/Archived) plus the two real values
+// this app's own workflow already depends on (Running Search, Subdivided)
+// that aren't in the spec's list at all -- the spec's 7 are a minimum, not
+// a replacement for real in-use states. Real schema migration applied
+// 2026-09-04 (expand_plot_status_type_and_add_workbook_fields) -- also
+// fixed a live bug the old 3-value CHECK constraint had: split_plot_for_
+// half_sale() has always set status='Subdivided' on the parent, but that
+// value was never in the allowed list, so every real split silently failed
+// its own final UPDATE.
+export type PlotStatus = 'Available' | 'Running Search' | 'Allocated' | 'Subdivided' | 'Reserved' | 'Held for Approval' | 'Blocked' | 'Disputed' | 'Archived';
 export type PlotUnitKind = 'whole' | 'half';
+
+// Deliberately its own type, not a reuse of PlotType above -- that one
+// is the SALES unit a client buys (Full/Half, drives pricing/quotation/
+// contract logic everywhere it's used). This is the PHYSICAL INVENTORY
+// classification (Plot.plotType only), where a real land parcel can be an
+// irregular "Partial" piece (per the real supplied workbook -- factors
+// like 0.3/0.55/0.7, not just 0.5) that still gets sold, priced
+// proportionally to the parcel's real area, without ever needing
+// pricingFor()/contract logic to learn a third sales unit they don't
+// actually have a defined price/contract clause for.
+export type PlotClassification = 'Full Plot' | 'Half Plot' | 'Partial Plot';
 
 // Real RLS on this table (confirmed live) restricts read/write to manager
 // or specifically the 'elias'/'emmanuel' staff keys -- not every agent.
 // This screen should only ever be reachable by those roles/keys, matching
 // how Sales Desk gates it.
-// width_ft/length_ft/areaSqft/section are new real columns (added
-// 2026-09-04, Master Spec 7.1/7.2 -- "the system must model actual
-// dimensions and area, not only a binary Full/Half label" -- the supplied
-// Royal Palm workbook has real irregular plots at 35x100/55x100/15x100/
-// 90x100ft alongside the 70x100 standard). areaSqft is a real generated
-// column (width_ft * length_ft), never written directly. All four are
-// nullable/optional -- schema-only for now, no real dimension data
-// imported yet (see PHASE0_INVENTORY.md's Allocation+Inventory section
-// for the workbook/site-plan block-count reconciliation this still needs
-// before any real plot rows get these values).
+// width_ft/length_ft/areaSqft/section: real columns (added 2026-09-04,
+// Master Spec 7.1/7.2 -- "the system must model actual dimensions and
+// area, not only a binary Full/Half label"). areaSqft is a real generated
+// column (width_ft * length_ft), never written directly.
+// factor/customerCode: also added 2026-09-04, from the real supplied
+// workbook (ALLOCATION SHEET - ROYAL PALM.xlsx) -- factor is the
+// workbook's own fractional unit multiplier (1=full, 0.5=half, irregular
+// values like 0.3/0.55/0.7 for Partial Plot); customerCode is the
+// workbook's legacy customer identifier (C0xx scheme), adopted as the
+// plot/client-facing ID for allocations going forward too, per explicit
+// user decision -- not retrofitted onto live Pipeline leads, which stay
+// identified by their own real Lead ID (fuzzy name-matching 330+ historical
+// customers against live leads was ruled out as unreliable for this pass).
+// All 414 real plots from the workbook were imported 2026-09-04, replacing
+// the smaller placeholder/partial dataset that existed before.
 export interface Plot {
   id: string;
   site: string;
   section: string | null;
   plotNumber: string;
-  plotType: PlotType;
+  plotType: PlotClassification;
   status: PlotStatus;
   price: number | null;
   clientName: string | null;
@@ -529,13 +555,15 @@ export interface Plot {
   widthFt: number | null;
   lengthFt: number | null;
   areaSqft: number | null;
+  factor: number | null;
+  customerCode: string | null;
 }
 
 export interface NewPlot {
   site: string;
   section?: string | null;
   plotNumber: string;
-  plotType: PlotType;
+  plotType: PlotClassification;
   status: PlotStatus;
   price?: number | null;
   clientName?: string | null;
@@ -544,11 +572,13 @@ export interface NewPlot {
   notes?: string | null;
   widthFt?: number | null;
   lengthFt?: number | null;
+  factor?: number | null;
+  customerCode?: string | null;
 }
 
 export interface PlotUpdate {
   status?: PlotStatus;
-  plotType?: PlotType;
+  plotType?: PlotClassification;
   price?: number | null;
   clientName?: string | null;
   clientContact?: string | null;
@@ -557,6 +587,8 @@ export interface PlotUpdate {
   widthFt?: number | null;
   lengthFt?: number | null;
   notes?: string | null;
+  factor?: number | null;
+  customerCode?: string | null;
 }
 
 // Not a real table -- there is no clients master table in production (confirmed

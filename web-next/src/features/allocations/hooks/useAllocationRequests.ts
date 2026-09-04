@@ -20,6 +20,11 @@ export function useAllocationRequests() {
   });
 }
 
+// Master Spec 7.5: "Management receives in-app notification + SMS that an
+// allocation request is awaiting review." Both are fire-and-forget --
+// never let a failed notify/SMS roll back or block the real request that
+// was just created, same "auditing must never break the calling flow"
+// reasoning as every other sms.send() call site in this app.
 export function useCreateAllocationRequest() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -27,7 +32,22 @@ export function useCreateAllocationRequest() {
   const agentName = profile?.name ?? '';
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: NewAllocationRequest) => getDataSource(demoMode).allocationRequests.create(agentKey, agentName, input),
+    mutationFn: async (input: NewAllocationRequest) => {
+      const ds = getDataSource(demoMode);
+      const request = await ds.allocationRequests.create(agentKey, agentName, input);
+      const managers = await ds.staff.list().catch(() => []);
+      const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
+      if (toManagers.length > 0) {
+        const body = `${agentName} requested plot allocation for ${request.clientName} — awaiting your review.`;
+        ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), body, 'allocation_pending', 'allocation_request', request.id).catch(() => {});
+        for (const mgr of toManagers) {
+          if (mgr.phone) {
+            ds.sms.send(mgr.phone, `${agentName} requested plot allocation for ${request.clientName}. Review it in Palmstead.`, 'allocation_pending', agentKey).catch(() => {});
+          }
+        }
+      }
+      return request;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
   });
 }

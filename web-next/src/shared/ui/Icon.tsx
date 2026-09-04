@@ -43,7 +43,8 @@ export type IconName =
   | 'bulb'
   | 'shield'
   | 'logout'
-  | 'chevronRight';
+  | 'chevronRight'
+  | 'bell';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -281,6 +282,13 @@ function IconInner({ name }: { name: IconName }) {
       );
     case 'chevronRight':
       return <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+    case 'bell':
+      return (
+        <>
+          <path d="M6 10.5a6 6 0 0112 0c0 3.4 1 5 2 6.2H4c1-1.2 2-2.8 2-6.2z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+          <path d="M10 19a2 2 0 004 0" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
   }
 }
 

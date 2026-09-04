@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
-import { usePlots } from '../../plots/hooks/usePlots';
+import { usePlots, useSplitPlot } from '../../plots/hooks/usePlots';
 import { allocationUnitsNeeded } from '../../pipeline/lib/pipelineLogic';
 import { suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -193,22 +194,72 @@ function RequestRow({ request, canAllocate }: { request: AllocationRequest; canA
 }
 
 function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lead | null }) {
+  const navigate = useNavigate();
   const { data: plots } = usePlots();
   const { data: config } = useConfig();
   const suggest = useSuggestAllocationPlots();
   const flag = useFlagAllocation();
+  const split = useSplitPlot();
   const [values, setValues] = useState<string[]>(['', '', '']);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [flagging, setFlagging] = useState(false);
   const [reason, setReason] = useState('Payment amount looks wrong');
   const [detail, setDetail] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showPartials, setShowPartials] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   const units = allocationUnitsNeeded(lead?.plotType ?? 'Full Plot', lead?.noPlots ?? 1);
   const multi = units.length > 1;
   const slots = multi ? units.length : 3;
 
   const std = { fullWidthFt: config?.techFullPlotWidthFt ?? 70, fullLengthFt: config?.techFullPlotLengthFt ?? 100, halfWidthFt: config?.techHalfPlotWidthFt ?? 50, halfLengthFt: config?.techHalfPlotLengthFt ?? 70 };
+
+  // Master Spec 7.4 only defines units for Full/Half Plot -- a Partial
+  // Plot (real classification, see PlotClassification in types/domain.ts)
+  // has no fixed full-plot-equivalence, so it can never be auto-suggested
+  // by units[]. This is the manual override path: browse real Available
+  // Partial Plots directly and drop one into whichever slot is open.
+  const availablePartials = (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.status === 'Available');
+
+  function fillSlot(plotNumber: string) {
+    setValues((v) => {
+      const openIdx = v.findIndex((x, i) => i < slots && !x.trim());
+      const targetIdx = openIdx === -1 ? slots - 1 : openIdx;
+      return v.map((x, i) => (i === targetIdx ? plotNumber : x));
+    });
+    setReasons((r) => {
+      const openIdx = values.findIndex((x, i) => i < slots && !x.trim());
+      const targetIdx = openIdx === -1 ? slots - 1 : openIdx;
+      const next = { ...r };
+      delete next[targetIdx];
+      return next;
+    });
+  }
+
+  // Splitting only lives in Plot Inventory today -- this is the same real
+  // split_plot_for_half_sale RPC (via useSplitPlot), just reachable from
+  // inside the flow that actually needs it: staff suggesting a Half Plot
+  // for a client with no half currently Available, but a splittable Full
+  // Plot on hand. The resulting half's own number auto-fills the slot so
+  // there's no app-switch and no re-typing.
+  async function splitAndFill(slotIndex: number, plotId: string) {
+    setSplitError(null);
+    try {
+      const r = await split.mutateAsync(plotId);
+      const half = r.plotA ?? r.plotB;
+      if (half) {
+        setValues((v) => v.map((x, i) => (i === slotIndex ? half.plotNumber : x)));
+        setReasons((rs) => {
+          const next = { ...rs };
+          delete next[slotIndex];
+          return next;
+        });
+      }
+    } catch (e) {
+      setSplitError(friendlyError(e, 'Failed to split plot'));
+    }
+  }
 
   // Master Spec 7.4's suggestion engine (features/allocations/lib/
   // suggestionEngine.ts) -- pre-fills the same editable slots below rather
@@ -299,11 +350,41 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
           ? `This client is buying ${units.length} units (${units.join(' + ')}). Suggest exactly one plot per unit — all are required together, not alternatives.`
           : 'Suggest up to 3 candidate plots. Management signs off physically before anything is allocated.'}
       </p>
-      <button type="button" className={styles.cancelBtn} style={{ marginBottom: 10 }} onClick={autoSuggest}>
-        ✨ Auto-suggest from inventory
-      </button>
+      {!multi && (
+        <p className={styles.helpText} style={{ marginTop: -6 }}>
+          Client buying more than one plot?{' '}
+          <button type="button" className={styles.inlineLink} onClick={() => navigate(`/app/sales/pipeline/${request.leadId}`)}>
+            Set the plot count on their lead →
+          </button>{' '}
+          — this panel will ask for one slot per unit automatically.
+        </p>
+      )}
+      <div className={styles.allocateActions} style={{ marginBottom: 10 }}>
+        <button type="button" className={styles.cancelBtn} onClick={autoSuggest}>
+          ✨ Auto-suggest from inventory
+        </button>
+        <button type="button" className={styles.cancelBtn} onClick={() => setShowPartials((v) => !v)}>
+          {showPartials ? 'Hide partial plots' : 'Browse partial plots'}
+        </button>
+      </div>
+      {showPartials && (
+        <div className={styles.pickerList} style={{ marginTop: 0, marginBottom: 10 }}>
+          {availablePartials.length === 0 && <p className={styles.noMatch}>No Available Partial Plots in inventory right now.</p>}
+          {availablePartials.map((p) => (
+            <button key={p.id} type="button" className={styles.pickerRow} onClick={() => fillSlot(p.plotNumber)}>
+              <div className={styles.pickerName}>{p.plotNumber} — Partial Plot</div>
+              <div className={styles.pickerMeta}>
+                {p.widthFt != null && p.lengthFt != null ? `${p.widthFt}×${p.lengthFt}ft · ` : ''}
+                {p.price != null ? ghs(p.price) : 'price not set'}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
       {Array.from({ length: slots }).map((_, i) => {
         const st = statusFor(values[i]);
+        const candidate = (plots ?? []).find((p) => p.plotNumber.toLowerCase() === values[i].trim().toLowerCase());
+        const canSplitCandidate = !!candidate && candidate.plotType === 'Full Plot' && candidate.status === 'Available' && !candidate.parentPlotId;
         return (
           <div key={i} style={{ marginBottom: 8 }}>
             <input
@@ -326,9 +407,15 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
                 {st.text}
               </div>
             )}
+            {canSplitCandidate && (multi ? units[i] === 'Half Plot' : true) && (
+              <button type="button" className={styles.inlineLink} style={{ marginTop: 4 }} disabled={split.isPending} onClick={() => splitAndFill(i, candidate.id)}>
+                {split.isPending ? 'Splitting…' : `Split ${candidate.plotNumber} into two Half Plots, use the first half →`}
+              </button>
+            )}
           </div>
         );
       })}
+      {splitError && <p className={styles.errorMsg}>{splitError}</p>}
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.allocateActions}>
         <button type="button" className={styles.confirmBtn} disabled={suggest.isPending} onClick={submit}>

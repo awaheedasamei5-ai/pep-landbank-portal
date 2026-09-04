@@ -758,6 +758,23 @@ export interface DataSource {
     send(myKey: string, myName: string, otherKey: string, body: string, replyToId?: string | null): Promise<ChatMessage>;
     markThreadRead(myKey: string, otherKey: string): Promise<void>;
   };
+  // The system-notification half of the same `messages` table chat.*
+  // above deliberately leaves alone (kind IS NOT NULL rows). A
+  // notification is just a message with a real `kind`/`refType`/`refId`
+  // set and no thread concept -- chat.listConversations()/listThread()
+  // already exclude these via .is('kind', null), so the two inboxes can
+  // never leak into each other. RLS is unchanged (messages_ins still
+  // requires sender_key = my_key()), so notify() always sends as the
+  // real acting staff member who triggered it, never a fabricated
+  // 'system' sender -- e.g. the agent whose allocation request just went
+  // in is the sender_key on the notification that reaches Management.
+  notifications: {
+    list(myKey: string): Promise<ChatMessage[]>;
+    unreadCount(myKey: string): Promise<number>;
+    markRead(id: string): Promise<void>;
+    markAllRead(myKey: string): Promise<void>;
+    notify(fromKey: string, fromName: string, toKeys: string[], body: string, kind: string, refType?: string | null, refId?: string | null): Promise<void>;
+  };
 }
 
 let cachedDemo: DataSource | null = null;
@@ -1202,6 +1219,8 @@ function createDemoDataSource(): DataSource {
           widthFt: input.widthFt ?? null,
           lengthFt: input.lengthFt ?? null,
           areaSqft: input.widthFt != null && input.lengthFt != null ? input.widthFt * input.lengthFt : null,
+          factor: input.factor ?? null,
+          customerCode: input.customerCode ?? null,
         };
         db.plots = [plot, ...db.plots];
         demoSave();
@@ -1250,8 +1269,8 @@ function createDemoDataSource(): DataSource {
         // identify which physical sub-unit is reserved, not just halve a
         // number). section carries over since both halves share the
         // parent's physical location.
-        const plotA: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'a', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null };
-        const plotB: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'b', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null };
+        const plotA: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'a', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null };
+        const plotB: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'b', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null };
         db.plots = [plotB, plotA, ...db.plots.map((x) => (x.id === plotId ? { ...x, status: 'Subdivided' as const } : x))];
         demoSave();
         return { alreadySplit: false, plotA, plotB };
@@ -1916,7 +1935,7 @@ function createDemoDataSource(): DataSource {
         db.plots = db.plots.map((p) => (plotNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
         for (const pn of plotNumbers) {
           if (!db.plots.some((p) => p.plotNumber.toLowerCase() === pn.toLowerCase())) {
-            db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: pn, plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: 'Allocated via signed authorization', unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null }, ...db.plots];
+            db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: pn, plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: 'Allocated via signed authorization', unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null, factor: null, customerCode: null }, ...db.plots];
           }
         }
         demoSave();
@@ -1950,7 +1969,7 @@ function createDemoDataSource(): DataSource {
         if (conflict) {
           db.plots = db.plots.map((p) => (p.id === conflict.id ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
         } else {
-          db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: newPlotNumber.trim(), plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: `Reassigned from Plot ${alloc.plotNumber ?? '—'}`, unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null }, ...db.plots];
+          db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: newPlotNumber.trim(), plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: `Reassigned from Plot ${alloc.plotNumber ?? '—'}`, unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null, factor: null, customerCode: null }, ...db.plots];
         }
         const event: AllocationHistoryEvent = { type: 'reassigned', fromPlot: alloc.plotNumber, toPlot: newPlotNumber.trim(), by: alloc.allocatedBy ?? '', at: new Date().toISOString() };
         const updated: AllocationRequest = { ...alloc, plotNumber: newPlotNumber.trim(), history: [...alloc.history, event] };
@@ -2361,6 +2380,51 @@ function createDemoDataSource(): DataSource {
         const db = demoLoad();
         for (const m of db.chatMessages) {
           if (m.recipientKey === myKey && m.senderKey === otherKey && !m.read) m.read = true;
+        }
+        demoSave();
+      },
+    },
+    notifications: {
+      async list(myKey) {
+        return demoLoad()
+          .chatMessages.filter((m) => !!m.kind && m.recipientKey === myKey)
+          .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async unreadCount(myKey) {
+        return demoLoad().chatMessages.filter((m) => !!m.kind && m.recipientKey === myKey && !m.read).length;
+      },
+      async markRead(id) {
+        const db = demoLoad();
+        const m = db.chatMessages.find((x) => x.id === id);
+        if (m) m.read = true;
+        demoSave();
+      },
+      async markAllRead(myKey) {
+        const db = demoLoad();
+        for (const m of db.chatMessages) {
+          if (m.kind && m.recipientKey === myKey) m.read = true;
+        }
+        demoSave();
+      },
+      async notify(fromKey, fromName, toKeys, body, kind, refType, refId) {
+        const db = demoLoad();
+        for (const toKey of toKeys) {
+          db.chatMessages.push({
+            id: Math.random().toString(36).slice(2, 10),
+            senderKey: fromKey,
+            senderName: fromName,
+            recipientKey: toKey,
+            body,
+            createdAt: new Date().toISOString(),
+            read: false,
+            attachmentData: null,
+            attachmentType: null,
+            attachmentName: null,
+            kind,
+            refType: refType ?? null,
+            refId: refId ?? null,
+            replyToId: null,
+          });
         }
         demoSave();
       },
@@ -2816,7 +2880,7 @@ function createLiveDataSource(): DataSource {
       async create(input) {
         const { data, error } = await requireClient()
           .from('plots')
-          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null, section: input.section ?? null, width_ft: input.widthFt ?? null, length_ft: input.lengthFt ?? null })
+          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null, section: input.section ?? null, width_ft: input.widthFt ?? null, length_ft: input.lengthFt ?? null, factor: input.factor ?? null, customer_code: input.customerCode ?? null })
           .select()
           .single();
         if (error) throw error;
@@ -2834,6 +2898,8 @@ function createLiveDataSource(): DataSource {
         if ('section' in patch) dbPatch.section = patch.section;
         if ('widthFt' in patch) dbPatch.width_ft = patch.widthFt;
         if ('lengthFt' in patch) dbPatch.length_ft = patch.lengthFt;
+        if ('factor' in patch) dbPatch.factor = patch.factor;
+        if ('customerCode' in patch) dbPatch.customer_code = patch.customerCode;
         const { data, error } = await requireClient().from('plots').update(dbPatch).eq('id', id).select().single();
         if (error) throw error;
         return mapPlotRow(data);
@@ -2868,6 +2934,8 @@ function createLiveDataSource(): DataSource {
                 widthFt: null,
                 lengthFt: null,
                 areaSqft: null,
+                factor: 0.5,
+                customerCode: null,
               }
             : null;
         return { alreadySplit: r.alreadySplit, plotA: norm(r.plotA), plotB: norm(r.plotB) };
@@ -3860,6 +3928,44 @@ function createLiveDataSource(): DataSource {
       },
       async markThreadRead(myKey, otherKey) {
         const { error } = await requireClient().from('messages').update({ read: true }).eq('recipient_key', myKey).eq('sender_key', otherKey).eq('read', false);
+        if (error) throw error;
+      },
+    },
+    notifications: {
+      async list(myKey) {
+        const { data, error } = await requireClient()
+          .from('messages')
+          .select('*')
+          .not('kind', 'is', null)
+          .eq('recipient_key', myKey)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        return (data ?? []).map(mapChatMessageRow);
+      },
+      async unreadCount(myKey) {
+        const { count, error } = await requireClient()
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .not('kind', 'is', null)
+          .eq('recipient_key', myKey)
+          .eq('read', false);
+        if (error) throw error;
+        return count ?? 0;
+      },
+      async markRead(id) {
+        const { error } = await requireClient().from('messages').update({ read: true }).eq('id', id);
+        if (error) throw error;
+      },
+      async markAllRead(myKey) {
+        const { error } = await requireClient().from('messages').update({ read: true }).eq('recipient_key', myKey).not('kind', 'is', null).eq('read', false);
+        if (error) throw error;
+      },
+      async notify(fromKey, fromName, toKeys, body, kind, refType, refId) {
+        if (toKeys.length === 0) return;
+        const { error } = await requireClient()
+          .from('messages')
+          .insert(toKeys.map((toKey) => ({ sender_key: fromKey, sender_name: fromName, recipient_key: toKey, body, kind, ref_type: refType ?? null, ref_id: refId ?? null })));
         if (error) throw error;
       },
     },

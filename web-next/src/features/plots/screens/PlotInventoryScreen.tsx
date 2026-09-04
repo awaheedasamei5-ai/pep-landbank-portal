@@ -1,33 +1,88 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
-import type { Plot, PlotStatus, PlotType } from '../../../types/domain';
-import { usePlots, useCreatePlot, useDeletePlot, useSplitPlot, useUpdatePlot } from '../hooks/usePlots';
+import type { Plot, PlotClassification, PlotStatus } from '../../../types/domain';
+import { usePlots, useCreatePlot } from '../hooks/usePlots';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './PlotInventoryScreen.module.css';
 
-const PLOT_STATUSES: PlotStatus[] = ['Available', 'Running Search', 'Allocated'];
-const BADGE_CLASS: Record<PlotStatus, string> = { Available: 'badgeAvailable', 'Running Search': 'badgeRunningSearch', Allocated: 'badgeAllocated', Subdivided: 'badgeSubdivided' };
+// All 9: the 4 real values this app's own workflow already produces
+// (Available/Running Search/Allocated/Subdivided) plus the 5 Master Spec
+// 7.2 adds (Reserved/Held for Approval/Blocked/Disputed/Archived) --
+// real schema migration applied 2026-09-04. Every one needs a real color
+// here, not just the 4 already in use, or a plot manually set to one of
+// the 5 new values would render with an undefined class.
+const PLOT_STATUSES: PlotStatus[] = ['Available', 'Running Search', 'Allocated', 'Subdivided', 'Reserved', 'Held for Approval', 'Blocked', 'Disputed', 'Archived'];
+const BADGE_CLASS: Record<PlotStatus, string> = {
+  Available: 'badgeAvailable',
+  'Running Search': 'badgeRunningSearch',
+  Allocated: 'badgeAllocated',
+  Subdivided: 'badgeSubdivided',
+  Reserved: 'badgeReserved',
+  'Held for Approval': 'badgeHeldForApproval',
+  Blocked: 'badgeBlocked',
+  Disputed: 'badgeDisputed',
+  Archived: 'badgeArchived',
+};
+const DOT_CLASS: Record<PlotStatus, string> = {
+  Available: 'dotAvailable',
+  'Running Search': 'dotRunningSearch',
+  Allocated: 'dotAllocated',
+  Subdivided: 'dotSubdivided',
+  Reserved: 'dotReserved',
+  'Held for Approval': 'dotHeldForApproval',
+  Blocked: 'dotBlocked',
+  Disputed: 'dotDisputed',
+  Archived: 'dotArchived',
+};
 const DEFAULT_SITE = 'Royal Palm Enclave, Tsopoli';
 
+interface Filters {
+  status: PlotStatus | '';
+  section: string;
+  priceMin: string;
+  priceMax: string;
+}
+const EMPTY_FILTERS: Filters = { status: '', section: '', priceMin: '', priceMax: '' };
+
 // Real write capability (plots_ins/plots_upd/plots_del RLS, manager/elias/
-// emmanuel only, confirmed live) plus the real split_plot_for_half_sale RPC
-// -- both ported to staging for this pass (staging never had unit_kind/
-// parent_plot_id columns or that RPC before now). Status vocabulary also
-// corrected: a prior version of this screen used invented 'Reserved'/'Sold'
-// values that never occur in real data (confirmed via a live `select
-// distinct status from plots` -- real values are Available/Running Search/
-// Allocated/Subdivided), which silently broke counts and badges for every
-// real Allocated or Running Search plot.
+// emmanuel only, confirmed live) plus the real split_plot_for_half_sale RPC.
+// Status vocabulary corrected to the real live values (Available/Running
+// Search/Allocated/Subdivided) -- the Master Spec's own 7-status vocabulary
+// (Reserved/Held-for-Approval/.../Blocked/Disputed/Archived) doesn't exist
+// in the real schema (confirmed live), and inventing new status values here
+// would silently diverge the UI from the actual plots.status column and
+// break every RLS/RPC that switches on it -- a real schema change, not a
+// UI pass, and needs its own explicit approval before touching production
+// data shape.
+//
+// Premium UI spec Section E: "Replace generic plot tiles with a
+// professional inventory board: status legend, filters, search, price
+// range and availability summary... Desktop: grid/map-style plot board...
+// Plot detail should open as a side drawer on desktop and bottom sheet/
+// full page on mobile." Real gap this closes -- the previous version had
+// none of the legend/filters/search/price-range, and detail opened inline
+// under the row instead of a drawer (the same pattern already fixed for
+// Pipeline and Client Database, applied here for consistency). No
+// geometry/map data exists for these plots (Master Spec Section 8: "do not
+// infer exact plot geometry from pixels without a proper survey"), so the
+// desktop "board" is a real status-colored tile grid grouped by section --
+// the honest interpretation of "grid/map-style" without fabricating
+// coordinates that don't exist.
 export function PlotInventoryScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
   const hasAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const { data: plots, isLoading } = usePlots();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+
+  const hasDetailOpen = /^\/app\/sales\/plots\/[^/]+$/.test(location.pathname);
 
   if (!hasAccess) {
     return (
@@ -38,86 +93,249 @@ export function PlotInventoryScreen() {
     );
   }
 
-  const counts: Record<PlotStatus, number> = { Available: 0, 'Running Search': 0, Allocated: 0, Subdivided: 0 };
-  (plots ?? []).forEach((p) => counts[p.status]++);
+  const all = plots ?? [];
+  const counts: Record<PlotStatus, number> = { Available: 0, 'Running Search': 0, Allocated: 0, Subdivided: 0, Reserved: 0, 'Held for Approval': 0, Blocked: 0, Disputed: 0, Archived: 0 };
+  all.forEach((p) => counts[p.status]++);
+  const availableValue = all.filter((p) => p.status === 'Available').reduce((s, p) => s + (p.price ?? 0), 0);
+
+  const sections = useMemo(() => Array.from(new Set(all.map((p) => p.section).filter(Boolean))).sort() as string[], [all]);
+
+  const q = query.trim().toLowerCase();
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+  const filtered = all.filter((p) => {
+    if (q && !p.plotNumber.toLowerCase().includes(q) && !(p.clientName ?? '').toLowerCase().includes(q)) return false;
+    if (filters.status && p.status !== filters.status) return false;
+    if (filters.section && p.section !== filters.section) return false;
+    if (filters.priceMin && (p.price ?? 0) < Number(filters.priceMin)) return false;
+    if (filters.priceMax && (p.price ?? 0) > Number(filters.priceMax)) return false;
+    return true;
+  });
 
   const bySite = new Map<string, Plot[]>();
-  (plots ?? []).forEach((p) => {
+  filtered.forEach((p) => {
     if (!bySite.has(p.site)) bySite.set(p.site, []);
     bySite.get(p.site)!.push(p);
   });
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.headRow}>
-        <div>
-          <h1 className={styles.title}>Plot Inventory</h1>
-          <p className={styles.sub}>Every plot and its current status</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button type="button" className={styles.addBtn} style={{ background: 'var(--c-card)', color: 'var(--c-muted)', border: '1px solid var(--c-line)' }} onClick={() => navigate('/app/sales/plots/reconciliation')}>
-            Reconciliation
-          </button>
-          <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
-            {addOpen ? 'Cancel' : '+ Add plot'}
-          </button>
-        </div>
-      </div>
-
-      {addOpen && <AddPlotForm defaultSite={plots?.[0]?.site ?? DEFAULT_SITE} onDone={() => setAddOpen(false)} />}
-
-      <div className={styles.summaryRow}>
-        <div className={styles.summaryPill}>
-          <div className={styles.summaryVal}>{counts.Available}</div>
-          <div className={styles.summaryLbl}>Available</div>
-        </div>
-        <div className={styles.summaryPill}>
-          <div className={styles.summaryVal}>{counts['Running Search']}</div>
-          <div className={styles.summaryLbl}>Running search</div>
-        </div>
-        <div className={styles.summaryPill}>
-          <div className={styles.summaryVal}>{counts.Allocated}</div>
-          <div className={styles.summaryLbl}>Allocated</div>
-        </div>
-      </div>
-
-      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
-      {[...bySite.entries()].map(([site, sitePlots]) => (
-        <div key={site}>
-          <div className={styles.site}>
-            <span className={styles.siteIcon}>
-              <Icon name="map" size={15} />
-            </span>
-            {site}
-            <span className={styles.siteCount}>{sitePlots.length}</span>
+    <div className={`${styles.pageRow} ${hasDetailOpen ? styles.pageRowSplit : ''}`}>
+      <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
+        <div className={styles.headRow}>
+          <div>
+            <h1 className={styles.title}>Plot Inventory</h1>
+            <p className={styles.sub}>Every plot and its current status</p>
           </div>
-          {sitePlots
-            .filter((p) => p.unitKind === 'whole')
-            .map((whole) => {
-              const halves = sitePlots.filter((p) => p.parentPlotId === whole.id);
-              return (
-                <div key={whole.id}>
-                  <PlotRow plot={whole} isSelected={selectedId === whole.id} onToggle={() => setSelectedId((cur) => (cur === whole.id ? null : whole.id))} />
-                  {selectedId === whole.id && <PlotDetail plot={whole} onClose={() => setSelectedId(null)} />}
-                  {halves.map((h) => (
-                    <div key={h.id}>
-                      <PlotRow plot={h} isHalf isSelected={selectedId === h.id} onToggle={() => setSelectedId((cur) => (cur === h.id ? null : h.id))} />
-                      {selectedId === h.id && <PlotDetail plot={h} onClose={() => setSelectedId(null)} />}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
+          <div className={styles.headActions}>
+            <button type="button" className={styles.reconBtn} onClick={() => navigate('/app/sales/plots/reconciliation')}>
+              Reconciliation
+            </button>
+            <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
+              {addOpen ? 'Cancel' : '+ Add plot'}
+            </button>
+          </div>
         </div>
-      ))}
-      {plots && plots.length === 0 && !isLoading && <p className={styles.emptyMsg}>No plots added yet. Add your first one above.</p>}
+
+        {addOpen && <AddPlotForm defaultSite={plots?.[0]?.site ?? DEFAULT_SITE} onDone={() => setAddOpen(false)} />}
+
+        <div className={styles.summaryRow}>
+          <div className={styles.summaryPill}>
+            <div className={styles.summaryVal}>{counts.Available}</div>
+            <div className={styles.summaryLbl}>Available</div>
+          </div>
+          <div className={styles.summaryPill}>
+            <div className={styles.summaryVal}>{counts['Running Search']}</div>
+            <div className={styles.summaryLbl}>Running search</div>
+          </div>
+          <div className={styles.summaryPill}>
+            <div className={styles.summaryVal}>{counts.Allocated}</div>
+            <div className={styles.summaryLbl}>Allocated</div>
+          </div>
+          <div className={`${styles.summaryPill} ${styles.summaryPillWide}`}>
+            <div className={styles.summaryVal}>{ghs(availableValue)}</div>
+            <div className={styles.summaryLbl}>Available inventory value</div>
+          </div>
+        </div>
+
+        {/* Status legend -- real colors instead of decoration, matching
+            spec's own "strong status colors, not random decoration." */}
+        <div className={styles.legend}>
+          {PLOT_STATUSES.map((s) => (
+            <span key={s} className={styles.legendItem}>
+              <span className={`${styles.legendDot} ${styles[DOT_CLASS[s]]}`} />
+              {s}
+            </span>
+          ))}
+        </div>
+
+        <div className={styles.searchRow}>
+          <div className={styles.searchWrap}>
+            <span className={styles.searchIcon}>
+              <Icon name="search" size={16} />
+            </span>
+            <input className={styles.search} placeholder="Search plot number or client…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <button type="button" className={styles.filterToggle} onClick={() => setShowFilters((v) => !v)}>
+            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className={styles.filterPanel}>
+            <div className={styles.filterGrid}>
+              <label className={styles.filterField}>
+                <span>Status</span>
+                <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as PlotStatus | '' }))}>
+                  <option value="">Any</option>
+                  {PLOT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span>Section</span>
+                <select value={filters.section} onChange={(e) => setFilters((f) => ({ ...f, section: e.target.value }))}>
+                  <option value="">Any</option>
+                  {sections.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.filterField}>
+                <span>Min price (GHS)</span>
+                <input type="number" value={filters.priceMin} onChange={(e) => setFilters((f) => ({ ...f, priceMin: e.target.value }))} />
+              </label>
+              <label className={styles.filterField}>
+                <span>Max price (GHS)</span>
+                <input type="number" value={filters.priceMax} onChange={(e) => setFilters((f) => ({ ...f, priceMax: e.target.value }))} />
+              </label>
+            </div>
+            {activeFilterCount > 0 && (
+              <button type="button" className={styles.clearFiltersBtn} onClick={() => setFilters(EMPTY_FILTERS)}>
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
+        {[...bySite.entries()].map(([site, sitePlots]) => (
+          <div key={site}>
+            <div className={styles.site}>
+              <span className={styles.siteIcon}>
+                <Icon name="map" size={15} />
+              </span>
+              {site}
+              <span className={styles.siteCount}>{sitePlots.length}</span>
+            </div>
+
+            {/* Desktop board: status-colored tile grid grouped by section.
+                Mobile: compact row list (Premium UI spec's own "mobile:
+                compact list with status chip"). Both feed the same
+                filtered/grouped data. */}
+            <PlotBoard plots={sitePlots} navigate={navigate} />
+            <PlotList plots={sitePlots} navigate={navigate} />
+          </div>
+        ))}
+        {plots && plots.length === 0 && !isLoading && <p className={styles.emptyMsg}>No plots added yet. Add your first one above.</p>}
+        {plots && plots.length > 0 && filtered.length === 0 && !isLoading && <p className={styles.emptyMsg}>No plots match your search/filters.</p>}
+      </div>
+      <Outlet />
     </div>
   );
 }
 
-function PlotRow({ plot, isHalf, isSelected, onToggle }: { plot: Plot; isHalf?: boolean; isSelected: boolean; onToggle: () => void }) {
+// Groups a section's plots into board "units": a whole plot on its own, or
+// a split parent shown as one connected two-tile group with its real
+// children -- Master Spec's own "A half split visually shows the parent
+// with two child units and a clear relationship."
+//
+// Groups by logical unit (a half's own parentPlotId, or its own id for a
+// plot with no parent) rather than looking up each whole's children from
+// the SAME array -- real bug caught live: a status filter can keep a half
+// (e.g. Allocated) while excluding its own Subdivided parent, and the old
+// "start from wholes, find their halves" approach silently dropped that
+// half entirely, since its parent was never in the filtered array to
+// start the lookup from.
+//
+// A plot is excluded from rendering as its OWN tile whenever some other
+// plot in this array points back to it as parentPlotId -- determined from
+// the real parent/child links, not from trusting plot.status === 'Subdivided'
+// alone. Caught live against real demo data: a plot with two real half-
+// children whose own status field was still 'Available' (a seed-data
+// inconsistency) rendered as a third, independently-clickable tile
+// alongside its own halves -- exactly the "split parent stays sellable"
+// bug Master Spec 7.2 rules out ("A split is atomic and cannot leave half
+// the transaction completed"). A plot that has real children is never
+// shown as its own tile, regardless of what its status column says.
+function boardUnits(plots: Plot[]): { key: string; tiles: Plot[] }[] {
+  const parentIds = new Set(plots.map((p) => p.parentPlotId).filter((id): id is string => !!id));
+  const map = new Map<string, Plot[]>();
+  for (const p of plots) {
+    if (parentIds.has(p.id)) continue;
+    const key = p.parentPlotId ?? p.id;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(p);
+  }
+  return [...map.entries()].map(([key, tiles]) => ({ key, tiles }));
+}
+
+function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate> }) {
+  const bySection = new Map<string, Plot[]>();
+  plots.forEach((p) => {
+    const key = p.section ?? '—';
+    if (!bySection.has(key)) bySection.set(key, []);
+    bySection.get(key)!.push(p);
+  });
   return (
-    <button type="button" className={`${styles.row} ${isHalf ? styles.rowHalf : ''} ${isSelected ? styles.rowSelected : ''}`} onClick={onToggle}>
+    <div className={styles.board}>
+      {[...bySection.entries()].map(([section, secPlots]) => (
+        <div key={section} className={styles.boardSection}>
+          <div className={styles.boardSectionLabel}>Block {section}</div>
+          <div className={styles.boardGrid}>
+            {boardUnits(secPlots).map((unit) => (
+              <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
+                {unit.tiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`${styles.tile} ${styles[`tile_${p.status.replace(/\s/g, '')}`]}`}
+                    onClick={() => navigate(`/app/sales/plots/${p.id}`)}
+                    title={`${p.plotNumber} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}`}
+                  >
+                    <span className={styles.tileNumber}>{p.plotNumber}</span>
+                    {p.price != null && <span className={styles.tilePrice}>{ghs(p.price)}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlotList({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate> }) {
+  return (
+    <div className={styles.list}>
+      {boardUnits(plots).map((unit) => (
+        <div key={unit.key}>
+          {unit.tiles.map((p) => (
+            <PlotRow key={p.id} plot={p} isHalf={unit.tiles.length > 1} onOpen={() => navigate(`/app/sales/plots/${p.id}`)} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlotRow({ plot, isHalf, onOpen }: { plot: Plot; isHalf?: boolean; onOpen: () => void }) {
+  return (
+    <button type="button" className={`${styles.row} ${isHalf ? styles.rowHalf : ''}`} onClick={onOpen}>
       <div>
         <div className={styles.plotNumber}>{plot.plotNumber}</div>
         <div className={styles.meta}>
@@ -138,7 +356,7 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
   const create = useCreatePlot();
   const [plotNumber, setPlotNumber] = useState('');
   const [section, setSection] = useState('');
-  const [plotType, setPlotType] = useState<PlotType>('Full Plot');
+  const [plotType, setPlotType] = useState<PlotClassification>('Full Plot');
   const [price, setPrice] = useState('');
   const [widthFt, setWidthFt] = useState('');
   const [lengthFt, setLengthFt] = useState('');
@@ -174,9 +392,10 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
         <input className={styles.input} placeholder="Section/block, e.g. B" value={section} onChange={(e) => setSection(e.target.value)} />
       </div>
       <div className={styles.grid2} style={{ marginTop: 8 }}>
-        <select className={styles.input} value={plotType} onChange={(e) => setPlotType(e.target.value as PlotType)}>
+        <select className={styles.input} value={plotType} onChange={(e) => setPlotType(e.target.value as PlotClassification)}>
           <option>Full Plot</option>
           <option>Half Plot</option>
+          <option>Partial Plot</option>
         </select>
         <input className={styles.input} type="number" placeholder="Price (GHS, optional)" value={price} onChange={(e) => setPrice(e.target.value)} />
       </div>
@@ -188,149 +407,6 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
       <button type="button" className={styles.submitBtn} disabled={create.isPending} onClick={submit}>
         {create.isPending ? 'Adding…' : 'Add plot'}
       </button>
-    </div>
-  );
-}
-
-function PlotDetail({ plot, onClose }: { plot: Plot; onClose: () => void }) {
-  const update = useUpdatePlot();
-  const del = useDeletePlot();
-  const split = useSplitPlot();
-  const [status, setStatus] = useState<PlotStatus>(plot.status === 'Subdivided' ? 'Available' : plot.status);
-  const [price, setPrice] = useState(plot.price != null ? String(plot.price) : '');
-  const [clientName, setClientName] = useState(plot.clientName ?? '');
-  const [clientContact, setClientContact] = useState(plot.clientContact ?? '');
-  const [notes, setNotes] = useState(plot.notes ?? '');
-  const [section, setSection] = useState(plot.section ?? '');
-  const [widthFt, setWidthFt] = useState(plot.widthFt != null ? String(plot.widthFt) : '');
-  const [lengthFt, setLengthFt] = useState(plot.lengthFt != null ? String(plot.lengthFt) : '');
-  const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<'split' | 'delete' | null>(null);
-
-  const canSplit = plot.status === 'Available' && plot.plotType === 'Full Plot' && plot.unitKind !== 'half' && !plot.parentPlotId;
-
-  async function save() {
-    setError(null);
-    try {
-      await update.mutateAsync({
-        id: plot.id,
-        patch: {
-          status,
-          price: price ? Number(price) : null,
-          clientName: clientName || null,
-          clientContact: clientContact || null,
-          notes: notes || null,
-          section: section.trim() || null,
-          widthFt: widthFt ? Number(widthFt) : null,
-          lengthFt: lengthFt ? Number(lengthFt) : null,
-        },
-      });
-      onClose();
-    } catch (e) {
-      setError(friendlyError(e, 'Failed to save'));
-    }
-  }
-
-  if (plot.status === 'Subdivided') {
-    return (
-      <div className={styles.detailCard}>
-        <p className={styles.helpText}>This plot has been split into {plot.plotNumber}a and {plot.plotNumber}b — manage each half separately below.</p>
-        <button type="button" className={styles.cancelBtn} onClick={onClose}>
-          Close
-        </button>
-      </div>
-    );
-  }
-
-  if (confirming === 'split') {
-    return (
-      <div className={styles.detailCard}>
-        <p className={styles.helpText}>
-          Split {plot.plotNumber} into {plot.plotNumber}a and {plot.plotNumber}b (two Half Plots)? {plot.plotNumber} itself stops being directly sellable.
-        </p>
-        <div className={styles.actionsRow}>
-          <button type="button" className={styles.cancelBtn} onClick={() => setConfirming(null)}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className={styles.submitBtn}
-            style={{ flex: 1, marginTop: 0 }}
-            disabled={split.isPending}
-            onClick={() => split.mutateAsync(plot.id).then(() => onClose())}
-          >
-            {split.isPending ? 'Splitting…' : 'Yes, split it'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (confirming === 'delete') {
-    return (
-      <div className={styles.detailCard}>
-        <p className={styles.helpText}>Remove plot {plot.plotNumber} from inventory entirely? This cannot be undone.</p>
-        <div className={styles.actionsRow}>
-          <button type="button" className={styles.cancelBtn} onClick={() => setConfirming(null)}>
-            Cancel
-          </button>
-          <button type="button" className={styles.dangerBtn} style={{ flex: 1 }} disabled={del.isPending} onClick={() => del.mutateAsync(plot.id).then(() => onClose())}>
-            {del.isPending ? 'Deleting…' : 'Yes, delete it'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.detailCard}>
-      <div className={styles.grid2}>
-        <select className={styles.input} value={status} onChange={(e) => setStatus(e.target.value as PlotStatus)}>
-          {PLOT_STATUSES.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-        <input className={styles.input} type="number" placeholder="Price (GHS)" value={price} onChange={(e) => setPrice(e.target.value)} />
-      </div>
-      <div className={styles.grid2} style={{ marginTop: 8 }}>
-        <input className={styles.input} placeholder="Client name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
-        <input className={styles.input} placeholder="Client contact" value={clientContact} onChange={(e) => setClientContact(e.target.value)} />
-      </div>
-      <div className={styles.grid2} style={{ marginTop: 8 }}>
-        <input className={styles.input} placeholder="Section/block" value={section} onChange={(e) => setSection(e.target.value)} />
-        <div className={styles.grid2} style={{ gap: 8 }}>
-          <input className={styles.input} type="number" placeholder="Width (ft)" value={widthFt} onChange={(e) => setWidthFt(e.target.value)} />
-          <input className={styles.input} type="number" placeholder="Length (ft)" value={lengthFt} onChange={(e) => setLengthFt(e.target.value)} />
-        </div>
-      </div>
-      <textarea className={styles.input} placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ marginTop: 8, minHeight: 60 }} />
-      {error && <p className={styles.errorMsg}>{error}</p>}
-      <div className={styles.actionsRow}>
-        <button type="button" className={styles.cancelBtn} onClick={onClose}>
-          Close
-        </button>
-        <button type="button" className={styles.submitBtn} disabled={update.isPending} onClick={save} style={{ flex: 1, marginTop: 0 }}>
-          {update.isPending ? 'Saving…' : 'Save changes'}
-        </button>
-      </div>
-
-      {canSplit && (
-        <div className={styles.splitBox}>
-          <div className={styles.splitTitle}>Need to sell this as two Half Plots instead?</div>
-          <p className={styles.helpText}>
-            Splits {plot.plotNumber} into {plot.plotNumber}a and {plot.plotNumber}b — two separate Half Plot units, both Available.
-          </p>
-          <button type="button" className={styles.cancelBtn} onClick={() => setConfirming('split')}>
-            Split into {plot.plotNumber}a / {plot.plotNumber}b
-          </button>
-        </div>
-      )}
-
-      <div className={styles.dangerRow}>
-        <button type="button" className={styles.dangerBtn} onClick={() => setConfirming('delete')}>
-          Delete plot
-        </button>
-      </div>
     </div>
   );
 }

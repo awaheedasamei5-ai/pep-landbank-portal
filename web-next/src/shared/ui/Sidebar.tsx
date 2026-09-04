@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useSessionStore } from '../../auth/useSessionStore';
 import { useConversations } from '../../features/chat/hooks/useChat';
+import { useUnreadNotificationCount } from '../../features/notifications/hooks/useNotifications';
 import { useCanManageCompanyLeads } from '../../features/company-leads/hooks/useCompanyLeads';
 import { useCanLogPayments } from '../../features/payments/hooks/useLogPayment';
 import { useCanManageExpenses } from '../../features/expenses/hooks/useFundRequests';
@@ -40,6 +41,7 @@ export function Sidebar() {
   const isMgr = profile?.role === 'manager';
   const { data: conversations } = useConversations();
   const unreadTotal = conversations?.reduce((s, c) => s + c.unreadCount, 0) ?? 0;
+  const { data: unreadNotifications } = useUnreadNotificationCount();
 
   const hasPlotAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const canManageCompanyLeads = useCanManageCompanyLeads();
@@ -92,6 +94,7 @@ export function Sidebar() {
       key: 'comms',
       label: 'Communication',
       items: [
+        { key: 'notifications', label: 'Notifications', to: '/app/notifications', icon: 'bell', badge: unreadNotifications ?? 0 },
         { key: 'chat', label: 'Chat', to: '/app/chat', icon: 'chat', badge: unreadTotal },
       ],
     },
@@ -144,7 +147,7 @@ export function Sidebar() {
   return (
     <nav className={styles.sidebar} aria-label="Primary">
       <div className={styles.brand}>
-        <div className={styles.brandMark}>P</div>
+        <img src="/bolt-mark.svg" alt="" className={styles.brandMark} />
         <span className={styles.brandName}>Palmstead</span>
       </div>
 

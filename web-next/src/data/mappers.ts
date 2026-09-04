@@ -188,6 +188,8 @@ export function mapPlotRow(r: Record<string, unknown>): Plot {
     widthFt: r.width_ft == null ? null : Number(r.width_ft),
     lengthFt: r.length_ft == null ? null : Number(r.length_ft),
     areaSqft: r.area_sqft == null ? null : Number(r.area_sqft),
+    factor: r.factor == null ? null : Number(r.factor),
+    customerCode: (r.customer_code as string) ?? null,
   };
 }
 

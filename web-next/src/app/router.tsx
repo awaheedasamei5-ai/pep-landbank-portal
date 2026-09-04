@@ -13,8 +13,10 @@ import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScre
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { TaskBoardScreen } from '../features/ops-tracker/screens/TaskBoardScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
+import { PlotDetailScreen } from '../features/plots/screens/PlotDetailScreen';
 import { PlotReconciliationScreen } from '../features/plots/screens/PlotReconciliationScreen';
 import { ClientDatabaseScreen } from '../features/clients/screens/ClientDatabaseScreen';
+import { ClientDetailScreen } from '../features/clients/screens/ClientDetailScreen';
 import { SiteVisitsScreen } from '../features/site-visits/screens/SiteVisitsScreen';
 import { AddSiteVisitScreen } from '../features/site-visits/screens/AddSiteVisitScreen';
 import { ReferralsScreen } from '../features/referrals/screens/ReferralsScreen';
@@ -31,6 +33,7 @@ import { PublicStatsScreen } from '../features/public/stats/PublicStatsScreen';
 import { SveManagementScreen } from '../features/sve-management/screens/SveManagementScreen';
 import { ChatScreen } from '../features/chat/screens/ChatScreen';
 import { ChatThreadScreen } from '../features/chat/screens/ChatThreadScreen';
+import { NotificationsScreen } from '../features/notifications/screens/NotificationsScreen';
 import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen';
 import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
 import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
@@ -245,9 +248,29 @@ export const router = createBrowserRouter([
         children: [{ path: ':id', element: <PipelineDetailScreen /> }],
       },
       { path: 'sales/pipeline/new', element: <AddLeadScreen /> },
-      { path: 'sales/plots', element: <PlotInventoryScreen /> },
+      {
+        // Same nested-route trick as sales/pipeline / sales/clients: :id is
+        // a child route so PlotInventoryScreen stays mounted (list visible
+        // behind the drawer on desktop) instead of being unmounted by a
+        // sibling route. 'reconciliation' stays a separate top-level entry
+        // (unaffected -- React Router ranks that static segment above the
+        // dynamic :id regardless of nesting, same reasoning as Pipeline's
+        // own 'new' route).
+        path: 'sales/plots',
+        element: <PlotInventoryScreen />,
+        children: [{ path: ':id', element: <PlotDetailScreen /> }],
+      },
       { path: 'sales/plots/reconciliation', element: <PlotReconciliationScreen /> },
-      { path: 'sales/clients', element: <ClientDatabaseScreen /> },
+      {
+        // Same nesting trick as sales/pipeline just above: :key is a child
+        // route so ClientDatabaseScreen stays mounted (list visible) while
+        // the Customer 360 drawer is open, instead of a sibling route that
+        // would unmount the list -- see PipelineListScreen's own comment
+        // for the full reasoning, ported here verbatim.
+        path: 'sales/clients',
+        element: <ClientDatabaseScreen />,
+        children: [{ path: ':key', element: <ClientDetailScreen /> }],
+      },
       { path: 'sales/sitevisits', element: <SiteVisitsScreen /> },
       { path: 'sales/sitevisits/new', element: <AddSiteVisitScreen /> },
       { path: 'sales/sitevisits/experience', element: <SveManagementScreen /> },
@@ -290,6 +313,7 @@ export const router = createBrowserRouter([
       },
       { path: 'chat', element: <ChatScreen /> },
       { path: 'chat/:otherKey', element: <ChatThreadScreen /> },
+      { path: 'notifications', element: <NotificationsScreen /> },
       { path: 'more', element: <MoreScreen /> },
       { path: 'data-check', element: <DataCheckScreen /> },
       { path: 'insights', element: <SmartInsightsScreen /> },
