@@ -1,6 +1,7 @@
 import type { DemoDb } from './store';
 import { isoPlusDays, today } from '../../shared/lib/format';
 import { DEFAULT_LEADERBOARD_WEIGHTS } from '../mappers';
+import { ROYAL_PALM_PLOTS } from './plotsRoyalPalm';
 
 // Small, hand-crafted (not a full port of index.html's much larger
 // DEMO_PIPELINES fixture set) but realistic seed -- enough real leads/
@@ -182,17 +183,27 @@ export function seedDemo(): DemoDb {
   // production's split_plot_for_half_sale() function creates.
   const wholePlotId = uid();
   const plots: DemoDb['plots'] = [
-    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Allocated', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
-    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Running Search', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
-    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'A', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Allocated', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'A', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Running Search', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'A', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
     // Irregular dimension, matching the master spec's own real example
     // sizes (35/55/15/90 x 100ft alongside the 70x100 standard) -- gives
     // the suggestion engine's exact-size-match preference something real
     // to differentiate in demo mode, not just uniform 70x100 everywhere.
-    { id: uid(), site: 'Royal Palm Enclave', section: 'C', plotNumber: 'C-05', plotType: 'Partial Plot', status: 'Available', price: 42000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 55, lengthFt: 100, areaSqft: 5500, factor: 0.79, customerCode: null },
-    { id: wholePlotId, site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
-    { id: uid(), site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Allocated', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null },
-    { id: uid(), site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'C', plotNumber: 'C-05', plotType: 'Partial Plot', status: 'Available', price: 42000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 55, lengthFt: 100, areaSqft: 5500, factor: 0.79, customerCode: null },
+    { id: wholePlotId, site: 'Royal Palm Enclave, Tsopoli', section: 'B', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000, factor: 1, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'B', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Allocated', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null },
+    { id: uid(), site: 'Royal Palm Enclave, Tsopoli', section: 'B', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null, factor: 0.5, customerCode: null },
+    // The real, full 414-row Royal Palm inventory (see plotsRoyalPalm.ts)
+    // -- appended, not swapped in, so every existing demo narrative above
+    // (the crafted split pair, the irregular-dimension suggestion-engine
+    // test case, Kwame/Mercy's named allocations) keeps working exactly
+    // as before, while Plot Inventory's board/filters/search now also
+    // get exercised at real scale (352 Allocated, 62 Available across 15
+    // blocks) instead of just 7 plots. No plotNumber collisions -- the
+    // real data uses no hyphen ("A1"), the crafted rows above always do
+    // ("A-01").
+    ...ROYAL_PALM_PLOTS,
   ];
 
   // Matches the real shape/style of production's actual site_visits rows
