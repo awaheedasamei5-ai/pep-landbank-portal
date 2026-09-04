@@ -559,3 +559,14 @@ Continued straight through from #23 without stopping, per the user's explicit "c
 All four follow the same two established patterns from #23: a mutation-based "tap to draft, fills an existing editable field" shape for anything that produces text a human will send (memo/leave/expense/task), and an auto-loading query shape for anything that's pure narration of already-computed numbers (commission). `redactPII()` continues to be applied everywhere real free-text staff input reaches the model.
 
 Total real, live `kind`s as of this push: `streak_coaching`, `colleague_availability`, `manager_daily_briefing`, `login_greeting`, `companion_qa`, `follow_up_draft`, `data_check_summary`, `memo_draft`, `leave_letter_draft`, `task_description_draft`, `expense_justification_draft`, `commission_explainer` — 12 across Login, Home, Pipeline, Data Check, Memos, Leave, Task Board, Expenses, and Commission.
+
+Blueprint artifact republished (same URL) with Phase 11's AI paragraph, Open Decision #01, and the Phase 7 Smart Insights roadmap line all updated to match — no longer describes the AI key or the companion as still-open.
+
+## 25. System Health closes its named AI gap, 13th real kind (2026-09-06, same push)
+
+Two more additions, both verified live as Management:
+
+- **`health_check` fast path** on `ai-insights` — reports whether `GROQ_API_KEY` is configured without spending a real Groq call (a status check, not content generation). Surfaced as a new "AI provider (Groq)" row in System Health's Scheduled Jobs list — directly closes Master Spec line 217's explicitly named gap ("Admin System Health page: ...AI [provider status]"), open since Phase 11 first shipped and tracked in the Blueprint's own §08 note.
+- **`system_health_summary`**, 13th real content kind — one-sentence narration of the real health snapshot (critical events, failing jobs, report/backup status). Purely operational aggregates, zero client or staff personal data. First pass echoed a raw JSON field name back verbatim ("criticalCount = 1") instead of natural prose — tightened the prompt to explicitly forbid that, verified live the second pass reads naturally ("One critical audit event requires attention, while all scheduled jobs, the daily report and backups are on schedule and healthy").
+
+Total real, live `kind`s: 13, across 10 apps (adds System Health to the #24 list).
