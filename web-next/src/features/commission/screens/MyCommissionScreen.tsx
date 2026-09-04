@@ -1,5 +1,6 @@
 import { ghs, monthLabel, shiftMonth, today } from '../../../shared/lib/format';
 import { useMyCommission } from '../hooks/useMyCommission';
+import { useCommissionExplainer } from '../hooks/useCommissionExplainer';
 import styles from './MyCommissionScreen.module.css';
 
 // Port of viewMyCommission() (index.html:25443-25455) -- always the current
@@ -20,6 +21,7 @@ export function MyCommissionScreen() {
   const prevMonthKey = shiftMonth(monthKey, -1);
   const { data, isLoading } = useMyCommission(monthKey);
   const { data: prevData } = useMyCommission(prevMonthKey);
+  const { data: explainer } = useCommissionExplainer(data, prevData?.total, monthLabel(monthKey));
 
   const delta = prevData && data ? data.total - prevData.total : null;
   const deltaPct = delta !== null && prevData && prevData.total > 0 ? Math.round((delta / prevData.total) * 100) : null;
@@ -40,6 +42,13 @@ export function MyCommissionScreen() {
         {monthLabel(monthKey)} &middot; personal only, pool share confirmed by Management on the 15th
         {delta !== null && <> &middot; vs {ghs(prevData?.total ?? 0)} in {monthLabel(prevMonthKey)}</>}
       </p>
+
+      {explainer && (
+        <div className={styles.aiRow}>
+          <span className={styles.aiBadge}>AI</span>
+          <span>{explainer}</span>
+        </div>
+      )}
 
       <div className={styles.sectitle}>Which plots earned this</div>
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}

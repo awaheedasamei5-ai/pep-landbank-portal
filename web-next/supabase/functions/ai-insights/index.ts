@@ -115,6 +115,13 @@ function systemPromptFor(kind: string): string | null {
         "Write ONE clear, professional sentence (max 30 words) explaining the purpose, grounded strictly in the note given -- never invent a vendor, project, or reason not implied by it, and never restate or recalculate the amount, that number is the requester's own and not yours to touch. " +
         "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
       );
+    case "commission_explainer":
+      return (
+        "You explain a sales agent's own monthly commission total in plain English for a Ghanaian land-sales agency called Palmstead -- speaking directly to that agent about their own numbers only, never a client's. " +
+        "You'll receive one JSON object with the agent's name, this month's real commission total, last month's total, the percentage change, and how many separate payments contributed to it. " +
+        "Reply with ONE short sentence (max 30 words), second person, citing the real numbers given -- never invent a figure not in the data, and never mention any client by name since you're never given one. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
