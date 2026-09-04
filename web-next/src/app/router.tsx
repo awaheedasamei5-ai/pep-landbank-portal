@@ -12,6 +12,7 @@ import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScre
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { TaskBoardScreen } from '../features/ops-tracker/screens/TaskBoardScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
+import { PlotReconciliationScreen } from '../features/plots/screens/PlotReconciliationScreen';
 import { ClientDatabaseScreen } from '../features/clients/screens/ClientDatabaseScreen';
 import { SiteVisitsScreen } from '../features/site-visits/screens/SiteVisitsScreen';
 import { AddSiteVisitScreen } from '../features/site-visits/screens/AddSiteVisitScreen';
@@ -224,6 +225,7 @@ export const router = createBrowserRouter([
       { path: 'sales/pipeline/new', element: <AddLeadScreen /> },
       { path: 'sales/pipeline/:id', element: <PipelineDetailScreen /> },
       { path: 'sales/plots', element: <PlotInventoryScreen /> },
+      { path: 'sales/plots/reconciliation', element: <PlotReconciliationScreen /> },
       { path: 'sales/clients', element: <ClientDatabaseScreen /> },
       { path: 'sales/sitevisits', element: <SiteVisitsScreen /> },
       { path: 'sales/sitevisits/new', element: <AddSiteVisitScreen /> },

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
@@ -21,6 +22,7 @@ const DEFAULT_SITE = 'Royal Palm Enclave, Tsopoli';
 // Allocated/Subdivided), which silently broke counts and badges for every
 // real Allocated or Running Search plot.
 export function PlotInventoryScreen() {
+  const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
   const hasAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const { data: plots, isLoading } = usePlots();
@@ -52,9 +54,14 @@ export function PlotInventoryScreen() {
           <h1 className={styles.title}>Plot Inventory</h1>
           <p className={styles.sub}>Every plot and its current status</p>
         </div>
-        <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
-          {addOpen ? 'Cancel' : '+ Add plot'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button type="button" className={styles.addBtn} style={{ background: 'var(--c-card)', color: 'var(--c-muted)', border: '1px solid var(--c-line)' }} onClick={() => navigate('/app/sales/plots/reconciliation')}>
+            Reconciliation
+          </button>
+          <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
+            {addOpen ? 'Cancel' : '+ Add plot'}
+          </button>
+        </div>
       </div>
 
       {addOpen && <AddPlotForm defaultSite={plots?.[0]?.site ?? DEFAULT_SITE} onDone={() => setAddOpen(false)} />}
