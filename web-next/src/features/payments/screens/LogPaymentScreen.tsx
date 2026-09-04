@@ -5,7 +5,18 @@ import { z } from 'zod';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
 import type { Lead, Payment } from '../../../types/domain';
-import { useAllLeads, useApprovePayment, useCanLogPayments, useCreatePayment, useDeclinePayment, usePendingPayments, useUploadPaymentProof } from '../hooks/useLogPayment';
+import {
+  useAllLeads,
+  useApprovePayment,
+  useCanLogPayments,
+  useCreatePayment,
+  useDeclinePayment,
+  useFlagPaymentNeedsCorrection,
+  useNeedsCorrectionPayments,
+  usePendingPayments,
+  useResubmitPayment,
+  useUploadPaymentProof,
+} from '../hooks/useLogPayment';
 import { useProofUrl } from '../hooks/useReceipt';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -18,6 +29,7 @@ const schema = z.object({
   paymentDate: z.string().min(1, 'Required'),
   paymentMethod: z.string().optional(),
   note: z.string().optional(),
+  referenceNumber: z.string().optional(),
 });
 type FormInput = z.input<typeof schema>;
 type FormOutput = z.output<typeof schema>;
@@ -30,6 +42,7 @@ export function LogPaymentScreen() {
   const profile = useSessionStore((s) => s.profile);
   const { data: leads } = useAllLeads();
   const { data: pending, isLoading: pendingLoading } = usePendingPayments();
+  const { data: needsCorrection } = useNeedsCorrectionPayments();
   const createPayment = useCreatePayment();
   const uploadProof = useUploadPaymentProof();
 
@@ -75,7 +88,14 @@ export function LogPaymentScreen() {
     let payment: Payment;
     try {
       payment = await createPayment.mutateAsync({
-        input: { leadId: selectedLead.id, amount: values.amount, paymentDate: values.paymentDate, paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined, note: values.note },
+        input: {
+          leadId: selectedLead.id,
+          amount: values.amount,
+          paymentDate: values.paymentDate,
+          paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined,
+          note: values.note,
+          referenceNumber: values.referenceNumber,
+        },
         leadName: selectedLead.name,
         leadAgentKey: selectedLead.agent,
         leadContact: selectedLead.contact,
@@ -175,6 +195,11 @@ export function LogPaymentScreen() {
                 </select>
               </div>
               <div className={styles.field}>
+                <label className={styles.label}>Reference / transaction number</label>
+                <input className={styles.input} placeholder="MoMo transaction ID, teller/cheque number…" {...register('referenceNumber')} />
+                <p className={styles.fileHelp}>So this can be cross-checked against the real bank/MoMo statement before approval.</p>
+              </div>
+              <div className={styles.field}>
                 <label className={styles.label}>Note</label>
                 <textarea className={styles.textarea} {...register('note')} />
               </div>
@@ -194,6 +219,19 @@ export function LogPaymentScreen() {
         )}
       </div>
 
+      {(() => {
+        const myCorrections = (needsCorrection ?? []).filter((p) => profile?.role === 'manager' || p.agentKey === profile?.key);
+        if (myCorrections.length === 0) return null;
+        return (
+          <>
+            <div className={styles.sectionTitle}>Needs correction</div>
+            {myCorrections.map((p) => (
+              <NeedsCorrectionRow key={p.id} payment={p} lead={(leads ?? []).find((l) => l.id === p.leadId) ?? null} />
+            ))}
+          </>
+        );
+      })()}
+
       <div className={styles.sectionTitle}>Pending approvals</div>
       {pendingLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {pending && pending.length === 0 && !pendingLoading && <p style={{ color: 'var(--c-muted)' }}>Nothing pending.</p>}
@@ -205,19 +243,23 @@ export function LogPaymentScreen() {
 }
 
 function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lead: Lead | null; canDecide: boolean }) {
-  const { id: paymentId, clientName, amount, date, note, receiptProofPath, agentKey, paymentMethod } = payment;
+  const { id: paymentId, clientName, amount, date, note, receiptProofPath, agentKey, paymentMethod, referenceNumber } = payment;
   const approve = useApprovePayment();
   const decline = useDeclinePayment();
+  const flagCorrection = useFlagPaymentNeedsCorrection();
   const { data: proofUrl } = useProofUrl(receiptProofPath);
   const { data: staff } = useStaffDirectory();
   const [declining, setDeclining] = useState(false);
   const [reason, setReason] = useState('');
   const [confirmingApprove, setConfirmingApprove] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState('');
 
   const staffName = staff?.find((s) => s.key === agentKey)?.name ?? agentKey;
   const currentBalance = lead ? Math.max(lead.grandTotal - lead.amtPaid, 0) : null;
   const proposedBalance = currentBalance != null ? Math.max(currentBalance - amount, 0) : null;
   const reasonRequired = reason.trim().length === 0;
+  const correctionReasonRequired = correctionReason.trim().length === 0;
 
   return (
     <div className={styles.pendingCard}>
@@ -228,6 +270,7 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
             {date} · logged by {staffName}
             {paymentMethod ? ` · ${paymentMethod}` : ''}
             {note ? ` · ${note}` : ''}
+            {referenceNumber ? ` · Ref: ${referenceNumber}` : ''}
           </div>
         </div>
         <div className={styles.pendingAmount}>{ghs(amount)}</div>
@@ -247,18 +290,39 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
           </a>
         </div>
       )}
-      {(approve.isError || decline.isError) && (
-        <div className={styles.err}>{friendlyError(approve.error ?? decline.error, 'Failed to record this decision')}</div>
+      {(approve.isError || decline.isError || flagCorrection.isError) && (
+        <div className={styles.err}>{friendlyError(approve.error ?? decline.error ?? flagCorrection.error, 'Failed to record this decision')}</div>
       )}
-      {canDecide && !declining && !confirmingApprove && (
+      {canDecide && !declining && !confirmingApprove && !correcting && (
         <div className={styles.pendingActions}>
           <button type="button" className={styles.approveBtn} onClick={() => setConfirmingApprove(true)}>
             Approve
+          </button>
+          <button type="button" className={styles.changeBtn} onClick={() => setCorrecting(true)}>
+            Needs correction
           </button>
           <button type="button" className={styles.declineBtn} onClick={() => setDeclining(true)}>
             Decline
           </button>
         </div>
+      )}
+      {canDecide && correcting && (
+        <>
+          <input className={styles.reasonInput} placeholder="What needs fixing? (required)" value={correctionReason} onChange={(e) => setCorrectionReason(e.target.value)} />
+          <div className={styles.pendingActions}>
+            <button
+              type="button"
+              className={styles.changeBtn}
+              disabled={flagCorrection.isPending || correctionReasonRequired}
+              onClick={() => flagCorrection.mutate({ paymentId, reason: correctionReason.trim() })}
+            >
+              {flagCorrection.isPending ? 'Sending back…' : 'Send back for correction'}
+            </button>
+            <button type="button" className={styles.changeBtn} onClick={() => setCorrecting(false)}>
+              Cancel
+            </button>
+          </div>
+        </>
       )}
       {canDecide && confirmingApprove && (
         <>
@@ -291,6 +355,84 @@ function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lea
               {decline.isPending ? 'Declining…' : 'Confirm decline'}
             </button>
             <button type="button" className={styles.changeBtn} onClick={() => setDeclining(false)}>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Master Spec Section 6's Needs-Correction workflow: the manager's reason
+// (flagged via PendingPaymentRow's "Needs correction" action) is shown
+// here so the logging staff member knows what to fix, then edits and
+// resubmits -- resubmit_payment() sends it back to 'pending' for a fresh
+// review rather than letting a raw edit bypass approval entirely.
+function NeedsCorrectionRow({ payment, lead }: { payment: Payment; lead: Lead | null }) {
+  const { id: paymentId, clientName, amount, correctionReason, note, paymentMethod } = payment;
+  const resubmit = useResubmitPayment();
+  const [editing, setEditing] = useState(false);
+  const [amountStr, setAmountStr] = useState(String(amount));
+  const [methodStr, setMethodStr] = useState(paymentMethod ?? '');
+  const [noteStr, setNoteStr] = useState(note ?? '');
+
+  const parsedAmount = Number(amountStr) || 0;
+  const canSubmit = parsedAmount > 0;
+
+  return (
+    <div className={styles.pendingCard}>
+      <div className={styles.pendingTop}>
+        <div>
+          <div className={styles.pendingName}>{clientName}</div>
+          <div className={styles.pendingMeta}>Balance: {lead ? ghs(Math.max(lead.grandTotal - lead.amtPaid, 0)) : '—'}</div>
+        </div>
+        <div className={styles.pendingAmount}>{ghs(amount)}</div>
+      </div>
+      {correctionReason && <div className={styles.err}>Management: {correctionReason}</div>}
+      {resubmit.isError && <div className={styles.err}>{friendlyError(resubmit.error, 'Failed to resubmit this payment')}</div>}
+      {!editing ? (
+        <div className={styles.pendingActions}>
+          <button type="button" className={styles.approveBtn} onClick={() => setEditing(true)}>
+            Fix and resubmit
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className={styles.grid2}>
+            <div className={styles.field}>
+              <label className={styles.label}>Amount (GHS) *</label>
+              <input className={styles.input} type="number" value={amountStr} onChange={(e) => setAmountStr(e.target.value)} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Payment method</label>
+              <select className={styles.select} value={methodStr} onChange={(e) => setMethodStr(e.target.value)}>
+                <option value="">Select…</option>
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Note</label>
+            <textarea className={styles.textarea} value={noteStr} onChange={(e) => setNoteStr(e.target.value)} />
+          </div>
+          <div className={styles.pendingActions}>
+            <button
+              type="button"
+              className={styles.approveBtn}
+              disabled={resubmit.isPending || !canSubmit}
+              onClick={() =>
+                resubmit.mutate(
+                  { paymentId, input: { amount: parsedAmount, paymentMethod: (methodStr || null) as Payment['paymentMethod'], note: noteStr || null } },
+                  { onSuccess: () => setEditing(false) },
+                )
+              }
+            >
+              {resubmit.isPending ? 'Resubmitting…' : 'Resubmit for approval'}
+            </button>
+            <button type="button" className={styles.changeBtn} onClick={() => setEditing(false)} disabled={resubmit.isPending}>
               Cancel
             </button>
           </div>

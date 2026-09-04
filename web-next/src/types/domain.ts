@@ -204,7 +204,13 @@ export interface NewLead {
 // Real distinct values seen on production's payment_method column
 // (index.html's PAYMENT_METHODS constant, confirmed still the live set).
 export type PaymentMethod = 'Ecobank' | 'Stanbic Bank' | 'MTN MoMo' | 'Vodafone Cash' | 'Hubtel' | 'Cash' | 'Other';
-export type PaymentStatus = 'pending' | 'approved' | 'declined';
+// 'needs_correction' -- Master Spec Section 6: a manager can send a
+// pending payment back for correction instead of declining it outright
+// (e.g. a typo'd amount/method), via flag_payment_needs_correction(); the
+// logging staff member (or manager) then edits and resubmit_payment()s it,
+// which resets status to 'pending' for a fresh review. Neither RPC is a
+// raw client UPDATE, matching the existing approve/decline pattern.
+export type PaymentStatus = 'pending' | 'approved' | 'declined' | 'needs_correction';
 
 // Extended in place (not a parallel type) since this is the same real
 // `payments` table "My pipeline"/pipeline detail already read from --
@@ -236,6 +242,16 @@ export interface Payment {
   // caller resolves it to a signed URL client-side when they actually
   // need to view it (see useProofImageUrl).
   receiptProofPath?: string | null;
+  // Staff-entered transaction reference (MoMo txn ID, bank teller slip
+  // number, cheque number) captured at logging time -- distinct from
+  // receiptNumber, which is this app's own internal number minted by
+  // ensure_receipt_number() only after approval. Lets a manager cross-
+  // check the payment against the real bank/MoMo statement before
+  // approving, per Master Spec Section 6.
+  referenceNumber?: string | null;
+  // Set only while status === 'needs_correction' -- the manager's reason,
+  // shown to the logging staff so they know what to fix before resubmitting.
+  correctionReason?: string | null;
 }
 
 export interface NewPaymentEntry {
@@ -245,6 +261,7 @@ export interface NewPaymentEntry {
   paymentMethod?: PaymentMethod;
   note?: string;
   receiptProofPath?: string;
+  referenceNumber?: string;
 }
 
 export interface PaymentDecisionResult {

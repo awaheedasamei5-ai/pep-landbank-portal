@@ -603,12 +603,35 @@ A 63-point requirements audit against Master Spec Sections 4-6 (My Pipeline, Exc
 - **Import "Conflicts" bucket** — was computed at commit time (`isStaleConflict`) but never shown in the preview the user actually reviews before confirming; `scanImportRows` now detects the same condition and surfaces a real Conflicts KPI + explanation.
 
 **Real remaining punch list** (most business-critical first — not yet built):
-1. **Payments "Needs Correction" workflow doesn't exist** — `PaymentStatus` is only pending/approved/declined; the spec names a distinct Needs-Correction state with its own required-reason flow.
+1. ~~Payments "Needs Correction" workflow doesn't exist~~ — **done 2026-09-07**, see §29.
 2. **Lead record is missing entire sections**: Site Visits (no FK from `site_visits` to a lead at all today), Documents, a combined Activity timeline, and a visible Audit trail — plus source/priority/assigned-staff are real columns with no UI.
-3. **Desktop pipeline UI is largely unbuilt**: no dense table, 0 of 8 required filter dimensions, no bulk actions (export/assign/tag/archive), 2 of 7 KPI-strip metrics, no Import/Export entry point on the Pipeline screen itself.
+3. ~~Desktop pipeline UI is largely unbuilt~~ — **done 2026-09-06/07**, see §28.
 4. **Import commit is not one transaction** — a for-loop of independent REST calls with per-row catch-and-continue, not atomic.
 5. **No realtime broadcast for leads/payments/imports** — only the acting session's own query cache is invalidated; other open sessions need a manual refresh.
-6. **Lifecycle automation gaps**: no auto follow-up task on lead creation, no activity-log entry on a manual stage change, stale-lead detection uses creation date + a hardcoded threshold rather than real last-activity tracking, and `nextAction` has no date field so it can never actually go overdue.
-7. **Reference/receipt-number field missing** from the Log Payment form itself (receipt numbers are currently only minted server-side after approval).
+6. **Lifecycle automation gaps**: no auto follow-up task on lead creation, no activity-log entry on a manual stage change, stale-lead detection uses creation date + a hardcoded threshold rather than real last-activity tracking. (The `nextAction` date-field half of this is now done, see §28 — overdue detection works; the auto-task/activity-log/stale-detection halves are still open.)
+7. ~~Reference/receipt-number field missing from the Log Payment form itself~~ — **done 2026-09-07**, see §29.
 
 This is real, substantial remaining work — Phase 2 is not being marked done. Continuing through this punch list before moving to Phase 3 (Allocation + Inventory) per the spec's own sequence.
+
+## 28. Phase 2 punch list item 3 — desktop pipeline UI, done (2026-09-07)
+
+Master Spec Section 4.1/4.2. My Pipeline had a mobile-card-only list with no desktop dense view, no filter panel beyond the stage tabs, and no bulk operations.
+
+New `PipelineListScreen` (`pipelineListLogic.ts` for the pure logic): the real 7-metric KPI strip (pipeline value/collected/outstanding/fully paid/site visits/high priority/allocation-ready — the last reuses `getInsightLists()` rather than reimplementing the 30%+ threshold check), the stage-funnel tabs using the spec's own vocabulary (New/Discovery/Qualified/Negotiation/Closed-Won/Lost) as a second, list-specific label set (StageBadge's existing short-code display elsewhere is untouched), the full 8-dimension filter panel (priority/payment state/site-visit state/allocation-ready/source/date range/overdue-only), and bulk select → Export/Assign/Tag/Archive — no bulk delete anywhere, matching spec 4.1's explicit prohibition. One `filtered` array feeds both the new desktop `<table>` and the existing mobile card list.
+
+Also closed the date-field half of punch-list item 6: new `leads.next_action_date` column (staging), a "Due" row + overdue red styling on Pipeline Detail's Follow-up section, `isLeadOverdue()` and the filter panel's overdue-only checkbox in `pipelineListLogic.ts`. `useAssignLead` hook added for the bulk-assign action (wraps the existing `leads.assign()` RPC-free UPDATE, already used elsewhere).
+
+**Real CSS cascade bug caught live**: the `>=900px` media query hiding `.cardList` was placed *before* `.cardList`'s own base `display:flex` rule, so the later same-specificity base rule silently won the cascade — both the table and the card list rendered simultaneously at desktop width. Fixed by reordering.
+
+Verified live in demo mode: bulk Tag round-tripped onto the lead's own detail page; bulk Assign moved a lead out of My Pipeline and recalculated every KPI; bulk Archive correctly gated on a required reason (Confirm stayed disabled until typed) and removed the lead from the list; the allocation-ready filter narrowed to exactly the 1 lead the KPI tile already counted. `tsc -b` clean, zero new console errors.
+
+## 29. Phase 2 punch list items 1 + 7 — Needs-Correction workflow + payment reference number (2026-09-07)
+
+Master Spec Section 6. Two new `payments` columns (staging): `correction_reason`, `reference_number`. Two new SECURITY DEFINER RPCs mirroring `approve_payment`/`decline_payment`'s own shape exactly (manager-role check, `for update` row lock, `activity_log` + `messages` + `record_audit_event()` writes, never a raw client UPDATE):
+
+- `flag_payment_needs_correction(payment_id, reason)` — manager-only, reason required, only from `pending`, sets `status='needs_correction'`.
+- `resubmit_payment(payment_id, amount, method, note, proof_path)` — manager or `elias` (matches `payments_ins`'s own real allowlist, so no new RLS surface opened), only from `needs_correction`, validates `amount > 0`, updates the row and resets `status='pending'` (and clears `decided_by/decided_at`) so it goes through a fresh, real approval — a resubmit can never itself become an approval bypass.
+
+`PaymentStatus` gains `'needs_correction'`. Log Payment: manager gets a third pending-row action ("Needs correction") alongside Approve/Decline, gated behind the same required-reason-text pattern already used for Decline; a new "Needs correction" section (visible to the flagged payment's own logger, or to any manager) shows the manager's reason and a "Fix and resubmit" inline edit form (amount/method/note, prefilled). The create-payment form gets a new "Reference / transaction number" free-text field (MoMo txn ID / teller slip / cheque number) — distinct from `receiptNumber`, which stays the app's own internal number minted post-approval by `ensure_receipt_number()` — shown on the pending-row meta line so a manager can cross-check it against the real statement before approving.
+
+Verified live end-to-end as both roles in one pass: logged GHS 5,000 for Abena Boateng as Elias with reference `MOMO-TEST-99887` → switched to Management, flagged it needing correction with a real reason → the row moved out of Pending into a new Needs Correction section showing that reason → "Fix and resubmit" corrected the amount to GHS 5,500 → resubmitted → landed back in Pending Approvals with the reference number still attached → approved → balance recalculated correctly (GHS 36,000 → GHS 30,500). `tsc -b` clean, zero new console errors at any step.

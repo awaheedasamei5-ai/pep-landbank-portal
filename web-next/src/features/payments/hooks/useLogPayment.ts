@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import type { NewPaymentEntry } from '../../../types/domain';
+import type { NewPaymentEntry, PaymentMethod } from '../../../types/domain';
 
 // Real RLS (payments_ins, confirmed live): only manager or the 'elias'
 // key may log a payment at all. Screens use this to gate visibility, not
@@ -21,6 +21,11 @@ export function usePendingPayments() {
   return useQuery({ queryKey: ['paymentsPending'], queryFn: () => getDataSource(demoMode).payments.listPending() });
 }
 
+export function useNeedsCorrectionPayments() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['paymentsNeedsCorrection'], queryFn: () => getDataSource(demoMode).payments.listNeedsCorrection() });
+}
+
 function useInvalidatePaymentEffects() {
   const queryClient = useQueryClient();
   return () => {
@@ -29,6 +34,7 @@ function useInvalidatePaymentEffects() {
     queryClient.invalidateQueries({ queryKey: ['lead'] });
     queryClient.invalidateQueries({ queryKey: ['payments'] });
     queryClient.invalidateQueries({ queryKey: ['paymentsPending'] });
+    queryClient.invalidateQueries({ queryKey: ['paymentsNeedsCorrection'] });
     queryClient.invalidateQueries({ queryKey: ['pipelineSummary'] });
     queryClient.invalidateQueries({ queryKey: ['managerOverview'] });
   };
@@ -89,6 +95,31 @@ export function useDeclinePayment() {
 
   return useMutation({
     mutationFn: ({ paymentId, reason }: { paymentId: string; reason?: string }) => getDataSource(demoMode).payments.decline(paymentId, profile?.key ?? '', profile?.name ?? '', reason),
+    onSuccess: invalidate,
+  });
+}
+
+// Master Spec Section 6's Needs-Correction workflow -- manager sends a
+// pending payment back for a fix instead of declining it outright.
+export function useFlagPaymentNeedsCorrection() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const invalidate = useInvalidatePaymentEffects();
+
+  return useMutation({
+    mutationFn: ({ paymentId, reason }: { paymentId: string; reason: string }) => getDataSource(demoMode).payments.flagNeedsCorrection(paymentId, reason),
+    onSuccess: invalidate,
+  });
+}
+
+// The logging staff member (or manager) edits the flagged payment and
+// sends it back to 'pending' for a fresh review.
+export function useResubmitPayment() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const invalidate = useInvalidatePaymentEffects();
+
+  return useMutation({
+    mutationFn: ({ paymentId, input }: { paymentId: string; input: { amount: number; paymentMethod?: PaymentMethod | null; note?: string | null; receiptProofPath?: string | null } }) =>
+      getDataSource(demoMode).payments.resubmit(paymentId, input),
     onSuccess: invalidate,
   });
 }

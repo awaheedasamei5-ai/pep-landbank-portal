@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -206,6 +206,16 @@ export interface DataSource {
     create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
     approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
     decline(paymentId: string, decidedBy: string, decidedByName: string, reason?: string): Promise<void>;
+    // Master Spec Section 6's Needs-Correction workflow -- a middle ground
+    // between pending and declined. flagNeedsCorrection is manager-only,
+    // requires a reason, and moves a pending payment sideways rather than
+    // killing it; resubmit (manager or the logging staff/'elias') edits the
+    // amount/method/note/proof and sends it back to 'pending' for a fresh
+    // review. Both go through RPCs, never a raw client UPDATE, matching
+    // approve/decline's own reasoning exactly.
+    listNeedsCorrection(): Promise<Payment[]>;
+    flagNeedsCorrection(paymentId: string, reason: string): Promise<void>;
+    resubmit(paymentId: string, input: { amount: number; paymentMethod?: PaymentMethod | null; note?: string | null; receiptProofPath?: string | null }): Promise<void>;
     // Real SECURITY DEFINER RPC `ensure_receipt_number` (confirmed live,
     // authenticated-only -- staging had this over-permissively granted to
     // anon too, fixed to match production, same drift class as
@@ -846,6 +856,8 @@ function createDemoDataSource(): DataSource {
           decidedByName: null,
           decidedAt: null,
           receiptNumber: null,
+          referenceNumber: input.referenceNumber ?? null,
+          correctionReason: null,
         };
         db.payments.push(payment);
         if (requestedStatus === 'approved') {
@@ -891,6 +903,37 @@ function createDemoDataSource(): DataSource {
         if (db.payments[index].status !== 'pending') throw new Error('This payment is no longer pending');
         const decidedAt = new Date().toISOString();
         const updated = { ...db.payments[index], status: 'declined' as const, decidedBy, decidedByName, decidedAt };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
+        demoSave();
+      },
+      async listNeedsCorrection() {
+        return demoLoad().payments.filter((p) => p.status === 'needs_correction');
+      },
+      async flagNeedsCorrection(paymentId, reason) {
+        const db = demoLoad();
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        if (db.payments[index].status !== 'pending') throw new Error('This payment is no longer pending');
+        const updated = { ...db.payments[index], status: 'needs_correction' as const, correctionReason: reason, decidedAt: new Date().toISOString() };
+        db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
+        demoSave();
+      },
+      async resubmit(paymentId, input) {
+        const db = demoLoad();
+        const index = db.payments.findIndex((p) => p.id === paymentId);
+        if (index === -1) throw new Error('Payment not found');
+        if (db.payments[index].status !== 'needs_correction') throw new Error('This payment does not need correction');
+        const updated: Payment = {
+          ...db.payments[index],
+          amount: input.amount,
+          paymentMethod: input.paymentMethod ?? db.payments[index].paymentMethod,
+          note: input.note ?? db.payments[index].note,
+          receiptProofPath: input.receiptProofPath ?? db.payments[index].receiptProofPath,
+          status: 'pending',
+          decidedBy: null,
+          decidedByName: null,
+          decidedAt: null,
+        };
         db.payments = [...db.payments.slice(0, index), updated, ...db.payments.slice(index + 1)];
         demoSave();
       },
@@ -2379,6 +2422,7 @@ function createLiveDataSource(): DataSource {
             payment_method: input.paymentMethod ?? null,
             note: input.note ?? null,
             status: requestedStatus,
+            reference_number: input.referenceNumber ?? null,
           })
           .select()
           .single();
@@ -2417,6 +2461,25 @@ function createLiveDataSource(): DataSource {
       },
       async decline(paymentId, _decidedBy, _decidedByName, reason) {
         const { error } = await requireClient().rpc('decline_payment', { p_payment_id: paymentId, p_reason: reason ?? null });
+        if (error) throw error;
+      },
+      async listNeedsCorrection() {
+        const { data, error } = await requireClient().from('payments').select('*').eq('status', 'needs_correction').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapPaymentRow);
+      },
+      async flagNeedsCorrection(paymentId, reason) {
+        const { error } = await requireClient().rpc('flag_payment_needs_correction', { p_payment_id: paymentId, p_reason: reason });
+        if (error) throw error;
+      },
+      async resubmit(paymentId, input) {
+        const { error } = await requireClient().rpc('resubmit_payment', {
+          p_payment_id: paymentId,
+          p_amount: input.amount,
+          p_payment_method: input.paymentMethod ?? null,
+          p_note: input.note ?? null,
+          p_receipt_proof_path: input.receiptProofPath ?? null,
+        });
         if (error) throw error;
       },
       async ensureReceiptNumber(paymentId) {
