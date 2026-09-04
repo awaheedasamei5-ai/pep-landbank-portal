@@ -44,6 +44,36 @@ import {
   domainStatusToDb,
 } from './mappers';
 
+// Shared by leads.update() and the two import-atomicity methods below
+// (createWithFollowup/reassignAndUpdate) -- same LeadUpdate-to-column
+// mapping either way, factored out so the import path can build one
+// merged insert/update statement instead of duplicating this by hand and
+// risking drift from the one real, already-battle-tested mapping.
+function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
+  const dbPatch: Record<string, unknown> = {};
+  if ('name' in patch) dbPatch.name = patch.name;
+  if ('contact' in patch) dbPatch.contact = patch.contact;
+  if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
+  if ('noPlots' in patch) dbPatch.no_plots = patch.noPlots;
+  if ('unitPrice' in patch) dbPatch.unit_price = patch.unitPrice;
+  if ('discount' in patch) dbPatch.discount = patch.discount;
+  if ('netTotal' in patch) dbPatch.net_total = patch.netTotal;
+  if ('grandTotal' in patch) dbPatch.grand_total = patch.grandTotal;
+  if ('paymentPlan' in patch) dbPatch.payment_plan = patch.paymentPlan;
+  if ('amtPaid' in patch) dbPatch.amt_paid = patch.amtPaid;
+  if ('stage' in patch) dbPatch.stage = patch.stage;
+  if ('nextAction' in patch) dbPatch.next_action = patch.nextAction;
+  if ('nextActionDate' in patch) dbPatch.next_action_date = patch.nextActionDate;
+  if ('notes' in patch) dbPatch.notes = patch.notes;
+  if ('tags' in patch) dbPatch.tags = patch.tags;
+  if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
+  if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
+  if ('priority' in patch) dbPatch.priority = patch.priority;
+  if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
+  if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
+  return dbPatch;
+}
+
 // Small realistic roster for demo mode's staff picker -- names/keys match
 // the real staff allowlist this session's schema research surfaced
 // repeatedly across plots/site_visits/complaints RLS policies
@@ -134,6 +164,13 @@ export interface DataSource {
     listCompany(): Promise<Lead[]>;
     assign(id: string, agentKey: string): Promise<Lead>;
     setSource(id: string, source: string): Promise<Lead>;
+    // Phase 2 punch-list item 4: single-statement equivalents of
+    // create()+update() / assign()+update(), used by the pipeline import
+    // commit so a mid-row failure can never leave a lead half-written
+    // (created but missing its follow-up fields). See createWithFollowup's
+    // own comment in the live implementation for the full reasoning.
+    createWithFollowup(agentKey: string, input: NewLead, followupPatch: LeadUpdate): Promise<Lead>;
+    reassignAndUpdate(id: string, agentKey: string | null, patch: LeadUpdate): Promise<Lead>;
     // Plain leads_upd RLS UPDATE (confirmed live, no WITH CHECK) -- matches
     // index.html's apiUpdateLead()/saveUpdate() exactly, including that a
     // NEW payment amount is never part of this patch (that goes through
@@ -789,6 +826,43 @@ function createDemoDataSource(): DataSource {
         // cache pick up the change before the invalidated refetch ran,
         // leaving the list one render behind.
         const updated: Lead = { ...db.leads[index], agent: agentKey };
+        db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async createWithFollowup(agentKey, input, followupPatch) {
+        // Demo mode's own writes are synchronous, so there's no real
+        // partial-failure risk to fix here -- this exists purely so the
+        // import commit's call site is identical in both modes, and so a
+        // future demo-only test of the import path exercises the same
+        // single-merged-object shape live mode now does.
+        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        const lead: Lead = {
+          id: Math.random().toString(36).slice(2, 10),
+          agent: agentKey,
+          name: input.name,
+          contact: input.contact,
+          date: new Date().toISOString().slice(0, 10),
+          plotType: input.plotType,
+          noPlots: input.noPlots,
+          unitPrice: input.unitPrice,
+          paymentPlan: input.paymentPlan,
+          amtPaid: 0,
+          grandTotal,
+          stage: deriveStageFromPayment(0, grandTotal),
+          notes: input.notes,
+          ...followupPatch,
+        };
+        const db = demoLoad();
+        db.leads.push(lead);
+        demoSave();
+        return lead;
+      },
+      async reassignAndUpdate(id, agentKey, patch) {
+        const db = demoLoad();
+        const index = db.leads.findIndex((l) => l.id === id);
+        if (index === -1) throw new Error('Lead not found');
+        const updated: Lead = { ...db.leads[index], ...patch, ...(agentKey ? { agent: agentKey } : {}), lastModifiedAt: new Date().toISOString() };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
         demoSave();
         return updated;
@@ -2352,6 +2426,53 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapLeadRow(data);
       },
+      // Phase 2 punch-list item 4 ("import commit is not one transaction"):
+      // the pipeline import used to insert a lead via create() and then
+      // immediately patch its follow-up fields (stage/discount/priority/
+      // etc.) via a SEPARATE update() call -- two independent REST round
+      // trips per inserted row. If the second one failed (network blip,
+      // RLS denial), the first had already committed, leaving a real lead
+      // sitting in the database with none of its follow-up fields set and
+      // no error attributing the row to that half-finished state clearly.
+      // One INSERT statement is atomic on its own -- merging both steps
+      // into a single insert closes that gap without needing a new RPC or
+      // a cross-row all-or-nothing transaction (a bigger, more speculative
+      // change the master spec's own wording doesn't clearly call for).
+      async createWithFollowup(agentKey, input, followupPatch) {
+        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        const followupCols = buildLeadDbPatch(followupPatch);
+        const { data, error } = await requireClient()
+          .from('leads')
+          .insert({
+            agent_key: agentKey,
+            name: input.name,
+            contact: input.contact,
+            plot_type: input.plotType,
+            no_plots: input.noPlots,
+            unit_price: input.unitPrice,
+            payment_plan: input.paymentPlan,
+            amt_paid: 0,
+            grand_total: grandTotal,
+            balance: grandTotal,
+            stage: deriveStageFromPayment(0, grandTotal),
+            notes: input.notes ?? null,
+            ...followupCols,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
+      // Same reasoning as createWithFollowup above, for the update path:
+      // a reassignment (assign()) followed by a separate patch (update())
+      // used to be two independent REST calls; merged into one UPDATE.
+      async reassignAndUpdate(id, agentKey, patch) {
+        const dbPatch = buildLeadDbPatch(patch);
+        if (agentKey) dbPatch.agent_key = agentKey;
+        const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
       async get(agentKey, id) {
         const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey).eq('id', id).maybeSingle();
         if (error) throw error;
@@ -2378,27 +2499,7 @@ function createLiveDataSource(): DataSource {
         return mapLeadRow(data);
       },
       async update(id, patch) {
-        const dbPatch: Record<string, unknown> = {};
-        if ('name' in patch) dbPatch.name = patch.name;
-        if ('contact' in patch) dbPatch.contact = patch.contact;
-        if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
-        if ('noPlots' in patch) dbPatch.no_plots = patch.noPlots;
-        if ('unitPrice' in patch) dbPatch.unit_price = patch.unitPrice;
-        if ('discount' in patch) dbPatch.discount = patch.discount;
-        if ('netTotal' in patch) dbPatch.net_total = patch.netTotal;
-        if ('grandTotal' in patch) dbPatch.grand_total = patch.grandTotal;
-        if ('paymentPlan' in patch) dbPatch.payment_plan = patch.paymentPlan;
-        if ('amtPaid' in patch) dbPatch.amt_paid = patch.amtPaid;
-        if ('stage' in patch) dbPatch.stage = patch.stage;
-        if ('nextAction' in patch) dbPatch.next_action = patch.nextAction;
-        if ('nextActionDate' in patch) dbPatch.next_action_date = patch.nextActionDate;
-        if ('notes' in patch) dbPatch.notes = patch.notes;
-        if ('tags' in patch) dbPatch.tags = patch.tags;
-        if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
-        if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
-        if ('priority' in patch) dbPatch.priority = patch.priority;
-        if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
-        if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
+        const dbPatch = buildLeadDbPatch(patch);
         // Real optimistic-concurrency guard (Master Spec Section 3.4's own
         // worked example) -- opt-in via patch.expectedVersion. With it, the
         // WHERE clause only matches the row the caller actually loaded; if

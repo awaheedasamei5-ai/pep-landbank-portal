@@ -159,17 +159,19 @@ export function useCommitPipelineImport() {
           } else if (item.kind === 'conflict') {
             conflictDetails.push({ leadId: item.existing.id, name: item.existing.name });
           } else if (item.kind === 'insert') {
-            const created = await ds.leads.create(item.agentKey || profile.key, item.input);
-            await ds.leads.update(created.id, item.followupPatch);
+            // Phase 2 punch-list item 4: one merged insert instead of
+            // create()-then-update() -- a mid-row failure can no longer
+            // leave a real lead sitting half-written (created, but with
+            // none of its stage/discount/priority follow-up fields set).
+            // See createWithFollowup's own comment in data/source.ts.
+            const created = await ds.leads.createWithFollowup(item.agentKey || profile.key, item.input, item.followupPatch);
             added++;
             fieldChanges.push({ leadId: created.id, name: item.row.name, field: '(new client)', oldValue: null, newValue: item.row.name });
           } else if (item.kind === 'update') {
             fieldChanges.push(...diffFields(item.row, item.existing));
-            // Reassignment goes through the dedicated assign() RPC, not the
-            // plain field patch -- same reasoning as everywhere else in
-            // this app that a staff-ownership change is its own operation.
-            if (item.reassignToAgentKey) await ds.leads.assign(item.existing.id, item.reassignToAgentKey);
-            await ds.leads.update(item.existing.id, item.patch);
+            // One merged update instead of assign()-then-update() -- same
+            // reasoning as the insert path above.
+            await ds.leads.reassignAndUpdate(item.existing.id, item.reassignToAgentKey, item.patch);
             updated++;
           }
         } catch (e) {
