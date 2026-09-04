@@ -78,6 +78,13 @@ function systemPromptFor(kind: string): string | null {
         "Ground the message in the real stage/notes/next-action context given -- never invent a detail not in the data. Professional, warm Ghanaian business tone. " +
         "No emoji, no hashtags -- plain text only, ready to send."
       );
+    case "data_check_summary":
+      return (
+        "You narrate the results of an automated data-hygiene scan for a Ghanaian land-sales agency called Palmstead's CRM. " +
+        "You'll receive one JSON object with the real hygiene score (0-100), total lead count, flagged lead count, and a breakdown of issue categories with how many leads each category affects and its severity (danger/warn) -- never any client names, only category counts. " +
+        "Reply with 1-2 sentences (max 45 words) in plain English naming the category that most deserves attention first and roughly how many leads it affects, plus a short practical recommendation. Cite only the real numbers given -- never invent a category or count not in the data. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +

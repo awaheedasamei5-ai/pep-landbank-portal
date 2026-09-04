@@ -3,6 +3,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { dismissIssue } from '../lib/dataIntegrityCheck';
 import type { DataIssue } from '../lib/dataIntegrityCheck';
 import { useDataCheck } from '../hooks/useDataCheck';
+import { useDataCheckSummary } from '../hooks/useDataCheckSummary';
 import styles from './DataCheckScreen.module.css';
 
 // Real, purely computed feature -- no new tables (beyond leads.last_
@@ -17,6 +18,7 @@ export function DataCheckScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
   const { issues, totalLeads, hygieneScore, isLoading, notifyDismissed } = useDataCheck();
+  const { data: aiSummary } = useDataCheckSummary(issues, totalLeads, hygieneScore, isLoading);
 
   const scopeLabel = profile?.role === 'manager' ? 'the company' : 'your pipeline';
   const flaggedCount = new Set(issues.map((i) => i.leadId)).size;
@@ -47,6 +49,13 @@ export function DataCheckScreen() {
           <div className={styles.kpiLbl}>Clean leads</div>
         </div>
       </div>
+
+      {aiSummary && (
+        <div className={styles.aiSummary}>
+          <span className={styles.aiBadge}>AI</span>
+          <span>{aiSummary}</span>
+        </div>
+      )}
 
       {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {!isLoading && issues.length === 0 && <p className={styles.emptyMsg}>Every lead&apos;s unit price, totals, payments and basic record fields are all in order.</p>}
