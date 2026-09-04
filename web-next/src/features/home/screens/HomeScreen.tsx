@@ -7,6 +7,8 @@ import { HeroCard } from '../components/HeroCard';
 import { TodayTasksCard } from '../components/TodayTasksCard';
 import { useMyCommission } from '../../commission/hooks/useMyCommission';
 import { useMyCollectedTrend } from '../hooks/useMyCollectedTrend';
+import { useSmartInsights } from '../../smart-insights/hooks/useSmartInsights';
+import { CompanionPanel } from '../../companion/components/CompanionPanel';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { AreaChart } from '../../../shared/ui/AreaChart';
 import { ghs, today } from '../../../shared/lib/format';
@@ -28,6 +30,7 @@ export function HomeScreen() {
   const streak = useTodayStreak();
   const commission = useMyCommission(today().slice(0, 7));
   const trend = useMyCollectedTrend();
+  const smartInsights = useSmartInsights();
 
   const firstName = profile?.name.split(' ')[0] ?? '';
   const series = trend.data ?? [];
@@ -66,6 +69,8 @@ export function HomeScreen() {
       )}
 
       <TodayTasksCard />
+
+      {smartInsights.leads.length > 0 && <CompanionPanel leads={smartInsights.leads} collectedTrend={series} leadCount={pipeline.data?.leadCount ?? 0} pipelineValue={pipeline.data?.pipelineValue ?? 0} />}
     </div>
   );
 }

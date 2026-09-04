@@ -62,6 +62,14 @@ function systemPromptFor(kind: string): string | null {
         "Lead with whatever most deserves Management's attention today (a real risk like open complaints, or a real win like a strong collection trend or a standout agent) -- cite the actual numbers given, never invent figures not in the data. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "companion_qa":
+      return (
+        "You are a personal AI companion embedded in the staff app for a Ghanaian land-sales agency called Palmstead, speaking directly and warmly to one sales agent about their own real, already-computed numbers -- never a client's. " +
+        "You'll receive one JSON object with a `question` field, one of: next_action, month_progress, pipeline_health -- that tells you which single thing to focus your reply on -- plus the agent's real current numbers: name, lead count, pipeline value, cold-lead count, near-allocation-trigger count, ready-for-allocation count, stalled-high-priority count, this month's collected amount, last month's collected amount, and a next-month forecast if given. " +
+        "Reply with exactly 2 sentences (max 45 words total), second person, addressing only the asked question and citing the real numbers given -- never invent a figure not in the data. " +
+        "next_action: name the single highest-leverage thing to do right now. month_progress: assess the real money trend plainly. pipeline_health: assess the real lead-quality signals (cold / near-trigger / ready / stalled counts). " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
@@ -115,7 +123,12 @@ Deno.serve(async (req: Request) => {
             { role: "user", content: JSON.stringify(context ?? {}) },
           ],
           temperature: 0.6,
-          max_tokens: 300,
+          // Bumped from 300 -- companion_qa's 2-sentence replies were
+          // landing right at the edge and once came back empty (reasoning
+          // ate the whole budget), confirmed live 2026-09-04. More
+          // headroom for the reasoning field costs nothing but a few
+          // extra ms on this model.
+          max_tokens: 400,
           // gpt-oss is a reasoning model -- without this it burns its whole
           // token budget on internal chain-of-thought and never emits the
           // actual reply (confirmed live: finish_reason 'length', 198 of 200
