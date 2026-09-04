@@ -13,6 +13,7 @@ import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 import { StageBadge } from '../components/StageBadge';
 import { useCanViewDocStage, useDeleteLead, useLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
+import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import styles from './PipelineDetailScreen.module.css';
 
 const DOC_STAGES = [
@@ -510,6 +511,7 @@ function FollowUpSection({ lead }: { lead: Lead }) {
           <span className={styles.readLabel}>Site visit</span>
           <span>{lead.siteVisit === 'Yes' ? 'Visited' : 'Not yet'}</span>
         </div>
+        <FollowUpDraftBox lead={lead} />
       </div>
     );
   }
@@ -567,6 +569,54 @@ function FollowUpSection({ lead }: { lead: Lead }) {
           {update.isPending ? 'Saving…' : 'Save'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Real LLM-drafted follow-up message -- the master spec's own named safe
+// use (Section 22: "summarize long lead notes and recommend follow-up
+// wording"). A tap-to-generate mutation, not something that fires on
+// every screen open -- drafting is a deliberate action, and every draft
+// costs a real Groq call. Copy button uses the Clipboard API directly
+// (no confirmation needed -- copying text to the clipboard isn't a
+// side-effectful action on anyone else's data).
+function FollowUpDraftBox({ lead }: { lead: Lead }) {
+  const draft = useFollowUpDraft();
+  const [copied, setCopied] = useState(false);
+
+  if (!draft.data && !draft.isPending) {
+    return (
+      <button type="button" className={styles.aiDraftBtn} onClick={() => draft.mutate(lead)}>
+        AI: Draft a follow-up message
+      </button>
+    );
+  }
+
+  async function copy() {
+    if (!draft.data) return;
+    await navigator.clipboard.writeText(draft.data).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className={styles.aiDraftBox}>
+      <div className={styles.aiDraftHead}>
+        <span className={styles.aiBadge}>AI</span>
+        <span className={styles.readLabel}>Follow-up draft</span>
+      </div>
+      {draft.isPending && <p className={styles.helpText}>Drafting…</p>}
+      {draft.data && <p className={styles.aiDraftText}>{draft.data}</p>}
+      {draft.data && (
+        <div className={styles.aiDraftActions}>
+          <button type="button" className={styles.aiDraftCopyBtn} onClick={copy}>
+            {copied ? 'Copied ✓' : 'Copy'}
+          </button>
+          <button type="button" className={styles.aiDraftRetryBtn} onClick={() => draft.mutate(lead)}>
+            Redraft
+          </button>
+        </div>
+      )}
     </div>
   );
 }

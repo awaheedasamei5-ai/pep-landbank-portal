@@ -70,6 +70,14 @@ function systemPromptFor(kind: string): string | null {
         "next_action: name the single highest-leverage thing to do right now. month_progress: assess the real money trend plainly. pipeline_health: assess the real lead-quality signals (cold / near-trigger / ready / stalled counts). " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "follow_up_draft":
+      return (
+        "You draft a short follow-up message a sales agent can send to a land-sales lead at a Ghanaian agency called Palmstead. " +
+        "You'll receive one JSON object with the lead's real pipeline stage, days since last contact, percentage paid, priority, their next agreed action, and a redacted summary of internal notes (phone numbers and emails already stripped out before reaching you). You are NEVER given the client's real name. " +
+        "Draft a warm, professional 2-3 sentence message (max 55 words) the agent can copy and send as-is, written in the agent's voice speaking TO the client -- use the placeholder {ClientName} wherever you would naturally address them by name, since you don't know it. " +
+        "Ground the message in the real stage/notes/next-action context given -- never invent a detail not in the data. Professional, warm Ghanaian business tone. " +
+        "No emoji, no hashtags -- plain text only, ready to send."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +

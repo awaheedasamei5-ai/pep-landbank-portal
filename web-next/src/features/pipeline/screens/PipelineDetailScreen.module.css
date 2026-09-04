@@ -171,6 +171,64 @@
 .warnText { color: var(--c-warn); font-weight: 700; }
 .helpText { font-size: 12.5px; color: var(--c-muted); margin: 4px 0; }
 
+.aiDraftBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-accent);
+  cursor: pointer;
+  margin-top: 10px;
+}
+.aiDraftBtn:hover { background: var(--c-accent-soft); }
+.aiDraftBtn:disabled { opacity: 0.6; cursor: default; }
+
+.aiDraftBox {
+  margin-top: 10px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 12px 13px;
+}
+.aiDraftHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.aiDraftText { font-size: 13.5px; color: var(--c-text); line-height: 1.5; white-space: pre-wrap; margin: 0 0 10px; }
+.aiDraftActions { display: flex; gap: 8px; }
+.aiDraftCopyBtn {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.aiDraftRetryBtn {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .actionsRow { display: flex; gap: 8px; margin-top: 12px; }
 
 .cancelBtn {
