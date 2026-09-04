@@ -5,6 +5,8 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { usePlots } from '../../plots/hooks/usePlots';
 import { allocationUnitsNeeded } from '../../pipeline/lib/pipelineLogic';
+import { suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
 import {
   useAllocationRequests,
   useCanAllocatePlots,
@@ -192,9 +194,11 @@ function RequestRow({ request, canAllocate }: { request: AllocationRequest; canA
 
 function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lead | null }) {
   const { data: plots } = usePlots();
+  const { data: config } = useConfig();
   const suggest = useSuggestAllocationPlots();
   const flag = useFlagAllocation();
   const [values, setValues] = useState<string[]>(['', '', '']);
+  const [reasons, setReasons] = useState<Record<number, string>>({});
   const [flagging, setFlagging] = useState(false);
   const [reason, setReason] = useState('Payment amount looks wrong');
   const [detail, setDetail] = useState('');
@@ -203,6 +207,33 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   const units = allocationUnitsNeeded(lead?.plotType ?? 'Full Plot', lead?.noPlots ?? 1);
   const multi = units.length > 1;
   const slots = multi ? units.length : 3;
+
+  const std = { fullWidthFt: config?.techFullPlotWidthFt ?? 70, fullLengthFt: config?.techFullPlotLengthFt ?? 100, halfWidthFt: config?.techHalfPlotWidthFt ?? 50, halfLengthFt: config?.techHalfPlotLengthFt ?? 70 };
+
+  // Master Spec 7.4's suggestion engine (features/allocations/lib/
+  // suggestionEngine.ts) -- pre-fills the same editable slots below rather
+  // than replacing them, since staff/Management still need to override a
+  // bad auto-pick (a plot the system doesn't know is physically
+  // compromised, say). Multi-unit gets one complete set; single-unit gets
+  // up to 3 ranked alternatives, matching the two real UI shapes already here.
+  function autoSuggest() {
+    if (!plots) return;
+    const nextReasons: Record<number, string> = {};
+    if (multi) {
+      const set = suggestSet(plots, units, std);
+      setValues((v) => v.map((_, i) => set[i]?.plot.plotNumber ?? ''));
+      set.forEach((s, i) => {
+        if (s) nextReasons[i] = s.reason;
+      });
+    } else {
+      const alts = suggestAlternatives(plots, lead?.plotType ?? 'Full Plot', std);
+      setValues((v) => v.map((_, i) => alts[i]?.plot.plotNumber ?? ''));
+      alts.forEach((s, i) => {
+        nextReasons[i] = s.reason;
+      });
+    }
+    setReasons(nextReasons);
+  }
 
   function statusFor(v: string): { color: string; text: string } | null {
     const pn = v.trim();
@@ -268,6 +299,9 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
           ? `This client is buying ${units.length} units (${units.join(' + ')}). Suggest exactly one plot per unit — all are required together, not alternatives.`
           : 'Suggest up to 3 candidate plots. Management signs off physically before anything is allocated.'}
       </p>
+      <button type="button" className={styles.cancelBtn} style={{ marginBottom: 10 }} onClick={autoSuggest}>
+        ✨ Auto-suggest from inventory
+      </button>
       {Array.from({ length: slots }).map((_, i) => {
         const st = statusFor(values[i]);
         return (
@@ -276,8 +310,17 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
               className={styles.input}
               placeholder={multi ? `${units[i]} ${i + 1}` : i === 0 ? 'e.g. A12' : 'optional'}
               value={values[i]}
-              onChange={(e) => setValues((v) => v.map((x, idx) => (idx === i ? e.target.value : x)))}
+              onChange={(e) => {
+                const val = e.target.value;
+                setValues((v) => v.map((x, idx) => (idx === i ? val : x)));
+                setReasons((r) => ({ ...r, [i]: '' }));
+              }}
             />
+            {reasons[i] && (
+              <div className={styles.fieldHint} style={{ color: 'var(--c-muted)' }}>
+                {reasons[i]}
+              </div>
+            )}
             {st && (
               <div className={styles.fieldHint} style={{ color: st.color }}>
                 {st.text}

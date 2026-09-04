@@ -115,6 +115,7 @@ function PlotRow({ plot, isHalf, isSelected, onToggle }: { plot: Plot; isHalf?: 
         <div className={styles.plotNumber}>{plot.plotNumber}</div>
         <div className={styles.meta}>
           {plot.plotType}
+          {plot.widthFt != null && plot.lengthFt != null ? ` · ${plot.widthFt}x${plot.lengthFt}ft` : ''}
           {plot.clientName ? ` · ${plot.clientName}` : ''}
         </div>
       </div>
@@ -129,8 +130,11 @@ function PlotRow({ plot, isHalf, isSelected, onToggle }: { plot: Plot; isHalf?: 
 function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () => void }) {
   const create = useCreatePlot();
   const [plotNumber, setPlotNumber] = useState('');
+  const [section, setSection] = useState('');
   const [plotType, setPlotType] = useState<PlotType>('Full Plot');
   const [price, setPrice] = useState('');
+  const [widthFt, setWidthFt] = useState('');
+  const [lengthFt, setLengthFt] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
@@ -140,7 +144,16 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
     }
     setError(null);
     try {
-      await create.mutateAsync({ site: defaultSite, plotNumber: plotNumber.trim(), plotType, status: 'Available', price: price ? Number(price) : null });
+      await create.mutateAsync({
+        site: defaultSite,
+        section: section.trim() || null,
+        plotNumber: plotNumber.trim(),
+        plotType,
+        status: 'Available',
+        price: price ? Number(price) : null,
+        widthFt: widthFt ? Number(widthFt) : null,
+        lengthFt: lengthFt ? Number(lengthFt) : null,
+      });
       onDone();
     } catch (e) {
       setError(friendlyError(e, 'Failed to add plot'));
@@ -151,12 +164,19 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
     <div className={styles.formCard}>
       <div className={styles.grid2}>
         <input className={styles.input} placeholder="Plot number, e.g. B14" value={plotNumber} onChange={(e) => setPlotNumber(e.target.value)} />
+        <input className={styles.input} placeholder="Section/block, e.g. B" value={section} onChange={(e) => setSection(e.target.value)} />
+      </div>
+      <div className={styles.grid2} style={{ marginTop: 8 }}>
         <select className={styles.input} value={plotType} onChange={(e) => setPlotType(e.target.value as PlotType)}>
           <option>Full Plot</option>
           <option>Half Plot</option>
         </select>
+        <input className={styles.input} type="number" placeholder="Price (GHS, optional)" value={price} onChange={(e) => setPrice(e.target.value)} />
       </div>
-      <input className={styles.input} type="number" placeholder="Price (GHS, optional)" value={price} onChange={(e) => setPrice(e.target.value)} style={{ marginTop: 8 }} />
+      <div className={styles.grid2} style={{ marginTop: 8 }}>
+        <input className={styles.input} type="number" placeholder="Width (ft, optional)" value={widthFt} onChange={(e) => setWidthFt(e.target.value)} />
+        <input className={styles.input} type="number" placeholder="Length (ft, optional)" value={lengthFt} onChange={(e) => setLengthFt(e.target.value)} />
+      </div>
       {error && <p className={styles.errorMsg}>{error}</p>}
       <button type="button" className={styles.submitBtn} disabled={create.isPending} onClick={submit}>
         {create.isPending ? 'Adding…' : 'Add plot'}
@@ -174,6 +194,9 @@ function PlotDetail({ plot, onClose }: { plot: Plot; onClose: () => void }) {
   const [clientName, setClientName] = useState(plot.clientName ?? '');
   const [clientContact, setClientContact] = useState(plot.clientContact ?? '');
   const [notes, setNotes] = useState(plot.notes ?? '');
+  const [section, setSection] = useState(plot.section ?? '');
+  const [widthFt, setWidthFt] = useState(plot.widthFt != null ? String(plot.widthFt) : '');
+  const [lengthFt, setLengthFt] = useState(plot.lengthFt != null ? String(plot.lengthFt) : '');
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<'split' | 'delete' | null>(null);
 
@@ -182,7 +205,19 @@ function PlotDetail({ plot, onClose }: { plot: Plot; onClose: () => void }) {
   async function save() {
     setError(null);
     try {
-      await update.mutateAsync({ id: plot.id, patch: { status, price: price ? Number(price) : null, clientName: clientName || null, clientContact: clientContact || null, notes: notes || null } });
+      await update.mutateAsync({
+        id: plot.id,
+        patch: {
+          status,
+          price: price ? Number(price) : null,
+          clientName: clientName || null,
+          clientContact: clientContact || null,
+          notes: notes || null,
+          section: section.trim() || null,
+          widthFt: widthFt ? Number(widthFt) : null,
+          lengthFt: lengthFt ? Number(lengthFt) : null,
+        },
+      });
       onClose();
     } catch (e) {
       setError(friendlyError(e, 'Failed to save'));
@@ -253,6 +288,13 @@ function PlotDetail({ plot, onClose }: { plot: Plot; onClose: () => void }) {
       <div className={styles.grid2} style={{ marginTop: 8 }}>
         <input className={styles.input} placeholder="Client name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
         <input className={styles.input} placeholder="Client contact" value={clientContact} onChange={(e) => setClientContact(e.target.value)} />
+      </div>
+      <div className={styles.grid2} style={{ marginTop: 8 }}>
+        <input className={styles.input} placeholder="Section/block" value={section} onChange={(e) => setSection(e.target.value)} />
+        <div className={styles.grid2} style={{ gap: 8 }}>
+          <input className={styles.input} type="number" placeholder="Width (ft)" value={widthFt} onChange={(e) => setWidthFt(e.target.value)} />
+          <input className={styles.input} type="number" placeholder="Length (ft)" value={lengthFt} onChange={(e) => setLengthFt(e.target.value)} />
+        </div>
       </div>
       <textarea className={styles.input} placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ marginTop: 8, minHeight: 60 }} />
       {error && <p className={styles.errorMsg}>{error}</p>}

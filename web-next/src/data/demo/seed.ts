@@ -182,12 +182,17 @@ export function seedDemo(): DemoDb {
   // production's split_plot_for_half_sale() function creates.
   const wholePlotId = uid();
   const plots: DemoDb['plots'] = [
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Allocated', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Running Search', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null },
-    { id: wholePlotId, site: 'Royal Palm Enclave', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Allocated', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
-    { id: uid(), site: 'Royal Palm Enclave', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId },
+    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-01', plotType: 'Full Plot', status: 'Allocated', price: 60000, clientName: 'Kwame Asante', clientContact: '0201234567', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000 },
+    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-02', plotType: 'Full Plot', status: 'Running Search', price: 36000, clientName: 'Abena Boateng', clientContact: '0559876543', agentKey: AGENT_KEY, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000 },
+    { id: uid(), site: 'Royal Palm Enclave', section: 'A', plotNumber: 'A-03', plotType: 'Full Plot', status: 'Available', price: 60000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000 },
+    // Irregular dimension, matching the master spec's own real example
+    // sizes (35/55/15/90 x 100ft alongside the 70x100 standard) -- gives
+    // the suggestion engine's exact-size-match preference something real
+    // to differentiate in demo mode, not just uniform 70x100 everywhere.
+    { id: uid(), site: 'Royal Palm Enclave', section: 'C', plotNumber: 'C-05', plotType: 'Full Plot', status: 'Available', price: 42000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'whole', parentPlotId: null, widthFt: 55, lengthFt: 100, areaSqft: 5500 },
+    { id: wholePlotId, site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01', plotType: 'Full Plot', status: 'Available', price: 96000, clientName: null, clientContact: null, agentKey: null, notes: 'Split into two half plots', unitKind: 'whole', parentPlotId: null, widthFt: 70, lengthFt: 100, areaSqft: 7000 },
+    { id: uid(), site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01-H1', plotType: 'Half Plot', status: 'Allocated', price: 48000, clientName: 'Mercy Owusu', clientContact: '0240758072', agentKey: AGENT_KEY, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null },
+    { id: uid(), site: 'Royal Palm Enclave', section: 'B', plotNumber: 'B-01-H2', plotType: 'Half Plot', status: 'Available', price: 48000, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: wholePlotId, widthFt: null, lengthFt: null, areaSqft: null },
   ];
 
   // Matches the real shape/style of production's actual site_visits rows

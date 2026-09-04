@@ -66,7 +66,7 @@ export interface DemoDb {
   reportArchive: ReportArchiveEntry[];
 }
 
-const DEMO_VERSION = 46;
+const DEMO_VERSION = 47;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;

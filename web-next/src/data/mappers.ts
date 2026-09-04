@@ -168,6 +168,10 @@ export function mapPlotRow(r: Record<string, unknown>): Plot {
     notes: (r.notes as string) ?? null,
     unitKind: (r.unit_kind as Plot['unitKind']) ?? 'whole',
     parentPlotId: (r.parent_plot_id as string) ?? null,
+    section: (r.section as string) ?? null,
+    widthFt: r.width_ft == null ? null : Number(r.width_ft),
+    lengthFt: r.length_ft == null ? null : Number(r.length_ft),
+    areaSqft: r.area_sqft == null ? null : Number(r.area_sqft),
   };
 }
 

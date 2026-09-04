@@ -439,9 +439,20 @@ export type PlotUnitKind = 'whole' | 'half';
 // or specifically the 'elias'/'emmanuel' staff keys -- not every agent.
 // This screen should only ever be reachable by those roles/keys, matching
 // how Sales Desk gates it.
+// width_ft/length_ft/areaSqft/section are new real columns (added
+// 2026-09-04, Master Spec 7.1/7.2 -- "the system must model actual
+// dimensions and area, not only a binary Full/Half label" -- the supplied
+// Royal Palm workbook has real irregular plots at 35x100/55x100/15x100/
+// 90x100ft alongside the 70x100 standard). areaSqft is a real generated
+// column (width_ft * length_ft), never written directly. All four are
+// nullable/optional -- schema-only for now, no real dimension data
+// imported yet (see PHASE0_INVENTORY.md's Allocation+Inventory section
+// for the workbook/site-plan block-count reconciliation this still needs
+// before any real plot rows get these values).
 export interface Plot {
   id: string;
   site: string;
+  section: string | null;
   plotNumber: string;
   plotType: PlotType;
   status: PlotStatus;
@@ -452,10 +463,14 @@ export interface Plot {
   notes: string | null;
   unitKind: PlotUnitKind;
   parentPlotId: string | null;
+  widthFt: number | null;
+  lengthFt: number | null;
+  areaSqft: number | null;
 }
 
 export interface NewPlot {
   site: string;
+  section?: string | null;
   plotNumber: string;
   plotType: PlotType;
   status: PlotStatus;
@@ -464,6 +479,8 @@ export interface NewPlot {
   clientContact?: string | null;
   agentKey?: string | null;
   notes?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
 }
 
 export interface PlotUpdate {
@@ -473,6 +490,9 @@ export interface PlotUpdate {
   clientName?: string | null;
   clientContact?: string | null;
   agentKey?: string | null;
+  section?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
   notes?: string | null;
 }
 

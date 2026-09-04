@@ -1008,6 +1008,10 @@ function createDemoDataSource(): DataSource {
           notes: input.notes ?? null,
           unitKind: 'whole',
           parentPlotId: null,
+          section: input.section ?? null,
+          widthFt: input.widthFt ?? null,
+          lengthFt: input.lengthFt ?? null,
+          areaSqft: input.widthFt != null && input.lengthFt != null ? input.widthFt * input.lengthFt : null,
         };
         db.plots = [plot, ...db.plots];
         demoSave();
@@ -1015,7 +1019,16 @@ function createDemoDataSource(): DataSource {
       },
       async update(id, patch) {
         const db = demoLoad();
-        db.plots = db.plots.map((p) => (p.id === id ? { ...p, ...patch } : p));
+        db.plots = db.plots.map((p) => {
+          if (p.id !== id) return p;
+          const next = { ...p, ...patch };
+          // areaSqft mirrors the real generated column -- recomputed
+          // whenever either dimension changes, never set directly.
+          if ('widthFt' in patch || 'lengthFt' in patch) {
+            next.areaSqft = next.widthFt != null && next.lengthFt != null ? next.widthFt * next.lengthFt : null;
+          }
+          return next;
+        });
         demoSave();
         const updated = db.plots.find((p) => p.id === id);
         if (!updated) throw new Error('Plot not found');
@@ -1041,8 +1054,14 @@ function createDemoDataSource(): DataSource {
         if (p.status !== 'Available') throw new Error(`Only an Available plot can be split (current status: ${p.status})`);
         if (p.unitKind === 'half' || p.parentPlotId) throw new Error('This plot is already a half-unit and cannot be split further');
         const half = p.price != null ? p.price / 2 : null;
-        const plotA: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'a', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id };
-        const plotB: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'b', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id };
+        // Dimensions deliberately left null on both halves -- splitting a
+        // parent's width_ft/length_ft evenly would be a guess without a
+        // real geometry/survey source (Master Spec 7.2: a half sale must
+        // identify which physical sub-unit is reserved, not just halve a
+        // number). section carries over since both halves share the
+        // parent's physical location.
+        const plotA: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'a', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null };
+        const plotB: Plot = { id: crypto.randomUUID(), site: p.site, plotNumber: p.plotNumber + 'b', plotType: 'Half Plot', status: 'Available', price: half, clientName: null, clientContact: null, agentKey: null, notes: null, unitKind: 'half', parentPlotId: p.id, section: p.section, widthFt: null, lengthFt: null, areaSqft: null };
         db.plots = [plotB, plotA, ...db.plots.map((x) => (x.id === plotId ? { ...x, status: 'Subdivided' as const } : x))];
         demoSave();
         return { alreadySplit: false, plotA, plotB };
@@ -1676,7 +1695,7 @@ function createDemoDataSource(): DataSource {
         db.plots = db.plots.map((p) => (plotNumbers.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
         for (const pn of plotNumbers) {
           if (!db.plots.some((p) => p.plotNumber.toLowerCase() === pn.toLowerCase())) {
-            db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: pn, plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: 'Allocated via signed authorization', unitKind: 'whole', parentPlotId: null }, ...db.plots];
+            db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: pn, plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: 'Allocated via signed authorization', unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null }, ...db.plots];
           }
         }
         demoSave();
@@ -1710,7 +1729,7 @@ function createDemoDataSource(): DataSource {
         if (conflict) {
           db.plots = db.plots.map((p) => (p.id === conflict.id ? { ...p, status: 'Allocated' as const, clientName: alloc.clientName, agentKey: alloc.agentKey } : p));
         } else {
-          db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: newPlotNumber.trim(), plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: `Reassigned from Plot ${alloc.plotNumber ?? '—'}`, unitKind: 'whole', parentPlotId: null }, ...db.plots];
+          db.plots = [{ id: crypto.randomUUID(), site: db.plots[0]?.site ?? 'Royal Palm Enclave, Tsopoli', plotNumber: newPlotNumber.trim(), plotType: 'Full Plot', status: 'Allocated', price: null, clientName: alloc.clientName, clientContact: null, agentKey: alloc.agentKey, notes: `Reassigned from Plot ${alloc.plotNumber ?? '—'}`, unitKind: 'whole', parentPlotId: null, section: null, widthFt: null, lengthFt: null, areaSqft: null }, ...db.plots];
         }
         const event: AllocationHistoryEvent = { type: 'reassigned', fromPlot: alloc.plotNumber, toPlot: newPlotNumber.trim(), by: alloc.allocatedBy ?? '', at: new Date().toISOString() };
         const updated: AllocationRequest = { ...alloc, plotNumber: newPlotNumber.trim(), history: [...alloc.history, event] };
@@ -2462,7 +2481,7 @@ function createLiveDataSource(): DataSource {
       async create(input) {
         const { data, error } = await requireClient()
           .from('plots')
-          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null })
+          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null, section: input.section ?? null, width_ft: input.widthFt ?? null, length_ft: input.lengthFt ?? null })
           .select()
           .single();
         if (error) throw error;
@@ -2477,6 +2496,9 @@ function createLiveDataSource(): DataSource {
         if ('clientContact' in patch) dbPatch.client_contact = patch.clientContact;
         if ('agentKey' in patch) dbPatch.agent_key = patch.agentKey;
         if ('notes' in patch) dbPatch.notes = patch.notes;
+        if ('section' in patch) dbPatch.section = patch.section;
+        if ('widthFt' in patch) dbPatch.width_ft = patch.widthFt;
+        if ('lengthFt' in patch) dbPatch.length_ft = patch.lengthFt;
         const { data, error } = await requireClient().from('plots').update(dbPatch).eq('id', id).select().single();
         if (error) throw error;
         return mapPlotRow(data);
@@ -2504,6 +2526,13 @@ function createLiveDataSource(): DataSource {
                 notes: null,
                 unitKind: 'half',
                 parentPlotId: plotId,
+                // Dimensions deliberately null on both halves -- same
+                // reasoning as the demo-mode split (see that code's own
+                // comment): no real geometry source to halve from yet.
+                section: (x.section as string) ?? null,
+                widthFt: null,
+                lengthFt: null,
+                areaSqft: null,
               }
             : null;
         return { alreadySplit: r.alreadySplit, plotA: norm(r.plotA), plotB: norm(r.plotB) };
