@@ -10,6 +10,13 @@
   z-index: 50;
 }
 
+/* Premium UI Rebuild spec, Section 16's acceptance criterion: "no
+   unnecessary bottom-nav dominance" on desktop, now that Sidebar (same
+   1024px breakpoint) covers the same navigation. Mobile is untouched. */
+@media (width >= 1024px) {
+  .nav { display: none; }
+}
+
 .tab {
   flex: 1;
   display: flex;

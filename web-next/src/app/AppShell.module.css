@@ -1,0 +1,27 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Screens below this were each built as a single narrow mobile-width
+   card (own .wrap { max-width: 480px }), with zero desktop-specific
+   composition -- confirmed across 55 of 57 screen stylesheets, real gap
+   flagged directly by the user, not a hypothetical. Rebuilding every one
+   of those into a real 2-3 column desktop workspace (per the Premium UI
+   spec's own app-by-app plan) is real, substantial, ongoing work -- not
+   done in one pass. This rule is the honest interim: center what would
+   otherwise sit stuck in the top-left corner of a wide canvas, with
+   real breathing room either side, rather than leaving it looking
+   unfinished while that per-screen work continues. Screens that opt
+   into a real desktop layout (e.g. Pipeline List's own table view) size
+   themselves and simply ignore this centering.
+*/
+@media (width >= 1024px) {
+  .content { display: flex; justify-content: center; padding: 0 32px; }
+  .content > * { width: 100%; }
+}

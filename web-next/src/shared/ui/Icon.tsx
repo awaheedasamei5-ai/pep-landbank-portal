@@ -39,7 +39,11 @@ export type IconName =
   | 'barChart'
   | 'chevronDown'
   | 'search'
-  | 'team';
+  | 'team'
+  | 'bulb'
+  | 'shield'
+  | 'logout'
+  | 'chevronRight';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -259,6 +263,24 @@ function IconInner({ name }: { name: IconName }) {
           <path d="M15 14.2c2.6.4 4.5 2.3 4.5 4.8" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
         </>
       );
+    case 'bulb':
+      return (
+        <>
+          <path d="M9 18h6M10 21h4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+          <path d="M12 3.5a6 6 0 00-3.2 11.1c.6.4.9 1 .9 1.7v.2h4.6v-.2c0-.7.3-1.3.9-1.7A6 6 0 0012 3.5z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'shield':
+      return <path d="M12 3.5l7 2.5v5.3c0 4.4-2.9 7.7-7 9.2-4.1-1.5-7-4.8-7-9.2V6l7-2.5z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />;
+    case 'logout':
+      return (
+        <>
+          <path d="M9 4H5a1 1 0 00-1 1v14a1 1 0 001 1h4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M15 15l4-3-4-3M19 12H9" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </>
+      );
+    case 'chevronRight':
+      return <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
   }
 }
 
