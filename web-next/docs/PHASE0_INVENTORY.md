@@ -546,3 +546,16 @@ Added `manager_daily_briefing` to the shared `ai-insights` Edge Function (Groq) 
 **Privacy discipline held across all five**: every new kind was checked against Section 22 before being written — aggregate counts and the *staff* member's own name travel to the model; a client's name, phone, or payment detail never does (with `redactPII()` as a technical backstop on the two kinds that touch real free-text notes).
 
 **Not done this pass**: the other ~320 ideas in the published roadmap are exactly that — a roadmap, not a backlog that's been worked through. No payment-approval-queue screen exists yet in `web-next` to hang a Payments AI kind off of (a real gap independent of AI). System Health doesn't yet show AI-provider status (Blueprint-tracked, spec line 217, still open).
+
+## 24. AI layer keeps expanding: 12 real kinds across 9 apps (2026-09-06, same push)
+
+Continued straight through from #23 without stopping, per the user's explicit "continue" — four more real kinds, each verified live in the browser (not just curl) before committing:
+
+- `leave_letter_draft` — Leave gets an "AI: Draft a leave letter" button once at least one date is picked, filling the existing Reason textarea from the real day count/date range plus whatever the staff member typed (redacted first). Verified live: selecting 11 September 2026 as Elias produced "requesting a one-day leave on 11 September 2026."
+- `task_description_draft` — Task Board's new-task form gets an "AI: Draft a description" button once a title is typed, expanding it into one grounded sentence from the title/category/priority alone (no redaction needed — nothing but the creator's own picks ever crosses the wire).
+- `expense_justification_draft` — Expenses' fund-request form gets an "AI: Polish into a justification" button once both an amount and a purpose note exist. The prompt explicitly forbids the model from touching or recalculating the amount — that stays the requester's own number, approval stays fully Management's, matching the "financial totals"/"final payment approval" guardrails.
+- `commission_explainer` — My Commission gets an auto-loading one-line AI explainer of the real month-over-month total (same always-there pattern as streak coaching). Real privacy note: the screen displays each row's actual `clientName` (e.g. "Kwame Asante") to the agent, but the AI request only ever carries the agent's own name and aggregate totals — a client's identity was never needed to explain a number and never sent.
+
+All four follow the same two established patterns from #23: a mutation-based "tap to draft, fills an existing editable field" shape for anything that produces text a human will send (memo/leave/expense/task), and an auto-loading query shape for anything that's pure narration of already-computed numbers (commission). `redactPII()` continues to be applied everywhere real free-text staff input reaches the model.
+
+Total real, live `kind`s as of this push: `streak_coaching`, `colleague_availability`, `manager_daily_briefing`, `login_greeting`, `companion_qa`, `follow_up_draft`, `data_check_summary`, `memo_draft`, `leave_letter_draft`, `task_description_draft`, `expense_justification_draft`, `commission_explainer` — 12 across Login, Home, Pipeline, Data Check, Memos, Leave, Task Board, Expenses, and Commission.
