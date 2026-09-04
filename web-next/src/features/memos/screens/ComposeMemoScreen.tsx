@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useCreateMemo, useStaffDirectory } from '../hooks/useMemos';
+import { useMemoDraft } from '../hooks/useMemoDraft';
 import styles from './ComposeMemoScreen.module.css';
 
 const schema = z.object({
@@ -27,12 +29,22 @@ export function ComposeMemoScreen() {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  const memoDraft = useMemoDraft();
+  const [brief, setBrief] = useState('');
 
   const others = (staff ?? []).filter((s) => s.key !== profile?.key);
   const toKey = watch('toKey');
+  const subject = watch('subject');
   const ccOptions = others.filter((s) => s.key !== toKey);
+
+  async function expandBrief() {
+    if (!brief.trim()) return;
+    const drafted = await memoDraft.mutateAsync({ subject: subject ?? '', brief: brief.trim() }).catch(() => null);
+    if (drafted) setValue('bodyHtml', drafted, { shouldValidate: true });
+  }
 
   async function submit(values: FormValues, status: 'draft' | 'sent') {
     const to = others.find((s) => s.key === values.toKey);
@@ -66,6 +78,19 @@ export function ComposeMemoScreen() {
           <label className={styles.label}>Subject *</label>
           <input className={styles.input} placeholder="e.g. Leave Request Letter" {...register('subject')} />
           {errors.subject && <div className={styles.err}>{errors.subject.message}</div>}
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>
+            <span className={styles.aiBadge}>AI</span> Quick brief (optional)
+          </label>
+          <div className={styles.briefRow}>
+            <input className={styles.input} placeholder="e.g. remind the team about Saturday site visits" value={brief} onChange={(e) => setBrief(e.target.value)} />
+            <button type="button" className={styles.expandBtn} onClick={expandBrief} disabled={!brief.trim() || memoDraft.isPending}>
+              {memoDraft.isPending ? 'Drafting…' : 'Expand'}
+            </button>
+          </div>
+          <p className={styles.hint}>Type a short note and let AI turn it into a full memo below — review and edit before sending.</p>
         </div>
 
         <div className={styles.field}>

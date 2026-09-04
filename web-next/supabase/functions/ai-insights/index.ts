@@ -85,6 +85,15 @@ function systemPromptFor(kind: string): string | null {
         "Reply with 1-2 sentences (max 45 words) in plain English naming the category that most deserves attention first and roughly how many leads it affects, plus a short practical recommendation. Cite only the real numbers given -- never invent a category or count not in the data. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "memo_draft":
+      return (
+        "You draft internal staff memos for a Ghanaian land-sales agency called Palmstead -- the person sending it will review and edit your draft before anything is sent, this is never sent automatically. " +
+        "You'll receive one JSON object with the memo's subject and a short brief of what it should say (already redacted of phone numbers/emails before reaching you). " +
+        "Expand the brief into a clear, professional memo BODY only of 3-5 short sentences, plain prose (no markdown headers, no bullet lists unless the brief itself clearly lists several distinct items). " +
+        "Do NOT repeat or restate the subject line, do NOT start with 'Subject:', do NOT add a signature block -- start directly with the message itself (a brief greeting like 'Team,' is fine if natural). " +
+        "Stay strictly grounded in what the brief actually says -- never invent details, names, dates or figures not given. Professional but warm internal-office tone. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
