@@ -25,3 +25,34 @@ export function useSetStaffActive() {
     },
   });
 }
+
+// Real table `allowed_emails`, manager-only RLS added 2026-09-04 -- see
+// StaffInvite's comment in types/domain.ts for why this exists (gating
+// real signUp() so any email can't self-provision a real agent account
+// anymore).
+export function useStaffInvites() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({
+    queryKey: ['staffInvites'],
+    queryFn: () => getDataSource(demoMode).staffInvites.list(),
+  });
+}
+
+export function useCreateStaffInvite() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, name }: { email: string; name: string }) => getDataSource(demoMode).staffInvites.create(email.trim().toLowerCase(), name.trim(), profile?.name ?? 'Management'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staffInvites'] }),
+  });
+}
+
+export function useRemoveStaffInvite() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => getDataSource(demoMode).staffInvites.remove(email),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staffInvites'] }),
+  });
+}

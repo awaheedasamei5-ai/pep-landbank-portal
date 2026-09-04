@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useSetStaffActive, useTeamRoster } from '../hooks/useTeamRoster';
-import type { Profile } from '../../../types/domain';
+import { useCreateStaffInvite, useRemoveStaffInvite, useSetStaffActive, useStaffInvites, useTeamRoster } from '../hooks/useTeamRoster';
+import type { Profile, StaffInvite } from '../../../types/domain';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './TeamRosterScreen.module.css';
 
 function initials(name: string): string {
@@ -15,12 +16,18 @@ function initials(name: string): string {
 // Real `profiles.active` column + p_profiles_upd RLS (manager or own row
 // only, confirmed live). Deactivating blocks sign-in but keeps historical
 // leads/stats intact everywhere, including the Leaderboard -- matches
-// index.html's own documented behavior for this exact toggle. Account
-// CREATION (index.html's create-employee Edge Function, which provisions
-// a real Supabase Auth user) is deliberately out of scope -- not something
-// to wire up and exercise in a demo/testing pass. Position/address/ID/
-// birthday and the per-tool access matrix (mgrStaffSettingsHtml's other
-// two sections) are also out of scope for this first cut.
+// index.html's own documented behavior for this exact toggle.
+//
+// New-staff invites (2026-09-04): closes a real security gap found while
+// scoping this -- handle_new_auth_user() used to create a real 'agent'
+// profile for ANY email that called supabase.auth.signUp(), with
+// allowed_emails never actually checked despite existing. Fixed at the
+// trigger level (rejects an uninvited sign-up outright); this screen is
+// the manager side of that gate. The actual account-creation step (a new
+// hire filling in name/email/password) is the public join screen
+// (auth/useJoinPortal.ts), reached from the login screen's staff picker.
+// Position/address/ID/birthday and the per-tool access matrix
+// (mgrStaffSettingsHtml's other two sections) stay out of scope.
 export function TeamRosterScreen() {
   const { data: roster, isLoading } = useTeamRoster();
   const activeCount = roster?.filter((r) => r.active).length ?? 0;
@@ -43,6 +50,81 @@ export function TeamRosterScreen() {
           <StaffCard key={s.key} staff={s} />
         ))}
       </div>
+
+      <InviteSection />
+    </div>
+  );
+}
+
+function InviteSection() {
+  const { data: invites, isLoading } = useStaffInvites();
+  const create = useCreateStaffInvite();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    setError(null);
+    try {
+      await create.mutateAsync({ email, name });
+      setName('');
+      setEmail('');
+      setShowForm(false);
+    } catch (err) {
+      setError(friendlyError(err, 'Could not send the invite'));
+    }
+  }
+
+  return (
+    <div className={styles.inviteSection}>
+      <div className={styles.inviteHead}>
+        <div className={styles.eyebrow}>Invites</div>
+        <button type="button" className={styles.inviteToggleBtn} onClick={() => setShowForm((v) => !v)}>
+          {showForm ? 'Cancel' : '+ Invite new staff'}
+        </button>
+      </div>
+      <p className={styles.sub} style={{ marginTop: 4 }}>
+        Only invited emails can create an account -- anyone else who tries is rejected automatically.
+      </p>
+
+      {showForm && (
+        <form className={styles.inviteForm} onSubmit={submit}>
+          <input className={styles.inviteInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className={styles.inviteInput} type="email" placeholder="Work email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          {error && <p className={styles.inviteError}>{error}</p>}
+          <button type="submit" className={styles.inviteSubmitBtn} disabled={create.isPending || !name.trim() || !email.trim()}>
+            {create.isPending ? 'Sending…' : 'Send invite'}
+          </button>
+        </form>
+      )}
+
+      {isLoading && <p style={{ color: 'var(--c-muted)', fontSize: 13 }}>Loading…</p>}
+      {!isLoading && invites && invites.length === 0 && <p style={{ color: 'var(--c-muted)', fontSize: 13 }}>No pending invites.</p>}
+      {invites && invites.length > 0 && (
+        <div className={styles.inviteList}>
+          {invites.map((inv) => (
+            <InviteRow key={inv.email} invite={inv} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InviteRow({ invite }: { invite: StaffInvite }) {
+  const remove = useRemoveStaffInvite();
+  return (
+    <div className={styles.inviteRow}>
+      <div>
+        <div className={styles.inviteName}>{invite.name}</div>
+        <div className={styles.inviteEmail}>{invite.email}</div>
+      </div>
+      <button type="button" className={styles.inviteRemoveBtn} disabled={remove.isPending} onClick={() => remove.mutate(invite.email)}>
+        {remove.isPending ? '…' : 'Revoke'}
+      </button>
     </div>
   );
 }

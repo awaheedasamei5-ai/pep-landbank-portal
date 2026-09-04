@@ -6,6 +6,7 @@ import { useSessionStore } from './useSessionStore';
 import { useLiveLogin } from './useLiveLogin';
 import { usePinLogin } from './usePinLogin';
 import { useSendResetCode, useConfirmReset } from './usePasswordReset';
+import { useJoinPortal } from './useJoinPortal';
 import { isConfigured } from '../shared/lib/env';
 import { fetchStaffDirectory, type StaffDirectoryEntry } from '../data/staffDirectoryClient';
 import { pinLockExists } from '../shared/lib/pinLock';
@@ -26,8 +27,11 @@ import styles from './LoginScreen.module.css';
 // redirect link) -- all ported 2026-09-04. If this device has a PIN
 // saved for the selected staff member (turned on from More > Account),
 // the PIN input replaces the password field by default, with a plain
-// toggle back to password. Deliberately still NOT ported: a manager-
-// facing new-staff-invite flow -- a real, separable feature.
+// toggle back to password. Also includes the self-service "join the
+// portal" signup (useJoinPortal.ts) reached from "+ New employee" below
+// the staff list -- a brand new hire creates their own account, gated
+// server-side by the real allowed_emails invite list (Team screen is the
+// manager side of that same gate).
 export function LoginScreen() {
   const login = useSessionStore((s) => s.login);
   const navigate = useNavigate();
@@ -35,7 +39,14 @@ export function LoginScreen() {
   const pinLogin = usePinLogin();
   const sendResetCode = useSendResetCode();
   const confirmReset = useConfirmReset();
-  const [mode, setMode] = useState<'demo' | 'live' | 'reset'>('demo');
+  const joinPortal = useJoinPortal();
+  const [mode, setMode] = useState<'demo' | 'live' | 'reset' | 'join'>('demo');
+  const [joinName, setJoinName] = useState('');
+  const [joinEmail, setJoinEmail] = useState('');
+  const [joinPw1, setJoinPw1] = useState('');
+  const [joinPw2, setJoinPw2] = useState('');
+  const [joinPwMismatch, setJoinPwMismatch] = useState<string | null>(null);
+  const [joinPendingConfirmation, setJoinPendingConfirmation] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<StaffDirectoryEntry | null>(null);
   const [password, setPassword] = useState('');
@@ -126,6 +137,37 @@ export function LoginScreen() {
     );
   }
 
+  function openJoin() {
+    setJoinName('');
+    setJoinEmail('');
+    setJoinPw1('');
+    setJoinPw2('');
+    setJoinPwMismatch(null);
+    setJoinPendingConfirmation(false);
+    setMode('join');
+  }
+
+  async function submitJoin(e: React.FormEvent) {
+    e.preventDefault();
+    setJoinPwMismatch(null);
+    if (!joinName.trim() || !joinEmail.trim()) return;
+    if (joinPw1.length < 6) {
+      setJoinPwMismatch('Password must be at least 6 characters.');
+      return;
+    }
+    if (joinPw1 !== joinPw2) {
+      setJoinPwMismatch('Passwords do not match.');
+      return;
+    }
+    const result = await joinPortal.mutateAsync({ name: joinName.trim(), email: joinEmail.trim(), password: joinPw1 }).catch(() => null);
+    if (!result) return;
+    if (result.pendingConfirmation) {
+      setJoinPendingConfirmation(true);
+      return;
+    }
+    navigate(result.profile.role === 'manager' ? '/app/mgr' : '/app/home', { replace: true });
+  }
+
   return (
     <div className={styles.wrap}>
       <div className={styles.card}>
@@ -160,6 +202,9 @@ export function LoginScreen() {
               ))}
               {staff && matches.length === 0 && <p className={styles.noMatch}>No staff match &quot;{query}&quot;.</p>}
             </div>
+            <button type="button" className={styles.modeLink} onClick={openJoin}>
+              + New employee — join the portal
+            </button>
             <button type="button" className={styles.modeLink} onClick={() => setMode('demo')}>
               ← Back to demo data
             </button>
@@ -238,6 +283,34 @@ export function LoginScreen() {
                   {confirmReset.isPending ? 'Setting password…' : 'Set new password'}
                 </button>
                 <button type="button" className={styles.modeLink} onClick={backFromReset}>
+                  ← Back
+                </button>
+              </form>
+            )}
+          </>
+        )}
+
+        {mode === 'join' && (
+          <>
+            <p className={styles.sub}>Join the portal</p>
+            {joinPendingConfirmation ? (
+              <>
+                <p className={styles.resetDoneMsg}>Account created — check your email and tap the confirmation link, then come back and sign in.</p>
+                <button type="button" className={styles.btnAgent} onClick={() => setMode('live')}>
+                  Back to sign in
+                </button>
+              </>
+            ) : (
+              <form onSubmit={submitJoin}>
+                <input className={styles.input} placeholder="Full name" value={joinName} onChange={(e) => setJoinName(e.target.value)} required autoFocus />
+                <input className={styles.input} type="email" placeholder="Work email" autoComplete="username" value={joinEmail} onChange={(e) => setJoinEmail(e.target.value)} required />
+                <input className={styles.input} type="password" placeholder="Password" autoComplete="new-password" value={joinPw1} onChange={(e) => setJoinPw1(e.target.value)} required />
+                <input className={styles.input} type="password" placeholder="Confirm password" autoComplete="new-password" value={joinPw2} onChange={(e) => setJoinPw2(e.target.value)} required />
+                {(joinPwMismatch || joinPortal.isError) && <p className={styles.error}>{joinPwMismatch ?? (joinPortal.error as Error).message}</p>}
+                <button type="submit" className={styles.btnAgent} disabled={joinPortal.isPending}>
+                  {joinPortal.isPending ? 'Creating account…' : 'Create my account'}
+                </button>
+                <button type="button" className={styles.modeLink} onClick={() => setMode('live')}>
                   ← Back
                 </button>
               </form>

@@ -83,3 +83,85 @@
   font-size: 11px;
   cursor: pointer;
 }
+
+.inviteSection { margin-top: 28px; }
+.inviteHead { display: flex; align-items: center; justify-content: space-between; }
+
+.inviteToggleBtn {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inviteForm {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inviteInput {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  font-size: 13.5px;
+  background: var(--c-paper);
+  color: var(--c-text);
+}
+
+.inviteError { color: var(--c-danger); font-size: 12px; margin: 0; }
+
+.inviteSubmitBtn {
+  background: var(--c-ink);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.inviteSubmitBtn:disabled { opacity: .6; cursor: default; }
+
+.inviteList {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.inviteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--c-line);
+}
+.inviteRow:last-child { border-bottom: none; }
+
+.inviteName { font-weight: 700; font-size: 13px; color: var(--c-text); }
+.inviteEmail { font-size: 11.5px; color: var(--c-muted); margin-top: 2px; }
+
+.inviteRemoveBtn {
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 12px;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+}
+.inviteRemoveBtn:disabled { opacity: .6; cursor: default; }

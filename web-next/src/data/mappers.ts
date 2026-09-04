@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -151,6 +151,15 @@ export function mapBannerRow(r: Record<string, unknown>): Banner {
     createdByName: (r.created_by_name as string) ?? '',
     createdAt: r.created_at as string,
     updatedAt: (r.updated_at as string) ?? (r.created_at as string),
+  };
+}
+
+export function mapStaffInviteRow(r: Record<string, unknown>): StaffInvite {
+  return {
+    email: r.email as string,
+    name: r.name as string,
+    invitedBy: (r.invited_by as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

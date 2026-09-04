@@ -27,6 +27,18 @@ export interface Profile {
   phone?: string;
 }
 
+// Real table `allowed_emails` (confirmed live) -- a manager-only invite
+// list. Fixed 2026-09-04: `handle_new_auth_user()` now actually checks
+// this table before creating a profile for a new sign-up (previously it
+// didn't -- any email could self-register a real agent account). A
+// consumed invite is deleted by that same trigger, not left to linger.
+export interface StaffInvite {
+  email: string;
+  name: string;
+  invitedBy: string | null;
+  createdAt: string;
+}
+
 export type PlotType = 'Full Plot' | 'Half Plot';
 export type PaymentPlan = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
 // Internal stage codes -- displayed to staff via the flipped

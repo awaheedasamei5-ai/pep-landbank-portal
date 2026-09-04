@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -29,6 +29,7 @@ import {
   mapNoteRow,
   mapPaymentRow,
   mapPlotRow,
+  mapStaffInviteRow,
   mapProfileRow,
   mapReferralRow,
   mapReportArchiveRow,
@@ -598,6 +599,20 @@ export interface DataSource {
     // auto-stamp the signed-in staff member's own signature onto
     // documents they generate/approve (index.html's getStaffSignature()).
     updateSignature(key: string, dataUrl: string | null): Promise<Profile>;
+  };
+  // Real table `allowed_emails` (confirmed live) -- manager-only invite
+  // list, gated by real RLS added 2026-09-04 alongside the
+  // handle_new_auth_user() fix (see StaffInvite's comment in types/
+  // domain.ts): a new sign-up is only allowed to create a profile if
+  // their email is here, and a successful sign-up consumes the row.
+  // create()/remove() are plain manager-gated table writes; the actual
+  // account-creation step (a new hire filling in name/email/password) is
+  // real Supabase Auth signUp(), handled by the public join screen
+  // (auth/useJoinPortal.ts), not by this namespace.
+  staffInvites: {
+    list(): Promise<StaffInvite[]>;
+    create(email: string, name: string, invitedBy: string): Promise<void>;
+    remove(email: string): Promise<void>;
   };
   // Real tables `memos` + `memo_recipients` -- see the Memo type's comment
   // in types/domain.ts for the RLS/draft/CC shape. delete() throws if
@@ -1875,6 +1890,21 @@ function createDemoDataSource(): DataSource {
         const staff = DEMO_STAFF.find((s) => s.key === key);
         if (!staff) throw new Error('Staff not found');
         return applyStaffOverrides(staff, db);
+      },
+    },
+    staffInvites: {
+      async list() {
+        return demoLoad().invites ?? [];
+      },
+      async create(email, name, invitedBy) {
+        const db = demoLoad();
+        db.invites = [{ email, name, invitedBy, createdAt: new Date().toISOString() }, ...(db.invites ?? []).filter((i) => i.email.toLowerCase() !== email.toLowerCase())];
+        demoSave();
+      },
+      async remove(email) {
+        const db = demoLoad();
+        db.invites = (db.invites ?? []).filter((i) => i.email.toLowerCase() !== email.toLowerCase());
+        demoSave();
       },
     },
     memos: {
@@ -3247,6 +3277,21 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('profiles').update({ signature_data: dataUrl }).eq('agent_key', key).select().single();
         if (error) throw error;
         return mapProfileRow(data);
+      },
+    },
+    staffInvites: {
+      async list() {
+        const { data, error } = await requireClient().from('allowed_emails').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapStaffInviteRow);
+      },
+      async create(email, name, invitedBy) {
+        const { error } = await requireClient().from('allowed_emails').insert({ email: email.toLowerCase(), name, invited_by: invitedBy });
+        if (error) throw error;
+      },
+      async remove(email) {
+        const { error } = await requireClient().from('allowed_emails').delete().eq('email', email.toLowerCase());
+        if (error) throw error;
       },
     },
     memos: {

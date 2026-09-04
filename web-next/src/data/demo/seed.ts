@@ -762,6 +762,9 @@ export function seedDemo(): DemoDb {
       { id: uid(), reportDate: isoPlusDays(t, -1), generatedAt: isoPlusDays(t, -1) + 'T09:00:00Z', recipients: 'management@landbankghana.com', generationStatus: 'success', emailStatus: 'sent', checksum: 'demo1checksum', errorDetail: null, retryCount: 0 },
       { id: uid(), reportDate: isoPlusDays(t, -2), generatedAt: isoPlusDays(t, -2) + 'T09:00:00Z', recipients: 'management@landbankghana.com', generationStatus: 'success', emailStatus: 'sent', checksum: 'demo2checksum', errorDetail: null, retryCount: 0 },
     ],
+    // One real pending invite so the Team screen's new invite list isn't
+    // empty on first load -- matches the real allowed_emails shape.
+    invites: [{ email: 'new.agent@example.com', name: 'New Agent', invitedBy: 'Management', createdAt: isoPlusDays(t, -1) }],
   };
 }
 
