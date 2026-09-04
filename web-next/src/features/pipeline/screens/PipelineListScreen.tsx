@@ -157,7 +157,7 @@ export function PipelineListScreen() {
 
   return (
     <>
-    <div className={`${styles.wrap} ${hasDetailOpen ? styles.wrapHiddenMobile : ''}`}>
+    <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
       <div className={styles.head}>
         <div>
           <h1 className={styles.title}>My pipeline</h1>

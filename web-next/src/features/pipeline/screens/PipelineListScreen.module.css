@@ -10,6 +10,24 @@
   .wrapHiddenMobile { display: block; }
 }
 
+/* Real correction, caught live by the user: the drawer used to just
+   float on top of the list at a fixed position, clipping/covering
+   whatever columns happened to sit under its 520px width instead of
+   the list actually making room for it. Now the list's own container
+   genuinely shrinks to the remaining space when a lead is open, so its
+   EXISTING table horizontal-scroll (.tableWrap { overflow-x: auto },
+   built earlier this session) does real work here instead of columns
+   just disappearing behind the drawer -- squeeze the list, not hide
+   the data. Reverts to full width the instant the drawer closes, since
+   this class is only applied while hasDetailOpen is true. */
+@media (width >= 1024px) {
+  /* margin-right: auto overrides AppShell's own centering (meant for
+     narrow single-card screens, not this one) so the shrunk list hugs
+     the sidebar's edge with the freed-up space sitting to its right,
+     under the drawer, instead of being centered into an overlap. */
+  .wrapWithDrawer { max-width: calc(100% - 540px); margin-right: auto; }
+}
+
 .head {
   display: flex;
   align-items: flex-start;
