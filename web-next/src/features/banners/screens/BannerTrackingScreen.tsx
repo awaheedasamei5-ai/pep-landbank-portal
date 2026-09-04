@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Banner, BannerStatus, NewBanner } from '../../../types/domain';
 import { useBanners, useCreateBanner, useLeadBannerCounts, useUpdateBannerStatus } from '../hooks/useBanners';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './BannerTrackingScreen.module.css';
 
 const STATUS_META: Record<BannerStatus, { label: string; className: string }> = {
@@ -137,7 +138,7 @@ function AddBannerForm({ onDone }: { onDone: () => void }) {
       await create.mutateAsync(input);
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      setError(friendlyError(e, 'Failed to save'));
     }
   }
 

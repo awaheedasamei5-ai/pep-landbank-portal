@@ -5,6 +5,7 @@ import { Icon } from '../../../shared/ui/Icon';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useAllLeadsForLinking } from '../hooks/useAllLeadsForLinking';
 import { useCanClearReferrals, useClearReferral, useLinkReferralLead, useReferrals } from '../hooks/useReferrals';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { Referral } from '../../../types/domain';
 import styles from './ReferralsScreen.module.css';
 
@@ -141,7 +142,7 @@ function ReferralDetail({ referral }: { referral: Referral }) {
     try {
       await clearReferral.mutateAsync({ id: referral.id, points: pointsValue });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not clear this referral.');
+      setError(friendlyError(e, 'Could not clear this referral.'));
     }
   }
 

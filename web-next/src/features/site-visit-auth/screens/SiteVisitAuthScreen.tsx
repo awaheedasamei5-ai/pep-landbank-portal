@@ -5,6 +5,7 @@ import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
 import { useCanViewSiteVisitAuth, useFinalizeWeeklyVisitForm, useSaveWeeklyVisitCosts, useWeeklyVisitForm, useWeekSiteVisits } from '../hooks/useSiteVisitAuth';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './SiteVisitAuthScreen.module.css';
 
 // Real table `weekly_visit_forms` -- Site Visit Authorization's Logistics
@@ -117,7 +118,7 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
     try {
       await saveCosts.mutateAsync({ id: form.id, patch });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      setError(friendlyError(e, 'Failed to save'));
     }
   }
 

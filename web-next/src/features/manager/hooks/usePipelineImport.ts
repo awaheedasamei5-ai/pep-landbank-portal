@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from './useConfigSettings';
+import { friendlyError, friendlyErrorObj } from '../../../shared/lib/friendlyError';
 import type { Config, Lead } from '../../../types/domain';
 import {
   IMPORT_SCHEMA_VERSION,
@@ -29,10 +30,10 @@ async function loadLeadsWorksheet(file: File) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
   const ws = wb.getWorksheet('LEADS');
-  if (!ws) throw new Error('Could not find the LEADS sheet in that file -- is this a Palmstead pipeline export?');
+  if (!ws) throw friendlyErrorObj('Could not find the LEADS sheet in that file -- is this a Palmstead pipeline export?');
   const meta = readWorkbookMeta(wb);
   if (meta.schemaVersion && meta.schemaVersion !== IMPORT_SCHEMA_VERSION) {
-    throw new Error(`This file was exported from an older/newer version of the workbook (schema v${meta.schemaVersion}, expected v${IMPORT_SCHEMA_VERSION}). Please re-export a fresh copy.`);
+    throw friendlyErrorObj(`This file was exported from an older/newer version of the workbook (schema v${meta.schemaVersion}, expected v${IMPORT_SCHEMA_VERSION}). Please re-export a fresh copy.`);
   }
   const exportedAt = meta.exportedAt ? new Date(meta.exportedAt) : null;
   return { ws, exportedAt, sourceLabel: meta.sourceLabel };
@@ -51,7 +52,7 @@ export function useScanPipelineImport() {
     mutationFn: async (file: File): Promise<ImportScanOutcome> => {
       const { ws, exportedAt } = await loadLeadsWorksheet(file);
       const cols = resolveLeadsColumns(ws);
-      if (!cols.leadId || !cols.name) throw new Error('This file is missing expected LEADS columns -- is this a Palmstead pipeline export?');
+      if (!cols.leadId || !cols.name) throw friendlyErrorObj('This file is missing expected LEADS columns -- is this a Palmstead pipeline export?');
       const rows = readImportRows(ws, cols);
       const ds = getDataSource(demoMode);
       const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
@@ -116,8 +117,8 @@ export function useCommitPipelineImport() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ rows, exportedAt, archiveMissing }: { rows: ParsedImportRow[]; exportedAt: Date | null; archiveMissing: boolean }): Promise<ImportCommitResult> => {
-      if (!config) throw new Error('Pricing configuration is not loaded yet -- try again in a moment.');
-      if (!profile) throw new Error('Not signed in.');
+      if (!config) throw friendlyErrorObj('Pricing configuration is not loaded yet -- try again in a moment.');
+      if (!profile) throw friendlyErrorObj('Not signed in.');
       const ds = getDataSource(demoMode);
       const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
       // 'company' is a real, legitimate agent_key (Company Leads -- clients
@@ -172,7 +173,7 @@ export function useCommitPipelineImport() {
             updated++;
           }
         } catch (e) {
-          errors.push(`${item.row.rowLabel}: ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(`${item.row.rowLabel}: ${friendlyError(e)}`);
         }
       }
 
@@ -186,7 +187,7 @@ export function useCommitPipelineImport() {
             archived++;
             archivedLeads.push({ id: lead.id, name: lead.name });
           } catch (e) {
-            errors.push(`Archiving ${lead.name}: ${e instanceof Error ? e.message : String(e)}`);
+            errors.push(`Archiving ${lead.name}: ${friendlyError(e)}`);
           }
         }
       }

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useCommitPipelineImport, useScanPipelineImport, type ImportCommitResult, type ImportScanOutcome } from '../hooks/usePipelineImport';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from '../screens/ReportsScreen.module.css';
 
 // UI for the canonical-workbook import (pipelineImportLogic.ts), matching
@@ -64,7 +65,7 @@ export function PipelineImportCard() {
         <input ref={fileInputRef} className={styles.fileInput} type="file" accept=".xlsx" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
 
         {scanMutation.isPending && <p className={styles.importResultLine}>Reading {pendingFile?.name}&hellip;</p>}
-        {scanMutation.isError && <p className={styles.importErrorText}>{scanMutation.error instanceof Error ? scanMutation.error.message : 'Could not read that file.'}</p>}
+        {scanMutation.isError && <p className={styles.importErrorText}>{friendlyError(scanMutation.error, 'Could not read that file.')}</p>}
 
         {scanResult && b && (
           <>
@@ -126,7 +127,7 @@ export function PipelineImportCard() {
           </>
         )}
 
-        {commitMutation.isError && <p className={styles.importErrorText}>{commitMutation.error instanceof Error ? commitMutation.error.message : 'Import failed.'}</p>}
+        {commitMutation.isError && <p className={styles.importErrorText}>{friendlyError(commitMutation.error, 'Import failed.')}</p>}
 
         {commitResult && (
           <p className={styles.importResultLine}>

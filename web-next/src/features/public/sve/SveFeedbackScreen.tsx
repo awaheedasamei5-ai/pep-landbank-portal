@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSiteVisitInvite, submitSiteVisitExperience } from '../../../data/sveClient';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import { NpsScale } from './NpsScale';
 import { StarRating } from './StarRating';
 import styles from './SveFeedbackScreen.module.css';
@@ -105,7 +106,7 @@ export function SveFeedbackScreen() {
         await queryClient.invalidateQueries({ queryKey: ['sveInvite', token] });
       }
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Something went wrong -- please try again.');
+      setSubmitError(friendlyError(e, 'Something went wrong -- please try again.'));
     } finally {
       setSubmitting(false);
     }

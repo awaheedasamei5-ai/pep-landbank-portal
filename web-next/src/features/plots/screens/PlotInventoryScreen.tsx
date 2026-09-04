@@ -4,6 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
 import type { Plot, PlotStatus, PlotType } from '../../../types/domain';
 import { usePlots, useCreatePlot, useDeletePlot, useSplitPlot, useUpdatePlot } from '../hooks/usePlots';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './PlotInventoryScreen.module.css';
 
 const PLOT_STATUSES: PlotStatus[] = ['Available', 'Running Search', 'Allocated'];
@@ -142,7 +143,7 @@ function AddPlotForm({ defaultSite, onDone }: { defaultSite: string; onDone: () 
       await create.mutateAsync({ site: defaultSite, plotNumber: plotNumber.trim(), plotType, status: 'Available', price: price ? Number(price) : null });
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add plot');
+      setError(friendlyError(e, 'Failed to add plot'));
     }
   }
 
@@ -184,7 +185,7 @@ function PlotDetail({ plot, onClose }: { plot: Plot; onClose: () => void }) {
       await update.mutateAsync({ id: plot.id, patch: { status, price: price ? Number(price) : null, clientName: clientName || null, clientContact: clientContact || null, notes: notes || null } });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      setError(friendlyError(e, 'Failed to save'));
     }
   }
 

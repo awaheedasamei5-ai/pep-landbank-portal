@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ghs } from '../../../shared/lib/format';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { usePlots } from '../../plots/hooks/usePlots';
@@ -228,7 +229,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
     try {
       await suggest.mutateAsync({ id: request.id, plotNumbers });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to suggest plots');
+      setError(friendlyError(e, 'Failed to suggest plots'));
     }
   }
 
@@ -321,7 +322,7 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
     try {
       await confirm.mutateAsync({ id: request.id, plotNumber, note: 'Approved via signed authorization form' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to confirm');
+      setError(friendlyError(e, 'Failed to confirm'));
     }
   }
 
@@ -417,7 +418,7 @@ function AllocatedPanel({ request }: { request: AllocationRequest }) {
                 setError(null);
                 editPlot.mutateAsync({ id: request.id, newPlotNumber: newPlot.trim() }).then(
                   () => setEditing(false),
-                  (e) => setError(e instanceof Error ? e.message : 'Failed to reassign'),
+                  (e) => setError(friendlyError(e, 'Failed to reassign')),
                 );
               }}
             >

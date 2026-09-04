@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ghs, today } from '../../../shared/lib/format';
 import type { FundRequest, FundRequestType, NewFundRequest } from '../../../types/domain';
 import { useCanManageExpenses, useCreateFundRequest, useDecideFundRequest, useFundRequests } from '../hooks/useFundRequests';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './ExpensesScreen.module.css';
 
 type Tab = 'requests' | 'approvals';
@@ -116,7 +117,7 @@ function RequestsTab({ requests }: { requests: FundRequest[] }) {
       setPurpose('');
       setFile(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to send request');
+      setError(friendlyError(e, 'Failed to send request'));
     }
   }
 

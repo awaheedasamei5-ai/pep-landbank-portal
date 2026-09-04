@@ -8,6 +8,7 @@ import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/us
 import { usePlots, useUpdatePlot } from '../../plots/hooks/usePlots';
 import type { Lead, Payment } from '../../../types/domain';
 import { computeDepositStatus, computeMonthlySchedule } from '../lib/pipelineLogic';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 import { StageBadge } from '../components/StageBadge';
 import { useCanViewDocStage, useDeleteLead, useLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
@@ -267,7 +268,7 @@ function ClientSection({ lead }: { lead: Lead }) {
             setError(null);
             update.mutateAsync({ id: lead.id, patch: { name: name.trim(), contact: contact.trim() } }).then(
               () => setEditing(false),
-              (e) => setError(e instanceof Error ? e.message : 'Failed to save'),
+              (e) => setError(friendlyError(e, 'Failed to save')),
             );
           }}
         >
@@ -395,7 +396,7 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
               })
               .then(
                 () => setEditing(false),
-                (e) => setError(e instanceof Error ? e.message : 'Failed to save'),
+                (e) => setError(friendlyError(e, 'Failed to save')),
               );
           }}
         >
@@ -559,7 +560,7 @@ function FollowUpSection({ lead }: { lead: Lead }) {
               })
               .then(
                 () => setEditing(false),
-                (e) => setError(e instanceof Error ? e.message : 'Failed to save'),
+                (e) => setError(friendlyError(e, 'Failed to save')),
               );
           }}
         >
