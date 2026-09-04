@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { demoReset } from '../../../data/demo/store';
+import { getSupabaseClient } from '../../../data/client';
+import { pinLockExists, removePinLock, savePinLock } from '../../../shared/lib/pinLock';
 import { useUpdateSignature } from '../hooks/useSignature';
 import { useEnablePushNotifications, getPushSupportState, type PushSupportState } from '../hooks/usePushNotifications';
 import styles from './MoreScreen.module.css';
@@ -27,6 +29,53 @@ export function MoreScreen() {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [pushState, setPushState] = useState<PushSupportState>(() => getPushSupportState());
   const enablePush = useEnablePushNotifications();
+  const [pinOn, setPinOn] = useState(() => (profile ? pinLockExists(profile.key) : false));
+  const [showPinForm, setShowPinForm] = useState(false);
+  const [pin1, setPin1] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
+
+  // Ported from index.html's saveAccountPin() (17098-17109) -- encrypts
+  // the CURRENT real session's tokens with a PIN-derived key, stored only
+  // on this device (shared/lib/pinLock.ts). Only meaningful in live mode
+  // -- demo mode has no real Supabase session for a PIN to unlock later.
+  async function handleSavePin() {
+    setPinError(null);
+    if (!/^\d{4,6}$/.test(pin1)) {
+      setPinError('PIN must be 4-6 digits');
+      return;
+    }
+    if (pin1 !== pin2) {
+      setPinError('PINs do not match');
+      return;
+    }
+    if (!profile) return;
+    setPinSaving(true);
+    try {
+      const client = getSupabaseClient();
+      const { data, error } = (await client?.auth.getSession()) ?? { data: null, error: new Error('Not configured') };
+      if (error || !data?.session) {
+        setPinError('Could not read your session -- try signing out and back in.');
+        return;
+      }
+      await savePinLock(profile.key, pin1, data.session);
+      setPinOn(true);
+      setShowPinForm(false);
+      setPin1('');
+      setPin2('');
+    } catch {
+      setPinError('Could not save a PIN on this device/browser.');
+    } finally {
+      setPinSaving(false);
+    }
+  }
+
+  function handleTurnOffPin() {
+    if (!profile) return;
+    removePinLock(profile.key);
+    setPinOn(false);
+  }
 
   async function handleEnablePush() {
     try {
@@ -182,6 +231,33 @@ export function MoreScreen() {
 
       <div className={styles.sectionTitle}>Account</div>
       <div className={styles.card}>
+        {!demoMode && (
+          <div className={styles.row}>
+            <div>
+              <div className={styles.rowLabel}>PIN sign-in</div>
+              <div className={styles.rowSub}>{pinOn ? 'On for this device -- skip typing your password next time' : 'Skip your password on this device with a 4-6 digit PIN'}</div>
+            </div>
+            {pinOn ? (
+              <button type="button" className={styles.actionBtn} onClick={handleTurnOffPin}>
+                Turn off
+              </button>
+            ) : (
+              <button type="button" className={styles.actionBtn} onClick={() => setShowPinForm((v) => !v)}>
+                {showPinForm ? 'Cancel' : 'Turn on'}
+              </button>
+            )}
+          </div>
+        )}
+        {!demoMode && showPinForm && !pinOn && (
+          <div className={styles.row} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+            <input className={styles.sigFileInput} style={{ padding: '10px 12px', border: '1px solid var(--c-line)', borderRadius: 10 }} type="password" inputMode="numeric" placeholder="New PIN (4-6 digits)" value={pin1} onChange={(e) => setPin1(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+            <input className={styles.sigFileInput} style={{ padding: '10px 12px', border: '1px solid var(--c-line)', borderRadius: 10 }} type="password" inputMode="numeric" placeholder="Confirm PIN" value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+            {pinError && <div className={styles.sigHint} style={{ color: 'var(--c-danger)' }}>{pinError}</div>}
+            <button type="button" className={styles.actionBtn} disabled={pinSaving} onClick={handleSavePin}>
+              {pinSaving ? 'Saving…' : 'Save PIN'}
+            </button>
+          </div>
+        )}
         <div className={styles.row}>
           <div>
             <div className={styles.rowLabel}>Sign out</div>
