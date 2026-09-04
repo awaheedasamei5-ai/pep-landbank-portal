@@ -5,6 +5,7 @@ import type { Role } from '../types/domain';
 import { useSessionStore } from './useSessionStore';
 import { useLiveLogin } from './useLiveLogin';
 import { usePinLogin } from './usePinLogin';
+import { useSendResetCode, useConfirmReset } from './usePasswordReset';
 import { isConfigured } from '../shared/lib/env';
 import { fetchStaffDirectory, type StaffDirectoryEntry } from '../data/staffDirectoryClient';
 import { pinLockExists } from '../shared/lib/pinLock';
@@ -19,23 +20,34 @@ import styles from './LoginScreen.module.css';
 // showing the option there would just be a guaranteed-broken button.
 //
 // Live mode includes the real staff-picker-before-password step
-// (index.html's refreshStaffList()/selectStaff()) and PIN quick-unlock
-// (usePinLogin.ts/shared/lib/pinLock.ts, both ported 2026-09-04) -- if
-// this device has a PIN saved for the selected staff member (turned on
-// from More > Account), the PIN input replaces the password field by
-// default, with a plain toggle back to password. Deliberately still NOT
-// ported: password-reset-via-OTP -- a real, separable feature.
+// (index.html's refreshStaffList()/selectStaff()), PIN quick-unlock
+// (usePinLogin.ts/shared/lib/pinLock.ts), and in-app password reset
+// (usePasswordReset.ts -- email -> 6-digit code -> new password, no
+// redirect link) -- all ported 2026-09-04. If this device has a PIN
+// saved for the selected staff member (turned on from More > Account),
+// the PIN input replaces the password field by default, with a plain
+// toggle back to password. Deliberately still NOT ported: a manager-
+// facing new-staff-invite flow -- a real, separable feature.
 export function LoginScreen() {
   const login = useSessionStore((s) => s.login);
   const navigate = useNavigate();
   const liveLogin = useLiveLogin();
   const pinLogin = usePinLogin();
-  const [mode, setMode] = useState<'demo' | 'live'>('demo');
+  const sendResetCode = useSendResetCode();
+  const confirmReset = useConfirmReset();
+  const [mode, setMode] = useState<'demo' | 'live' | 'reset'>('demo');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<StaffDirectoryEntry | null>(null);
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
   const [useLoginMode, setUseLoginMode] = useState<'pin' | 'password'>('password');
+  const [resetStep, setResetStep] = useState<'email' | 'code'>('email');
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetPw1, setResetPw1] = useState('');
+  const [resetPw2, setResetPw2] = useState('');
+  const [resetPwMismatch, setResetPwMismatch] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState(false);
   const liveAvailable = isConfigured('supabaseUrl') && isConfigured('supabaseAnonKey');
 
   const { data: staff } = useQuery({ queryKey: ['staffDirectory'], queryFn: fetchStaffDirectory, enabled: mode === 'live' });
@@ -68,6 +80,51 @@ export function LoginScreen() {
 
   const activeError = useLoginMode === 'pin' ? pinLogin.error : liveLogin.error;
   const isPending = useLoginMode === 'pin' ? pinLogin.isPending : liveLogin.isPending;
+
+  function openReset() {
+    setResetEmail(selected?.email ?? '');
+    setResetStep('email');
+    setResetCode('');
+    setResetPw1('');
+    setResetPw2('');
+    setResetPwMismatch(null);
+    setResetDone(false);
+    setMode('reset');
+  }
+
+  function backFromReset() {
+    setMode('live');
+  }
+
+  async function submitSendCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resetEmail.trim()) return;
+    await sendResetCode.mutateAsync(resetEmail.trim()).then(
+      () => setResetStep('code'),
+      () => {},
+    );
+  }
+
+  async function submitConfirmReset(e: React.FormEvent) {
+    e.preventDefault();
+    setResetPwMismatch(null);
+    if (!/^\d{4,10}$/.test(resetCode.trim())) {
+      setResetPwMismatch('Enter the code from your email.');
+      return;
+    }
+    if (resetPw1.length < 6) {
+      setResetPwMismatch('Password must be at least 6 characters.');
+      return;
+    }
+    if (resetPw1 !== resetPw2) {
+      setResetPwMismatch('Passwords do not match.');
+      return;
+    }
+    await confirmReset.mutateAsync({ email: resetEmail.trim(), code: resetCode.trim(), password: resetPw1 }).then(
+      () => setResetDone(true),
+      () => {},
+    );
+  }
 
   return (
     <div className={styles.wrap}>
@@ -138,10 +195,54 @@ export function LoginScreen() {
                 {useLoginMode === 'pin' ? 'Use password instead' : 'Use PIN instead'}
               </button>
             )}
+            {useLoginMode === 'password' && (
+              <button type="button" className={styles.modeLink} onClick={openReset}>
+                Forgot password?
+              </button>
+            )}
             <button type="button" className={styles.modeLink} onClick={() => setSelected(null)}>
               ← Not you?
             </button>
           </form>
+        )}
+
+        {mode === 'reset' && (
+          <>
+            <p className={styles.sub}>Reset your password</p>
+            {resetDone ? (
+              <>
+                <p className={styles.resetDoneMsg}>Password updated — sign in with your new password.</p>
+                <button type="button" className={styles.btnAgent} onClick={backFromReset}>
+                  Back to sign in
+                </button>
+              </>
+            ) : resetStep === 'email' ? (
+              <form onSubmit={submitSendCode}>
+                <input className={styles.input} type="email" placeholder="Your work email" autoComplete="username" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required autoFocus />
+                {sendResetCode.isError && <p className={styles.error}>{(sendResetCode.error as Error).message}</p>}
+                <button type="submit" className={styles.btnAgent} disabled={sendResetCode.isPending}>
+                  {sendResetCode.isPending ? 'Sending…' : 'Send code'}
+                </button>
+                <button type="button" className={styles.modeLink} onClick={backFromReset}>
+                  ← Back
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={submitConfirmReset}>
+                <p className={styles.resetSentMsg}>Code sent to {resetEmail}</p>
+                <input className={styles.input} placeholder="6-digit code" inputMode="numeric" value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 10))} required autoFocus />
+                <input className={styles.input} type="password" placeholder="New password" autoComplete="new-password" value={resetPw1} onChange={(e) => setResetPw1(e.target.value)} required />
+                <input className={styles.input} type="password" placeholder="Confirm new password" autoComplete="new-password" value={resetPw2} onChange={(e) => setResetPw2(e.target.value)} required />
+                {(resetPwMismatch || confirmReset.isError) && <p className={styles.error}>{resetPwMismatch ?? (confirmReset.error as Error).message}</p>}
+                <button type="submit" className={styles.btnAgent} disabled={confirmReset.isPending}>
+                  {confirmReset.isPending ? 'Setting password…' : 'Set new password'}
+                </button>
+                <button type="button" className={styles.modeLink} onClick={backFromReset}>
+                  ← Back
+                </button>
+              </form>
+            )}
+          </>
         )}
       </div>
     </div>

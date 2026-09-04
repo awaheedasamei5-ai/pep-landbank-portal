@@ -135,3 +135,17 @@
   margin-bottom: var(--sp-3);
 }
 .changeLink { color: var(--c-muted); font-size: var(--fs-sm); font-weight: var(--fw-semi); }
+
+.resetSentMsg {
+  color: var(--c-muted);
+  font-size: var(--fs-sm);
+  margin: -6px 0 var(--sp-3);
+  text-align: left;
+}
+
+.resetDoneMsg {
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: 0 0 var(--sp-4);
+}
