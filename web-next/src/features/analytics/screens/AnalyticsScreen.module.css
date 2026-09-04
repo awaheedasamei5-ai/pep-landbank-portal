@@ -1,4 +1,8 @@
 .wrap { padding: 20px 16px 90px; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 900px; padding: 28px 32px 40px; }
+}
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 10px; font-size: 13px; }
 .eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .title { font-size: 21px; margin: 2px 0 4px; }
