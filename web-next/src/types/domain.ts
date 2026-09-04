@@ -1275,6 +1275,25 @@ export interface AuditEvent {
   source: string;
 }
 
+// Real table `report_archive` (ported to staging 2026-09-03 -- already live
+// on production, written by daily-management-report on every run, success
+// or failure). Master Rebuild Spec Section 3.5's System Health checklist
+// names "last successful report" explicitly; `retry_count` exists on the
+// real table for a future manual-retry feature but isn't incremented by
+// anything yet (no screen calls it) -- present here so the type matches the
+// real column, not because a retry action exists to wire it to.
+export interface ReportArchiveEntry {
+  id: string;
+  reportDate: string;
+  generatedAt: string;
+  recipients: string | null;
+  generationStatus: 'success' | 'failed';
+  emailStatus: 'sent' | 'skipped' | 'failed' | null;
+  checksum: string | null;
+  errorDetail: string | null;
+  retryCount: number;
+}
+
 // Real table `backups` + RPCs `create_backup`/`restore_backup` (confirmed
 // live on both projects -- production runs these on a 6am/2pm/10pm cron,
 // staging already carries 30 real rows from the same schedule). Deliberately

@@ -1,4 +1,4 @@
-import type { AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionOverride, Plot, Referral, ScheduleItem, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
+import type { AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionOverride, Plot, Referral, ReportArchiveEntry, ScheduleItem, SiteVisit, StaffAchievement, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -63,9 +63,10 @@ export interface DemoDb {
   backups: (BackupRecord & { snapshot: Partial<DemoDb> })[];
   permissionOverrides: PermissionOverride[];
   importBatches: ImportBatch[];
+  reportArchive: ReportArchiveEntry[];
 }
 
-const DEMO_VERSION = 43;
+const DEMO_VERSION = 44;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;
@@ -85,6 +86,16 @@ export function demoLoad(): DemoDb {
     // fall through to reseed
   }
   demoMem = seedDemo();
+  // Real bug caught live 2026-09-03: seed.ts's own returned object hardcodes
+  // a stale `version: 40` literal that was never kept in sync with this
+  // file's DEMO_VERSION (long since bumped past it by later feature work),
+  // so the guard above could never match -- every single reload silently
+  // wiped and reseeded demo data, discarding anything a demo session had
+  // written (a lead added, a payment logged, this very screen's own test
+  // data). Stamping the real current version here, once, in the one place
+  // that already owns DEMO_VERSION, instead of trying to keep two files in
+  // sync by hand.
+  demoMem.version = DEMO_VERSION;
   demoSave();
   return demoMem;
 }

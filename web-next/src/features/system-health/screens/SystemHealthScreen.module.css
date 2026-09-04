@@ -46,3 +46,40 @@
 
 .cardTitle { font-weight: 700; font-size: 14px; }
 .cardSub { color: var(--c-muted); font-size: 12px; }
+
+.sectionTitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 22px 0 10px; }
+
+.jobList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--c-line);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.jobRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--c-card);
+  padding: 12px 14px;
+}
+
+.jobName { font-weight: 700; font-size: 13.5px; }
+.jobCadence { color: var(--c-muted); font-size: 11.5px; margin-top: 1px; }
+
+.jobStatus {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.jobStatusOk { background: #ECFDF5; color: #059669; }
+.jobStatusFail { background: #FEF2F2; color: #B91C1C; }
+
+.jobFailDetail { font-size: 11.5px; color: #B91C1C; padding: 0 14px 10px; background: var(--c-card); }

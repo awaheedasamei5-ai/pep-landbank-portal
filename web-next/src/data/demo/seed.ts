@@ -684,7 +684,11 @@ export function seedDemo(): DemoDb {
   ];
 
   return {
-    version: 40,
+    // Overwritten by demoLoad() with the real DEMO_VERSION immediately
+    // after this call -- store.ts is the single source of truth for the
+    // version number (this file used to hardcode its own stale copy,
+    // which silently broke the reseed guard -- see demoLoad()'s comment).
+    version: 0,
     leads,
     payments,
     scheduleItems,
@@ -736,6 +740,11 @@ export function seedDemo(): DemoDb {
       { staffKey: 'elizabeth', permissionKey: 'ops.view_all', granted: true, grantedBy: 'migration', grantedAt: '2026-09-03T00:00:00Z' },
     ],
     importBatches: [],
+    reportArchive: [
+      { id: uid(), reportDate: isoPlusDays(t, 0), generatedAt: isoPlusDays(t, 0) + 'T09:00:00Z', recipients: 'management@landbankghana.com', generationStatus: 'success', emailStatus: 'sent', checksum: 'demo0checksum', errorDetail: null, retryCount: 0 },
+      { id: uid(), reportDate: isoPlusDays(t, -1), generatedAt: isoPlusDays(t, -1) + 'T09:00:00Z', recipients: 'management@landbankghana.com', generationStatus: 'success', emailStatus: 'sent', checksum: 'demo1checksum', errorDetail: null, retryCount: 0 },
+      { id: uid(), reportDate: isoPlusDays(t, -2), generatedAt: isoPlusDays(t, -2) + 'T09:00:00Z', recipients: 'management@landbankghana.com', generationStatus: 'success', emailStatus: 'sent', checksum: 'demo2checksum', errorDetail: null, retryCount: 0 },
+    ],
   };
 }
 

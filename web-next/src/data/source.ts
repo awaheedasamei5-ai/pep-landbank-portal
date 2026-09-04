@@ -1,4 +1,4 @@
-import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, NewReferral, NewSiteVisit, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -31,6 +31,7 @@ import {
   mapPlotRow,
   mapProfileRow,
   mapReferralRow,
+  mapReportArchiveRow,
   mapScheduleItemRow,
   mapSiteVisitRow,
   mapSveInviteRow,
@@ -421,6 +422,16 @@ export interface DataSource {
   // key/name, never a caller-supplied one.
   importBatches: {
     create(importedBy: string, importedByName: string, batch: NewImportBatch): Promise<void>;
+  };
+  // Real table `report_archive` (ported to staging 2026-09-03; already live
+  // on production, written by daily-management-report on every run). Read-
+  // only from this app -- report_archive_sel RLS is manager-only SELECT
+  // with zero INSERT/UPDATE policies, the edge function's service-role
+  // client is the sole write path, same shape as audit_events/backups.
+  // Closes the master spec's "Admin System Health page:... last successful
+  // report" line -- System Health had no visibility into this at all before.
+  reportArchive: {
+    list(limit?: number): Promise<ReportArchiveEntry[]>;
   };
   // Real tables `achievement_definitions`/`staff_achievements` (confirmed
   // live, already fully seeded on both projects with the same 8 real
@@ -1370,6 +1381,12 @@ function createDemoDataSource(): DataSource {
         const rec: ImportBatch = { id: crypto.randomUUID(), importedBy, importedByName, ...batch, createdAt: new Date().toISOString() };
         db.importBatches = [rec, ...(db.importBatches ?? [])];
         demoSave();
+      },
+    },
+    reportArchive: {
+      async list(limit = 30) {
+        const db = demoLoad();
+        return (db.reportArchive ?? []).slice(0, limit);
       },
     },
     achievements: {
@@ -2743,6 +2760,13 @@ function createLiveDataSource(): DataSource {
             details: batch.details,
           });
         if (error) throw error;
+      },
+    },
+    reportArchive: {
+      async list(limit = 30) {
+        const { data, error } = await requireClient().from('report_archive').select('*').order('generated_at', { ascending: false }).limit(limit);
+        if (error) throw error;
+        return (data ?? []).map(mapReportArchiveRow);
       },
     },
     achievements: {
