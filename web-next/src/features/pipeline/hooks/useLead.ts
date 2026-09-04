@@ -58,6 +58,21 @@ export function useUpdateLead() {
   });
 }
 
+// Bulk-safe reassignment (My Pipeline's "Assign" bulk action, Master Spec
+// Section 4.1) -- real leads.assign() RPC-free UPDATE, already existed
+// for other call sites (Company Leads), just needed a hook wrapper here.
+export function useAssignLead() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, agentKey }: { id: string; agentKey: string }) => getDataSource(demoMode).leads.assign(id, agentKey),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+}
+
 export function useUpdateLeadDocStage() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const qc = useQueryClient();

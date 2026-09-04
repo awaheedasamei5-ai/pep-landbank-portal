@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { ghs } from '../../../shared/lib/format';
+import { ghs, today } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLogPayment';
 import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
@@ -486,10 +486,15 @@ function FollowUpSection({ lead }: { lead: Lead }) {
   const [editing, setEditing] = useState(false);
   const [markLost, setMarkLost] = useState(lead.stage === 'Lost');
   const [nextAction, setNextAction] = useState(lead.nextAction ?? '');
+  const [nextActionDate, setNextActionDate] = useState(lead.nextActionDate ?? '');
   const [notes, setNotes] = useState(lead.notes ?? '');
   const [tags, setTags] = useState(lead.tags ?? '');
   const [siteVisit, setSiteVisit] = useState(lead.siteVisit === 'Yes');
   const [error, setError] = useState<string | null>(null);
+
+  // Master Spec Section 4.6: "Next-action date overdue -> red overdue
+  // state." today() as a plain string compare works fine for YYYY-MM-DD.
+  const isOverdue = !!lead.nextActionDate && lead.nextActionDate < today() && lead.stage !== '4' && lead.stage !== 'Lost';
 
   if (!editing) {
     return (
@@ -503,6 +508,13 @@ function FollowUpSection({ lead }: { lead: Lead }) {
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Next step</span>
           <span>{lead.nextAction || '—'}</span>
+        </div>
+        <div className={styles.readRow}>
+          <span className={styles.readLabel}>Due</span>
+          <span className={isOverdue ? styles.overdueText : undefined}>
+            {lead.nextActionDate ? lead.nextActionDate : '—'}
+            {isOverdue ? ' · Overdue' : ''}
+          </span>
         </div>
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Tags</span>
@@ -526,6 +538,10 @@ function FollowUpSection({ lead }: { lead: Lead }) {
       <div className={styles.field}>
         <label className={styles.label}>Next step agreed</label>
         <input className={styles.input} value={nextAction} onChange={(e) => setNextAction(e.target.value)} />
+      </div>
+      <div className={styles.field}>
+        <label className={styles.label}>Due date (optional)</label>
+        <input className={styles.input} type="date" value={nextActionDate} onChange={(e) => setNextActionDate(e.target.value)} />
       </div>
       <div className={styles.field}>
         <label className={styles.label}>Notes</label>
@@ -556,6 +572,7 @@ function FollowUpSection({ lead }: { lead: Lead }) {
                 patch: {
                   stage: markLost ? 'Lost' : lead.stage,
                   nextAction: nextAction.trim(),
+                  nextActionDate: nextActionDate || null,
                   notes: notes.trim(),
                   tags: tags.trim(),
                   siteVisit: siteVisit ? 'Yes' : lead.siteVisit ?? undefined,

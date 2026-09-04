@@ -33,6 +33,7 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     depositTarget: r.deposit_target != null ? Number(r.deposit_target) : null,
     kyc: (r.kyc as Lead['kyc']) ?? null,
     nextAction: (r.next_action as string) ?? null,
+    nextActionDate: (r.next_action_date as string) ?? null,
     priority: (r.priority as string) ?? null,
     tags: (r.tags as string) ?? null,
     siteVisit: (r.site_visit as string) ?? null,

@@ -5,11 +5,25 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .title { font-size: 22px; margin: 0; }
 .sub { color: var(--c-muted); margin: 4px 0 0; font-size: 13.5px; }
 .emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+.headActions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.iconBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
 
 .addBtn {
   background: var(--c-accent);
@@ -22,19 +36,244 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.pillsWrap { margin-bottom: 18px; }
+
+.search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+
+.kpiWrap { margin-bottom: 16px; }
+
+/* Stage funnel tabs -- real spec vocabulary (New/Discovery/Qualified/
+   Negotiation/Closed-Won/Lost), horizontally scrollable so it never wraps
+   awkwardly on a narrow phone. */
+.stageTabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+}
+.stageTabs::-webkit-scrollbar { display: none; }
+
+.stageTab {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stageTabOn { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+
+.filterToggle {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--c-line);
+  background: none;
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* The mobile "opens in a bottom sheet" requirement (4.2) and the desktop
+   inline panel (4.1) share this one component -- a slide-down panel
+   rather than two separate implementations, matching how the table/card
+   list itself is one dataset with two CSS-toggled presentations. */
+.filterPanel {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (width >= 640px) {
+  .filterGrid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-muted);
+}
+.filterField select, .filterField input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.filterCheck {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.clearFiltersBtn {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Bulk action bar -- only export/assign/tag/archive are offered, per
+   spec 4.1's explicit "Bulk deletion is prohibited" -- there is no bulk
+   delete button anywhere in this file, by design, not by omission. */
+.bulkBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.bulkCount { font-size: 12.5px; font-weight: 700; color: var(--c-text); }
+.bulkActions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+.bulkBtn, .bulkBtnDanger, .bulkCancel {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+}
+.bulkBtn { background: var(--c-card); color: var(--c-accent); border: 1px solid var(--c-line); }
+.bulkBtnDanger { background: var(--c-danger); color: #fff; }
+.bulkCancel { background: none; color: var(--c-muted); }
+.bulkBtn:disabled, .bulkBtnDanger:disabled { opacity: .6; cursor: default; }
+
+.bulkInput {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 12.5px;
+}
+
+/* Desktop dense table (4.1) -- hidden by default, shown >=900px, where
+   .cardList (the mobile stacked-card view, 4.2) hides instead. Same
+   `filtered` array feeds both -- there is exactly one place selection/
+   filter state lives. */
+.tableWrap {
+  display: none;
+  overflow-x: auto;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+}
+.table { border-collapse: collapse; width: 100%; min-width: 780px; }
+.th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--c-muted);
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--c-line);
+  white-space: nowrap;
+}
+.tr:hover { background: var(--c-paper); }
+.td { padding: 10px; border-bottom: 1px solid var(--c-line); font-size: 12.5px; color: var(--c-text); white-space: nowrap; }
+.tdName { font-weight: 700; cursor: pointer; }
+.tdName:hover { color: var(--c-accent); }
+.tdMono { font-family: var(--font-mono); }
+.tdOverdue { color: var(--c-danger); font-weight: 700; }
+
+.editIconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  cursor: pointer;
+  font-size: 12px;
+}
+.editIconBtn:hover { background: var(--c-accent-soft); color: var(--c-accent); }
+
+.cardList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+
+/* Placed after .cardList's own rule so this media query's display:none
+   actually wins the cascade at >=900px instead of being overridden by
+   source order -- real bug caught live: both the table and the card
+   list were rendering at once until this was reordered. */
+@media (width >= 900px) {
+  .tableWrap { display: block; }
+  .cardList { display: none; }
+}
 
 .row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: var(--c-card);
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
   padding: 14px 16px;
-  margin-bottom: 10px;
   box-shadow: var(--shadow);
+}
+.rowCheck { flex-shrink: 0; }
+.rowBody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+
+.editIconBtnMobile {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
   cursor: pointer;
+  font-size: 13px;
 }
 
 .avatar {
@@ -68,6 +307,7 @@
 .rowMain { flex: 1; min-width: 0; }
 .name { font-weight: 700; font-size: 14px; color: var(--c-text); }
 .meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overdueChip { color: var(--c-danger); font-weight: 700; }
 .right { text-align: right; flex-shrink: 0; }
 .value { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
 .stageWrap { margin-top: 4px; }

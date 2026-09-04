@@ -80,6 +80,11 @@ export interface Lead {
   depositTarget?: number | null;
   kyc?: LeadKyc | null;
   nextAction?: string | null;
+  // Real column next_action_date (added 2026-09-06, Master Spec Section
+  // 4.6: "Next-action date overdue -> red overdue state and optional
+  // task"). Optional -- a staff member can type a next step without a
+  // date, but only a dated one can ever be "overdue".
+  nextActionDate?: string | null;
   // Real column `priority` (confirmed live, text -- 'High'/'Medium'/'Low'
   // in practice, no enum constraint) -- was a real, unmapped column this
   // whole build; only surfaced when Smart Insights needed it for its
@@ -138,6 +143,7 @@ export interface LeadUpdate {
   amtPaid?: number;
   stage?: Stage;
   nextAction?: string;
+  nextActionDate?: string | null;
   notes?: string;
   tags?: string;
   siteVisit?: string;

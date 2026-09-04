@@ -2288,6 +2288,7 @@ function createLiveDataSource(): DataSource {
         if ('amtPaid' in patch) dbPatch.amt_paid = patch.amtPaid;
         if ('stage' in patch) dbPatch.stage = patch.stage;
         if ('nextAction' in patch) dbPatch.next_action = patch.nextAction;
+        if ('nextActionDate' in patch) dbPatch.next_action_date = patch.nextActionDate;
         if ('notes' in patch) dbPatch.notes = patch.notes;
         if ('tags' in patch) dbPatch.tags = patch.tags;
         if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;

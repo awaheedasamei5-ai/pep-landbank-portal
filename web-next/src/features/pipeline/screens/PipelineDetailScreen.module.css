@@ -151,6 +151,7 @@
 }
 .readRow:last-child { border-bottom: none; }
 .readLabel { color: var(--c-muted); font-size: 12px; font-weight: 600; }
+.overdueText { color: var(--c-danger); font-weight: 700; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid2 .field { margin-bottom: 12px; }
