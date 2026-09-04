@@ -64,6 +64,7 @@ export function LogPaymentScreen() {
       input: { leadId: selectedLead.id, amount: values.amount, paymentDate: values.paymentDate, paymentMethod: values.paymentMethod as (typeof PAYMENT_METHODS)[number] | undefined, note: values.note },
       leadName: selectedLead.name,
       leadAgentKey: selectedLead.agent,
+      leadContact: selectedLead.contact,
     });
     // Uploaded as a separate step after the payment itself is created --
     // a failed upload (bad connection, oversized photo) shouldn't lose the
@@ -170,7 +171,7 @@ export function LogPaymentScreen() {
   );
 }
 
-function PendingPaymentRow({ payment, canDecide }: { payment: Payment; lead: Lead | null; canDecide: boolean }) {
+function PendingPaymentRow({ payment, lead, canDecide }: { payment: Payment; lead: Lead | null; canDecide: boolean }) {
   const { id: paymentId, clientName, amount, date, note, receiptProofPath } = payment;
   const approve = useApprovePayment();
   const decline = useDeclinePayment();
@@ -200,7 +201,7 @@ function PendingPaymentRow({ payment, canDecide }: { payment: Payment; lead: Lea
       )}
       {canDecide && !declining && (
         <div className={styles.pendingActions}>
-          <button type="button" className={styles.approveBtn} disabled={approve.isPending} onClick={() => approve.mutate(paymentId)}>
+          <button type="button" className={styles.approveBtn} disabled={approve.isPending} onClick={() => approve.mutate({ paymentId, leadName: clientName, leadContact: lead?.contact, amount })}>
             {approve.isPending ? 'Approving…' : 'Approve'}
           </button>
           <button type="button" className={styles.declineBtn} onClick={() => setDeclining(true)}>

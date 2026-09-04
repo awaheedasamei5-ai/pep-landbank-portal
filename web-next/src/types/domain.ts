@@ -20,6 +20,11 @@ export interface Profile {
   // (index.html's getStaffSignature()/pdfStampSignature()). Optional/null
   // since most staff never upload one.
   signatureData?: string | null;
+  // Real column `phone` (confirmed live) -- used to send a staff member
+  // an SMS (task assigned/escalated, leave decided) via phoneForStaffKey's
+  // real equivalent (index.html), not shown anywhere in the UI itself.
+  // Optional/undefined on call sites that never selected it.
+  phone?: string;
 }
 
 export type PlotType = 'Full Plot' | 'Half Plot';

@@ -15,6 +15,8 @@ export function useComplaints() {
   });
 }
 
+// Confirmation SMS to the client on submission -- matches index.html's own
+// apiSendSms call right after the insert (index.html:3722), fire-and-forget.
 export function useCreateComplaint() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -23,7 +25,15 @@ export function useCreateComplaint() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: NewComplaint) => getDataSource(demoMode).complaints.create(agentKey, agentName, input),
+    mutationFn: async (input: NewComplaint) => {
+      const rec = await getDataSource(demoMode).complaints.create(agentKey, agentName, input);
+      if (input.contact) {
+        getDataSource(demoMode)
+          .sms.send(input.contact, `Hi ${input.name || ''}, we've received your feedback and someone from our team will follow up with you soon. - PEP Landbank`, 'complaint_submitted', agentKey || null)
+          .catch(() => {});
+      }
+      return rec;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['complaints', agentKey] }),
   });
 }

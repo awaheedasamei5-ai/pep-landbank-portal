@@ -466,6 +466,17 @@ export interface DataSource {
   pushSubscriptions: {
     save(ownerKind: 'staff' | 'client', ownerId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
   };
+  // Real Edge Function `send-sms` (Arkesel proxy, already live and used
+  // elsewhere -- payment reminders, SVE invites) + table `sms_log`
+  // (confirmed live RLS on both projects: any authenticated user can
+  // insert their own row; select is own-or-manager). Mirrors apiSendSms
+  // (index.html:4307-4322) exactly: never throws -- a failed SMS should
+  // never roll back or block whatever real action triggered it, so
+  // callers fire-and-forget this rather than awaiting inside a try/catch
+  // of their own.
+  sms: {
+    send(to: string, message: string, trigger: string, sentByKey: string | null): Promise<boolean>;
+  };
   // Real RPCs `create_backup`/`restore_backup` + table `backups`
   // (confirmed live on both projects -- production runs these on a
   // 6am/2pm/10pm cron plus a manual trigger, 30 real backups on file).
@@ -1439,6 +1450,14 @@ function createDemoDataSource(): DataSource {
         // server-side push_subscriptions table to write to) -- the
         // subscribe flow itself already short-circuits before calling
         // this in demo mode, this is just here to satisfy the interface.
+      },
+    },
+    sms: {
+      async send() {
+        // Demo mode never sends a real SMS (no Arkesel key, no real phone
+        // number to text) -- matches apiSendSms's own DEMO_MODE branch,
+        // which just returns true without a network call.
+        return true;
       },
     },
     backups: {
@@ -2844,6 +2863,30 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
       },
     },
+    sms: {
+      async send(to, message, trigger, sentByKey) {
+        if (!to) return false;
+        let ok = false;
+        let errMsg: string | null = null;
+        try {
+          const { data, error } = await requireClient().functions.invoke('send-sms', { body: { to, message, sender: 'Trulander' } });
+          if (error) throw error;
+          ok = !!data?.ok;
+          if (!ok) errMsg = data?.data?.message ? String(data.data.message) : 'SMS provider rejected the request';
+        } catch (e) {
+          errMsg = e instanceof Error ? e.message : String(e);
+        }
+        try {
+          await requireClient()
+            .from('sms_log')
+            .insert({ recipient: to, message, trigger: trigger || null, sent_by: sentByKey, status: ok ? 'sent' : 'failed', error: errMsg });
+        } catch {
+          // Logging the send is best-effort too -- never let a sms_log
+          // insert failure mask the real send result the caller needs.
+        }
+        return ok;
+      },
+    },
     backups: {
       async list() {
         const { data, error } = await requireClient().from('backups').select('id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum').order('created_at', { ascending: false });
@@ -3057,12 +3100,12 @@ function createLiveDataSource(): DataSource {
     },
     staff: {
       async list() {
-        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active').eq('active', true);
+        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active,phone').eq('active', true);
         if (error) throw error;
         return (data ?? []).map(mapProfileRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active');
+        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active,phone');
         if (error) throw error;
         return (data ?? []).map(mapProfileRow);
       },

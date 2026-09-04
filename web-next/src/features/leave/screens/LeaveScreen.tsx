@@ -167,10 +167,10 @@ function LeaveRow({ request, canDecide }: { request: LeaveRequest; canDecide: bo
       {request.status === 'pending' ? (
         canDecide ? (
           <div className={styles.decideActions}>
-            <button type="button" className={styles.approveBtn} disabled={decide.isPending} onClick={() => decide.mutate({ id: request.id, approve: true })}>
+            <button type="button" className={styles.approveBtn} disabled={decide.isPending} onClick={() => decide.mutate({ id: request.id, approve: true, agentKey: request.agentKey, daysCount: request.daysCount, year: request.year })}>
               Approve
             </button>
-            <button type="button" className={styles.declineBtn} disabled={decide.isPending} onClick={() => decide.mutate({ id: request.id, approve: false })}>
+            <button type="button" className={styles.declineBtn} disabled={decide.isPending} onClick={() => decide.mutate({ id: request.id, approve: false, agentKey: request.agentKey, daysCount: request.daysCount, year: request.year })}>
               Decline
             </button>
           </div>

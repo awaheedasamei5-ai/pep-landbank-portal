@@ -15,6 +15,8 @@ export function useSiteVisits() {
   });
 }
 
+// Confirmation SMS to the client on request -- matches index.html's own
+// apiSendSms call right after the insert (index.html:3738), fire-and-forget.
 export function useCreateSiteVisit() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -23,7 +25,15 @@ export function useCreateSiteVisit() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: NewSiteVisit) => getDataSource(demoMode).siteVisits.create(agentKey, agentName, input),
+    mutationFn: async (input: NewSiteVisit) => {
+      const rec = await getDataSource(demoMode).siteVisits.create(agentKey, agentName, input);
+      if (input.contact) {
+        getDataSource(demoMode)
+          .sms.send(input.contact, `Hi ${input.name || ''}, your site visit request to Royal Palm Enclave has been received. We'll confirm the date/time shortly. - PEP Landbank`, 'site_visit_requested', agentKey || null)
+          .catch(() => {});
+      }
+      return rec;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['siteVisits', agentKey] });
     },

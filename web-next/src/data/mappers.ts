@@ -266,6 +266,7 @@ export function mapProfileRow(r: Record<string, unknown>): Profile {
     email: (r.email as string) ?? undefined,
     active: (r.active as boolean) ?? true,
     signatureData: (r.signature_data as string) ?? null,
+    phone: (r.phone as string) ?? undefined,
   };
 }
 

@@ -39,15 +39,25 @@ function useInvalidatePaymentEffects() {
 // no review needed); 'elias' logging it is always 'pending' regardless
 // of who the lead's own agent is, since elias isn't Management and the
 // real RLS/RPC gate on approve_payment requires my_role()='manager'.
+// A payment that lands 'approved' (either immediately here, or later via
+// useApprovePayment) fires the client's real thank-you SMS -- matches
+// applyApprovedPaymentToLead's own apiSendSms call (index.html:4259),
+// fire-and-forget so a failed text never blocks the payment itself.
 export function useCreatePayment() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
   const invalidate = useInvalidatePaymentEffects();
 
   return useMutation({
-    mutationFn: ({ input, leadName, leadAgentKey }: { input: NewPaymentEntry; leadName: string; leadAgentKey: string }) => {
+    mutationFn: async ({ input, leadName, leadAgentKey, leadContact }: { input: NewPaymentEntry; leadName: string; leadAgentKey: string; leadContact?: string }) => {
       const status = profile?.role === 'manager' ? 'approved' : 'pending';
-      return getDataSource(demoMode).payments.create(input, leadName, leadAgentKey, status);
+      const payment = await getDataSource(demoMode).payments.create(input, leadName, leadAgentKey, status);
+      if (status === 'approved' && leadContact) {
+        getDataSource(demoMode)
+          .sms.send(leadContact, `Hi ${leadName}, thank you for your payment of GHS ${input.amount.toLocaleString('en-GH')} towards your plot at Royal Palm Enclave. - PEP Landbank`, 'payment_thanks', profile?.key ?? null)
+          .catch(() => {});
+      }
+      return payment;
     },
     onSuccess: invalidate,
   });
@@ -59,7 +69,15 @@ export function useApprovePayment() {
   const invalidate = useInvalidatePaymentEffects();
 
   return useMutation({
-    mutationFn: (paymentId: string) => getDataSource(demoMode).payments.approve(paymentId, profile?.key ?? '', profile?.name ?? ''),
+    mutationFn: async ({ paymentId, leadName, leadContact, amount }: { paymentId: string; leadName?: string; leadContact?: string; amount?: number }) => {
+      const result = await getDataSource(demoMode).payments.approve(paymentId, profile?.key ?? '', profile?.name ?? '');
+      if (leadContact && leadName && amount != null) {
+        getDataSource(demoMode)
+          .sms.send(leadContact, `Hi ${leadName}, thank you for your payment of GHS ${amount.toLocaleString('en-GH')} towards your plot at Royal Palm Enclave. - PEP Landbank`, 'payment_thanks', profile?.key ?? null)
+          .catch(() => {});
+      }
+      return result;
+    },
     onSuccess: invalidate,
   });
 }
