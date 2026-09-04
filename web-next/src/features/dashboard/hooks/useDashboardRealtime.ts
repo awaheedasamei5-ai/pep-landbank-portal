@@ -46,9 +46,25 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['leadsAll'] });
       queryClient.invalidateQueries({ queryKey: ['reportsLeads'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      // Master Spec Section 4's realtime gap: My Pipeline/Pipeline Detail/
+      // Log Payment/Archived Leads all read their own query keys, none of
+      // which the dashboard bridge used to touch -- a payment approved on
+      // one device previously left every other open session's pipeline
+      // screens stale until a manual refresh, even though the dashboard's
+      // own KPI numbers already updated live.
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead'] });
+      queryClient.invalidateQueries({ queryKey: ['leadsArchived'] });
+      queryClient.invalidateQueries({ queryKey: ['paymentsPending'] });
+      queryClient.invalidateQueries({ queryKey: ['paymentsNeedsCorrection'] });
+      queryClient.invalidateQueries({ queryKey: ['activityForLead'] });
+      queryClient.invalidateQueries({ queryKey: ['auditForLead'] });
     };
     const invalidateLeave = () => {
       queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });
+    };
+    const invalidateImports = () => {
+      queryClient.invalidateQueries({ queryKey: ['importBatches'] });
     };
 
     const channel = client.channel(`dashboard-${myKey}`);
@@ -64,6 +80,9 @@ export function useDashboardRealtime() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `agent_key=eq.${myKey}` }, invalidatePipeline);
     }
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, invalidateLeave);
+    if (isManager) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'import_batches' }, invalidateImports);
+    }
     channel.subscribe();
 
     return () => {
