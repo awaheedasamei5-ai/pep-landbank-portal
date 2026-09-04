@@ -76,6 +76,21 @@
 }
 .submitBtn:disabled { opacity: .6; cursor: default; }
 
+.aiDraftBtn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.aiDraftBtn:hover { background: var(--c-accent-soft); }
+.aiDraftBtn:disabled { opacity: .6; cursor: default; }
+
 .list { display: flex; flex-direction: column; gap: 8px; }
 
 .row {

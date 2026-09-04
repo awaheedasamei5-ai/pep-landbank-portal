@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ghs, today } from '../../../shared/lib/format';
 import type { FundRequest, FundRequestType, NewFundRequest } from '../../../types/domain';
 import { useCanManageExpenses, useCreateFundRequest, useDecideFundRequest, useFundRequests } from '../hooks/useFundRequests';
+import { useExpenseJustificationDraft } from '../hooks/useExpenseJustificationDraft';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './ExpensesScreen.module.css';
 
@@ -89,11 +90,19 @@ export function ExpensesScreen() {
 
 function RequestsTab({ requests }: { requests: FundRequest[] }) {
   const create = useCreateFundRequest();
+  const justificationDraft = useExpenseJustificationDraft();
   const [type, setType] = useState<FundRequestType>('budget');
   const [amount, setAmount] = useState('');
   const [purpose, setPurpose] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function draftJustification() {
+    const n = Number(amount);
+    if (!purpose.trim() || !n) return;
+    const drafted = await justificationDraft.mutateAsync({ type, amount: n, note: purpose.trim() }).catch(() => null);
+    if (drafted) setPurpose(drafted);
+  }
 
   async function submit() {
     const n = Number(amount);
@@ -134,6 +143,11 @@ function RequestsTab({ requests }: { requests: FundRequest[] }) {
         <input className={styles.input} type="number" min="0" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <label className={styles.label}>Purpose</label>
         <textarea className={styles.input} placeholder="What is this for?" value={purpose} onChange={(e) => setPurpose(e.target.value)} style={{ minHeight: 60 }} />
+        {purpose.trim() && Number(amount) > 0 && (
+          <button type="button" className={styles.aiDraftBtn} disabled={justificationDraft.isPending} onClick={draftJustification}>
+            {justificationDraft.isPending ? 'Drafting…' : 'AI: Polish into a justification'}
+          </button>
+        )}
         <label className={styles.label}>Supporting document (optional)</label>
         <input className={styles.fileInput} type="file" accept="image/*,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         {file && <div className={styles.fileHint}>{file.name}</div>}

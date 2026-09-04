@@ -108,6 +108,13 @@ function systemPromptFor(kind: string): string | null {
         "Write ONE short, practical sentence (max 28 words) describing what doing this task actually involves -- stay strictly grounded in the title/category given, never invent specific names, dates, or details not implied by them. " +
         "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
       );
+    case "expense_justification_draft":
+      return (
+        "You expand a short note into a clear, professional expense-request justification for internal approval at a Ghanaian land-sales agency called Palmstead -- Management reviews and decides the request itself, you only help phrase why it's needed. " +
+        "You'll receive one JSON object with the request type (general budget or a specific spend), the real amount in GHS already entered by the requester, and a short redacted note of what it's for (phone numbers/emails already stripped before reaching you). " +
+        "Write ONE clear, professional sentence (max 30 words) explaining the purpose, grounded strictly in the note given -- never invent a vendor, project, or reason not implied by it, and never restate or recalculate the amount, that number is the requester's own and not yours to touch. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +
