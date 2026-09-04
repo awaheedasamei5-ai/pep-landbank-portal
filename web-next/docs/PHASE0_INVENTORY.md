@@ -452,3 +452,27 @@ not just in isolation. `tsc`/build/lint all clean.
 14. Next: a manual "run now" action for a failing scheduled job, idempotent-RPC review (spec 3.1's "all destructive/financial/permission changes are idempotent" — not yet audited in `web-next`), planning the actual production cutover of the permission model (staging-only today, by design), live-mode manager sign-in (needs a real manager `auth.users` account — account creation, out of scope here), and deploying the `send-todo-alarms` observability fix to production whenever approved.
 
 **Standing rule, stated explicitly by the user 2026-09-04:** nothing on `rebuild` merges into `main`/production until asked, separate from and narrower than the general "continue with V2" autonomy grant — applies to the `send-todo-alarms` deploy above too.
+
+## 16. Phase 9 (PWA parity) + Phase 7 (SMS) — both fully shipped 2026-09-04
+
+Closes both remaining Blueprint phases short of the cutover gate (Phase 12).
+
+**Phase 9 — Public surfaces & PWA parity (5/5):**
+- Service worker (`public/sw.js`) — app-shell cache-first for static same-origin assets only; every Supabase/API call passes straight through, deliberately never cached (caching stale business data would violate the same error-contract principle Section 15 fixed).
+- Push notifications — ported legacy's real, working Web Push flow (`shared/lib/webPush.ts`: real VAPID key, `subscribeWebPush()`) plus a new `DataSource.pushSubscriptions.save()` writing to the real `push_subscriptions` table (RLS already live on staging, no migration needed). The send side (`send-push`/`send-todo-alarms` Edge Functions) already worked in production — this closes the missing receive half.
+- Offline mutation queue — TanStack Query v5's default `networkMode` already pauses/resumes mutations while offline; added `@tanstack/react-query-persist-client` so that survives a reload too, plus a visible offline/syncing banner (`OfflineBanner.tsx`).
+- Public stats widget — reused the real `public-stats` Edge Function (live on production since 2026-08-29 for the external homepage widget), ported to staging along with the `profiles.widget_token` column it needs, and added `/stats` (company-wide) + `/stats/:token` (personalized) public routes.
+
+**Phase 7 — SMS, the last item (6/6 now):** added `DataSource.sms.send()` (real Arkesel `send-sms` proxy + `sms_log`, both already live) and wired it into payment thank-you, leave decided, complaint submitted, site visit requested, and SVE invite send — matching `index.html`'s own `apiSendSms` call sites. Caught a real bug on the way in: the SVE "Send invite" button only ever wrote the invite row and stamped it sent — nothing ever actually sent the client a link until this pass.
+
+Verified live in demo mode across every flow above (zero console errors); `tsc`/build/lint all clean.
+
+## 17. `leaderboard_rows()` date-range bug — partially fixed 2026-09-04 (staging only)
+
+Verified live (Open Decision #06 from the Blueprint): the RPC's `p_from`/`p_to` params only ever scoped `deals_closed_year` — every other column (`site_visits`, `tasks_completed`/`avg_task_days`, `todos_completed`, `days_attended`/`on_time_days`) silently used a fixed trailing-90-day window regardless of the year selected, so the Leaderboard's year picker never actually changed most of the ranking inputs.
+
+**Fixed** (migration `p1_fix_leaderboard_rows_date_scoping`, staging only): every one of those CTEs now scopes by the real column already on its own table (`site_visits.visit_date`, `schedule_items.completed_at`/`item_date`, `attendance_log.work_date`). Verified directly against the RPC: 2026 range returns real non-zero `site_visits`; an empty year (2020) correctly returns 0 across the board — previously both would have shown identical all-time counts.
+
+**Deliberately NOT fixed — `total_collected`:** while investigating, found `sum(payments.amount where status='approved')` per agent diverges substantially from `sum(leads.amt_paid)` per agent (the column this metric actually uses) — not a rounding difference, roughly double for some agents on this project. Bundling an unverified swap of this column's data source into the same fix would risk trading one wrong number for a different wrong one on a metric that's commission-adjacent. Left exactly as it was (still unscoped by date, still `leads.amt_paid`) pending a real investigation into why those two ever diverge — flagged to the user directly rather than silently deciding either way.
+
+**Not yet done:** the equivalent fix on **production** — this RPC also backs `index.html`'s live Leaderboard today, and a production database function change needs its own explicit go-ahead per the standing production-approval rule, separate from the general V2 autonomy grant.
