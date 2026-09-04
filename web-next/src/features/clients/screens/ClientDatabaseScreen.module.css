@@ -19,19 +19,23 @@
 }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 940px; padding: 28px 32px 40px; }
+  /* No max-width here on purpose, matching Pipeline's own list (which
+     never had one) -- a CRM table of many rows should use the full row
+     width it's given, not sit capped in a narrow column with the rest of
+     a wide screen empty beside it. The old 940px cap here was the real
+     cause of that dead space: it applied whenever the drawer was closed
+     (the plain browsing view), which is most of the time -- only the
+     drawer-open case below ever got a real fix. */
+  .wrap { padding: 28px 32px 40px; }
   /* Real fix, caught live by the user at a wider screen: a percentage-
      of-.content max-width (calc(100% - 540px)) paired with the drawer's
      old position:fixed (anchored to the viewport's own right edge) only
      agreed at one specific viewport width and left a visible gap at any
      other. .pageRowSplit (this screen's own wrapper) makes the list and
      drawer real flex siblings instead, so one layout pass divides the
-     space between them exactly -- no gap possible at any width. The base
-     940px cap above still applies with the drawer closed; flex:1 here
-     overrides it (max-width:none) so the squeezed list can actually
-     claim its full share of the remaining row instead of being capped
-     short of it. overflow-y gives this panel its own scrollbar, same
-     reasoning as Pipeline's own list. */
+     space between them exactly -- no gap possible at any width.
+     overflow-y gives this panel its own scrollbar, same reasoning as
+     Pipeline's own list. */
   .pageRowSplit { display: flex; align-items: stretch; height: 100vh; }
   .pageRowSplit .wrapWithDrawer { max-width: none; flex: 1 1 auto; min-width: 0; overflow-y: auto; box-sizing: border-box; }
 }
