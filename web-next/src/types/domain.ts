@@ -95,6 +95,11 @@ export interface Lead {
   // comment). Auto-maintained server-side by `leads_track_modification`,
   // a BEFORE UPDATE trigger -- never set directly from the client.
   lastModifiedAt?: string | null;
+  // Real column `version` (same trigger as lastModifiedAt above -- both
+  // bumped/stamped together, never client-writable). Read-only signal a
+  // caller can round-trip back as LeadUpdate.expectedVersion to get a real
+  // optimistic-concurrency guard instead of last-write-wins.
+  version?: number | null;
   // Real column `deleted_at` (ported to staging 2026-09-03 -- see
   // PHASE0_INVENTORY.md; live on production, matches legacy's real
   // apiDeleteLead()). Never a hard DELETE -- a real ON DELETE CASCADE on
@@ -137,6 +142,15 @@ export interface LeadUpdate {
   // Added for the pipeline Excel import's canonical LEADS sheet ("Source"
   // column, spec 5.1) -- same reasoning as priority above.
   leadSource?: string;
+  // Master Rebuild Spec Section 3.4's own worked example: "This client has
+  // already been updated by another user. Refresh and review the latest
+  // version before saving." Optional and opt-in -- a caller that loaded a
+  // Lead and is now saving edits against it passes back `lead.version`
+  // here to get a real conflict check; a caller that never loaded the full
+  // record (e.g. a bulk/system update) omits it and keeps today's
+  // last-write-wins behavior, matching every existing call site until each
+  // is deliberately updated to pass it.
+  expectedVersion?: number;
 }
 
 export interface LeadKyc {

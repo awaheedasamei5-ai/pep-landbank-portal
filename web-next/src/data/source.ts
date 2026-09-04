@@ -4,6 +4,7 @@ import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
+import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import {
   mapAchievementDefRow,
   mapAllocationRequestRow,
@@ -2260,8 +2261,20 @@ function createLiveDataSource(): DataSource {
         if ('priority' in patch) dbPatch.priority = patch.priority;
         if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
         if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
-        const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
-        if (error) throw error;
+        // Real optimistic-concurrency guard (Master Spec Section 3.4's own
+        // worked example) -- opt-in via patch.expectedVersion. With it, the
+        // WHERE clause only matches the row the caller actually loaded; if
+        // someone else's update landed first, version has already moved on
+        // and this UPDATE affects zero rows, so .single() throws PGRST116
+        // ("no rows"), which we translate into a real stale_version conflict
+        // rather than letting the caller silently overwrite unseen changes.
+        let query = requireClient().from('leads').update(dbPatch).eq('id', id);
+        if (patch.expectedVersion != null) query = query.eq('version', patch.expectedVersion);
+        const { data, error } = await query.select().single();
+        if (error) {
+          if (patch.expectedVersion != null && error.code === 'PGRST116') throw friendlyErrorObj('This record has already been updated by another user. Refresh and review the latest version before saving.');
+          throw error;
+        }
         return mapLeadRow(data);
       },
       async updateDocStage(id, stage) {

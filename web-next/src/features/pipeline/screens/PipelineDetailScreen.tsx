@@ -267,7 +267,7 @@ function ClientSection({ lead }: { lead: Lead }) {
           disabled={update.isPending || !name.trim()}
           onClick={() => {
             setError(null);
-            update.mutateAsync({ id: lead.id, patch: { name: name.trim(), contact: contact.trim() } }).then(
+            update.mutateAsync({ id: lead.id, patch: { name: name.trim(), contact: contact.trim(), expectedVersion: lead.version ?? undefined } }).then(
               () => setEditing(false),
               (e) => setError(friendlyError(e, 'Failed to save')),
             );
@@ -393,6 +393,7 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
                   paymentPlan,
                   netTotal: preview.net,
                   grandTotal,
+                  expectedVersion: lead.version ?? undefined,
                 },
               })
               .then(
@@ -558,6 +559,7 @@ function FollowUpSection({ lead }: { lead: Lead }) {
                   notes: notes.trim(),
                   tags: tags.trim(),
                   siteVisit: siteVisit ? 'Yes' : lead.siteVisit ?? undefined,
+                  expectedVersion: lead.version ?? undefined,
                 },
               })
               .then(
