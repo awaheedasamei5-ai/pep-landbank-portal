@@ -49,28 +49,37 @@ export function HomeScreen() {
         </PipePillStrip>
       </div>
 
-      {series.some((v) => v > 0) && (
-        <div className={styles.heroCard}>
-          <div className={styles.heroTop}>
-            <div>
-              <div className={styles.heroLabel}>Collected this month</div>
-              <div className={styles.heroValue}>{ghs(series[series.length - 1] ?? 0)}</div>
+      {/* Premium UI Rebuild spec, Section 6.A: "Replace long stacks of
+          equal-weight cards with a two-column desktop grid: main
+          analytics column + action/attention column." Below 1024px this
+          is a plain stack (grid-template-columns:1fr), identical to the
+          original render order -- mobile is unchanged. */}
+      <div className={styles.grid}>
+        <div className={styles.mainCol}>
+          {series.some((v) => v > 0) && (
+            <div className={styles.heroCard}>
+              <div className={styles.heroTop}>
+                <div>
+                  <div className={styles.heroLabel}>Collected this month</div>
+                  <div className={styles.heroValue}>{ghs(series[series.length - 1] ?? 0)}</div>
+                </div>
+                {trendDelta !== null && trendDelta !== 0 && (
+                  <span className={`${styles.heroDelta} ${trendDelta > 0 ? styles.heroDeltaUp : styles.heroDeltaDown}`}>
+                    {trendDelta > 0 ? '▲' : '▼'} {ghs(Math.abs(trendDelta))}
+                  </span>
+                )}
+              </div>
+              <div className={styles.heroChart}>
+                <AreaChart values={series} labels={trailingMonthLabels()} color="var(--c-accent-soft)" height={72} />
+              </div>
             </div>
-            {trendDelta !== null && trendDelta !== 0 && (
-              <span className={`${styles.heroDelta} ${trendDelta > 0 ? styles.heroDeltaUp : styles.heroDeltaDown}`}>
-                {trendDelta > 0 ? '▲' : '▼'} {ghs(Math.abs(trendDelta))}
-              </span>
-            )}
-          </div>
-          <div className={styles.heroChart}>
-            <AreaChart values={series} labels={trailingMonthLabels()} color="var(--c-accent-soft)" height={72} />
-          </div>
+          )}
+          {smartInsights.leads.length > 0 && <CompanionPanel leads={smartInsights.leads} collectedTrend={series} leadCount={pipeline.data?.leadCount ?? 0} pipelineValue={pipeline.data?.pipelineValue ?? 0} />}
         </div>
-      )}
-
-      <TodayTasksCard />
-
-      {smartInsights.leads.length > 0 && <CompanionPanel leads={smartInsights.leads} collectedTrend={series} leadCount={pipeline.data?.leadCount ?? 0} pipelineValue={pipeline.data?.pipelineValue ?? 0} />}
+        <div className={styles.sideCol}>
+          <TodayTasksCard />
+        </div>
+      </div>
     </div>
   );
 }

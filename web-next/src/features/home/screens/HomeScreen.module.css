@@ -1,6 +1,14 @@
 .wrap { padding: 20px 16px 90px; }
 .pillsWrap { margin: 16px 0; }
 
+.grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.mainCol, .sideCol { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 1180px; padding: 28px 32px 40px; }
+  .grid { grid-template-columns: 1.6fr 1fr; align-items: start; }
+}
+
 .heroCard {
   background: linear-gradient(165deg, var(--c-ink) 0%, var(--c-ink-2) 100%);
   color: #fff;
