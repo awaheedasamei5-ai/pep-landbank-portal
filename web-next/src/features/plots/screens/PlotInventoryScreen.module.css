@@ -3,6 +3,17 @@
 .sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
 .emptyMsg { color: var(--c-muted); font-size: 13.5px; }
 
+/* Premium UI spec, Section 6.E asks for a real "grid/map-style plot
+   board" on desktop -- a genuinely bigger rebuild (visual grid over
+   ~415 real plots) than this pass has room to build and verify safely
+   against live inventory data. This is the honest interim, same as
+   Client Database: real width instead of corner-stuck rows, so nothing
+   looks broken while that larger piece stays open, separate work. */
+@media (width >= 1024px) {
+  .wrap { max-width: 880px; padding: 28px 32px 40px; }
+  .grid2 { max-width: 480px; }
+}
+
 .headRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 
 .addBtn {

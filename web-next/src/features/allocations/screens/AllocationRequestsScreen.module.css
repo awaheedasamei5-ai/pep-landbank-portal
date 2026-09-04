@@ -1,5 +1,16 @@
 .wrap { padding: 20px 16px 90px; }
 
+/* Premium UI spec, Section 6.F: "Create a clear allocation workflow
+   timeline... status-driven cards... structured detail panel." The
+   3-stage Pending/Awaiting/Allocated sections and status-driven request
+   rows already match that shape (built earlier this session) -- this
+   is the same real-width fix as every other screen in this pass so it
+   isn't left corner-stuck while a fuller timeline-visualization pass
+   stays open, separate work. */
+@media (width >= 1024px) {
+  .wrap { max-width: 760px; padding: 28px 32px 40px; }
+}
+
 .head {
   display: flex;
   align-items: flex-start;
