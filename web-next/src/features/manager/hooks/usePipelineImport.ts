@@ -46,7 +46,15 @@ export interface ImportScanOutcome {
   buckets: ScanBuckets;
 }
 
-export function useScanPipelineImport() {
+// Passed by the staff-scoped "My Pipeline" import card only -- scopes both
+// the scan and the commit to one agent's own leads (see StaffPipelineImportCard).
+// The manager-only Reports import never passes this and keeps its existing
+// company-wide behavior unchanged.
+export interface ImportScope {
+  staffKey: string;
+}
+
+export function useScanPipelineImport(scope?: ImportScope) {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useMutation({
     mutationFn: async (file: File): Promise<ImportScanOutcome> => {
@@ -55,7 +63,12 @@ export function useScanPipelineImport() {
       if (!cols.leadId || !cols.name) throw friendlyErrorObj('This file is missing expected LEADS columns -- is this a Palmstead pipeline export?');
       const rows = readImportRows(ws, cols);
       const ds = getDataSource(demoMode);
-      const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
+      const [ownLeads, allLeads, staff] = await Promise.all([
+        scope ? ds.leads.listForAgent(scope.staffKey) : ds.leads.listAll(),
+        scope ? ds.leads.listAll() : Promise.resolve<undefined>(undefined),
+        ds.staff.listAll(),
+      ]);
+      const freshLeads = ownLeads;
       // 'company' is a real, legitimate agent_key (Company Leads -- clients
       // who came to the company directly, not through a specific agent),
       // not a staff profile -- staff.listAll() never returns it, so it must
@@ -63,7 +76,8 @@ export function useScanPipelineImport() {
       // wrongly flagged Invalid on a plain re-upload. Real bug caught live
       // while testing, not by inspection.
       const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
-      const buckets = scanImportRows(rows, freshLeads, validStaffKeys, exportedAt);
+      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scope.staffKey).map((l) => l.id)) : undefined;
+      const buckets = scanImportRows(rows, freshLeads, validStaffKeys, exportedAt, foreignLeadIds);
       const fileIds = new Set(rows.map((r) => r.leadId).filter(Boolean));
       const possiblyDeletedLeads = freshLeads.filter((l) => !fileIds.has(l.id));
       return { rows, exportedAt, possiblyDeletedLeads, buckets };
@@ -110,7 +124,7 @@ function diffFields(row: ParsedImportRow, existing: Lead): FieldChange[] {
   return pairs.filter(([, before, after]) => before !== after).map(([field, before, after]) => ({ leadId: existing.id, name: existing.name, field, oldValue: before, newValue: after }));
 }
 
-export function useCommitPipelineImport() {
+export function useCommitPipelineImport(scope?: ImportScope) {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
@@ -120,7 +134,12 @@ export function useCommitPipelineImport() {
       if (!config) throw friendlyErrorObj('Pricing configuration is not loaded yet -- try again in a moment.');
       if (!profile) throw friendlyErrorObj('Not signed in.');
       const ds = getDataSource(demoMode);
-      const [freshLeads, staff] = await Promise.all([ds.leads.listAll(), ds.staff.listAll()]);
+      const [ownLeads, allLeads, staff] = await Promise.all([
+        scope ? ds.leads.listForAgent(scope.staffKey) : ds.leads.listAll(),
+        scope ? ds.leads.listAll() : Promise.resolve<undefined>(undefined),
+        ds.staff.listAll(),
+      ]);
+      const freshLeads = ownLeads;
       // 'company' is a real, legitimate agent_key (Company Leads -- clients
       // who came to the company directly, not through a specific agent),
       // not a staff profile -- staff.listAll() never returns it, so it must
@@ -128,7 +147,8 @@ export function useCommitPipelineImport() {
       // wrongly flagged Invalid on a plain re-upload. Real bug caught live
       // while testing, not by inspection.
       const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
-      const plan = planImportRows(rows, freshLeads, config as Config, validStaffKeys, profile.key, exportedAt);
+      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scope.staffKey).map((l) => l.id)) : undefined;
+      const plan = planImportRows(rows, freshLeads, config as Config, validStaffKeys, profile.key, exportedAt, foreignLeadIds, scope?.staffKey ?? null);
 
       let added = 0;
       let updated = 0;
@@ -195,7 +215,7 @@ export function useCommitPipelineImport() {
       }
 
       await ds.importBatches.create(profile.key, profile.name, {
-        sourceLabel: 'Master Pipeline (company-wide, canonical workbook)',
+        sourceLabel: scope ? `${profile.name}'s pipeline (own leads, canonical workbook)` : 'Master Pipeline (company-wide, canonical workbook)',
         addedCount: added,
         updatedCount: updated,
         unchangedCount: unchanged,

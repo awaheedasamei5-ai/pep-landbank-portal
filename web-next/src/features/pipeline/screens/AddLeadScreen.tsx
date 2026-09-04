@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateLead } from '../hooks/useLeads';
 import { computeGrandTotal } from '../lib/pipelineLogic';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useClients } from '../../clients/hooks/useClients';
+import { clientKey } from '../../clients/lib/groupClients';
 import styles from './AddLeadScreen.module.css';
 
 // Simplified port of formAddLead()/readLeadForm() (index.html:14132-14182).
@@ -44,9 +46,19 @@ type FormOutput = z.output<typeof schema>;
 // this screen.
 export function AddLeadScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
   const createLead = useCreateLead();
+  const { data: clients } = useClients();
   const [depositNotice, setDepositNotice] = useState<{ leadId: string; message: string } | null>(null);
+  // Client Database's "+ New deal for this client" row action lands here
+  // with the client's name/contact pre-filled via router state -- a real,
+  // grounded answer to Master Rebuild Spec 17.2's "duplicate detection
+  // before creating a new client" requirement: instead of trying to
+  // fuzzy-match on submit, the one place a NEW client actually gets typed
+  // in is checked live as they type (below), so a would-be duplicate is
+  // caught before it's ever saved, not after.
+  const prefill = location.state as { name?: string; contact?: string } | null;
   const {
     register,
     handleSubmit,
@@ -54,7 +66,7 @@ export function AddLeadScreen() {
     formState: { errors },
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
-    defaultValues: { plotType: 'Full Plot', noPlots: 1, paymentPlan: 'Full Payment', amtPaid: 0 },
+    defaultValues: { plotType: 'Full Plot', noPlots: 1, paymentPlan: 'Full Payment', amtPaid: 0, name: prefill?.name ?? '', contact: prefill?.contact ?? '' },
   });
 
   // Master Spec Section 4.4: amt_paid is never a free field -- only
@@ -69,6 +81,14 @@ export function AddLeadScreen() {
   const amtPaid = watch('amtPaid') || 0;
   const grandTotal = computeGrandTotal(Number(unitPrice), Number(noPlots));
   const balanceAfter = Math.max(grandTotal - Number(amtPaid), 0);
+
+  const watchedName = watch('name') || '';
+  const watchedContact = watch('contact') || '';
+  const duplicateClient = useMemo(() => {
+    if (!watchedName.trim() || !watchedContact.trim()) return null;
+    const key = clientKey(watchedName, watchedContact);
+    return (clients ?? []).find((c) => clientKey(c.name, c.contact) === key) ?? null;
+  }, [watchedName, watchedContact, clients]);
 
   async function onSubmit(values: FormOutput) {
     const { lead, depositError } = await createLead.mutateAsync(values);
@@ -112,6 +132,11 @@ export function AddLeadScreen() {
                 <input className={styles.input} placeholder="0244…" {...register('contact')} />
                 {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
               </div>
+              {duplicateClient && (
+                <p className={styles.hint}>
+                  {duplicateClient.name} is already a client with {duplicateClient.leadCount} {duplicateClient.leadCount === 1 ? 'deal' : 'deals'} on file ({ghs(duplicateClient.totalValue)} total) — saving will add another deal for them, not a new client.
+                </p>
+              )}
             </div>
 
             <div className={styles.card}>

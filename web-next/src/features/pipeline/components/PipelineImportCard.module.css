@@ -1,0 +1,42 @@
+/* Same visual language as the manager Reports import card (its own
+   ReportsScreen.module.css) -- duplicated rather than shared so this
+   staff-facing card can't accidentally regress that screen. */
+.sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 12px; }
+.sub { color: var(--c-muted); font-size: 12.5px; margin: 0 0 10px; line-height: 1.5; }
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.dlChip {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dlChip:disabled { opacity: .6; cursor: default; }
+
+.compareRow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--c-text); margin-bottom: 14px; cursor: pointer; }
+
+.fileInput { width: 100%; box-sizing: border-box; padding: 9px 0; font-size: 13px; color: var(--c-text); }
+
+.importKpis { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+.importKpi { flex: 1; min-width: 90px; background: var(--c-paper); border: 1px solid var(--c-line); border-radius: 10px; padding: 10px 12px; }
+.importKpiValue { font-weight: 800; font-size: 17px; font-family: var(--font-mono); }
+.importKpiLabel { font-size: 11px; color: var(--c-muted); margin-top: 2px; }
+
+.importActions { display: flex; gap: 8px; margin-top: 10px; }
+.importActions .dlChip { flex: 1; text-align: center; padding: 10px 0; }
+
+.importResultLine { font-size: 12.5px; color: var(--c-text); margin: 4px 0; }
+.importErrorText { color: var(--c-danger); font-size: 12.5px; margin-top: 8px; }

@@ -18,18 +18,28 @@
    EXISTING table horizontal-scroll (.tableWrap { overflow-x: auto },
    built earlier this session) does real work here instead of columns
    just disappearing behind the drawer -- squeeze the list, not hide
-   the data. Reverts to full width the instant the drawer closes, since
-   this class is only applied while hasDetailOpen is true. */
+   the data.
+
+   Second real correction, caught live by the user again at a wider
+   screen: the squeeze used to be a `max-width: calc(100% - 540px)` on
+   the list PLUS a `position: fixed` drawer anchored to the viewport's
+   own right edge -- two independent coordinate systems (percentage of
+   .content's box vs. fixed viewport position) that only agreed at the
+   one width this was eyeballed against. .pageRowSplit below makes the
+   list and the drawer real flex siblings instead, so the same layout
+   pass divides the space between them -- there is no number left for a
+   gap to come from, at any viewport width. */
 @media (width >= 1024px) {
-  /* margin-right: auto overrides AppShell's own centering (meant for
-     narrow single-card screens, not this one) so the shrunk list hugs
-     the sidebar's edge with the freed-up space sitting to its right,
-     under the drawer, instead of being centered into an overlap.
-     height+overflow-y give the panel its own scrollbar (real fix, asked
-     for live: "a side scroll panel... so when the list gets long we can
-     scroll to the end") -- matches the drawer's own independent scroll
-     instead of relying on the whole page growing taller. */
-  .wrapWithDrawer { max-width: calc(100% - 540px); margin-right: auto; height: 100vh; overflow-y: auto; box-sizing: border-box; }
+  .pageRowSplit { display: flex; align-items: stretch; height: 100vh; }
+  /* flex:1 fills the row on its own (drawer closed, unchanged look);
+     shares the row evenly with the drawer's own fixed flex-basis once
+     it mounts (drawer open) -- no separate "drawer open" width rule
+     needed here at all, flexbox already does it. overflow-y gives this
+     panel its own scrollbar (real fix, asked for live: "a side scroll
+     panel... so when the list gets long we can scroll to the end"),
+     matching the drawer's own independent scroll instead of relying on
+     the whole page growing taller. */
+  .pageRowSplit .wrapWithDrawer { flex: 1 1 auto; min-width: 0; overflow-y: auto; box-sizing: border-box; }
 }
 
 .head {

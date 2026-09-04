@@ -82,7 +82,21 @@
 
 @media (width >= 1024px) {
   .wrap { max-width: 880px; padding: 28px 32px 100px; }
-  .grid { grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+  /* No align-items override here -- grid's own default (stretch) makes
+     .mainCol and .sideCol match the taller column's height instead of
+     each sizing to its own content, which is what let .sideCol end well
+     above .mainCol's bottom edge (caught live via a red-boxed screenshot:
+     "the notes also expand it to fit... in line with the one on the
+     left"). */
+  .grid { grid-template-columns: 1.4fr 1fr; gap: 20px; }
+  /* Notes is .sideCol's last card -- once the column itself is stretched
+     to full height, this card grows to absorb the leftover space instead
+     of leaving it empty below a content-sized box, and the textarea
+     inside grows with it so the whole card (not just its padding) is the
+     thing expanding. */
+  .sideCol > .card:last-child { flex: 1; display: flex; flex-direction: column; }
+  .sideCol > .card:last-child .field { flex: 1; display: flex; flex-direction: column; }
+  .sideCol > .card:last-child .textarea { flex: 1; min-height: 0; }
   /* Sticky action bar (spec 11's own explicit ask for long forms) --
      stays reachable without scrolling back down a two-column desktop
      form, while mobile keeps the plain in-flow buttons it always had. */

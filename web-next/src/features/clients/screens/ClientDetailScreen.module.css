@@ -1,0 +1,155 @@
+/* Same non-modal split-view drawer as Pipeline's own lead detail (see
+   that file's own comment for the full reasoning) -- one detail-panel
+   pattern for the whole app. Inert below 1024px: mobile gets a plain
+   full-page route instead, exactly like Pipeline. */
+.drawerBackdrop { display: contents; }
+.drawerPanel { display: contents; }
+
+@media (width >= 1024px) {
+  /* Real flex sibling of the list inside .pageRowSplit (ClientDatabase
+     Screen's own module), not position:fixed -- see PipelineDetailScreen
+     module's identical comment for the full reasoning (a real gap,
+     caught live by the user at a wider viewport, from two independent
+     coordinate systems that only agreed at one width). position:relative
+     is what the close button's own position:absolute now anchors to. */
+  .drawerPanel {
+    display: block;
+    position: relative;
+    flex: 0 0 520px;
+    max-width: 92vw;
+    background: var(--c-paper);
+    border-left: 1px solid var(--c-line);
+    box-shadow: -18px 0 44px rgb(20 22 50 / 14%);
+    overflow-y: auto;
+    animation: slideIn 220ms var(--ease-out);
+  }
+}
+
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerPanel { animation: none; }
+}
+
+.closeDrawerBtn { display: none; }
+
+@media (width >= 1024px) {
+  .closeDrawerBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--c-line);
+    background: var(--c-card);
+    color: var(--c-muted);
+    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    right: 16px;
+    font-size: 15px;
+  }
+  .closeDrawerBtn:hover { color: var(--c-danger); border-color: var(--c-danger); }
+}
+
+.wrap { padding: 20px 16px 90px; max-width: 480px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--c-ink), var(--c-accent));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
+.meta { color: var(--c-muted); font-size: 12.5px; margin: 2px 0 0; }
+
+.statsRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+.statCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 12px 10px;
+  box-shadow: var(--shadow);
+}
+.statLabel { font-size: 10.5px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.statValue { font-family: var(--font-mono); font-weight: 800; font-size: 14px; margin-top: 3px; }
+
+.section { margin-bottom: 16px; }
+.sectionHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sectionIcon { display: flex; color: var(--c-muted); }
+.sectionTitle { font-weight: 700; font-size: 13px; }
+.sectionCount {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--c-muted);
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+}
+
+.sectionBody {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.row, .rowStatic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--c-line);
+}
+.row:last-child, .rowStatic:last-child { border-bottom: none; }
+.row {
+  width: 100%;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.row:hover { background: var(--c-paper); }
+
+.rowMain { min-width: 0; flex: 1; }
+.rowTitle { font-weight: 700; font-size: 13px; }
+.rowSub { color: var(--c-muted); font-size: 11.5px; margin-top: 2px; }
+.rowRight { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.rowValue { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
+
+.emptyRow { padding: 14px; color: var(--c-muted); font-size: 12.5px; text-align: center; }
+
+.chip {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.chip_ok { background: var(--c-success-bg); color: var(--c-success); }
+.chip_warn { background: var(--c-warn-bg); color: var(--c-warn); }
+.chip_dgr { background: var(--c-danger-bg); color: var(--c-danger); }
+.chip_muted { background: var(--c-paper); color: var(--c-muted); border: 1px solid var(--c-line); }
+
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; margin-top: 4px; }

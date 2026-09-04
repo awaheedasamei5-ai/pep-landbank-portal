@@ -18,19 +18,26 @@
 .drawerPanel { display: contents; }
 
 @media (width >= 1024px) {
+  /* Real fix, caught live by the user at a wider screen: this used to be
+     position:fixed, anchored to the viewport's own right edge -- a
+     coordinate system independent of PipelineListScreen's own
+     calc(100% - <n>px) list width, so the two only lined up by
+     coincidence at one specific viewport width and left a visible gap
+     at any other. Now a real flex sibling of the list inside
+     .pageRowSplit (that screen's own module), sized by flex-basis
+     instead of position -- same layout pass places both, so there is no
+     gap possible. position:relative is what the close button's own
+     position:absolute now anchors to, since position:fixed no longer
+     establishes that containing block. */
   .drawerPanel {
     display: block;
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 520px;
+    position: relative;
+    flex: 0 0 520px;
     max-width: 92vw;
     background: var(--c-paper);
     border-left: 1px solid var(--c-line);
     box-shadow: -18px 0 44px rgb(20 22 50 / 14%);
     overflow-y: auto;
-    z-index: 60;
     animation: slideIn 220ms var(--ease-out);
   }
 }

@@ -230,7 +230,24 @@ function fieldsChanged(row: ParsedImportRow, existing: Lead): boolean {
   );
 }
 
-export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], validStaffKeys: Set<string>, exportedAt: Date | null): ScanBuckets {
+// Real access-control gap this closes: a staff-scoped import only ever
+// receives that one agent's OWN leads as `freshLeads` (data/source.ts's
+// listForAgent, same scoping every other staff-facing screen already
+// uses), so matchRow can never resolve a Lead ID belonging to a colleague
+// -- it just looks "not found". That reads as a typo, not "this isn't
+// yours", and a staff member editing a stray ID in the file could later
+// be told it's a genuinely new client and accidentally re-add a
+// colleague's lead under their own name. foreignLeadIds (every real Lead
+// ID that exists company-wide but didn't come back in this scope) lets a
+// scoped scan/plan give the honest reason instead.
+function checkForeignId(row: ParsedImportRow, foreignLeadIds?: Set<string>): { kind: 'needsReview'; reason: string } | null {
+  if (row.leadId && foreignLeadIds?.has(row.leadId)) {
+    return { kind: 'needsReview', reason: `Lead ID "${row.leadId}" belongs to another staff member's pipeline -- you can only import changes to your own leads.` };
+  }
+  return null;
+}
+
+export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], validStaffKeys: Set<string>, exportedAt: Date | null, foreignLeadIds?: Set<string>): ScanBuckets {
   const buckets: ScanBuckets = { toAdd: 0, toUpdate: 0, unchanged: 0, needsReview: 0, invalid: 0, skipped: 0, duplicateIdsInFile: 0, possiblyDeleted: 0, conflicts: 0 };
   const seenIds = new Map<string, number>();
   rows.forEach((row) => {
@@ -250,6 +267,10 @@ export function scanImportRows(rows: ParsedImportRow[], freshLeads: Lead[], vali
     const validation = validateRow(row, validStaffKeys);
     if (!validation.valid) {
       buckets.invalid++;
+      continue;
+    }
+    if (checkForeignId(row, foreignLeadIds)) {
+      buckets.needsReview++;
       continue;
     }
     const match = matchRow(row, freshLeads);
@@ -296,7 +317,22 @@ function freshTotals(config: Config, unitPrice: number, noPlots: number, discoun
   return { net, grand: net + interestTotal };
 }
 
-export function planImportRows(rows: ParsedImportRow[], freshLeads: Lead[], config: Config, validStaffKeys: Set<string>, importerKey: string, exportedAt: Date | null): ImportPlanItem[] {
+export function planImportRows(
+  rows: ParsedImportRow[],
+  freshLeads: Lead[],
+  config: Config,
+  validStaffKeys: Set<string>,
+  importerKey: string,
+  exportedAt: Date | null,
+  foreignLeadIds?: Set<string>,
+  // Set only for a staff-scoped self-import: forces every insert to land
+  // on this staff member regardless of the Staff Key column, and forbids
+  // reassigning an existing lead away to someone else through this file
+  // -- the file can edit an agent's OWN leads, never move ownership.
+  // Company-wide manager imports (Reports) never pass this and keep
+  // today's real Staff-Key-column-driven reassignment.
+  lockedStaffKey?: string | null
+): ImportPlanItem[] {
   const seenIds = new Map<string, number>();
   rows.forEach((row) => {
     if (row.leadId) seenIds.set(row.leadId, (seenIds.get(row.leadId) ?? 0) + 1);
@@ -308,6 +344,9 @@ export function planImportRows(rows: ParsedImportRow[], freshLeads: Lead[], conf
 
     const validation = validateRow(row, validStaffKeys);
     if (!validation.valid) return { kind: 'invalid', row, errors: validation.errors };
+
+    const foreignCheck = checkForeignId(row, foreignLeadIds);
+    if (foreignCheck) return { kind: 'needsReview', row, reason: foreignCheck.reason };
 
     const match = matchRow(row, freshLeads);
     if (match.kind === 'needsReview') return { kind: 'needsReview', row, reason: match.reason };
@@ -332,7 +371,10 @@ export function planImportRows(rows: ParsedImportRow[], freshLeads: Lead[], conf
       // A brand-new row (blank Lead ID) with a real Staff Key attributes
       // straight to that agent; with no key, it defaults to whoever is
       // running the import, matching the old notes-tag fallback behavior.
-      const agentKey = row.staffKey && validStaffKeys.has(row.staffKey) ? row.staffKey : importerKey;
+      // A locked (staff self-import) run ignores the column outright --
+      // a colleague's key typed into that cell must never let this file
+      // attribute a new client to someone else.
+      const agentKey = lockedStaffKey || (row.staffKey && validStaffKeys.has(row.staffKey) ? row.staffKey : importerKey);
       return { kind: 'insert', row, input, followupPatch, agentKey };
     }
 
@@ -342,7 +384,11 @@ export function planImportRows(rows: ParsedImportRow[], freshLeads: Lead[], conf
     const isStaleConflict = !!(exportedAt && existing.lastModifiedAt && new Date(existing.lastModifiedAt) > exportedAt);
     if (isStaleConflict) return { kind: 'conflict', row, existing };
 
-    const reassignToAgentKey = row.staffKey && row.staffKey !== existing.agent ? row.staffKey : null;
+    // Same lock for updates: a scoped self-import can edit this lead's
+    // own fields but never hand it to another agent through the Staff Key
+    // column, even though freshLeads already guarantees `existing` is
+    // this staff member's own lead.
+    const reassignToAgentKey = lockedStaffKey ? null : row.staffKey && row.staffKey !== existing.agent ? row.staffKey : null;
     const unitPrice = row.unitPrice ?? existing.unitPrice;
     const discount = row.discount ?? (existing.discount ?? 0);
     const totals = freshTotals(config, unitPrice, noPlots, discount, paymentPlan, plotType);

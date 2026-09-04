@@ -103,7 +103,7 @@ export const ALLOCATIONS_COLUMNS: { key: string; header: string; width: number }
 ];
 
 const BRAND_INK = 'FF151A33'; // --c-ink
-const BRAND_GOLD = 'FFC9A227'; // --c-accent
+const BRAND_GOLD = 'FF7C3AED'; // --c-accent
 const LOCKED_BG = 'FFF3F1EA'; // muted neutral -- visually flags "don't type here" without alarm-red
 
 function headerRow(ws: ExcelJS.Worksheet, columns: { header: string; width: number }[], accent: string) {

@@ -8,6 +8,9 @@ import { useSiteVisits } from '../../site-visits/hooks/useSiteVisits';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { StageBadge } from '../components/StageBadge';
+import { StaffPipelineImportCard } from '../components/StaffPipelineImportCard';
+import { useDownloadAgentPipeline } from '../../manager/hooks/usePipelineExcel';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import {
   EMPTY_FILTERS,
   STAGE_FUNNEL_LABELS,
@@ -82,10 +85,12 @@ export function PipelineListScreen() {
   const assignLead = useAssignLead();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
+  const downloadAgentPipeline = useDownloadAgentPipeline();
 
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<PipelineFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMode, setBulkMode] = useState<'assign' | 'tag' | 'archive' | null>(null);
   const [bulkValue, setBulkValue] = useState('');
@@ -155,8 +160,22 @@ export function PipelineListScreen() {
     clearBulk();
   }
 
+  // Real bug caught live by the user, twice now: a fixed-position drawer
+  // (position:fixed, anchored to the viewport's own right edge) combined
+  // with the list's width computed as calc(100% - <magic number>px) of a
+  // DIFFERENT box (.content) are two independent coordinate systems that
+  // only happen to agree at the one viewport width they were eyeballed
+  // against -- at any other width (a wider monitor, a resized window) a
+  // visible gap opens up between the list and the drawer. The actual fix,
+  // not a wider magic number: make the list and the drawer real flex
+  // siblings in one row (.pageRow/.pageRowSplit below) so the SAME layout
+  // algorithm divides the space between them -- there is no other number
+  // for a gap to come from. This is the one split-view pattern for the
+  // whole app (see ClientDatabaseScreen's identical structure); fixing it
+  // here and only here, applied everywhere this pattern is used, is the
+  // actual ask -- not a one-off patch.
   return (
-    <>
+    <div className={`${styles.pageRow} ${hasDetailOpen ? styles.pageRowSplit : ''}`}>
     <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
       <div className={styles.head}>
         <div>
@@ -166,14 +185,35 @@ export function PipelineListScreen() {
           </p>
         </div>
         <div className={styles.headActions}>
-          <button type="button" className={styles.iconBtn} title="Export" onClick={() => exportLeadsCsv(filtered.length ? filtered : all)}>
+          {/* Real gap the user caught live: this screen used to only offer
+              a plain CSV export, with no counterpart to Master Pipeline's
+              full canonical-workbook export+import round trip on Reports.
+              Same buildCanonicalPipelineWorkbook this agent's own data
+              already flows through there (via useDownloadAgentPipeline,
+              called here with the signed-in agent's own key/name) --
+              matching column set, Lead ID and all, so a file round-tripped
+              here can also be read back in by the Import panel below. */}
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title="Export my pipeline (.xlsx)"
+            disabled={downloadAgentPipeline.isPending}
+            onClick={() => profile && downloadAgentPipeline.mutate({ agentKey: profile.key, agentName: profile.name })}
+          >
             ⬇
+          </button>
+          <button type="button" className={styles.iconBtn} title="Import my pipeline (.xlsx)" onClick={() => setShowImport((v) => !v)}>
+            ⬆
           </button>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/app/sales/pipeline/new')}>
             + Add lead
           </button>
         </div>
       </div>
+
+      {downloadAgentPipeline.isError && <p className={styles.emptyMsg}>{friendlyError(downloadAgentPipeline.error, 'Could not build the export.')}</p>}
+
+      {showImport && <StaffPipelineImportCard />}
 
       <input className={styles.search} placeholder="Search by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
 
@@ -459,6 +499,6 @@ export function PipelineListScreen() {
         or a plain full-page screen (mobile, via display:contents on its
         own wrappers). */}
     <Outlet />
-    </>
+    </div>
   );
 }
