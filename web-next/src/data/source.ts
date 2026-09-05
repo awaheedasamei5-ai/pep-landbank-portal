@@ -1,7 +1,7 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
-import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
+import { deriveStageFromPayment, computeGrandTotal, previewGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
@@ -13,6 +13,7 @@ import {
   mapAuditEventRow,
   mapBackupRow,
   mapBannerRow,
+  mapPricingHistoryRow,
   mapPermissionDefRow,
   mapPermissionOverrideRow,
   mapFundRequestRow,
@@ -206,6 +207,18 @@ export interface DataSource {
     // deletion, matching how decidedBy/decidedByName on payments are
     // never cleared either.
     restore(id: string): Promise<Lead>;
+    // Port of v1's apiBulkAdjust (index.html:6923-6938) -- Management's
+    // "Monthly price adjustment" tool. Every lead with a real outstanding
+    // balance (grandTotal-amtPaid > 0.5) matching plotType gets either its
+    // discount raised (mode 'discount', reduces balance) or its unitPrice
+    // raised (mode 'increase', raises balance) by amountPerPlot, then
+    // net/grand/balance are recomputed and persisted -- amtPaid itself is
+    // never touched. Same real limitation as v1: a plain per-row loop, not
+    // one atomic transaction (matches the live RLS's own per-row manager
+    // check; the operation is manager-only, explicit, and rare enough that
+    // this is an accepted, not overlooked, tradeoff). Returns how many
+    // leads were affected.
+    bulkAdjustPrice(plotType: 'Both' | 'Full Plot' | 'Half Plot', mode: 'discount' | 'increase', amountPerPlot: number): Promise<number>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
   // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
@@ -330,7 +343,30 @@ export interface DataSource {
     // only writes the fields the caller actually passes, leaving every
     // other real app_config column (quotation text, pricing, targets,
     // etc. -- all out of scope here) untouched.
-    update(patch: Partial<Pick<Config, 'leaderboardWeights' | 'commissionFullCap' | 'commissionHalfCap' | 'commissionPoolPerPlot' | 'allocationThresholdPct'>>): Promise<Config>;
+    update(
+      patch: Partial<
+        Pick<
+          Config,
+          | 'leaderboardWeights'
+          | 'commissionFullCap'
+          | 'commissionHalfCap'
+          | 'commissionPoolPerPlot'
+          | 'allocationThresholdPct'
+          | 'fullPrice'
+          | 'halfPrice'
+          | 'fullDiscount'
+          | 'halfDiscount'
+          | 'int3'
+          | 'int6'
+          | 'int9'
+          | 'int12'
+          | 'techFullPlotLengthFt'
+          | 'techFullPlotWidthFt'
+          | 'techHalfPlotLengthFt'
+          | 'techHalfPlotWidthFt'
+        >
+      >
+    ): Promise<Config>;
   };
   // Real RLS restricts this to manager + specifically the 'elias'/
   // 'emmanuel' staff keys (confirmed live) -- not every agent. Callers
@@ -473,6 +509,15 @@ export interface DataSource {
     list(): Promise<Banner[]>;
     create(createdBy: string, createdByName: string, input: NewBanner): Promise<Banner>;
     updateStatus(id: string, status: BannerStatus): Promise<Banner>;
+  };
+  // Real table `pricing_history` (confirmed live) -- port of v1's
+  // apiLogPricingChange/apiLoadPricingHistory. log() is called once per
+  // changed field by Settings' own save handler (matching v1's own
+  // architecture exactly: the diff is computed at the call site, not
+  // inside config.update() itself), never automatically.
+  pricingHistory: {
+    list(): Promise<PricingHistoryEntry[]>;
+    log(changedBy: string, changedByName: string, field: string, fieldLabel: string, oldValue: number, newValue: number): Promise<PricingHistoryEntry>;
   };
   // Real table `fund_requests` -- see the FundRequest type's comment in
   // types/domain.ts for the real reason this is only ever the request/
@@ -994,6 +1039,24 @@ function createDemoDataSource(): DataSource {
         db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.restored', severity: 'info', actorKey: null, actorName: null, entityType: 'lead', entityId: id, summary: `${updated.name} was restored from the archive`, detail: null, source: 'client' }, ...db.auditEvents];
         demoSave();
         return updated;
+      },
+      async bulkAdjustPrice(plotType, mode, amountPerPlot) {
+        const db = demoLoad();
+        const config = db.config;
+        let affected = 0;
+        db.leads = db.leads.map((l) => {
+          if (l.deletedAt) return l;
+          if (plotType !== 'Both' && l.plotType !== plotType) return l;
+          const outstanding = l.grandTotal - l.amtPaid;
+          if (!(outstanding > 0.5)) return l;
+          const newDiscount = mode === 'discount' ? (l.discount ?? 0) + amountPerPlot * l.noPlots : l.discount ?? 0;
+          const newUnitPrice = mode === 'increase' ? l.unitPrice + amountPerPlot : l.unitPrice;
+          const recomputed = previewGrandTotal(config, l.plotType, l.noPlots, newUnitPrice, newDiscount, l.paymentPlan);
+          affected++;
+          return { ...l, discount: newDiscount, unitPrice: newUnitPrice, netTotal: recomputed.net, grandTotal: recomputed.grand };
+        });
+        demoSave();
+        return affected;
       },
     },
     payments: {
@@ -1692,6 +1755,18 @@ function createDemoDataSource(): DataSource {
         db.banners = [...db.banners.slice(0, index), updated, ...db.banners.slice(index + 1)];
         demoSave();
         return updated;
+      },
+    },
+    pricingHistory: {
+      async list() {
+        return (demoLoad().pricingHistory ?? []).slice(0, 30);
+      },
+      async log(changedBy, changedByName, field, fieldLabel, oldValue, newValue) {
+        const entry: PricingHistoryEntry = { id: crypto.randomUUID(), changedBy, changedByName, field, fieldLabel, oldValue, newValue, changedAt: new Date().toISOString() };
+        const db = demoLoad();
+        db.pricingHistory = [entry, ...(db.pricingHistory ?? [])];
+        demoSave();
+        return entry;
       },
     },
     async leadBannerCounts() {
@@ -2781,6 +2856,28 @@ function createLiveDataSource(): DataSource {
           });
         return mapLeadRow(data);
       },
+      async bulkAdjustPrice(plotType, mode, amountPerPlot) {
+        const client = requireClient();
+        const { data: configRow, error: configError } = await client.from('app_config').select('*').eq('id', 1).single();
+        if (configError) throw configError;
+        const config = mapConfigRow(configRow);
+        let query = client.from('leads').select('*').is('deleted_at', null);
+        if (plotType !== 'Both') query = query.eq('plot_type', plotType);
+        const { data: rows, error: listError } = await query;
+        if (listError) throw listError;
+        const targets = (rows ?? []).map(mapLeadRow).filter((l) => l.grandTotal - l.amtPaid > 0.5);
+        for (const l of targets) {
+          const newDiscount = mode === 'discount' ? (l.discount ?? 0) + amountPerPlot * l.noPlots : l.discount ?? 0;
+          const newUnitPrice = mode === 'increase' ? l.unitPrice + amountPerPlot : l.unitPrice;
+          const recomputed = previewGrandTotal(config, l.plotType, l.noPlots, newUnitPrice, newDiscount, l.paymentPlan);
+          const { error: updError } = await client
+            .from('leads')
+            .update({ discount: newDiscount, unit_price: newUnitPrice, net_total: recomputed.net, grand_total: recomputed.grand, balance: Math.max(recomputed.grand - l.amtPaid, 0) })
+            .eq('id', l.id);
+          if (updError) throw updError;
+        }
+        return targets.length;
+      },
     },
     payments: {
       async listForAgent(agentKey) {
@@ -3029,6 +3126,18 @@ function createLiveDataSource(): DataSource {
         if (patch.commissionHalfCap !== undefined) dbPatch.commission_half_cap = patch.commissionHalfCap;
         if (patch.commissionPoolPerPlot !== undefined) dbPatch.commission_pool_per_plot = patch.commissionPoolPerPlot;
         if (patch.allocationThresholdPct !== undefined) dbPatch.allocation_threshold_pct = patch.allocationThresholdPct;
+        if (patch.fullPrice !== undefined) dbPatch.full_price = patch.fullPrice;
+        if (patch.halfPrice !== undefined) dbPatch.half_price = patch.halfPrice;
+        if (patch.fullDiscount !== undefined) dbPatch.full_discount = patch.fullDiscount;
+        if (patch.halfDiscount !== undefined) dbPatch.half_discount = patch.halfDiscount;
+        if (patch.int3 !== undefined) dbPatch.int_3 = patch.int3;
+        if (patch.int6 !== undefined) dbPatch.int_6 = patch.int6;
+        if (patch.int9 !== undefined) dbPatch.int_9 = patch.int9;
+        if (patch.int12 !== undefined) dbPatch.int_12 = patch.int12;
+        if (patch.techFullPlotLengthFt !== undefined) dbPatch.tech_full_plot_length_ft = patch.techFullPlotLengthFt;
+        if (patch.techFullPlotWidthFt !== undefined) dbPatch.tech_full_plot_width_ft = patch.techFullPlotWidthFt;
+        if (patch.techHalfPlotLengthFt !== undefined) dbPatch.tech_half_plot_length_ft = patch.techHalfPlotLengthFt;
+        if (patch.techHalfPlotWidthFt !== undefined) dbPatch.tech_half_plot_width_ft = patch.techHalfPlotWidthFt;
         const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
@@ -3390,6 +3499,22 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('banners').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapBannerRow(data);
+      },
+    },
+    pricingHistory: {
+      async list() {
+        const { data, error } = await requireClient().from('pricing_history').select('*').order('changed_at', { ascending: false }).limit(30);
+        if (error) throw error;
+        return (data ?? []).map(mapPricingHistoryRow);
+      },
+      async log(changedBy, changedByName, field, fieldLabel, oldValue, newValue) {
+        const { data, error } = await requireClient()
+          .from('pricing_history')
+          .insert({ changed_by: changedBy, changed_by_name: changedByName, field, field_label: fieldLabel, old_value: oldValue, new_value: newValue })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapPricingHistoryRow(data);
       },
     },
     async leadBannerCounts() {

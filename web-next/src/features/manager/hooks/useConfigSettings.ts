@@ -25,3 +25,40 @@ export function useUpdateConfig() {
     },
   });
 }
+
+// Port of v1's Price change history -- one row per changed field, logged
+// by the caller after a successful config.update() (see SettingsScreen's
+// own save handler, which diffs old vs new and calls this once per field
+// that actually changed).
+export function usePricingHistory() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['pricingHistory'], queryFn: () => getDataSource(demoMode).pricingHistory.list() });
+}
+
+export function useLogPricingChange() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ field, fieldLabel, oldValue, newValue }: { field: string; fieldLabel: string; oldValue: number; newValue: number }) =>
+      getDataSource(demoMode).pricingHistory.log(profile?.key ?? '', profile?.name ?? '', field, fieldLabel, oldValue, newValue),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pricingHistory'] }),
+  });
+}
+
+// Port of v1's "Monthly price adjustment" (apiBulkAdjust) -- Management's
+// manual, one-time bulk discount/price-increase applied to every lead
+// with an outstanding balance. Real money-affecting action -- deliberately
+// requires its own explicit confirmation in the UI, not just this hook.
+export function useBulkAdjustPrice() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ plotType, mode, amountPerPlot }: { plotType: 'Both' | 'Full Plot' | 'Half Plot'; mode: 'discount' | 'increase'; amountPerPlot: number }) =>
+      getDataSource(demoMode).leads.bulkAdjustPrice(plotType, mode, amountPerPlot),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leadsAll'] });
+    },
+  });
+}

@@ -1332,6 +1332,23 @@ export interface Banner {
   updatedAt: string;
 }
 
+// Real table `pricing_history` (confirmed live, port of v1's own
+// apiLogPricingChange/apiLoadPricingHistory) -- every change to a real
+// pricing/interest/tech-dimension config field is logged here, one row
+// per field per save, so Management can see exactly who changed what and
+// when. field is the raw Config key (e.g. 'fullPrice'); fieldLabel is the
+// human caption shown in the UI (e.g. 'Full Plot price').
+export interface PricingHistoryEntry {
+  id: string;
+  changedBy: string;
+  changedByName: string;
+  field: string;
+  fieldLabel: string;
+  oldValue: number;
+  newValue: number;
+  changedAt: string;
+}
+
 export interface NewBanner {
   name: string;
   area: string;

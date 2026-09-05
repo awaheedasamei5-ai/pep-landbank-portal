@@ -2,21 +2,26 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Config, LeaderboardWeights } from '../../../types/domain';
 import { Icon } from '../../../shared/ui/Icon';
-import { useConfig, useUpdateConfig } from '../hooks/useConfigSettings';
+import { ghs } from '../../../shared/lib/format';
+import { friendlyError } from '../../../shared/lib/friendlyError';
+import { useBulkAdjustPrice, useConfig, useLogPricingChange, usePricingHistory, useUpdateConfig } from '../hooks/useConfigSettings';
 import styles from './SettingsScreen.module.css';
 
 // Real app_config columns leaderboard_weights/commission_full_cap/
 // commission_half_cap/commission_pool_per_plot -- p_config_upd RLS
 // confirmed manager-only. Closes the loop on the Leaderboard and
 // Commission screens shipped earlier, which read these same fields but
-// had no way for a manager to actually change them. Every other real
-// settings area (Quotation text, full Pricing & Targets, Company/
-// Achievement/Referral settings, Backup/System/Audit) is deliberately
-// out of scope for this first cut -- a much larger hub in index.html
-// (mgrSettingsHubHtml), not something to half-build here. Team roster
-// (activate/deactivate) lives at its own route, linked below, since it
-// has real content of its own rather than fitting this screen's
-// edit-a-number-and-save shape.
+// had no way for a manager to actually change them. Plot Pricing (below)
+// closes the same real gap for the pricing engine itself -- read
+// directly from v1's mgrPricingTargetsHtml/bindPricingTargetsCtrls
+// (index.html:20821-20899), field-for-field, per the user's own explicit
+// "no room for errors" instruction. Every other real settings area
+// (Quotation text, Company/Achievement/Referral settings, Backup/System/
+// Audit) stays deliberately out of scope -- a much larger hub in
+// index.html (mgrSettingsHubHtml), not something to half-build here.
+// Team roster (activate/deactivate) lives at its own route, linked
+// below, since it has real content of its own rather than fitting this
+// screen's edit-a-number-and-save shape.
 export function SettingsScreen() {
   const navigate = useNavigate();
   const { data: config, isLoading } = useConfig();
@@ -25,14 +30,273 @@ export function SettingsScreen() {
     <div className={styles.wrap}>
       <div className={styles.eyebrow}>Management</div>
       <h1 className={styles.title}>Settings</h1>
-      <p className={styles.sub}>Leaderboard points formula & the commission engine</p>
+      <p className={styles.sub}>Plot pricing, leaderboard points formula & the commission engine</p>
 
       <button type="button" className={styles.teamLink} onClick={() => navigate('/app/mgr/team')}>
         <Icon name="team" size={18} /> Team roster &mdash; activate / deactivate staff
       </button>
 
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
+      {config && <PricingSettingsSection config={config} />}
       {config && <SettingsForm config={config} />}
+      {config && <BulkAdjustmentSection />}
+      <PricingHistorySection />
+    </div>
+  );
+}
+
+const PRICING_FIELD_LABELS: Record<string, string> = {
+  fullPrice: 'Full Plot price',
+  halfPrice: 'Half Plot price',
+  fullDiscount: 'Full Plot standard discount',
+  halfDiscount: 'Half Plot standard discount',
+  int3: '3 Months interest',
+  int6: '6 Months interest',
+  int9: '9 Months interest',
+  int12: '12 Months interest',
+  techFullPlotLengthFt: 'Full Plot length (ft)',
+  techFullPlotWidthFt: 'Full Plot width (ft)',
+  techHalfPlotLengthFt: 'Half Plot length (ft)',
+  techHalfPlotWidthFt: 'Half Plot width (ft)',
+};
+
+// Port of v1's mgrPricingTargetsHtml's "Plot pricing" card + Technical
+// Quotation dimensions, field-for-field. Every changed field is logged to
+// Price change history (below) the same way v1's own saveCfg diffs old
+// vs new and calls apiLogPricingChange once per changed field -- not a
+// single opaque "config updated" entry.
+function PricingSettingsSection({ config }: { config: Config }) {
+  const update = useUpdateConfig();
+  const logChange = useLogPricingChange();
+  const [fullPrice, setFullPrice] = useState(String(config.fullPrice));
+  const [halfPrice, setHalfPrice] = useState(String(config.halfPrice));
+  const [fullDiscount, setFullDiscount] = useState(String(config.fullDiscount));
+  const [halfDiscount, setHalfDiscount] = useState(String(config.halfDiscount));
+  const [int3, setInt3] = useState(String(config.int3));
+  const [int6, setInt6] = useState(String(config.int6));
+  const [int9, setInt9] = useState(String(config.int9));
+  const [int12, setInt12] = useState(String(config.int12));
+  const [techFullLen, setTechFullLen] = useState(String(config.techFullPlotLengthFt));
+  const [techFullWid, setTechFullWid] = useState(String(config.techFullPlotWidthFt));
+  const [techHalfLen, setTechHalfLen] = useState(String(config.techHalfPlotLengthFt));
+  const [techHalfWid, setTechHalfWid] = useState(String(config.techHalfPlotWidthFt));
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const draft: Record<string, number> = {
+    fullPrice: Number(fullPrice),
+    halfPrice: Number(halfPrice),
+    fullDiscount: Number(fullDiscount),
+    halfDiscount: Number(halfDiscount),
+    int3: Number(int3),
+    int6: Number(int6),
+    int9: Number(int9),
+    int12: Number(int12),
+    techFullPlotLengthFt: Number(techFullLen),
+    techFullPlotWidthFt: Number(techFullWid),
+    techHalfPlotLengthFt: Number(techHalfLen),
+    techHalfPlotWidthFt: Number(techHalfWid),
+  };
+  const dirty = Object.keys(draft).some((k) => draft[k] !== Number(config[k as keyof Config]));
+
+  async function save() {
+    setError(null);
+    const changed = Object.keys(draft).filter((k) => draft[k] !== Number(config[k as keyof Config]));
+    if (!changed.length) return;
+    try {
+      await update.mutateAsync(draft as never);
+      for (const field of changed) {
+        await logChange.mutateAsync({ field, fieldLabel: PRICING_FIELD_LABELS[field] ?? field, oldValue: Number(config[field as keyof Config]), newValue: draft[field] }).catch(() => {});
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to save pricing'));
+    }
+  }
+
+  return (
+    <div className={styles.sectionCard}>
+      <div className={styles.sectionTitle}>Plot pricing</div>
+      <p className={styles.sectionHint}>
+        Existing leads already keep their own price and discount from when they were created &mdash; changing this here only affects new leads and anyone re-saved after the change. Every change is logged below with who, when, and
+        the old vs. new value.
+      </p>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>Full Plot price (GHS)</label>
+          <input className={styles.input} type="number" value={fullPrice} onChange={(e) => setFullPrice(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Full Plot standard discount (GHS)</label>
+          <input className={styles.input} type="number" value={fullDiscount} onChange={(e) => setFullDiscount(e.target.value)} />
+        </div>
+      </div>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>Half Plot price (GHS)</label>
+          <input className={styles.input} type="number" value={halfPrice} onChange={(e) => setHalfPrice(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Half Plot standard discount (GHS)</label>
+          <input className={styles.input} type="number" value={halfDiscount} onChange={(e) => setHalfDiscount(e.target.value)} />
+        </div>
+      </div>
+
+      <div className={styles.sectionSubtitle}>Payment plan interest (per full-plot-equivalent)</div>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>3 Months (GHS)</label>
+          <input className={styles.input} type="number" value={int3} onChange={(e) => setInt3(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>6 Months (GHS)</label>
+          <input className={styles.input} type="number" value={int6} onChange={(e) => setInt6(e.target.value)} />
+        </div>
+      </div>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>9 Months (GHS)</label>
+          <input className={styles.input} type="number" value={int9} onChange={(e) => setInt9(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>12 Months (GHS)</label>
+          <input className={styles.input} type="number" value={int12} onChange={(e) => setInt12(e.target.value)} />
+        </div>
+      </div>
+
+      <div className={styles.sectionSubtitle}>Technical Quotation &mdash; standard plot dimensions (ft)</div>
+      <p className={styles.sectionHint}>The Technical Quotation app&apos;s price-per-sq.ft is always derived from Full Plot price ÷ (length×width) above &mdash; never hardcoded. Update these if the standard plot sizes ever change.</p>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>Full Plot length (ft)</label>
+          <input className={styles.input} type="number" value={techFullLen} onChange={(e) => setTechFullLen(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Full Plot width (ft)</label>
+          <input className={styles.input} type="number" value={techFullWid} onChange={(e) => setTechFullWid(e.target.value)} />
+        </div>
+      </div>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>Half Plot length (ft)</label>
+          <input className={styles.input} type="number" value={techHalfLen} onChange={(e) => setTechHalfLen(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Half Plot width (ft)</label>
+          <input className={styles.input} type="number" value={techHalfWid} onChange={(e) => setTechHalfWid(e.target.value)} />
+        </div>
+      </div>
+      {error && <p className={styles.errorMsg}>{error}</p>}
+      <button type="button" className={styles.saveBtn} disabled={!dirty || update.isPending} onClick={save}>
+        {update.isPending ? 'Saving…' : saved ? 'Saved ✓' : 'Save pricing'}
+      </button>
+    </div>
+  );
+}
+
+// Port of v1's "Monthly price adjustment" (apiBulkAdjust) -- a manual,
+// one-time bulk discount/price-increase applied to every lead with an
+// outstanding balance, for when plot prices genuinely change for a given
+// month (an end-of-month promo, or a price rise on new sales). This is
+// NOT a scheduled/date-ranged campaign -- v1 has no such mechanism; it
+// runs once, immediately, when clicked, exactly like the real app does.
+function BulkAdjustmentSection() {
+  const bulkAdjust = useBulkAdjustPrice();
+  const [plotType, setPlotType] = useState<'Both' | 'Full Plot' | 'Half Plot'>('Both');
+  const [mode, setMode] = useState<'discount' | 'increase'>('discount');
+  const [amount, setAmount] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function apply() {
+    setError(null);
+    setResult(null);
+    const amt = Number(amount);
+    if (!amt) return;
+    try {
+      const n = await bulkAdjust.mutateAsync({ plotType, mode, amountPerPlot: amt });
+      setResult(`Applied to ${n} outstanding lead${n === 1 ? '' : 's'}.`);
+      setConfirming(false);
+      setAmount('');
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to apply the adjustment'));
+    }
+  }
+
+  return (
+    <div className={styles.sectionCard}>
+      <div className={styles.sectionTitle}>Monthly price adjustment</div>
+      <p className={styles.sectionHint}>
+        Applies a one-time discount or price increase to every lead with an outstanding balance right now. Use this when plot prices change for a given month &mdash; e.g. an end-of-month promo discount, or a price rise on new
+        pricing. This updates real balances immediately and only once; it does not repeat or expire on a schedule.
+      </p>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>Plot type</label>
+          <select className={styles.input} value={plotType} onChange={(e) => setPlotType(e.target.value as typeof plotType)}>
+            <option>Both</option>
+            <option>Full Plot</option>
+            <option>Half Plot</option>
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Adjustment type</label>
+          <select className={styles.input} value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+            <option value="discount">Extra discount (reduce balance)</option>
+            <option value="increase">Price increase (raise balance)</option>
+          </select>
+        </div>
+      </div>
+      <div className={styles.field}>
+        <label className={styles.label}>Amount per plot (GHS)</label>
+        <input className={styles.input} type="number" placeholder="e.g. 2000" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </div>
+      {error && <p className={styles.errorMsg}>{error}</p>}
+      {result && <p className={styles.sectionHint}>{result}</p>}
+      {!confirming ? (
+        <button type="button" className={styles.saveBtnGold} disabled={!amount} onClick={() => setConfirming(true)}>
+          Apply adjustment now
+        </button>
+      ) : (
+        <div>
+          <p className={styles.errorMsg}>
+            Apply {mode === 'discount' ? 'an extra discount' : 'a price increase'} of {ghs(Number(amount) || 0)} per plot to every {plotType === 'Both' ? '' : plotType + ' '}lead with an outstanding balance, right now? This
+            updates real balances and cannot be undone automatically.
+          </p>
+          <div className={styles.confirmRow}>
+            <button type="button" className={styles.cancelLink} onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+            <button type="button" className={styles.saveBtnGold} disabled={bulkAdjust.isPending} onClick={apply}>
+              {bulkAdjust.isPending ? 'Applying…' : 'Yes, apply now'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PricingHistorySection() {
+  const { data: history } = usePricingHistory();
+  return (
+    <div className={styles.sectionCard}>
+      <div className={styles.sectionTitle}>Price change history</div>
+      {!history?.length && <p className={styles.sectionHint}>No changes logged yet. Every price/discount/interest change you save above will appear here.</p>}
+      {!!history?.length && (
+        <div className={styles.historyList}>
+          {history.map((h) => (
+            <div key={h.id} className={styles.historyRow}>
+              <div className={styles.historyField}>{h.fieldLabel}</div>
+              <div className={styles.historyMeta}>
+                {ghs(h.oldValue)} → {ghs(h.newValue)} &middot; by {h.changedByName} &middot; {h.changedAt.slice(0, 16).replace('T', ' ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
