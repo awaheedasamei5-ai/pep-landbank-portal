@@ -269,6 +269,18 @@ export interface PaymentDecisionResult {
   decidedByName: string;
   newAmtPaid: number;
   newBalance: number;
+  // Set only when this approval newly crossed config.allocationThresholdPct
+  // and auto-raised an allocation_requests row (approve_payment RPC, and
+  // its demo-mode equivalent) -- lets the caller SMS the agent in charge
+  // without a second round-trip to fetch the request it just created.
+  autoAllocation?: {
+    id: string;
+    leadId: string;
+    clientName: string;
+    agentKey: string;
+    agentName: string | null;
+    agentPhone: string | null;
+  };
 }
 
 // Real DB check constraint (schedule_items_status_check, confirmed live):

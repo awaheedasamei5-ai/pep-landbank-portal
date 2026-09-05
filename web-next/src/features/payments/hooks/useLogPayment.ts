@@ -39,6 +39,7 @@ function useInvalidatePaymentEffects() {
     queryClient.invalidateQueries({ queryKey: ['auditForLead'] });
     queryClient.invalidateQueries({ queryKey: ['pipelineSummary'] });
     queryClient.invalidateQueries({ queryKey: ['managerOverview'] });
+    queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
   };
 }
 
@@ -51,6 +52,15 @@ function useInvalidatePaymentEffects() {
 // useApprovePayment) fires the client's real thank-you SMS -- matches
 // applyApprovedPaymentToLead's own apiSendSms call (index.html:4259),
 // fire-and-forget so a failed text never blocks the payment itself.
+//
+// Known gap, deliberately not closed here: a manager's own self-approved
+// entry goes through payments.create() directly, not approve_payment --
+// so it does NOT auto-raise an allocation_requests row the way
+// useApprovePayment below does, even if this same payment pushes the
+// lead over config.allocationThresholdPct. Widening create()'s return
+// shape to carry that would touch both call sites' Payment-typed
+// results (LogPaymentScreen, PipelineDetailScreen); left for a
+// follow-up rather than bundled into this pass.
 export function useCreatePayment() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
@@ -82,6 +92,23 @@ export function useApprovePayment() {
       if (leadContact && leadName && amount != null) {
         getDataSource(demoMode)
           .sms.send(leadContact, `Hi ${leadName}, thank you for your payment of GHS ${amount.toLocaleString('en-GH')} towards your plot at Royal Palm Enclave. - PEP Landbank`, 'payment_thanks', profile?.key ?? null)
+          .catch(() => {});
+      }
+      // Master Spec 7.3/7.4: this approval just pushed the lead over the
+      // allocation eligibility threshold, and approve_payment (or its
+      // demo equivalent) already auto-raised the allocation_requests row
+      // -- alert the agent in charge to log in and act on it, same
+      // fire-and-forget pattern as the client thank-you SMS above.
+      const autoAllocationPhone = result.autoAllocation?.agentPhone;
+      if (autoAllocationPhone) {
+        const a = result.autoAllocation!;
+        getDataSource(demoMode)
+          .sms.send(
+            autoAllocationPhone,
+            `Hi ${a.agentName ?? ''}, ${a.clientName} is now due for plot allocation. Please log in to Palmstead to request their allocation. - PEP Landbank`,
+            'allocation_due',
+            profile?.key ?? null
+          )
           .catch(() => {});
       }
       return result;

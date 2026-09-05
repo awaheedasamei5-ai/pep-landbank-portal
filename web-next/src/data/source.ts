@@ -1031,6 +1031,7 @@ function createDemoDataSource(): DataSource {
         const leadIndex = db.leads.findIndex((l) => l.id === updated.leadId);
         let newAmtPaid = 0;
         let newBalance = 0;
+        let autoAllocation: PaymentDecisionResult['autoAllocation'];
         if (leadIndex !== -1) {
           const amtPaid = db.leads[leadIndex].amtPaid + updated.amount;
           const stage = deriveStageFromPayment(amtPaid, db.leads[leadIndex].grandTotal);
@@ -1038,9 +1039,50 @@ function createDemoDataSource(): DataSource {
           db.leads = [...db.leads.slice(0, leadIndex), updatedLead, ...db.leads.slice(leadIndex + 1)];
           newAmtPaid = amtPaid;
           newBalance = Math.max(updatedLead.grandTotal - amtPaid, 0);
+
+          // Mirrors approve_payment's own auto-raise -- same real config
+          // threshold, same "only if none exists yet" guard, same "the
+          // lead's actual agent owns this, not whoever approved the
+          // payment" fix that RPC needed too.
+          const threshold = db.config.allocationThresholdPct ?? 30;
+          const pct = updatedLead.grandTotal > 0 ? (newAmtPaid / updatedLead.grandTotal) * 100 : 0;
+          const alreadyRequested = db.allocationRequests.some((r) => r.leadId === updatedLead.id);
+          if (pct >= threshold && !alreadyRequested) {
+            const agent = DEMO_STAFF.find((s) => s.key === updatedLead.agent);
+            const request: AllocationRequest = {
+              id: Math.random().toString(36).slice(2, 10),
+              leadId: updatedLead.id,
+              clientName: updatedLead.name,
+              agentKey: updatedLead.agent,
+              agentName: agent?.name ?? updatedLead.agent,
+              percentPaid: Math.round(pct * 10) / 10,
+              grandTotal: updatedLead.grandTotal,
+              amtPaid: newAmtPaid,
+              status: 'Pending',
+              plotNumber: null,
+              suggestedPlots: null,
+              note: null,
+              allocatedBy: null,
+              flagReason: null,
+              flaggedBy: null,
+              flaggedAt: null,
+              history: [{ type: 'requested', at: decidedAt, by: 'System (auto-detected eligibility)' }],
+              createdAt: decidedAt,
+              resolvedAt: null,
+            };
+            db.allocationRequests = [...db.allocationRequests, request];
+            autoAllocation = {
+              id: request.id,
+              leadId: request.leadId,
+              clientName: request.clientName,
+              agentKey: request.agentKey,
+              agentName: request.agentName,
+              agentPhone: agent?.phone ?? null,
+            };
+          }
         }
         demoSave();
-        return { decidedBy, decidedByName, newAmtPaid, newBalance };
+        return { decidedBy, decidedByName, newAmtPaid, newBalance, autoAllocation };
       },
       async decline(paymentId, decidedBy, decidedByName) {
         const db = demoLoad();
@@ -2722,7 +2764,16 @@ function createLiveDataSource(): DataSource {
       async approve(paymentId) {
         const { data, error } = await requireClient().rpc('approve_payment', { p_payment_id: paymentId });
         if (error) throw error;
-        return { decidedBy: data.decided_by, decidedByName: data.decided_by_name, newAmtPaid: Number(data.new_amt_paid), newBalance: Number(data.new_balance) };
+        const a = data.allocation;
+        return {
+          decidedBy: data.decided_by,
+          decidedByName: data.decided_by_name,
+          newAmtPaid: Number(data.new_amt_paid),
+          newBalance: Number(data.new_balance),
+          autoAllocation: a
+            ? { id: a.id, leadId: a.leadId, clientName: a.clientName, agentKey: a.agentKey, agentName: a.agentName, agentPhone: a.agentPhone ?? null }
+            : undefined,
+        };
       },
       async decline(paymentId, _decidedBy, _decidedByName, reason) {
         const { error } = await requireClient().rpc('decline_payment', { p_payment_id: paymentId, p_reason: reason ?? null });
