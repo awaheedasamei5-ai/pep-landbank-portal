@@ -3,7 +3,7 @@
 .sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 720px; padding: 28px 32px 40px; }
+  .wrap { max-width: 1200px; padding: 28px 32px 40px; }
 }
 
 .sectionTitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 24px 0 14px; }

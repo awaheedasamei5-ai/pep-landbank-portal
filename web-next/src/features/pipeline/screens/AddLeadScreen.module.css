@@ -81,7 +81,7 @@
 .mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 880px; padding: 28px 32px 100px; }
+  .wrap { max-width: 1200px; padding: 28px 32px 100px; }
   /* No align-items override here -- grid's own default (stretch) makes
      .mainCol and .sideCol match the taller column's height instead of
      each sizing to its own content, which is what let .sideCol end well

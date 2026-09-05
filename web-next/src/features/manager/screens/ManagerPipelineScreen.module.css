@@ -6,7 +6,7 @@
    stated plainly. This is the same width-only fix as every other
    screen here. */
 @media (width >= 1024px) {
-  .wrap { max-width: 900px; padding: 28px 32px 40px; }
+  .wrap { max-width: 1200px; padding: 28px 32px 40px; }
 }
 .title { font-size: 22px; margin: 0; }
 .sub { color: var(--c-muted); margin: 4px 0 16px; font-size: 13.5px; }
