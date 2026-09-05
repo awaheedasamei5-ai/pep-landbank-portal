@@ -17,6 +17,16 @@ export function useSiteVisits() {
   });
 }
 
+// User ask: "a section for site visit records for each staff, very
+// detailed." Company-wide (real site_visits_sel RLS already scopes this
+// to manager/ops.view_all, same fact useWeekSiteVisits already relies
+// on) -- SiteVisitsScreen uses this instead of useSiteVisits() when a
+// manager picks "All staff" or a specific staff member.
+export function useAllSiteVisits() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['siteVisitsAll'], queryFn: () => getDataSource(demoMode).siteVisits.listAll() });
+}
+
 // Master Spec 9.3: "Prevent duplicate booking for the same client/date
 // unless Management explicitly allows it." Scoped to the CURRENT agent's
 // own visits (the same real RLS shape listForAgent already uses) rather

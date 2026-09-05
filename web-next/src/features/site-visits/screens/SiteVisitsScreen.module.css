@@ -101,3 +101,42 @@
 .detailRow { display: flex; gap: 6px; font-size: 12.5px; }
 .detailLabel { color: var(--c-muted); min-width: 110px; flex-shrink: 0; }
 .detailValue { color: var(--c-text); }
+
+.pdfRowBtn {
+  margin-top: 4px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.pdfRowBtn:disabled { opacity: .6; cursor: default; }
+
+.kpiWrap { margin-bottom: 14px; }
+
+.filterRow { display: flex; gap: 10px; margin-bottom: 16px; }
+.search {
+  flex: 1 1 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 13.5px;
+}
+.staffSelect {
+  flex: 0 0 auto;
+  min-width: 150px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 13px;
+  font-family: inherit;
+}
