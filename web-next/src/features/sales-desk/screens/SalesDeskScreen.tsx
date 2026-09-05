@@ -11,11 +11,18 @@ import styles from './SalesDeskScreen.module.css';
 export function SalesDeskScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
+  const isMgr = profile?.role === 'manager';
   const hasPlotAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const canManageCompanyLeads = useCanManageCompanyLeads();
 
   const items: TileItem[] = [
-    { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/sales/pipeline') },
+    // Same real fix as the desktop Sidebar's own 'pipeline' item: a
+    // manager's own agent_key owns few or no real leads, so "My pipeline"
+    // landed them on a near-empty view instead of the company-wide
+    // Company Pipeline they actually need here.
+    isMgr
+      ? { key: 'pipeline', label: 'Company Pipeline', sub: 'Every client, company-wide, filterable by agent', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/mgr/pipeline') }
+      : { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/sales/pipeline') },
     { key: 'clients', label: 'Client Database', sub: 'Search & browse by client', color: 'blue', icon: 'folder', onOpen: () => navigate('/app/sales/clients') },
     ...(hasPlotAccess
       ? [{ key: 'plots', label: 'Plot Inventory', sub: 'Browse every plot & status', color: 'green', icon: 'map', onOpen: () => navigate('/app/sales/plots') } satisfies TileItem]

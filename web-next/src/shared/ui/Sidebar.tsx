@@ -60,7 +60,15 @@ export function Sidebar() {
       key: 'sales',
       label: 'Sales',
       items: [
-        { key: 'pipeline', label: 'My Pipeline', to: '/app/sales/pipeline', icon: 'chartLine' },
+        // Real bug the user caught live: this always pointed to the
+        // agent-scoped My Pipeline screen, even for Management -- whose
+        // own agent_key owns few or no real leads, so clicking the first
+        // item under Sales landed a manager on a near-empty view instead
+        // of the company-wide Company Pipeline (already built, already
+        // filterable by individual agent) that's what they actually need
+        // in this position. Same fix applied to the mobile Sales Desk
+        // tile below.
+        { key: 'pipeline', label: isMgr ? 'Company Pipeline' : 'My Pipeline', to: isMgr ? '/app/mgr/pipeline' : '/app/sales/pipeline', icon: 'chartLine' },
         { key: 'clients', label: 'Client Database', to: '/app/sales/clients', icon: 'folder' },
         ...(hasPlotAccess ? [{ key: 'plots', label: 'Plot Inventory', to: '/app/sales/plots', icon: 'map' as IconName }] : []),
         ...(hasPlotAccess ? [{ key: 'allocations', label: 'Allocations', to: '/app/sales/allocations', icon: 'ruler' as IconName }] : []),
@@ -122,7 +130,9 @@ export function Sidebar() {
             key: 'management',
             label: 'Management',
             items: [
-              { key: 'mgrpipeline', label: 'Company Pipeline', to: '/app/mgr/pipeline', icon: 'chartLine' as IconName },
+              // Company Pipeline itself now lives under Sales (the
+              // 'pipeline' item above, retargeted for isMgr) -- not
+              // duplicated here too.
               { key: 'team', label: 'Team Roster', to: '/app/mgr/team', icon: 'team' as IconName },
               { key: 'health', label: 'System Health', to: '/app/mgr/health', icon: 'shield' as IconName },
               { key: 'settings', label: 'Settings', to: '/app/mgr/settings', icon: 'settings' as IconName },
