@@ -4,24 +4,41 @@ import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateLead } from '../hooks/useLeads';
-import { computeGrandTotal } from '../lib/pipelineLogic';
+import { previewGrandTotal } from '../lib/pipelineLogic';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import styles from './AddLeadScreen.module.css';
 
-// Simplified port of formAddLead()/readLeadForm() (index.html:14132-14182).
-// One Zod schema doubles as validation + the inferred form type -- the
-// real interest/discount/deposit-target calc engine and lead-source/
-// referral capture are deferred to a later phase (see pipelineLogic.ts).
+const PRIORITIES = ['High', 'Medium', 'Low'] as const;
+
+// Port of formAddLead()/readLeadForm() (index.html:14132-14182), widened to
+// close a real completeness gap the user caught live: source/priority/
+// address/discount are all real columns with no way to set them at intake
+// before this -- staff had to save, then immediately reopen the lead to
+// fill them in via Pipeline Detail's own edit sections. discount is kept
+// OUTSIDE the zod-coerced-number pipeline (a plain string field, parsed by
+// hand below) rather than z.coerce.number() -- coercing an empty string
+// through Number() silently becomes 0, which is a real distinct value here
+// (an explicit zero discount) from "leave it blank, use the configured
+// default", the same string-until-parsed pattern Pipeline Detail's own
+// Plot & Pricing edit already uses for this exact field. KYC (nationality/
+// occupation/ID/etc.) is deliberately NOT here -- a real, separate, still-
+// unbuilt capture screen of its own, not something a quick intake form
+// should be stretched to also hold.
 const schema = z.object({
   name: z.string().trim().min(1, 'Required'),
   contact: z.string().trim().min(1, 'Required'),
+  leadSource: z.string().optional(),
+  address: z.string().optional(),
   plotType: z.enum(['Full Plot', 'Half Plot']),
   noPlots: z.coerce.number().min(0.5),
   unitPrice: z.coerce.number().min(1, 'Required'),
+  discount: z.string().optional(),
   paymentPlan: z.enum(['Full Payment', '3 Months', '6 Months', '9 Months', '12 Months']),
+  priority: z.string().optional(),
   amtPaid: z.coerce.number().min(0),
   notes: z.string().optional(),
 });
@@ -34,22 +51,23 @@ type FormOutput = z.output<typeof schema>;
 // Premium UI Rebuild spec, Section 6.D/11: "Long forms: two-column
 // desktop grid... financial fields visually distinct... calculated
 // totals should appear immediately... sticky action bar." Real
-// correction, caught live: this was a single flat column of plain
-// inputs on a bare background at any screen width -- centered but with
-// large dead space either side on desktop, and the grand total was a
-// throwaway gray text line despite being the one number this whole
-// form exists to produce. Regrouped into real cards (Client / Plot &
-// pricing / Deposit & notes) that stack on mobile and split into a
-// main+side grid on desktop, with the total promoted to the same
-// dark-gradient hero-card treatment Pipeline Detail's own balance card
-// already uses -- one visual language, not a second style invented for
-// this screen.
+// correction, caught live twice now: the first pass was a single flat
+// column of plain inputs with large dead space either side on desktop --
+// fixed by regrouping into real cards across a main+side grid. The
+// second pass then force-stretched the Notes card to fill whatever
+// leftover vertical space that left (a real CSS hack, not a real fix --
+// see AddLeadScreen.module.css's own history). This version removes that
+// stretch entirely: the side column now holds three genuinely real cards
+// (grand total, a Details card for priority, and Notes), so the columns
+// balance because there's real content on both sides, not because one
+// card was forced to grow into empty space.
 export function AddLeadScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
   const createLead = useCreateLead();
   const { data: clients } = useClients();
+  const { data: config } = useConfig();
   const [depositNotice, setDepositNotice] = useState<{ leadId: string; message: string } | null>(null);
   // Client Database's "+ New deal for this client" row action lands here
   // with the client's name/contact pre-filled via router state -- a real,
@@ -76,10 +94,25 @@ export function AddLeadScreen() {
   // Payment afterward like every other payment does.
   const canLogDeposit = profile?.role === 'manager' || profile?.key === 'elias';
 
+  const plotType = watch('plotType') || 'Full Plot';
   const unitPrice = watch('unitPrice') || 0;
   const noPlots = watch('noPlots') || 0;
   const amtPaid = watch('amtPaid') || 0;
-  const grandTotal = computeGrandTotal(Number(unitPrice), Number(noPlots));
+  const paymentPlan = watch('paymentPlan') || 'Full Payment';
+  const discountRaw = watch('discount');
+  const discountNum = discountRaw != null && discountRaw !== '' ? Number(discountRaw) : null;
+
+  // Real interest-by-payment-plan/discount-aware pricing (previewGrandTotal,
+  // same engine Pipeline Detail's own edit already uses), not the naive
+  // unitPrice*noPlots this screen used before -- that silently under-priced
+  // every lead created on any plan other than Full Payment, since a 3/6/9/
+  // 12-month plan's real interest was never included in what got stored.
+  // Falls back to the plain multiplication for the one render before
+  // config has loaded, rather than crashing on an undefined config.
+  const preview = config
+    ? previewGrandTotal(config, plotType, Number(noPlots), Number(unitPrice), discountNum, paymentPlan)
+    : { net: Number(unitPrice) * Number(noPlots), grand: Number(unitPrice) * Number(noPlots) };
+  const grandTotal = preview.grand;
   const balanceAfter = Math.max(grandTotal - Number(amtPaid), 0);
 
   const watchedName = watch('name') || '';
@@ -91,7 +124,16 @@ export function AddLeadScreen() {
   }, [watchedName, watchedContact, clients]);
 
   async function onSubmit(values: FormOutput) {
-    const { lead, depositError } = await createLead.mutateAsync(values);
+    const discount = values.discount?.trim() ? Number(values.discount) : undefined;
+    const { lead, depositError } = await createLead.mutateAsync({
+      ...values,
+      leadSource: values.leadSource?.trim() || undefined,
+      address: values.address?.trim() || undefined,
+      priority: values.priority || undefined,
+      discount,
+      netTotal: preview.net,
+      grandTotal: preview.grand,
+    });
     if (depositError) {
       setDepositNotice({ leadId: lead.id, message: depositError });
       return;
@@ -122,15 +164,28 @@ export function AddLeadScreen() {
           <div className={styles.mainCol}>
             <div className={styles.card}>
               <div className={styles.cardTitle}>Client</div>
-              <div className={styles.field}>
-                <label className={styles.label}>Lead name *</label>
-                <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
-                {errors.name && <div className={styles.err}>{errors.name.message}</div>}
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Lead name *</label>
+                  <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
+                  {errors.name && <div className={styles.err}>{errors.name.message}</div>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Contact *</label>
+                  <input className={styles.input} placeholder="e.g. +233 24 400 1234" {...register('contact')} />
+                  {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
+                  <p className={styles.hint}>Include the country code for clients outside Ghana (e.g. +44…, +1…).</p>
+                </div>
               </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Contact *</label>
-                <input className={styles.input} placeholder="0244…" {...register('contact')} />
-                {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Lead source</label>
+                  <input className={styles.input} placeholder="e.g. Referral, Walk-in, Facebook" {...register('leadSource')} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Address</label>
+                  <input className={styles.input} placeholder="Client's physical address" {...register('address')} />
+                </div>
               </div>
               {duplicateClient && (
                 <p className={styles.hint}>
@@ -154,10 +209,16 @@ export function AddLeadScreen() {
                   <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots')} />
                 </div>
               </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Unit price (GHS) *</label>
-                <input className={styles.input} type="number" {...register('unitPrice')} />
-                {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Unit price (GHS) *</label>
+                  <input className={styles.input} type="number" {...register('unitPrice')} />
+                  {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Discount (GHS)</label>
+                  <input className={styles.input} type="number" placeholder="Leave blank to use the standard rate" {...register('discount')} />
+                </div>
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Payment plan</label>
@@ -188,6 +249,19 @@ export function AddLeadScreen() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className={styles.card}>
+              <div className={styles.cardTitle}>Details</div>
+              <div className={styles.field}>
+                <label className={styles.label}>Priority</label>
+                <select className={styles.select} {...register('priority')}>
+                  <option value="">Not set</option>
+                  {PRIORITIES.map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {canLogDeposit && (

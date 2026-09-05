@@ -4,6 +4,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ghs, normContact } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { Icon } from '../../../shared/ui/Icon';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { useClients } from '../hooks/useClients';
 import { clientKey } from '../lib/groupClients';
 import type { Client } from '../../../types/domain';
@@ -25,6 +26,8 @@ function initials(name: string): string {
 export function ClientDatabaseScreen() {
   const navigate = useNavigate();
   const location = useLocation();
+  const profile = useSessionStore((s) => s.profile);
+  const isMgr = profile?.role === 'manager';
   const { data: clients, isLoading } = useClients();
   const [query, setQuery] = useState('');
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export function ClientDatabaseScreen() {
     <div className={`${styles.pageRow} ${hasDetailOpen ? styles.pageRowSplit : ''}`}>
       <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
         <h1 className={styles.title}>Client Database</h1>
-        <p className={styles.sub}>Every client you own, grouped from your pipeline</p>
+        <p className={styles.sub}>{isMgr ? 'Every client, company-wide, grouped from the master pipeline' : 'Every client you own, grouped from your pipeline'}</p>
 
         <PipePillStrip>
           <PipePill tone="blue" value={clients?.length ?? 0} label="Clients" />

@@ -1,12 +1,9 @@
 import type { Config, Lead, Payment, PlotType, Stage } from '../../../types/domain';
 import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
+import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 
 // Ports of index.html's stage constants/derivation (index.html:2541,
-// 2846-2854, 17138-17139). Pricing here is deliberately simplified to
-// unitPrice * noPlots -- the real app's interest/discount/deposit-target
-// calc engine (computeLead(), index.html:2860+) is a large, separate
-// feature deferred to a later phase; grandTotal below is not yet a full
-// port of that engine.
+// 2846-2854, 17138-17139).
 export const STAGES: Stage[] = ['1', '2A', '2B', '3', '4', 'Lost'];
 
 // Internal code -> staff-facing display code (reversed numbering, per the
@@ -28,8 +25,40 @@ export function deriveStageFromPayment(paid: number, grand: number): Stage {
   return '1';
 }
 
+// Naive fallback only -- real pricing (interest by payment plan, real
+// per-plot-type discount) is previewGrandTotal below. Kept for the rare
+// caller that genuinely has nothing but a unit price and a count (e.g. a
+// bulk import row with no plan/discount data at all).
 export function computeGrandTotal(unitPrice: number, noPlots: number): number {
   return unitPrice * noPlots;
+}
+
+// Ported from index.html's computeLead() (index.html:2860-2864) -- always
+// recomputes fresh from plotType/noPlots/unitPrice/discount/paymentPlan,
+// unlike quotationLogic's computeLeadQuotationTotals (which trusts a
+// lead's stored netTotal/grandTotal when present, the right behavior for
+// the Contract PDF but wrong for a live "what would it become" preview
+// while a form is still being typed into -- both Pipeline Detail's Plot &
+// Pricing edit and Add Lead's own creation form need this same live-typing
+// preview, so it lives here rather than duplicated in each screen).
+export function previewGrandTotal(
+  config: Config,
+  plotType: Lead['plotType'],
+  noPlots: number,
+  unitPrice: number,
+  discount: number | null,
+  paymentPlan: PaymentPlanKey
+): { net: number; grand: number } {
+  const p = plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
+  const qty = noPlots || 1;
+  const unit = unitPrice || p.list;
+  const gross = unit * qty;
+  const disc = discount != null ? discount : p.disc * qty;
+  const net = Math.max(gross - disc, 0);
+  const eq = p.eq * qty;
+  const interestTable: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
+  const interest = (interestTable[paymentPlan] ?? 0) * eq;
+  return { net, grand: net + interest };
 }
 
 // Ported from index.html's allocationUnitsNeeded() (index.html:2660-2675) --

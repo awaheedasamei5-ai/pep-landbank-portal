@@ -8,9 +8,8 @@ import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/us
 import { usePlots, useUpdatePlot } from '../../plots/hooks/usePlots';
 import { useAllocationRequests, useCreateAllocationRequest } from '../../allocations/hooks/useAllocationRequests';
 import type { Lead, Payment } from '../../../types/domain';
-import { computeDepositStatus, computeMonthlySchedule } from '../lib/pipelineLogic';
+import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal } from '../lib/pipelineLogic';
 import { friendlyError } from '../../../shared/lib/friendlyError';
-import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 import { StageBadge } from '../components/StageBadge';
 import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
@@ -29,24 +28,6 @@ const DOC_STAGES = [
   { key: 'ready_pickup', label: 'Documents ready for pickup' },
 ];
 
-// Ported from index.html's computeLead() (index.html:2860-2864) -- always
-// recomputes fresh from plotType/noPlots/unitPrice/discount/paymentPlan,
-// unlike quotationLogic's computeLeadQuotationTotals (which trusts a
-// lead's stored netTotal/grandTotal when present, the right behavior for
-// the Contract PDF but wrong for this section's live "what would it
-// become" preview while the manager is still typing).
-function previewGrandTotal(config: NonNullable<ReturnType<typeof useConfig>['data']>, plotType: Lead['plotType'], noPlots: number, unitPrice: number, discount: number | null, paymentPlan: PaymentPlanKey): { net: number; grand: number } {
-  const p = plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
-  const qty = noPlots || 1;
-  const unit = unitPrice || p.list;
-  const gross = unit * qty;
-  const disc = discount != null ? discount : p.disc * qty;
-  const net = Math.max(gross - disc, 0);
-  const eq = p.eq * qty;
-  const interestTable: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
-  const interest = (interestTable[paymentPlan] ?? 0) * eq;
-  return { net, grand: net + interest };
-}
 
 function initialsOf(name: string): string {
   return name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -325,6 +306,7 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState(lead.leadSource ?? '');
   const [priority, setPriority] = useState(lead.priority ?? '');
+  const [address, setAddress] = useState(lead.address ?? '');
   const [reassigning, setReassigning] = useState(false);
   const [assignTo, setAssignTo] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -348,6 +330,10 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Priority</span>
           <span>{lead.priority || '—'}</span>
+        </div>
+        <div className={styles.readRow}>
+          <span className={styles.readLabel}>Address</span>
+          <span>{lead.address || '—'}</span>
         </div>
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Assigned to</span>
@@ -399,6 +385,10 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
           ))}
         </select>
       </div>
+      <div className={styles.field}>
+        <label className={styles.label}>Address</label>
+        <input className={styles.input} placeholder="Client's physical address" value={address} onChange={(e) => setAddress(e.target.value)} />
+      </div>
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.actionsRow}>
         <button type="button" className={styles.cancelBtn} onClick={() => setEditing(false)}>
@@ -411,7 +401,9 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
           disabled={update.isPending}
           onClick={() => {
             setError(null);
-            update.mutateAsync({ id: lead.id, patch: { leadSource: source.trim() || undefined, priority: priority || undefined, expectedVersion: lead.version ?? undefined } }).then(
+            update
+              .mutateAsync({ id: lead.id, patch: { leadSource: source.trim() || undefined, priority: priority || undefined, address: address.trim() || undefined, expectedVersion: lead.version ?? undefined } })
+              .then(
               () => setEditing(false),
               (e) => setError(friendlyError(e, 'Failed to save')),
             );

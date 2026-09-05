@@ -70,6 +70,7 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
   if ('priority' in patch) dbPatch.priority = patch.priority;
   if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
+  if ('address' in patch) dbPatch.address = patch.address;
   if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
   return dbPatch;
 }
@@ -825,7 +826,10 @@ function createDemoDataSource(): DataSource {
         // Same rule as live mode -- see live leads.create()'s comment.
         // amt_paid always starts at 0 here regardless of input.amtPaid;
         // useCreateLead creates a real Payment row for a nonzero deposit.
-        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        // grandTotal/netTotal prefer the caller's own previewGrandTotal()
+        // figures (what Add Lead actually showed on screen) -- the naive
+        // unitPrice*noPlots fallback is only for a caller with nothing else.
+        const grandTotal = input.grandTotal ?? computeGrandTotal(input.unitPrice, input.noPlots);
         const lead: Lead = {
           id: Math.random().toString(36).slice(2, 10),
           agent: agentKey,
@@ -840,6 +844,11 @@ function createDemoDataSource(): DataSource {
           grandTotal,
           stage: deriveStageFromPayment(0, grandTotal),
           notes: input.notes,
+          leadSource: input.leadSource ?? null,
+          priority: input.priority ?? null,
+          address: input.address ?? null,
+          discount: input.discount ?? null,
+          netTotal: input.netTotal ?? null,
         };
         const db = demoLoad();
         db.leads.push(lead);
@@ -2608,7 +2617,7 @@ function createLiveDataSource(): DataSource {
         // this resolves (see that hook's own comment for why it isn't
         // folded into one call here: the lead must exist first to supply
         // payments.create() a real leadId).
-        const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
+        const grandTotal = input.grandTotal ?? computeGrandTotal(input.unitPrice, input.noPlots);
         const { data, error } = await requireClient()
           .from('leads')
           .insert({
@@ -2621,9 +2630,14 @@ function createLiveDataSource(): DataSource {
             payment_plan: input.paymentPlan,
             amt_paid: 0,
             grand_total: grandTotal,
+            net_total: input.netTotal ?? null,
+            discount: input.discount ?? null,
             balance: grandTotal,
             stage: deriveStageFromPayment(0, grandTotal),
             notes: input.notes ?? null,
+            lead_source: input.leadSource ?? null,
+            priority: input.priority ?? null,
+            address: input.address ?? null,
           })
           .select()
           .single();

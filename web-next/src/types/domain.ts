@@ -155,6 +155,10 @@ export interface LeadUpdate {
   // Added for the pipeline Excel import's canonical LEADS sheet ("Source"
   // column, spec 5.1) -- same reasoning as priority above.
   leadSource?: string;
+  // Real column `address` (confirmed live) had NO write path anywhere in
+  // the app before this -- 4 separate PDF generators (Quotation, Technical
+  // Quotation, Receipt, Contract of Sale) read it and always got blank.
+  address?: string;
   // Master Rebuild Spec Section 3.4's own worked example: "This client has
   // already been updated by another user. Refresh and review the latest
   // version before saving." Optional and opt-in -- a caller that loaded a
@@ -199,6 +203,20 @@ export interface NewLead {
   // amt_paid=0 regardless of what's passed here.
   amtPaid: number;
   notes?: string;
+  // Real columns with no way to ever be set before this (address had NO
+  // write path anywhere in the app despite 4 separate PDF generators
+  // reading it) -- captured at intake rather than forcing an immediate
+  // second edit right after saving. discount/netTotal/grandTotal are the
+  // real previewGrandTotal()-computed figures the Add Lead form already
+  // shows on screen; passed through explicitly so what's stored matches
+  // what staff saw, rather than leads.create() re-deriving its own
+  // (previously interest-blind) total from scratch.
+  leadSource?: string;
+  priority?: string;
+  address?: string;
+  discount?: number;
+  netTotal?: number;
+  grandTotal?: number;
 }
 
 // Real distinct values seen on production's payment_method column
