@@ -936,9 +936,25 @@ function createDemoDataSource(): DataSource {
         if (index === -1) return;
         const updated: Lead = { ...db.leads[index], deletedAt: new Date().toISOString(), deletionReason: reason, deletedBy, deletedByName };
         db.leads = [...db.leads.slice(0, index), updated, ...db.leads.slice(index + 1)];
+        // Real gap the user caught live: archiving a client never freed
+        // their allocated plot, matching (and now fixed alongside) the
+        // live archive_lead_and_vacate RPC -- vacates any plot(s) this
+        // lead's own Allocated request(s) hold, reverting those requests
+        // to Pending with a real history entry instead of deleting them.
+        const now = new Date().toISOString();
+        const vacated: string[] = [];
+        db.allocationRequests = db.allocationRequests.map((r) => {
+          if (r.leadId !== id || r.status !== 'Allocated') return r;
+          const plotNumbers = (r.plotNumber ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+          vacated.push(...plotNumbers);
+          return { ...r, status: 'Pending' as const, plotNumber: null, history: [...r.history, { type: 'reverted', reason: `Lead archived: ${reason}`, by: deletedByName, at: now }] };
+        });
+        if (vacated.length > 0) {
+          db.plots = db.plots.map((p) => (vacated.some((pn) => pn.toLowerCase() === p.plotNumber.toLowerCase()) && p.status === 'Allocated' ? { ...p, status: 'Available' as const, clientName: null, clientContact: null, agentKey: null } : p));
+        }
         db.auditEvents = db.auditEvents ?? [];
         const nextId = (db.auditEvents.reduce((max, e) => Math.max(max, e.id), 0) || 0) + 1;
-        db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.archived', severity: 'warning', actorKey: deletedBy, actorName: deletedByName, entityType: 'lead', entityId: id, summary: `${deletedByName} archived a lead — ${reason}`, detail: { reason, deletedBy }, source: 'client' }, ...db.auditEvents];
+        db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.archived', severity: 'warning', actorKey: deletedBy, actorName: deletedByName, entityType: 'lead', entityId: id, summary: `${deletedByName} archived a lead — ${reason}`, detail: { reason, deletedBy, vacatedPlots: vacated }, source: 'client' }, ...db.auditEvents];
         demoSave();
       },
       async listArchived() {
@@ -2604,29 +2620,19 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
       },
       async remove(id, reason, deletedBy, deletedByName) {
-        // Soft delete, not a hard DELETE -- matches legacy's real
-        // apiDeleteLead() (index.html:4622-4629). A real ON DELETE CASCADE
-        // on allocation_requests/target_selections/payment_reminders_log/
-        // client_notifications would destroy their history, and payments
-        // would be orphaned via ON DELETE SET NULL -- all confirmed live.
-        // leads_sel/leads_client_sel RLS already filters deleted_at IS
-        // NULL for everyone but a manager, so this needs no client-side
-        // filtering anywhere else.
-        const { error } = await requireClient()
-          .from('leads')
-          .update({ deleted_at: new Date().toISOString(), deletion_reason: reason, deleted_by: deletedBy, deleted_by_name: deletedByName })
-          .eq('id', id);
+        // Real SECURITY DEFINER RPC (added this session) -- soft-deletes
+        // the lead (matches legacy's real apiDeleteLead(), index.html:
+        // 4622-4629) AND vacates any plot(s) currently Allocated to this
+        // lead's own allocation_request(s) back to Available, reverting
+        // those requests to Pending with a real history entry rather
+        // than leaving a plot permanently locked out of resale just
+        // because the client record was archived -- a real gap the user
+        // caught live (danger-zone reason text already implied this, the
+        // actual delete path never did it). Also writes the audit event
+        // itself now (was a separate fire-and-forget RPC call before),
+        // so archiving and vacating are one atomic transaction.
+        const { error } = await requireClient().rpc('archive_lead_and_vacate', { p_lead_id: id, p_reason: reason, p_deleted_by: deletedBy, p_deleted_by_name: deletedByName });
         if (error) throw error;
-        // Real audit trail (Master Spec Section 4's Audit Trail section) --
-        // a reason-required deletion is exactly the kind of business-
-        // critical write §26 already required for payments; this closes
-        // the same gap for leads. Fire-and-forget, matches audit.log()'s
-        // own never-block-the-caller contract.
-        requireClient()
-          .rpc('record_audit_event', { p_category: 'audit', p_event_type: 'lead.archived', p_severity: 'warning', p_entity_type: 'lead', p_entity_id: id, p_summary: `${deletedByName} archived a lead — ${reason}`, p_detail: { reason, deletedBy } })
-          .then(({ error: auditError }) => {
-            if (auditError) console.error('record_audit_event failed', auditError);
-          });
       },
       async listArchived() {
         // Explicit filter needed here even though RLS already restricts
