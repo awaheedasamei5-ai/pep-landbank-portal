@@ -1349,6 +1349,24 @@ export interface PricingHistoryEntry {
   changedAt: string;
 }
 
+// A promo window Management sets up in Settings -- applies a discount/
+// price increase ONLY to leads created within [dateFrom, dateTo], never
+// to any lead already in the system (real user requirement, replacing an
+// earlier "bulk-adjust every existing lead now" feature that did the
+// opposite). AddLeadScreen looks these up by the lead's own date + plot
+// type and auto-fills discount/unit price when one matches.
+export interface PricingPromotion {
+  id: string;
+  plotType: 'Both' | PlotType;
+  mode: 'discount' | 'increase';
+  amountPerPlot: number;
+  dateFrom: string;
+  dateTo: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
+}
+
 export interface NewBanner {
   name: string;
   area: string;

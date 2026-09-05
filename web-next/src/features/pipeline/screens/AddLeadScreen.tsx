@@ -7,7 +7,7 @@ import { useCreateLead, useLeads } from '../hooks/useLeads';
 import { previewGrandTotal } from '../lib/pipelineLogic';
 import { ghs, today } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useConfig, usePricingPromotions } from '../../manager/hooks/useConfigSettings';
 import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { useBanners } from '../../banners/hooks/useBanners';
@@ -84,6 +84,7 @@ export function AddLeadScreen() {
   const { data: leads } = useLeads();
   const { data: clients } = useClients();
   const { data: config } = useConfig();
+  const { data: promotions } = usePricingPromotions();
   const { data: banners } = useBanners();
   const createReferral = useCreateReferral();
   const linkReferralLead = useLinkReferralLead();
@@ -132,6 +133,11 @@ export function AddLeadScreen() {
   // own number -- e.g. via the partial-plot calculator below, or a real
   // multi-plot deal.
   const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(false);
+  // Same pattern again -- an active Promotional pricing window (Settings)
+  // auto-fills unit price (mode 'increase') or the discount field (mode
+  // 'discount') for a matching new lead, but only while the staff member
+  // hasn't typed their own override.
+  const [discountManuallyEdited, setDiscountManuallyEdited] = useState(false);
   const {
     register,
     handleSubmit,
@@ -176,6 +182,17 @@ export function AddLeadScreen() {
   const qtyOfType = Number(noPlots || eqPerUnit) / eqPerUnit;
   const discountNum = discountRaw != null && discountRaw !== '' ? (discountMode === 'perplot' ? Number(discountRaw) * qtyOfType : Number(discountRaw)) : null;
 
+  // Real feature: a promo window (Settings > Promotional pricing window)
+  // only ever applies to a lead being created NOW, matched by plot type
+  // and this lead's own date -- never a retroactive change to any
+  // existing lead. `watchedDate` falls back to today() so an as-yet-blank
+  // Date field still resolves to "today" for the lookup, matching the
+  // form's own default.
+  const watchedDateRaw = watch('date');
+  const watchedDate = watchedDateRaw?.trim() ? watchedDateRaw : today();
+  const activePromo = (promotions ?? []).find((p) => (p.plotType === 'Both' || p.plotType === plotType) && watchedDate >= p.dateFrom && watchedDate <= p.dateTo) ?? null;
+  const activePromoId = activePromo?.id;
+
   // Real interest-by-payment-plan/discount-aware pricing (previewGrandTotal,
   // same engine Pipeline Detail's own edit already uses), not the naive
   // unitPrice*noPlots this screen used before -- that silently under-priced
@@ -199,13 +216,30 @@ export function AddLeadScreen() {
   // unitPriceManuallyEdited above).
   useEffect(() => {
     if (!config || unitPriceManuallyEdited) return;
-    setValue('unitPrice', plotType === 'Half Plot' ? config.halfPrice : config.fullPrice);
-  }, [config, plotType, unitPriceManuallyEdited, setValue]);
+    const standard = plotType === 'Half Plot' ? config.halfPrice : config.fullPrice;
+    const promoBump = activePromo?.mode === 'increase' ? activePromo.amountPerPlot : 0;
+    setValue('unitPrice', standard + promoBump);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, plotType, unitPriceManuallyEdited, activePromoId, setValue]);
 
   useEffect(() => {
     if (noPlotsManuallyEdited) return;
     setValue('noPlots', plotType === 'Half Plot' ? 0.5 : 1);
   }, [plotType, noPlotsManuallyEdited, setValue]);
+
+  // Promo's own discount reuses the existing "Discount is per plot" mode
+  // (amount x qty-of-type, same convention a staff member picks manually)
+  // rather than a second discount-scaling path.
+  useEffect(() => {
+    if (discountManuallyEdited) return;
+    if (activePromo?.mode === 'discount') {
+      setDiscountMode('perplot');
+      setValue('discount', String(activePromo.amountPerPlot));
+    } else {
+      setValue('discount', '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePromoId, discountManuallyEdited, setValue]);
 
   const watchedName = watch('name') || '';
   const watchedContact = watch('contact') || '';
@@ -359,7 +393,18 @@ export function AddLeadScreen() {
                     Discount is per plot
                   </button>
                 </div>
-                <input className={styles.input} type="number" placeholder="Leave blank to use the standard rate" {...register('discount')} />
+                <input
+                  className={styles.input}
+                  type="number"
+                  placeholder="Leave blank to use the standard rate"
+                  {...register('discount', { onChange: () => setDiscountManuallyEdited(true) })}
+                />
+                {activePromo && (
+                  <p className={styles.hint}>
+                    🏷️ Promo active for this date/plot type: {activePromo.mode === 'discount' ? `extra ${ghs(activePromo.amountPerPlot)} discount` : `${ghs(activePromo.amountPerPlot)} price increase`} per plot, through{' '}
+                    {activePromo.dateTo}.
+                  </p>
+                )}
               </div>
               <div className={styles.grid2}>
                 <div className={styles.field}>

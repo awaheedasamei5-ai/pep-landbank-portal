@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import type { Config } from '../../../types/domain';
+import type { Config, PricingPromotion } from '../../../types/domain';
 
 export function useConfig() {
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -46,19 +46,33 @@ export function useLogPricingChange() {
   });
 }
 
-// Port of v1's "Monthly price adjustment" (apiBulkAdjust) -- Management's
-// manual, one-time bulk discount/price-increase applied to every lead
-// with an outstanding balance. Real money-affecting action -- deliberately
-// requires its own explicit confirmation in the UI, not just this hook.
-export function useBulkAdjustPrice() {
+// Real feature request, replacing the earlier "Monthly price adjustment"
+// (which bulk-mutated every existing outstanding lead immediately -- the
+// opposite of what was actually wanted): a promo window Management sets
+// up once (plot type, discount/increase, amount, date range) that only
+// ever affects leads CREATED inside that window, via AddLeadScreen's own
+// lookup -- never a mutation against any lead already in the system.
+export function usePricingPromotions() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['pricingPromotions'], queryFn: () => getDataSource(demoMode).pricingPromotions.list() });
+}
+
+export function useCreatePricingPromotion() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Omit<PricingPromotion, 'id' | 'createdBy' | 'createdByName' | 'createdAt'>) =>
+      getDataSource(demoMode).pricingPromotions.create(profile?.key ?? '', profile?.name ?? '', input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pricingPromotions'] }),
+  });
+}
+
+export function useDeletePricingPromotion() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ plotType, mode, amountPerPlot }: { plotType: 'Both' | 'Full Plot' | 'Half Plot'; mode: 'discount' | 'increase'; amountPerPlot: number }) =>
-      getDataSource(demoMode).leads.bulkAdjustPrice(plotType, mode, amountPerPlot),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['leadsAll'] });
-    },
+    mutationFn: (id: string) => getDataSource(demoMode).pricingPromotions.remove(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pricingPromotions'] }),
   });
 }

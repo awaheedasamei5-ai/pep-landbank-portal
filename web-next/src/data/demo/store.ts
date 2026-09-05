@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionOverride, Plot, PricingHistoryEntry, Referral, ReportArchiveEntry, ScheduleItem, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
+import type { ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Referral, ReportArchiveEntry, ScheduleItem, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -50,6 +50,7 @@ export interface DemoDb {
   receiptShareLinks: { id: string; paymentId: string; token: string; createdAt: string }[];
   banners: Banner[];
   pricingHistory?: PricingHistoryEntry[];
+  pricingPromotions?: PricingPromotion[];
   fundRequests: FundRequest[];
   weeklyVisitForms: WeeklyVisitForm[];
   downloads: DownloadRecord[];

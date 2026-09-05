@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -171,6 +171,20 @@ export function mapPricingHistoryRow(r: Record<string, unknown>): PricingHistory
     oldValue: Number(r.old_value ?? 0),
     newValue: Number(r.new_value ?? 0),
     changedAt: r.changed_at as string,
+  };
+}
+
+export function mapPricingPromotionRow(r: Record<string, unknown>): PricingPromotion {
+  return {
+    id: r.id as string,
+    plotType: r.plot_type as PricingPromotion['plotType'],
+    mode: r.mode as PricingPromotion['mode'],
+    amountPerPlot: Number(r.amount_per_plot ?? 0),
+    dateFrom: r.date_from as string,
+    dateTo: r.date_to as string,
+    createdBy: (r.created_by as string) ?? null,
+    createdByName: (r.created_by_name as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

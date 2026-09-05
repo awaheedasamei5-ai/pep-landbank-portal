@@ -1,7 +1,7 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
-import { deriveStageFromPayment, computeGrandTotal, previewGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
+import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
@@ -14,6 +14,7 @@ import {
   mapBackupRow,
   mapBannerRow,
   mapPricingHistoryRow,
+  mapPricingPromotionRow,
   mapPermissionDefRow,
   mapPermissionOverrideRow,
   mapFundRequestRow,
@@ -207,18 +208,6 @@ export interface DataSource {
     // deletion, matching how decidedBy/decidedByName on payments are
     // never cleared either.
     restore(id: string): Promise<Lead>;
-    // Port of v1's apiBulkAdjust (index.html:6923-6938) -- Management's
-    // "Monthly price adjustment" tool. Every lead with a real outstanding
-    // balance (grandTotal-amtPaid > 0.5) matching plotType gets either its
-    // discount raised (mode 'discount', reduces balance) or its unitPrice
-    // raised (mode 'increase', raises balance) by amountPerPlot, then
-    // net/grand/balance are recomputed and persisted -- amtPaid itself is
-    // never touched. Same real limitation as v1: a plain per-row loop, not
-    // one atomic transaction (matches the live RLS's own per-row manager
-    // check; the operation is manager-only, explicit, and rare enough that
-    // this is an accepted, not overlooked, tradeoff). Returns how many
-    // leads were affected.
-    bulkAdjustPrice(plotType: 'Both' | 'Full Plot' | 'Half Plot', mode: 'discount' | 'increase', amountPerPlot: number): Promise<number>;
   };
   // Real workflow (confirmed live via RLS + the actual production RPCs +
   // reading index.html's own logNewPayment()/applyApprovedPaymentToLead()
@@ -518,6 +507,19 @@ export interface DataSource {
   pricingHistory: {
     list(): Promise<PricingHistoryEntry[]>;
     log(changedBy: string, changedByName: string, field: string, fieldLabel: string, oldValue: number, newValue: number): Promise<PricingHistoryEntry>;
+  };
+  // Real table `pricing_promotions` -- a promo window Management sets up
+  // (plot type, discount/increase, amount, date range) that only ever
+  // affects leads CREATED inside that window; it never touches a lead
+  // already in the system (replaces an earlier "bulk-adjust every
+  // existing lead now" tool that did the opposite of what was wanted).
+  // AddLeadScreen calls list() and finds the match itself rather than a
+  // separate server-side "what applies today" endpoint, since the set is
+  // always small and the match logic (date range + plot type) is trivial.
+  pricingPromotions: {
+    list(): Promise<PricingPromotion[]>;
+    create(createdBy: string, createdByName: string, input: Omit<PricingPromotion, 'id' | 'createdBy' | 'createdByName' | 'createdAt'>): Promise<PricingPromotion>;
+    remove(id: string): Promise<void>;
   };
   // Real table `fund_requests` -- see the FundRequest type's comment in
   // types/domain.ts for the real reason this is only ever the request/
@@ -1039,24 +1041,6 @@ function createDemoDataSource(): DataSource {
         db.auditEvents = [{ id: nextId, createdAt: new Date().toISOString(), category: 'audit', eventType: 'lead.restored', severity: 'info', actorKey: null, actorName: null, entityType: 'lead', entityId: id, summary: `${updated.name} was restored from the archive`, detail: null, source: 'client' }, ...db.auditEvents];
         demoSave();
         return updated;
-      },
-      async bulkAdjustPrice(plotType, mode, amountPerPlot) {
-        const db = demoLoad();
-        const config = db.config;
-        let affected = 0;
-        db.leads = db.leads.map((l) => {
-          if (l.deletedAt) return l;
-          if (plotType !== 'Both' && l.plotType !== plotType) return l;
-          const outstanding = l.grandTotal - l.amtPaid;
-          if (!(outstanding > 0.5)) return l;
-          const newDiscount = mode === 'discount' ? (l.discount ?? 0) + amountPerPlot * l.noPlots : l.discount ?? 0;
-          const newUnitPrice = mode === 'increase' ? l.unitPrice + amountPerPlot : l.unitPrice;
-          const recomputed = previewGrandTotal(config, l.plotType, l.noPlots, newUnitPrice, newDiscount, l.paymentPlan);
-          affected++;
-          return { ...l, discount: newDiscount, unitPrice: newUnitPrice, netTotal: recomputed.net, grandTotal: recomputed.grand };
-        });
-        demoSave();
-        return affected;
       },
     },
     payments: {
@@ -1767,6 +1751,23 @@ function createDemoDataSource(): DataSource {
         db.pricingHistory = [entry, ...(db.pricingHistory ?? [])];
         demoSave();
         return entry;
+      },
+    },
+    pricingPromotions: {
+      async list() {
+        return (demoLoad().pricingPromotions ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      },
+      async create(createdBy, createdByName, input) {
+        const entry: PricingPromotion = { id: crypto.randomUUID(), createdBy, createdByName, createdAt: new Date().toISOString(), ...input };
+        const db = demoLoad();
+        db.pricingPromotions = [entry, ...(db.pricingPromotions ?? [])];
+        demoSave();
+        return entry;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.pricingPromotions = (db.pricingPromotions ?? []).filter((p) => p.id !== id);
+        demoSave();
       },
     },
     async leadBannerCounts() {
@@ -2856,28 +2857,6 @@ function createLiveDataSource(): DataSource {
           });
         return mapLeadRow(data);
       },
-      async bulkAdjustPrice(plotType, mode, amountPerPlot) {
-        const client = requireClient();
-        const { data: configRow, error: configError } = await client.from('app_config').select('*').eq('id', 1).single();
-        if (configError) throw configError;
-        const config = mapConfigRow(configRow);
-        let query = client.from('leads').select('*').is('deleted_at', null);
-        if (plotType !== 'Both') query = query.eq('plot_type', plotType);
-        const { data: rows, error: listError } = await query;
-        if (listError) throw listError;
-        const targets = (rows ?? []).map(mapLeadRow).filter((l) => l.grandTotal - l.amtPaid > 0.5);
-        for (const l of targets) {
-          const newDiscount = mode === 'discount' ? (l.discount ?? 0) + amountPerPlot * l.noPlots : l.discount ?? 0;
-          const newUnitPrice = mode === 'increase' ? l.unitPrice + amountPerPlot : l.unitPrice;
-          const recomputed = previewGrandTotal(config, l.plotType, l.noPlots, newUnitPrice, newDiscount, l.paymentPlan);
-          const { error: updError } = await client
-            .from('leads')
-            .update({ discount: newDiscount, unit_price: newUnitPrice, net_total: recomputed.net, grand_total: recomputed.grand, balance: Math.max(recomputed.grand - l.amtPaid, 0) })
-            .eq('id', l.id);
-          if (updError) throw updError;
-        }
-        return targets.length;
-      },
     },
     payments: {
       async listForAgent(agentKey) {
@@ -3515,6 +3494,34 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapPricingHistoryRow(data);
+      },
+    },
+    pricingPromotions: {
+      async list() {
+        const { data, error } = await requireClient().from('pricing_promotions').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapPricingPromotionRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('pricing_promotions')
+          .insert({
+            plot_type: input.plotType,
+            mode: input.mode,
+            amount_per_plot: input.amountPerPlot,
+            date_from: input.dateFrom,
+            date_to: input.dateTo,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapPricingPromotionRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('pricing_promotions').delete().eq('id', id);
+        if (error) throw error;
       },
     },
     async leadBannerCounts() {

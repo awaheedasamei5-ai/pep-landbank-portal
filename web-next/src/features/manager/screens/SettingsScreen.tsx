@@ -4,7 +4,8 @@ import type { Config, LeaderboardWeights } from '../../../types/domain';
 import { Icon } from '../../../shared/ui/Icon';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
-import { useBulkAdjustPrice, useConfig, useLogPricingChange, usePricingHistory, useUpdateConfig } from '../hooks/useConfigSettings';
+import { useConfig, useCreatePricingPromotion, useDeletePricingPromotion, useLogPricingChange, usePricingHistory, usePricingPromotions, useUpdateConfig } from '../hooks/useConfigSettings';
+import { today as todayStr } from '../../../shared/lib/format';
 import styles from './SettingsScreen.module.css';
 
 // Real app_config columns leaderboard_weights/commission_full_cap/
@@ -39,7 +40,7 @@ export function SettingsScreen() {
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
       {config && <PricingSettingsSection config={config} />}
       {config && <SettingsForm config={config} />}
-      {config && <BulkAdjustmentSection />}
+      {config && <PromotionalPricingSection />}
       <PricingHistorySection />
     </div>
   );
@@ -195,42 +196,66 @@ function PricingSettingsSection({ config }: { config: Config }) {
   );
 }
 
-// Port of v1's "Monthly price adjustment" (apiBulkAdjust) -- a manual,
-// one-time bulk discount/price-increase applied to every lead with an
-// outstanding balance, for when plot prices genuinely change for a given
-// month (an end-of-month promo, or a price rise on new sales). This is
-// NOT a scheduled/date-ranged campaign -- v1 has no such mechanism; it
-// runs once, immediately, when clicked, exactly like the real app does.
-function BulkAdjustmentSection() {
-  const bulkAdjust = useBulkAdjustPrice();
+// Real user correction, replacing the earlier "Monthly price adjustment"
+// (apiBulkAdjust-style, one-time bulk-mutate every existing outstanding
+// lead immediately): "the adjustment is supposed to serve as a setting
+// that is only used in case management wants to set up a discount or
+// price change only in a promo period, and the adjustment only affects
+// clients loaded into the system during that period ... never any client
+// that was in the system already." A promo window saved here does
+// nothing to any existing lead -- AddLeadScreen looks up whether one
+// applies (matching plot type, and the lead's own date falling inside
+// dateFrom..dateTo) and auto-fills the discount/unit price for a NEW
+// lead only, exactly once, at creation.
+function PromotionalPricingSection() {
+  const { data: promos } = usePricingPromotions();
+  const createPromo = useCreatePricingPromotion();
+  const deletePromo = useDeletePricingPromotion();
   const [plotType, setPlotType] = useState<'Both' | 'Full Plot' | 'Half Plot'>('Both');
   const [mode, setMode] = useState<'discount' | 'increase'>('discount');
   const [amount, setAmount] = useState('');
-  const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  async function apply() {
+  const today = todayStr();
+
+  function overlapsExisting(candidate: { plotType: typeof plotType; dateFrom: string; dateTo: string }): boolean {
+    return (promos ?? []).some((p) => {
+      const sameType = p.plotType === 'Both' || candidate.plotType === 'Both' || p.plotType === candidate.plotType;
+      if (!sameType) return false;
+      return candidate.dateFrom <= p.dateTo && candidate.dateTo >= p.dateFrom;
+    });
+  }
+
+  async function save() {
     setError(null);
-    setResult(null);
     const amt = Number(amount);
-    if (!amt) return;
+    if (!amt || !dateFrom || !dateTo) return;
+    if (dateTo < dateFrom) {
+      setError('End date must be on or after the start date.');
+      return;
+    }
+    if (overlapsExisting({ plotType, dateFrom, dateTo })) {
+      setError('This overlaps an existing promo window for the same plot type — end or remove it first, or narrow the dates.');
+      return;
+    }
     try {
-      const n = await bulkAdjust.mutateAsync({ plotType, mode, amountPerPlot: amt });
-      setResult(`Applied to ${n} outstanding lead${n === 1 ? '' : 's'}.`);
-      setConfirming(false);
+      await createPromo.mutateAsync({ plotType, mode, amountPerPlot: amt, dateFrom, dateTo });
       setAmount('');
+      setDateFrom('');
+      setDateTo('');
     } catch (e) {
-      setError(friendlyError(e, 'Failed to apply the adjustment'));
+      setError(friendlyError(e, 'Failed to save the promotion'));
     }
   }
 
   return (
     <div className={styles.sectionCard}>
-      <div className={styles.sectionTitle}>Monthly price adjustment</div>
+      <div className={styles.sectionTitle}>Promotional pricing window</div>
       <p className={styles.sectionHint}>
-        Applies a one-time discount or price increase to every lead with an outstanding balance right now. Use this when plot prices change for a given month &mdash; e.g. an end-of-month promo discount, or a price rise on new
-        pricing. This updates real balances immediately and only once; it does not repeat or expire on a schedule.
+        Runs a discount or price increase ONLY for leads added within the dates you choose below &mdash; e.g. an end-of-month promo. Never touches any client already in the system, before or after saving this; it only ever
+        applies once, automatically, when a new lead is created inside the window.
       </p>
       <div className={styles.grid2}>
         <div className={styles.field}>
@@ -244,8 +269,8 @@ function BulkAdjustmentSection() {
         <div className={styles.field}>
           <label className={styles.label}>Adjustment type</label>
           <select className={styles.input} value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
-            <option value="discount">Extra discount (reduce balance)</option>
-            <option value="increase">Price increase (raise balance)</option>
+            <option value="discount">Extra discount (reduce price)</option>
+            <option value="increase">Price increase (raise price)</option>
           </select>
         </div>
       </div>
@@ -253,26 +278,47 @@ function BulkAdjustmentSection() {
         <label className={styles.label}>Amount per plot (GHS)</label>
         <input className={styles.input} type="number" placeholder="e.g. 2000" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </div>
+      <div className={styles.grid2}>
+        <div className={styles.field}>
+          <label className={styles.label}>From</label>
+          <input className={styles.input} type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>To</label>
+          <input className={styles.input} type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+      </div>
       {error && <p className={styles.errorMsg}>{error}</p>}
-      {result && <p className={styles.sectionHint}>{result}</p>}
-      {!confirming ? (
-        <button type="button" className={styles.saveBtnGold} disabled={!amount} onClick={() => setConfirming(true)}>
-          Apply adjustment now
-        </button>
-      ) : (
-        <div>
-          <p className={styles.errorMsg}>
-            Apply {mode === 'discount' ? 'an extra discount' : 'a price increase'} of {ghs(Number(amount) || 0)} per plot to every {plotType === 'Both' ? '' : plotType + ' '}lead with an outstanding balance, right now? This
-            updates real balances and cannot be undone automatically.
-          </p>
-          <div className={styles.confirmRow}>
-            <button type="button" className={styles.cancelLink} onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-            <button type="button" className={styles.saveBtnGold} disabled={bulkAdjust.isPending} onClick={apply}>
-              {bulkAdjust.isPending ? 'Applying…' : 'Yes, apply now'}
-            </button>
-          </div>
+      <button type="button" className={styles.saveBtnGold} disabled={!amount || !dateFrom || !dateTo || createPromo.isPending} onClick={save}>
+        {createPromo.isPending ? 'Saving…' : 'Save promotion'}
+      </button>
+
+      {(promos ?? []).length > 0 && (
+        <div className={styles.historyList} style={{ marginTop: 14 }}>
+          {(promos ?? []).map((p) => {
+            const state = p.dateTo < today ? 'Ended' : p.dateFrom > today ? 'Upcoming' : 'Active now';
+            return (
+              <div key={p.id} className={styles.historyRow}>
+                <div className={styles.historyField}>
+                  {p.plotType} — {p.mode === 'discount' ? 'Extra discount' : 'Price increase'} of {ghs(p.amountPerPlot)}/plot
+                </div>
+                <div className={styles.historyMeta}>
+                  {p.dateFrom} → {p.dateTo} · {state} · added by {p.createdByName || 'Management'}
+                </div>
+                <button
+                  type="button"
+                  className={styles.cancelLink}
+                  disabled={deletePromo.isPending}
+                  onClick={() => {
+                    setError(null);
+                    deletePromo.mutate(p.id);
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
