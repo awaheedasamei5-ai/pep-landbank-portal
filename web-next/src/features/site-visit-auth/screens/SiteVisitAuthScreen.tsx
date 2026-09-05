@@ -5,6 +5,7 @@ import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
 import { useCanViewSiteVisitAuth, useFinalizeWeeklyVisitForm, useSaveWeeklyVisitCosts, useWeeklyVisitForm, useWeekSiteVisits } from '../hooks/useSiteVisitAuth';
 import { useCancelSiteVisit } from '../../site-visits/hooks/useSiteVisits';
+import { useDownloadSiteVisitAuthPdf } from '../hooks/useSiteVisitAuthPdf';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './SiteVisitAuthScreen.module.css';
@@ -98,6 +99,7 @@ export function SiteVisitAuthScreen() {
 function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitForm; visits: SiteVisit[]; activeDay: string; isManager: boolean }) {
   const saveCosts = useSaveWeeklyVisitCosts();
   const finalize = useFinalizeWeeklyVisitForm();
+  const downloadPdf = useDownloadSiteVisitAuthPdf();
   const costsEditable = form.status !== 'Finalized';
 
   const [siteManagerName, setSiteManagerName] = useState(form.siteManagerName ?? '');
@@ -131,6 +133,9 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
           {fmtLongDate(activeDay)} · {visits.length} visit{visits.length === 1 ? '' : 's'}
         </span>
       </div>
+      <button type="button" className={styles.pdfDownloadBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate({ form, visits })}>
+        {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download authorization form (PDF)'}
+      </button>
 
       <div className={styles.smCard}>
         <label className={styles.label}>Site manager in charge</label>
