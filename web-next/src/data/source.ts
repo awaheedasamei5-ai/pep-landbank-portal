@@ -1465,6 +1465,8 @@ function createDemoDataSource(): DataSource {
           deletedBy: null,
           deletedByName: null,
           cancellationReason: null,
+          advanceReminderSentAt: null,
+          finalReminderSentAt: null,
         };
         const db = demoLoad();
         db.siteVisits.push(visit);

@@ -255,6 +255,8 @@ export function seedDemo(): DemoDb {
       deletedBy: null,
       deletedByName: null,
       cancellationReason: null,
+      advanceReminderSentAt: null,
+      finalReminderSentAt: null,
     },
     {
       id: uid(),
@@ -287,6 +289,8 @@ export function seedDemo(): DemoDb {
       deletedBy: null,
       deletedByName: null,
       cancellationReason: null,
+      advanceReminderSentAt: null,
+      finalReminderSentAt: null,
     },
   ];
 

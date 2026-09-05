@@ -705,6 +705,13 @@ export interface SiteVisit {
   deletedBy: string | null;
   deletedByName: string | null;
   cancellationReason: string | null;
+  // Real columns added 2026-09-05 -- de-dupe tracking for the two
+  // scheduled client reminder SMS (send_site_visit_reminders(), run by
+  // pg_cron daily at 18:00 the evening before, and 07:00 the morning of),
+  // so a visit is never reminded twice. Read-only here -- only the
+  // server-side function ever sets these.
+  advanceReminderSentAt: string | null;
+  finalReminderSentAt: string | null;
 }
 
 export interface NewSiteVisit {
