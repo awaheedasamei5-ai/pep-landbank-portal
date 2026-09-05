@@ -12,6 +12,7 @@ import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { useBanners } from '../../banners/hooks/useBanners';
 import { useCreateReferral, useLinkReferralLead } from '../../referrals/hooks/useReferrals';
+import { PartialPlotAdder } from '../components/PartialPlotAdder';
 import styles from './AddLeadScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -304,6 +305,13 @@ export function AddLeadScreen() {
                   <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots')} />
                 </div>
               </div>
+              {config && (
+                <PartialPlotAdder
+                  config={config}
+                  plotType={plotType}
+                  onAdd={(eq) => setValue('noPlots', Math.round((Number(noPlots || 0) + eq) * 100) / 100)}
+                />
+              )}
               <div className={styles.field}>
                 <label className={styles.label}>Unit price (GHS) *</label>
                 <input className={styles.input} type="number" {...register('unitPrice', { onChange: () => setUnitPriceManuallyEdited(true) })} />

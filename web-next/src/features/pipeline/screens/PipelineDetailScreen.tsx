@@ -11,6 +11,7 @@ import type { Lead, Payment } from '../../../types/domain';
 import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal } from '../lib/pipelineLogic';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { StageBadge } from '../components/StageBadge';
+import { PartialPlotAdder } from '../components/PartialPlotAdder';
 import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
@@ -486,6 +487,7 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
           <input className={styles.input} type="number" step="0.5" min="0.5" value={noPlots} onChange={(e) => setNoPlots(e.target.value)} />
         </div>
       </div>
+      <PartialPlotAdder config={config} plotType={plotType} onAdd={(eq) => setNoPlots(String(Math.round((Number(noPlots || 0) + eq) * 100) / 100))} />
       <div className={styles.grid2}>
         <div className={styles.field}>
           <label className={styles.label}>Unit price (GHS)</label>
