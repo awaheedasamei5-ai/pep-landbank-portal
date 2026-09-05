@@ -1242,6 +1242,16 @@ export interface AllocationRequest {
   history: AllocationHistoryEvent[];
   createdAt: string;
   resolvedAt: string | null;
+  // Master Spec 7.5's physical sign-off gate: Management signs a printed
+  // authorization form, staff photograph it and attach it here before
+  // confirming. Soft gate (explicit user decision) -- a photo is required
+  // to confirm, but authDocAiStatus never blocks the confirm button itself,
+  // it just informs whoever is about to click it.
+  authDocPhotoPath: string | null;
+  authDocUploadedBy: string | null;
+  authDocUploadedAt: string | null;
+  authDocAiStatus: 'pending' | 'pass' | 'mismatch' | 'unavailable' | null;
+  authDocAiNote: string | null;
 }
 
 export interface NewAllocationRequest {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -12,6 +12,7 @@ import { suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import {
   useAllocationRequests,
+  useAnalyzeAllocationAuthDoc,
   useCanAllocatePlots,
   useConfirmAllocation,
   useCreateAllocationRequest,
@@ -22,7 +23,9 @@ import {
   useRevertAllocation,
   useSendBackAllocation,
   useSuggestAllocationPlots,
+  useUploadAllocationAuthDoc,
 } from '../hooks/useAllocationRequests';
+import { allocationAuthFilename, buildAllocationAuthorizationPdf } from '../lib/allocationAuthPdf';
 import type { AllocationRequest, Lead } from '../../../types/domain';
 import styles from './AllocationRequestsScreen.module.css';
 
@@ -464,6 +467,65 @@ function FixResubmit({ request }: { request: AllocationRequest }) {
   );
 }
 
+// Master Spec 7.5's physical sign-off gate: Management signs a printed
+// authorization form, staff photograph the signed copy and attach it here.
+// Soft gate (explicit user decision, see PHASE0_INVENTORY.md #39) -- a
+// photo is required before Confirm is enabled, but the AI read below is
+// informational only, never a hard block, so a Groq outage can never stop
+// a real allocation.
+function AuthDocGate({ request, plotsForDoc }: { request: AllocationRequest; plotsForDoc: string }) {
+  const { data: config } = useConfig();
+  const upload = useUploadAllocationAuthDoc();
+  const analyze = useAnalyzeAllocationAuthDoc();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function generatePdf() {
+    const doc = buildAllocationAuthorizationPdf({ ...request, plotNumber: request.plotNumber ?? plotsForDoc }, config?.quoteCompanyName);
+    doc.save(allocationAuthFilename(request.clientName));
+  }
+
+  function onFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) upload.mutate({ id: request.id, file });
+    e.target.value = '';
+  }
+
+  function runAnalysis() {
+    if (!request.authDocPhotoPath) return;
+    analyze.mutate({ id: request.id, path: request.authDocPhotoPath, clientName: request.clientName, plotNumber: plotsForDoc });
+  }
+
+  return (
+    <div className={styles.authDocBox}>
+      <div className={styles.authDocRow}>
+        <button type="button" className={styles.changeBtn} onClick={generatePdf}>
+          Generate authorization PDF
+        </button>
+        <button type="button" className={styles.changeBtn} onClick={() => fileRef.current?.click()} disabled={upload.isPending}>
+          {upload.isPending ? 'Uploading…' : request.authDocPhotoPath ? 'Replace signed photo' : 'Attach signed photo'}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFileChosen} />
+        {request.authDocPhotoPath && (
+          <button type="button" className={styles.changeBtn} onClick={runAnalysis} disabled={analyze.isPending}>
+            {analyze.isPending ? 'Analyzing…' : 'Analyze with AI'}
+          </button>
+        )}
+      </div>
+      {!request.authDocPhotoPath && <p className={styles.errorMsg}>A photo of the signed authorization form is required before this can be confirmed.</p>}
+      {request.authDocAiStatus && (
+        <div
+          className={`${styles.authDocBanner} ${
+            request.authDocAiStatus === 'pass' ? styles.authDocBannerPass : request.authDocAiStatus === 'mismatch' ? styles.authDocBannerMismatch : styles.authDocBannerUnavailable
+          }`}
+        >
+          {request.authDocAiStatus === 'pass' ? 'AI check passed' : request.authDocAiStatus === 'mismatch' ? 'AI flagged a possible mismatch' : 'AI check unavailable'}
+          {request.authDocAiNote ? ` — ${request.authDocAiNote}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Lead | null }) {
   const confirm = useConfirmAllocation();
   const sendBack = useSendBackAllocation();
@@ -533,9 +595,10 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
             <span style={{ fontWeight: 700 }}>Plot {pn}</span> <span className={styles.fieldHint}>({units[i] ?? ''})</span>
           </div>
         ))}
+        <AuthDocGate request={request} plotsForDoc={plots.join(', ')} />
         {error && <p className={styles.errorMsg}>{error}</p>}
         <div className={styles.allocateActions}>
-          <button type="button" className={styles.confirmBtn} disabled={confirm.isPending} onClick={() => doConfirm(plots.join(','))}>
+          <button type="button" className={styles.confirmBtn} disabled={!request.authDocPhotoPath || confirm.isPending} onClick={() => doConfirm(plots.join(','))}>
             {confirm.isPending ? 'Confirming…' : `Confirm all ${plots.length} approved`}
           </button>
           <button type="button" className={styles.cancelBtn} onClick={() => setSendingBack(true)}>
@@ -554,9 +617,10 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
           <input type="radio" name={`al_${request.id}`} checked={selected === pn} onChange={() => setSelected(pn)} /> <span style={{ fontWeight: 700 }}>Plot {pn}</span>
         </label>
       ))}
+      <AuthDocGate request={request} plotsForDoc={selected ?? plots.join(' or ')} />
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.allocateActions}>
-        <button type="button" className={styles.confirmBtn} disabled={!selected || confirm.isPending} onClick={() => selected && doConfirm(selected)}>
+        <button type="button" className={styles.confirmBtn} disabled={!selected || !request.authDocPhotoPath || confirm.isPending} onClick={() => selected && doConfirm(selected)}>
           {confirm.isPending ? 'Confirming…' : 'Confirm approved plot'}
         </button>
         <button type="button" className={styles.cancelBtn} onClick={() => setSendingBack(true)}>

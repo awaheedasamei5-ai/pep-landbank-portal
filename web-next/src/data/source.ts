@@ -640,6 +640,16 @@ export interface DataSource {
     // resubmit" panel with zero new UI needed, the same real path staff
     // already use for a suggestion-stage data problem.
     sendBack(id: string, reason: string, sentBackBy: string): Promise<AllocationRequest>;
+    // Master Spec 7.5's physical sign-off gate: staff photograph
+    // Management's signed authorization form and attach it here (same
+    // storage-bucket-per-agent-folder pattern as payments.uploadProof).
+    // resolveAuthDocUrl turns the stored path into something viewable/
+    // sendable to the AI. analyzeAuthDoc calls the vision check and
+    // persists its result onto the row -- soft signal only, never a hard
+    // gate on confirm() itself.
+    uploadAuthDoc(id: string, agentKey: string, file: File): Promise<string>;
+    resolveAuthDocUrl(path: string): Promise<string | null>;
+    analyzeAuthDoc(id: string, imageUrl: string, clientName: string, plotNumber: string): Promise<AllocationRequest>;
   };
   // Real table `notes` -- a private per-staff scratchpad. notes_sel also
   // lets a manager SELECT anyone's notes (confirmed live), not used here --
@@ -1069,6 +1079,11 @@ function createDemoDataSource(): DataSource {
               history: [{ type: 'requested', at: decidedAt, by: 'System (auto-detected eligibility)' }],
               createdAt: decidedAt,
               resolvedAt: null,
+              authDocPhotoPath: null,
+              authDocUploadedBy: null,
+              authDocUploadedAt: null,
+              authDocAiStatus: null,
+              authDocAiNote: null,
             };
             db.allocationRequests = [...db.allocationRequests, request];
             autoAllocation = {
@@ -1962,6 +1977,11 @@ function createDemoDataSource(): DataSource {
           history: [{ type: 'requested', at: new Date().toISOString(), by: agentName }],
           createdAt: new Date().toISOString(),
           resolvedAt: null,
+          authDocPhotoPath: null,
+          authDocUploadedBy: null,
+          authDocUploadedAt: null,
+          authDocAiStatus: null,
+          authDocAiNote: null,
         };
         db.allocationRequests.push(request);
         demoSave();
@@ -2077,6 +2097,49 @@ function createDemoDataSource(): DataSource {
         const index = db.allocationRequests.findIndex((r) => r.id === id);
         if (index === -1) throw new Error('Allocation request not found');
         const updated: AllocationRequest = { ...db.allocationRequests[index], status: 'Pending', suggestedPlots: null, flagReason: reason, flaggedBy: sentBackBy, flaggedAt: new Date().toISOString() };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async uploadAuthDoc(id, agentKey, file) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = {
+          ...db.allocationRequests[index],
+          authDocPhotoPath: dataUrl,
+          authDocUploadedBy: agentKey,
+          authDocUploadedAt: new Date().toISOString(),
+          authDocAiStatus: null,
+          authDocAiNote: null,
+        };
+        db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
+        demoSave();
+        return dataUrl;
+      },
+      async resolveAuthDocUrl(path) {
+        // Demo's "path" already IS a data URI (see uploadAuthDoc above).
+        return path;
+      },
+      async analyzeAuthDoc(id, _imageUrl, _clientName, _plotNumber) {
+        // Demo mode never calls the real Groq vision model -- there's no
+        // live edge function invocation to make here, matching sms.send's
+        // own demo no-op. Reports a clear 'pending'-then-'pass' so the UI
+        // can be exercised end-to-end without a live provider.
+        const db = demoLoad();
+        const index = db.allocationRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Allocation request not found');
+        const updated: AllocationRequest = {
+          ...db.allocationRequests[index],
+          authDocAiStatus: 'pass',
+          authDocAiNote: 'Demo mode: AI verification is simulated here (no live Groq call). Live mode actually analyzes the uploaded photo.',
+        };
         db.allocationRequests = [...db.allocationRequests.slice(0, index), updated, ...db.allocationRequests.slice(index + 1)];
         demoSave();
         return updated;
@@ -3649,6 +3712,39 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
+      },
+      async uploadAuthDoc(id, agentKey, file) {
+        const client = requireClient();
+        const ext = file.name.split('.').pop() || 'jpg';
+        const path = `${agentKey}/${id}.${ext}`;
+        const { error: uploadError } = await client.storage.from('allocation-auth-docs').upload(path, file, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { error: updError } = await client
+          .from('allocation_requests')
+          .update({ auth_doc_photo_path: path, auth_doc_uploaded_by: agentKey, auth_doc_uploaded_at: new Date().toISOString(), auth_doc_ai_status: null, auth_doc_ai_note: null })
+          .eq('id', id);
+        if (updError) throw updError;
+        return path;
+      },
+      async resolveAuthDocUrl(path) {
+        const { data, error } = await requireClient().storage.from('allocation-auth-docs').createSignedUrl(path, 300);
+        if (error) throw error;
+        return data?.signedUrl ?? null;
+      },
+      async analyzeAuthDoc(id, imageUrl, clientName, plotNumber) {
+        const client = requireClient();
+        const { data, error } = await client.functions.invoke('ai-insights', { body: { kind: 'allocation_doc_verify', context: { imageUrl, clientName, plotNumber } } });
+        if (error) throw error;
+        const status = (data?.status ?? 'unavailable') as AllocationRequest['authDocAiStatus'];
+        const note = String(data?.note ?? 'The AI did not return a clear result.');
+        const { data: row, error: updError } = await client
+          .from('allocation_requests')
+          .update({ auth_doc_ai_status: status, auth_doc_ai_note: note })
+          .eq('id', id)
+          .select()
+          .single();
+        if (updError) throw updError;
+        return mapAllocationRequestRow(row);
       },
     },
     notes: {

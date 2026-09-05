@@ -206,6 +206,30 @@
 
 .detail { margin-top: 10px; }
 
+.authDocBox {
+  border: 1px dashed var(--c-line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin: 4px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.authDocRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.authDocLink { font-size: 12px; font-weight: 700; color: var(--c-accent); text-decoration: underline; }
+.authDocBanner {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.authDocBannerPass { background: var(--c-success-bg); color: var(--c-success); }
+.authDocBannerMismatch { background: var(--c-warn-bg); color: var(--c-warn); }
+.authDocBannerUnavailable { background: var(--c-danger-bg); color: var(--c-danger); }
+
 .suggestForm { display: flex; flex-direction: column; }
 
 .fieldLabel { font-size: 11.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; display: block; }

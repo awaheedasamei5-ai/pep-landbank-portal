@@ -472,6 +472,11 @@ export function mapAllocationRequestRow(r: Record<string, unknown>): AllocationR
     history: Array.isArray(r.history) ? (r.history as AllocationRequest['history']) : [],
     createdAt: r.created_at as string,
     resolvedAt: (r.resolved_at as string) ?? null,
+    authDocPhotoPath: (r.auth_doc_photo_path as string) ?? null,
+    authDocUploadedBy: (r.auth_doc_uploaded_by as string) ?? null,
+    authDocUploadedAt: (r.auth_doc_uploaded_at as string) ?? null,
+    authDocAiStatus: (r.auth_doc_ai_status as AllocationRequest['authDocAiStatus']) ?? null,
+    authDocAiNote: (r.auth_doc_ai_note as string) ?? null,
   };
 }
 

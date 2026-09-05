@@ -180,3 +180,35 @@ export function useSendBackAllocation() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
   });
 }
+
+// Master Spec 7.5's physical sign-off gate: staff photograph Management's
+// signed authorization form and attach it here before confirming can
+// proceed (AwaitingPanel enforces the "must have a photo" part; this just
+// persists it).
+export function useUploadAllocationAuthDoc() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => getDataSource(demoMode).allocationRequests.uploadAuthDoc(id, profile?.key ?? '', file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Soft signal only (explicit user decision): resolves a viewable URL for
+// the attached photo, sends it to the vision model, and persists whatever
+// it comes back with. Never blocks confirm() itself -- an 'unavailable' or
+// 'mismatch' read is shown to Management, not enforced.
+export function useAnalyzeAllocationAuthDoc() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, path, clientName, plotNumber }: { id: string; path: string; clientName: string; plotNumber: string }) => {
+      const ds = getDataSource(demoMode);
+      const url = await ds.allocationRequests.resolveAuthDocUrl(path);
+      if (!url) throw new Error('Could not load the attached document');
+      return ds.allocationRequests.analyzeAuthDoc(id, url, clientName, plotNumber);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}

@@ -597,6 +597,11 @@ export function seedDemo(): DemoDb {
       history: [{ type: 'requested', at: isoPlusDays(t, -2), by: 'Elias Torgbuivi' }],
       createdAt: isoPlusDays(t, -2),
       resolvedAt: null,
+      authDocPhotoPath: null,
+      authDocUploadedBy: null,
+      authDocUploadedAt: null,
+      authDocAiStatus: null,
+      authDocAiNote: null,
     },
     {
       id: uid(),
@@ -621,6 +626,11 @@ export function seedDemo(): DemoDb {
       ],
       createdAt: isoPlusDays(t, -6),
       resolvedAt: isoPlusDays(t, -4),
+      authDocPhotoPath: 'demo-signed-authorization.jpg',
+      authDocUploadedBy: 'Elias Torgbuivi',
+      authDocUploadedAt: isoPlusDays(t, -4),
+      authDocAiStatus: 'pass',
+      authDocAiNote: 'Document names the correct client and plot number, with a visible signature.',
     },
   ];
 
