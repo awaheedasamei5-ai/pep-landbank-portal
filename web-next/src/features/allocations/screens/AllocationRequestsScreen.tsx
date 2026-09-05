@@ -479,7 +479,13 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
   async function doConfirm(plotNumber: string) {
     setError(null);
     try {
-      await confirm.mutateAsync({ id: request.id, plotNumber, note: 'Approved via signed authorization form' });
+      await confirm.mutateAsync({
+        id: request.id,
+        plotNumber,
+        note: 'Approved via signed authorization form',
+        clientName: request.clientName,
+        clientContact: lead?.contact,
+      });
     } catch (e) {
       setError(friendlyError(e, 'Failed to confirm'));
     }

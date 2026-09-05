@@ -65,12 +65,46 @@ export function useSuggestAllocationPlots() {
 // -- invalidating both queries here (not just allocationRequests) is what
 // makes a freshly-Allocated plot disappear from Plot Inventory's Available
 // count without a manual refresh.
+//
+// clientName/clientContact are optional, caller-supplied (AwaitingPanel
+// already has both -- request.clientName and the matched lead's own
+// .contact) rather than fetched here, same "component already has it,
+// don't re-fetch" reasoning as useCreatePayment's leadContact. Fires the
+// congratulatory SMS the user explicitly asked for once an allocation is
+// actually confirmed -- fire-and-forget, same pattern as every other
+// sms.send() call site in this app.
 export function useConfirmAllocation() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, plotNumber, note }: { id: string; plotNumber: string; note?: string }) => getDataSource(demoMode).allocationRequests.confirm(id, plotNumber, note, profile?.name ?? ''),
+    mutationFn: async ({
+      id,
+      plotNumber,
+      note,
+      clientName,
+      clientContact,
+    }: {
+      id: string;
+      plotNumber: string;
+      note?: string;
+      clientName?: string;
+      clientContact?: string;
+    }) => {
+      const ds = getDataSource(demoMode);
+      const result = await ds.allocationRequests.confirm(id, plotNumber, note, profile?.name ?? '');
+      if (clientContact && clientName) {
+        ds.sms
+          .send(
+            clientContact,
+            `Congratulations ${clientName}! Your plot allocation (${plotNumber}) has been confirmed. Welcome to the Trulander family -- thank you for choosing us. - PEP Landbank`,
+            'allocation_confirmed',
+            profile?.key ?? null
+          )
+          .catch(() => {});
+      }
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
       queryClient.invalidateQueries({ queryKey: ['plots'] });
