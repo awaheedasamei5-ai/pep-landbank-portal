@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { fmtLongDate } from '../../site-visit-auth/lib/siteVisitAuthLogic';
 import type { NewSiteVisit } from '../../../types/domain';
 
 export function useSiteVisits() {
@@ -28,16 +30,21 @@ export function findDuplicateVisit(existing: { name: string; contact: string; vi
   return existing.find((v) => !v.deletedAt && v.visitDate === visitDate && v.contact.replace(/[^0-9]/g, '').slice(-9) === c && v.name.trim().toLowerCase() === n) ?? null;
 }
 
-// Confirmation SMS to the client on request -- matches index.html's own
-// apiSendSms call right after the insert (index.html:3738), fire-and-forget.
-// Also notifies Management in-app + SMS (Master Spec 9.3: "notify staff +
-// Management in-app and by SMS" -- "staff" here is the agent submitting
-// the form themselves, who already sees their own confirmation screen;
-// same real ds.staff.list()-filtered-by-role/ds.notifications.notify/
-// ds.sms.send pattern useCreateAllocationRequest already uses).
+// Confirmation SMS to the client -- real user ask: "the sms should also
+// state the pickup location that was filled and the time", not just a
+// generic "we'll confirm shortly" (v1's own message, index.html:3738,
+// never actually included either). Also notifies Management in-app + SMS
+// (Master Spec 9.3 -- "staff" here is the agent submitting the form
+// themselves, who already sees their own confirmation screen). Real
+// production v1 (`lrahgcnftetnyxunaljs`) has no manager-role profile with
+// a phone at all -- Management's real number lives on `app_config.
+// company_phone` instead (confirmed live, 0544330390) -- so that's
+// included alongside any manager-role profile phone, deduped, rather
+// than assuming a profile row is the only place a number can live.
 export function useCreateSiteVisit() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
+  const { data: config } = useConfig();
   const agentKey = profile?.key ?? '';
   const agentName = profile?.name ?? '';
   const queryClient = useQueryClient();
@@ -47,16 +54,28 @@ export function useCreateSiteVisit() {
       const ds = getDataSource(demoMode);
       const rec = await ds.siteVisits.create(agentKey, agentName, input);
       if (input.contact) {
-        ds.sms.send(input.contact, `Hi ${input.name || ''}, your site visit request to Royal Palm Enclave has been received. We'll confirm the date/time shortly. - PEP Landbank`, 'site_visit_requested', agentKey || null).catch(() => {});
+        const whenPart = `${fmtLongDate(rec.visitDate)}${rec.visitTime ? ' at ' + rec.visitTime : ''}`;
+        const pickupPart = rec.pickup ? ` We'll pick you up at ${rec.pickup}.` : '';
+        ds.sms
+          .send(
+            input.contact,
+            `Hi ${input.name || ''}, your site visit request to Royal Palm Enclave has been received for ${whenPart}.${pickupPart} We'll confirm shortly. - PEP Landbank`,
+            'site_visit_requested',
+            agentKey || null
+          )
+          .catch(() => {});
       }
       const managers = await ds.staff.list().catch(() => []);
       const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
       if (toManagers.length > 0) {
         const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' at ' + rec.visitTime : ''}.`;
         ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), body, 'site_visit_logged', 'site_visit', rec.id).catch(() => {});
-        for (const mgr of toManagers) {
-          if (mgr.phone) ds.sms.send(mgr.phone, body, 'site_visit_logged', agentKey).catch(() => {});
-        }
+        const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+        if (config?.companyPhone) phones.add(config.companyPhone);
+        for (const phone of phones) ds.sms.send(phone, body, 'site_visit_logged', agentKey).catch(() => {});
+      } else if (config?.companyPhone) {
+        const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' at ' + rec.visitTime : ''}.`;
+        ds.sms.send(config.companyPhone, body, 'site_visit_logged', agentKey).catch(() => {});
       }
       return rec;
     },

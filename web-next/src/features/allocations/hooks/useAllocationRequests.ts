@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
 import type { NewAllocationRequest } from '../../../types/domain';
 
 // Same real gate as Plot Inventory (alloc_sel/alloc_upd RLS, confirmed live).
@@ -28,6 +29,7 @@ export function useAllocationRequests() {
 export function useCreateAllocationRequest() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
+  const { data: config } = useConfig();
   const agentKey = profile?.key ?? '';
   const agentName = profile?.name ?? '';
   const queryClient = useQueryClient();
@@ -37,15 +39,18 @@ export function useCreateAllocationRequest() {
       const request = await ds.allocationRequests.create(agentKey, agentName, input);
       const managers = await ds.staff.list().catch(() => []);
       const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
+      const body = `${agentName} requested plot allocation for ${request.clientName}. Review it in Palmstead.`;
       if (toManagers.length > 0) {
-        const body = `${agentName} requested plot allocation for ${request.clientName} — awaiting your review.`;
-        ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), body, 'allocation_pending', 'allocation_request', request.id).catch(() => {});
-        for (const mgr of toManagers) {
-          if (mgr.phone) {
-            ds.sms.send(mgr.phone, `${agentName} requested plot allocation for ${request.clientName}. Review it in Palmstead.`, 'allocation_pending', agentKey).catch(() => {});
-          }
-        }
+        ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), `${agentName} requested plot allocation for ${request.clientName} — awaiting your review.`, 'allocation_pending', 'allocation_request', request.id).catch(() => {});
       }
+      // Real production v1 has no manager-role profile with a phone at
+      // all -- Management's real number lives on app_config.company_phone
+      // instead (confirmed live). Included alongside any manager-role
+      // profile phone, deduped, rather than assuming a profile is the
+      // only place a number can live.
+      const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+      if (config?.companyPhone) phones.add(config.companyPhone);
+      for (const phone of phones) ds.sms.send(phone, body, 'allocation_pending', agentKey).catch(() => {});
       return request;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),

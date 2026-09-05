@@ -723,6 +723,12 @@ export interface NewSiteVisit {
   purpose?: string;
   discussionSoFar?: string;
   keyUnderstanding?: string;
+  // Real v1 fields (formSiteVisit(), index.html:16234-16235): v1's own
+  // "Notes (optional -- can fill now or after the visit)" section lets
+  // these be captured at REQUEST time too, not only after the visit --
+  // previously only settable via a later update, never at creation.
+  feedbackAfter?: string;
+  keyNextSteps?: string;
   source?: string;
   accompanied?: string;
   notes?: string;

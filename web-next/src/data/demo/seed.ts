@@ -165,7 +165,7 @@ export function seedDemo(): DemoDb {
     // genuinely empty in production today, not a demo-only gap.
     quoteCompanyName: 'Trulander JSF Limited',
     quoteSiteName: 'P.O Box CO3644, Tema, Accra-Ghana',
-    companyPhone: '',
+    companyPhone: '0544330390',
     companyEmail: '',
     companyTin: '',
     quoteFooterAddress: 'First Floor Alex Nerda Building. Nungua Nautical Beach Road Drive',
