@@ -19,9 +19,10 @@ export function SalesDeskScreen() {
     // Same real fix as the desktop Sidebar's own 'pipeline' item: a
     // manager's own agent_key owns few or no real leads, so "My pipeline"
     // landed them on a near-empty view instead of the company-wide
-    // Company Pipeline they actually need here.
+    // Master Pipeline they actually need here (named per the user's own
+    // explicit correction -- not a separate "Company Pipeline" concept).
     isMgr
-      ? { key: 'pipeline', label: 'Company Pipeline', sub: 'Every client, company-wide, filterable by agent', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/mgr/pipeline') }
+      ? { key: 'pipeline', label: 'Master Pipeline', sub: 'Every client, company-wide, filterable by staff', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/mgr/pipeline') }
       : { key: 'pipeline', label: 'My pipeline', sub: 'Every client you own', color: 'purple', icon: 'chartLine', onOpen: () => navigate('/app/sales/pipeline') },
     { key: 'clients', label: 'Client Database', sub: 'Search & browse by client', color: 'blue', icon: 'folder', onOpen: () => navigate('/app/sales/clients') },
     ...(hasPlotAccess

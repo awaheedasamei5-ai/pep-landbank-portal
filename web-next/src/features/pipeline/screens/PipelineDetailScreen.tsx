@@ -47,11 +47,11 @@ export function PipelineDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
-  // Real bug the user caught live: Company Pipeline (ManagerPipelineScreen)
-  // drills into this same shared detail screen via /app/sales/pipeline/:id,
+  // Real bug the user caught live: Master Pipeline (PipelineListScreen in
+  // its company-wide mode) drills into this same shared detail screen,
   // but every close/back/delete-redirect here was hardcoded back to the
   // agent-scoped /app/sales/pipeline list -- which for a manager shows few
-  // or no real leads. A manager who got here from Company Pipeline needs
+  // or no real leads. A manager who got here from Master Pipeline needs
   // Close/Back to return there, not strand them on an empty list.
   const backTo = profile?.role === 'manager' ? '/app/mgr/pipeline' : '/app/sales/pipeline';
   const canLog = useCanLogPayments();

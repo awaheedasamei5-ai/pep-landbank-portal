@@ -76,7 +76,13 @@ export function AddLeadScreen() {
   // fuzzy-match on submit, the one place a NEW client actually gets typed
   // in is checked live as they type (below), so a would-be duplicate is
   // caught before it's ever saved, not after.
-  const prefill = location.state as { name?: string; contact?: string } | null;
+  // `returnTo` lets Master Pipeline's own "+ Add lead" send the agent back
+  // to /app/mgr/pipeline instead of the hardcoded /app/sales/pipeline --
+  // same reasoning as PipelineDetailScreen's own backTo fix, just threaded
+  // through router state since this screen has no other way to know which
+  // list it was opened from.
+  const prefill = location.state as { name?: string; contact?: string; returnTo?: string } | null;
+  const returnTo = prefill?.returnTo ?? '/app/sales/pipeline';
   const {
     register,
     handleSubmit,
@@ -138,7 +144,7 @@ export function AddLeadScreen() {
       setDepositNotice({ leadId: lead.id, message: depositError });
       return;
     }
-    navigate('/app/sales/pipeline');
+    navigate(returnTo);
   }
 
   if (depositNotice) {
@@ -147,7 +153,7 @@ export function AddLeadScreen() {
         <h1 className={styles.title}>Lead saved</h1>
         <p className={styles.err} style={{ marginTop: 8 }}>{depositNotice.message}</p>
         <div className={styles.actions} style={{ marginTop: 16 }}>
-          <button type="button" className={styles.save} onClick={() => navigate(`/app/sales/pipeline/${depositNotice.leadId}`)}>
+          <button type="button" className={styles.save} onClick={() => navigate(`${returnTo}/${depositNotice.leadId}`)}>
             Open the lead
           </button>
         </div>
@@ -285,7 +291,7 @@ export function AddLeadScreen() {
         </div>
 
         <div className={styles.actions}>
-          <button type="button" className={styles.cancel} onClick={() => navigate('/app/sales/pipeline')}>
+          <button type="button" className={styles.cancel} onClick={() => navigate(returnTo)}>
             Cancel
           </button>
           <button type="submit" className={styles.save} disabled={createLead.isPending}>

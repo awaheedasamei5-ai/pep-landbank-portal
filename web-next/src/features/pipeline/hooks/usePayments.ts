@@ -4,7 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 
 // Real bug found while testing the payment-receipt feature: this used to
 // call listForAgent(viewerKey), so a manager opening someone else's lead
-// (via Manager Home's drill-down or Company Pipeline) always saw "no
+// (via Manager Home's drill-down or Master Pipeline) always saw "no
 // payments" -- filtered to the VIEWER's own payments, not the lead being
 // looked at. listForLead(leadId) relies on real payments_sel RLS to scope
 // correctly for everyone (see its DataSource comment), so this needs no

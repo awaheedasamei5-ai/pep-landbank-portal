@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router';
+import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useLeads } from '../hooks/useLeads';
+import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useAssignLead, useUpdateLead, useDeleteLead } from '../hooks/useLead';
 import { useSiteVisits } from '../../site-visits/hooks/useSiteVisits';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { StageBadge } from '../components/StageBadge';
 import { StaffPipelineImportCard } from '../components/StaffPipelineImportCard';
-import { useDownloadAgentPipeline } from '../../manager/hooks/usePipelineExcel';
+import { PipelineImportCard } from '../../manager/components/PipelineImportCard';
+import { useDownloadAgentPipeline, useDownloadMasterPipeline } from '../../manager/hooks/usePipelineExcel';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import {
   EMPTY_FILTERS,
@@ -64,10 +66,22 @@ function exportLeadsCsv(leads: Lead[]) {
 // separate data-fetch paths), safe-only bulk actions (export/assign/tag/
 // archive -- bulk delete is deliberately not offered at all), and a real
 // working Edit affordance + status badge on every row.
+//
+// Also serves as Master Pipeline (`/app/mgr/pipeline`) -- per the user's
+// explicit correction, there is no separate "Company Pipeline" concept;
+// Master Pipeline is this exact same app, just scoped company-wide with
+// a staff filter added, not a second bespoke screen (the old, much
+// poorer ManagerPipelineScreen this replaced never got KPIs/filters/
+// import/export at all). `isMaster` is route-derived rather than a prop
+// so both entry points (Sidebar/SalesDesk's two links) keep working
+// exactly as before with zero call-site changes.
 export function PipelineListScreen() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const profile = useSessionStore((s) => s.profile);
+  const isMaster = location.pathname.startsWith('/app/mgr/pipeline');
+  const basePath = isMaster ? '/app/mgr/pipeline' : '/app/sales/pipeline';
   // Real fix, caught live: the detail route is now nested under this
   // one (see router.tsx's own comment) so the list stays mounted while
   // the drawer is open -- necessary for the desktop split view to have
@@ -78,17 +92,28 @@ export function PipelineListScreen() {
   // is active, while it stays mounted (so scroll position/filters
   // aren't lost) and fully visible again once desktop's own CSS takes
   // over.
-  const hasDetailOpen = /^\/app\/sales\/pipeline\/[^/]+$/.test(location.pathname);
-  const { data: leads, isLoading } = useLeads();
+  const hasDetailOpen = new RegExp(`^${basePath}/[^/]+$`).test(location.pathname);
+  // Both hooks are always called (React hooks rules), the unused one's
+  // result is just discarded -- same pattern as useClients()' own
+  // manager-vs-agent branch.
+  const mine = useLeads();
+  const master = useAllLeads();
+  const { data: leads, isLoading } = isMaster ? master : mine;
   const { data: siteVisits } = useSiteVisits();
   const { data: staff } = useStaffDirectory();
   const assignLead = useAssignLead();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
   const downloadAgentPipeline = useDownloadAgentPipeline();
+  const downloadMasterPipeline = useDownloadMasterPipeline();
 
   const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState<PipelineFilters>(EMPTY_FILTERS);
+  // Seeded once from Manager Home's own drill-down links
+  // (?stage=/&agent=, the only two entry points that ever set these) --
+  // local state afterward, matching every other filter on this screen,
+  // not continuously URL-synced.
+  const [filters, setFilters] = useState<PipelineFilters>(() => ({ ...EMPTY_FILTERS, stage: (searchParams.get('stage') as PipelineFilters['stage']) ?? '' }));
+  const [staffFilter, setStaffFilter] = useState(() => searchParams.get('agent') ?? '');
   const [showFilters, setShowFilters] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -96,7 +121,8 @@ export function PipelineListScreen() {
   const [bulkValue, setBulkValue] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const all = leads ?? [];
+  const byAgent = useMemo(() => (leads ?? []).filter((l) => !isMaster || !staffFilter || l.agent === staffFilter), [leads, isMaster, staffFilter]);
+  const all = byAgent;
   const sources = useMemo(() => Array.from(new Set(all.map((l) => l.leadSource).filter(Boolean))) as string[], [all]);
 
   const q = query.trim().toLowerCase();
@@ -179,9 +205,10 @@ export function PipelineListScreen() {
     <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
       <div className={styles.head}>
         <div>
-          <h1 className={styles.title}>My pipeline</h1>
+          <h1 className={styles.title}>{isMaster ? 'Master Pipeline' : 'My pipeline'}</h1>
           <p className={styles.sub}>
-            {all.length} leads · {paidCount} paid in full
+            {all.length} lead{all.length === 1 ? '' : 's'}
+            {isMaster ? ' company-wide' : ''} · {paidCount} paid in full
           </p>
         </div>
         <div className={styles.headActions}>
@@ -192,30 +219,46 @@ export function PipelineListScreen() {
               already flows through there (via useDownloadAgentPipeline,
               called here with the signed-in agent's own key/name) --
               matching column set, Lead ID and all, so a file round-tripped
-              here can also be read back in by the Import panel below. */}
+              here can also be read back in by the Import panel below.
+              Master mode swaps in the company-wide counterparts of both
+              (useDownloadMasterPipeline / PipelineImportCard) -- the same
+              two components Reports already used, not new ones. */}
           <button
             type="button"
             className={styles.iconBtn}
-            title="Export my pipeline (.xlsx)"
-            disabled={downloadAgentPipeline.isPending}
-            onClick={() => profile && downloadAgentPipeline.mutate({ agentKey: profile.key, agentName: profile.name })}
+            title={isMaster ? 'Export Master Pipeline (.xlsx)' : 'Export my pipeline (.xlsx)'}
+            disabled={isMaster ? downloadMasterPipeline.isPending : downloadAgentPipeline.isPending}
+            onClick={() => (isMaster ? downloadMasterPipeline.mutate() : profile && downloadAgentPipeline.mutate({ agentKey: profile.key, agentName: profile.name }))}
           >
             ⬇
           </button>
-          <button type="button" className={styles.iconBtn} title="Import my pipeline (.xlsx)" onClick={() => setShowImport((v) => !v)}>
+          <button type="button" className={styles.iconBtn} title={isMaster ? 'Import Master Pipeline (.xlsx)' : 'Import my pipeline (.xlsx)'} onClick={() => setShowImport((v) => !v)}>
             ⬆
           </button>
-          <button type="button" className={styles.addBtn} onClick={() => navigate('/app/sales/pipeline/new')}>
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/app/sales/pipeline/new', { state: { returnTo: basePath } })}>
             + Add lead
           </button>
         </div>
       </div>
 
       {downloadAgentPipeline.isError && <p className={styles.emptyMsg}>{friendlyError(downloadAgentPipeline.error, 'Could not build the export.')}</p>}
+      {downloadMasterPipeline.isError && <p className={styles.emptyMsg}>{friendlyError(downloadMasterPipeline.error, 'Could not build the export.')}</p>}
 
-      {showImport && <StaffPipelineImportCard />}
+      {showImport && (isMaster ? <PipelineImportCard /> : <StaffPipelineImportCard />)}
 
-      <input className={styles.search} placeholder="Search by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className={styles.searchRow}>
+        <input className={styles.search} placeholder="Search by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {isMaster && (
+          <select className={styles.staffSelect} value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+            <option value="">All staff</option>
+            {(staff ?? []).filter((s) => s.role === 'agent').map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <div className={styles.kpiWrap}>
         <PipePillStrip>
@@ -417,7 +460,7 @@ export function PipelineListScreen() {
                     <td className={styles.td}>
                       <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />
                     </td>
-                    <td className={`${styles.td} ${styles.tdName}`} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)}>
+                    <td className={`${styles.td} ${styles.tdName}`} onClick={() => navigate(`${basePath}/${l.id}`)}>
                       {l.name}
                     </td>
                     <td className={styles.td}>{l.contact}</td>
@@ -437,7 +480,7 @@ export function PipelineListScreen() {
                     </td>
                     <td className={styles.td}>{l.priority || 'Low'}</td>
                     <td className={styles.td}>
-                      <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)}>
+                      <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`${basePath}/${l.id}`)}>
                         ✎
                       </button>
                     </td>
@@ -455,7 +498,7 @@ export function PipelineListScreen() {
           return (
             <div className={styles.row} key={l.id}>
               <input type="checkbox" className={styles.rowCheck} checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />
-              <div className={styles.rowBody} onClick={() => navigate(`/app/sales/pipeline/${l.id}`)} role="button" tabIndex={0}>
+              <div className={styles.rowBody} onClick={() => navigate(`${basePath}/${l.id}`)} role="button" tabIndex={0}>
                 <span className={styles.avatar}>{initials(l.name)}</span>
                 <div className={styles.rowMain}>
                   <div className={styles.name}>{l.name}</div>
@@ -477,7 +520,7 @@ export function PipelineListScreen() {
                 className={styles.editIconBtnMobile}
                 title="Edit"
                 aria-label={`Edit ${l.name}`}
-                onClick={() => navigate(`/app/sales/pipeline/${l.id}`)}
+                onClick={() => navigate(`${basePath}/${l.id}`)}
               >
                 ✎
               </button>

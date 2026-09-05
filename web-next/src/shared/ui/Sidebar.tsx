@@ -64,11 +64,13 @@ export function Sidebar() {
         // agent-scoped My Pipeline screen, even for Management -- whose
         // own agent_key owns few or no real leads, so clicking the first
         // item under Sales landed a manager on a near-empty view instead
-        // of the company-wide Company Pipeline (already built, already
-        // filterable by individual agent) that's what they actually need
-        // in this position. Same fix applied to the mobile Sales Desk
-        // tile below.
-        { key: 'pipeline', label: isMgr ? 'Company Pipeline' : 'My Pipeline', to: isMgr ? '/app/mgr/pipeline' : '/app/sales/pipeline', icon: 'chartLine' },
+        // of the company-wide Master Pipeline (already built, already
+        // filterable by individual staff) that's what they actually need
+        // in this position. Named "Master Pipeline" per the user's own
+        // explicit correction -- there is no separate "Company Pipeline"
+        // concept; it's the same My Pipeline app, scoped company-wide.
+        // Same fix applied to the mobile Sales Desk tile below.
+        { key: 'pipeline', label: isMgr ? 'Master Pipeline' : 'My Pipeline', to: isMgr ? '/app/mgr/pipeline' : '/app/sales/pipeline', icon: 'chartLine' },
         { key: 'clients', label: 'Client Database', to: '/app/sales/clients', icon: 'folder' },
         ...(hasPlotAccess ? [{ key: 'plots', label: 'Plot Inventory', to: '/app/sales/plots', icon: 'map' as IconName }] : []),
         ...(hasPlotAccess ? [{ key: 'allocations', label: 'Allocations', to: '/app/sales/allocations', icon: 'ruler' as IconName }] : []),
@@ -130,7 +132,7 @@ export function Sidebar() {
             key: 'management',
             label: 'Management',
             items: [
-              // Company Pipeline itself now lives under Sales (the
+              // Master Pipeline itself now lives under Sales (the
               // 'pipeline' item above, retargeted for isMgr) -- not
               // duplicated here too.
               { key: 'team', label: 'Team Roster', to: '/app/mgr/team', icon: 'team' as IconName },
