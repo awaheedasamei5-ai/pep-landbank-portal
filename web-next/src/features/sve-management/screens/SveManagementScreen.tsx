@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { useSendSveInvite, useSveVisits } from '../hooks/useSveManagement';
+import { useGenerateSveReportDraft, useSendSveInvite, useSendSveReport, useSveVisits } from '../hooks/useSveManagement';
+import { friendlyError } from '../../../shared/lib/friendlyError';
+import type { SiteVisit, SveSubmissionRecord } from '../../../types/domain';
 import styles from './SveManagementScreen.module.css';
 
 function initials(name: string): string {
@@ -20,11 +22,10 @@ function inviteLink(token: string): string {
 // SveInviteRecord/SveVisitStatus comments in types/domain.ts. Gated the
 // same way real RLS gates the underlying tables: manager + the
 // 'elias'/'emmanuel'/'elizabeth' allowlist, matching Site Visits itself.
-// No SMS-sending integration exists anywhere in this app (no real free
-// SMS API exists at all -- researched earlier this session), so "send an
-// invite" here means generating the link and copying it, for the staff
-// member to share however they actually reach the client (SMS, WhatsApp,
-// in person) -- not a fabricated "sent via SMS" claim.
+// "Send invite" really does send a real SMS to the client (useSendSveInvite
+// -> ds.sms.send, the same real Arkesel-backed send-sms Edge Function
+// every other SMS in this app goes through) -- the Copy link button next
+// to it stays as a fallback for sharing via WhatsApp/in person instead.
 //
 // In demo mode, an invite created here is a local-only simulation (same
 // as every other demo write this session) -- its link will correctly
@@ -169,12 +170,76 @@ export function SveManagementScreen() {
                     <span className={styles.detailValue}>{submission.additionalComments}</span>
                   </div>
                 )}
+                <ReportBuilder siteVisit={siteVisit} submission={submission} />
               </div>
             )}
           </div>
         );
       })}
       {visits && visits.length === 0 && !isLoading && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
+    </div>
+  );
+}
+
+// Real user ask: "the ai is able to analyze [the submission] and help
+// the staff build the report ... when the report is ready, it's sent to
+// management via their system and also through an sms link." Generate ->
+// review/edit -> send is one deliberate flow, never automatic -- matches
+// every other AI-draft feature in this app (memo/leave-letter/follow-up).
+function ReportBuilder({ siteVisit, submission }: { siteVisit: SiteVisit; submission: SveSubmissionRecord }) {
+  const generateDraft = useGenerateSveReportDraft();
+  const sendReport = useSendSveReport();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const alreadySent = !!submission.reportSentAt;
+
+  async function generate() {
+    setError(null);
+    try {
+      const message = await generateDraft.mutateAsync(submission);
+      setDraft(message);
+    } catch (e) {
+      setError(friendlyError(e, 'Could not generate a draft'));
+    }
+  }
+
+  async function send() {
+    if (!draft) return;
+    setError(null);
+    try {
+      await sendReport.mutateAsync({ siteVisit, submission, reportText: draft });
+      setSent(true);
+    } catch (e) {
+      setError(friendlyError(e, 'Could not send the report'));
+    }
+  }
+
+  return (
+    <div className={styles.reportBox}>
+      <div className={styles.reportHead}>AI-assisted report</div>
+      {alreadySent && !sent && <p className={styles.reportSentNote}>A report for this feedback was already sent to Management.</p>}
+      {sent && <p className={styles.reportSentNote}>Report sent to Management — in-app and by SMS.</p>}
+      {error && <p className={styles.reportError}>{error}</p>}
+
+      {draft == null ? (
+        <button type="button" className={styles.reportGenBtn} disabled={generateDraft.isPending} onClick={generate}>
+          {generateDraft.isPending ? 'Analyzing feedback…' : alreadySent ? 'Regenerate report' : '✨ Generate AI report'}
+        </button>
+      ) : (
+        <>
+          <textarea className={styles.reportTextarea} rows={8} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <p className={styles.reportHint}>Review and edit before sending — nothing goes to Management until you tap Send.</p>
+          <div className={styles.reportActions}>
+            <button type="button" className={styles.reportCancelBtn} onClick={() => setDraft(null)}>
+              Discard
+            </button>
+            <button type="button" className={styles.reportSendBtn} disabled={sendReport.isPending} onClick={send}>
+              {sendReport.isPending ? 'Sending…' : 'Send report to Management'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

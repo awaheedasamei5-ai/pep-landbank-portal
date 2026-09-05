@@ -366,6 +366,8 @@ export function seedDemo(): DemoDb {
       purchaseIntent: 'need more time',
       additionalComments: 'Really enjoyed the visit, discussing with my spouse before committing.',
       createdAt: isoPlusDays(t, -10),
+      reportPdfPath: null,
+      reportSentAt: null,
     },
   ];
 

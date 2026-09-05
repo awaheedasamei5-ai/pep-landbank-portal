@@ -821,6 +821,13 @@ export interface DataSource {
   sve: {
     listVisitsWithStatus(): Promise<SveVisitStatus[]>;
     createInvite(siteVisitId: string, clientName: string, clientContact: string, sentBy: string): Promise<SveInviteRecord>;
+    // Real table `sve_report_links` -- mirrors payments.issueReceiptLink()
+    // exactly (upload the PDF, insert a row, return its server-generated
+    // token) for the AI-assisted report a staff member sends Management
+    // after reviewing a client's Site Visit Experience feedback. Also
+    // stamps report_pdf_path/report_sent_at on the submission itself so
+    // the UI knows a report already went out.
+    issueReportLink(submissionId: string, pdfBlob: Blob, createdBy: string, createdByName: string): Promise<string>;
   };
   // Real table `messages` -- strictly 1:1 staff-to-staff, kind IS NULL
   // rows only (the same table also carries system notifications with a
@@ -2572,6 +2579,16 @@ function createDemoDataSource(): DataSource {
         demoSave();
         return invite;
       },
+      async issueReportLink(submissionId) {
+        const db = demoLoad();
+        const token = 'demo-' + Math.random().toString(36).slice(2, 10);
+        const index = db.sveSubmissions.findIndex((s) => s.id === submissionId);
+        if (index !== -1) {
+          db.sveSubmissions[index] = { ...db.sveSubmissions[index], reportPdfPath: `demo/${submissionId}.pdf`, reportSentAt: new Date().toISOString() };
+        }
+        demoSave();
+        return token;
+      },
     },
     chat: {
       async listConversations(myKey) {
@@ -4242,6 +4259,20 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapSveInviteRow(data);
+      },
+      async issueReportLink(submissionId, pdfBlob, createdBy, createdByName) {
+        const client = requireClient();
+        const path = `${submissionId}/report-${Date.now()}.pdf`;
+        const { error: uploadError } = await client.storage.from('sve-reports').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        if (uploadError) throw uploadError;
+        const { data, error } = await client.from('sve_report_links').insert({ submission_id: submissionId, storage_path: path, created_by: createdBy, created_by_name: createdByName }).select('token').single();
+        if (error) throw error;
+        const { error: updError } = await client
+          .from('site_visit_experience_submissions')
+          .update({ report_pdf_path: path, report_sent_at: new Date().toISOString() })
+          .eq('id', submissionId);
+        if (updError) throw updError;
+        return data.token as string;
       },
     },
     chat: {

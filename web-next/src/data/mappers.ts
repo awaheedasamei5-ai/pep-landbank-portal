@@ -410,6 +410,8 @@ export function mapSveSubmissionRow(r: Record<string, unknown>): SveSubmissionRe
     purchaseIntent: (r.purchase_intent as string) ?? null,
     additionalComments: (r.additional_comments as string) ?? null,
     createdAt: r.created_at as string,
+    reportPdfPath: (r.report_pdf_path as string) ?? null,
+    reportSentAt: (r.report_sent_at as string) ?? null,
   };
 }
 

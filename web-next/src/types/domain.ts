@@ -1057,6 +1057,12 @@ export interface SveSubmissionRecord {
   purchaseIntent: string | null;
   additionalComments: string | null;
   createdAt: string;
+  // Real columns added 2026-09-05 -- the AI-assisted report a staff
+  // member built from this submission and sent to Management (a
+  // sve_report_links row, tokenized the same way receipt_share_links
+  // is), if any yet.
+  reportPdfPath: string | null;
+  reportSentAt: string | null;
 }
 
 // A site visit joined with its invite/submission status, if any --
