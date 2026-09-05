@@ -21,6 +21,51 @@
 .err { color: var(--c-danger); font-size: 11.5px; margin-top: 4px; }
 .hint { color: var(--c-muted); font-size: 11px; margin: 4px 0 0; }
 
+/* Discount-mode toggle (total vs per-plot) and the Referral yes/no
+   toggle share this same small-pill-pair look, matching v1's own
+   discModeToggleHtml chips. */
+.discModeRow { display: flex; gap: 8px; margin-bottom: 8px; }
+.discModeChip {
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.discModeChipOn { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+
+.changeLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Referral search-result dropdown -- same list/row shape Client
+   Database's own picker uses elsewhere in this app. */
+.pickerList { margin-top: 6px; border: 1px solid var(--c-line); border-radius: 10px; overflow: hidden; }
+.pickerRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-card);
+  cursor: pointer;
+}
+.pickerRow:last-child { border-bottom: none; }
+.pickerRow:hover { background: var(--c-paper); }
+.pickerName { font-weight: 700; font-size: 13px; }
+.pickerMeta { color: var(--c-muted); font-size: 11.5px; margin-top: 2px; }
+
 .card {
   background: var(--c-card);
   border: 1px solid var(--c-line);

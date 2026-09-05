@@ -835,7 +835,7 @@ function createDemoDataSource(): DataSource {
           agent: agentKey,
           name: input.name,
           contact: input.contact,
-          date: new Date().toISOString().slice(0, 10),
+          date: input.date || new Date().toISOString().slice(0, 10),
           plotType: input.plotType,
           noPlots: input.noPlots,
           unitPrice: input.unitPrice,
@@ -845,10 +845,14 @@ function createDemoDataSource(): DataSource {
           stage: deriveStageFromPayment(0, grandTotal),
           notes: input.notes,
           leadSource: input.leadSource ?? null,
+          bannerId: input.bannerId ?? null,
           priority: input.priority ?? null,
           address: input.address ?? null,
           discount: input.discount ?? null,
           netTotal: input.netTotal ?? null,
+          siteVisit: input.siteVisit ?? null,
+          nextAction: input.nextAction ?? null,
+          depositTarget: input.depositTarget ?? null,
         };
         const db = demoLoad();
         db.leads.push(lead);
@@ -2624,6 +2628,7 @@ function createLiveDataSource(): DataSource {
             agent_key: agentKey,
             name: input.name,
             contact: input.contact,
+            date_added: input.date || undefined,
             plot_type: input.plotType,
             no_plots: input.noPlots,
             unit_price: input.unitPrice,
@@ -2636,8 +2641,12 @@ function createLiveDataSource(): DataSource {
             stage: deriveStageFromPayment(0, grandTotal),
             notes: input.notes ?? null,
             lead_source: input.leadSource ?? null,
+            banner_id: input.bannerId ?? null,
             priority: input.priority ?? null,
             address: input.address ?? null,
+            site_visit: input.siteVisit ?? null,
+            next_action: input.nextAction ?? null,
+            deposit_target: input.depositTarget ?? null,
           })
           .select()
           .single();

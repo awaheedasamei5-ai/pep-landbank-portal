@@ -212,11 +212,21 @@ export interface NewLead {
   // what staff saw, rather than leads.create() re-deriving its own
   // (previously interest-blind) total from scratch.
   leadSource?: string;
+  bannerId?: string | null;
   priority?: string;
   address?: string;
   discount?: number;
   netTotal?: number;
   grandTotal?: number;
+  // v1-parity fields (formAddLead, index.html:14132) that Add Lead never
+  // captured at intake before -- date defaults to today if omitted;
+  // siteVisit/nextAction/depositTarget were only ever editable after the
+  // fact via Pipeline Detail, forcing an immediate second edit right after
+  // saving for something staff already knew at intake.
+  date?: string;
+  siteVisit?: string;
+  nextAction?: string;
+  depositTarget?: number;
 }
 
 // Real distinct values seen on production's payment_method column
