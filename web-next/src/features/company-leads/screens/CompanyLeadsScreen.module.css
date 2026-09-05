@@ -9,8 +9,15 @@
    duplicated per-screen rather than shared) -- the list and the lead
    detail drawer become real flex siblings on desktop so one layout pass
    divides the space between them, and the list hides (not unmounts)
-   below 1024px while a lead's own full-page detail route is active. */
-.pageRow { display: flex; }
+   below 1024px while a lead's own full-page detail route is active.
+   Real bug caught live: an earlier version of this file gave .pageRow
+   an unconditional `display:flex`, which is NOT what PipelineListScreen
+   itself does (it has no bare .pageRow rule at all, only .pageRowSplit
+   below) -- a flex child's default flex:0 1 auto shrinks to its own
+   content width instead of filling the row, which is exactly what made
+   .wrap look like it had dead space on both sides even though its own
+   max-width was correctly 1200px. .pageRow must stay a plain block
+   outside split mode so .wrap can take its parent's full width. */
 .wrapHiddenMobile { display: none; }
 @media (width >= 1024px) {
   .wrapHiddenMobile { display: block; }
