@@ -4,6 +4,7 @@ import { ghs } from '../../../shared/lib/format';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
 import { useCanViewSiteVisitAuth, useFinalizeWeeklyVisitForm, useSaveWeeklyVisitCosts, useWeeklyVisitForm, useWeekSiteVisits } from '../hooks/useSiteVisitAuth';
+import { useCancelSiteVisit } from '../../site-visits/hooks/useSiteVisits';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './SiteVisitAuthScreen.module.css';
@@ -139,17 +140,7 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
       <div className={styles.visitList}>
         {visits.length === 0 && <p className={styles.emptyMsg}>No site visits logged for this day yet.</p>}
         {visits.map((v) => (
-          <div className={styles.visitCard} key={v.id}>
-            <div className={styles.visitName}>{v.name}</div>
-            <div className={styles.visitMeta}>
-              {v.contact} · {accompaniedText(v.people, v.accompanied)} accompanied
-            </div>
-            {v.purpose && <div className={styles.visitField}>Purpose: {v.purpose}</div>}
-            {v.pickup && <div className={styles.visitField}>Pick-up: {v.pickup}</div>}
-            {v.transport && <div className={styles.visitField}>Transport: {v.transport}</div>}
-            {v.feedbackAfter && <div className={styles.visitField}>Feedback: {v.feedbackAfter}</div>}
-            <div className={styles.visitField}>Staff: {v.agentName}</div>
-          </div>
+          <VisitCard key={v.id} visit={v} canCancel={costsEditable} />
         ))}
       </div>
 
@@ -248,5 +239,75 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
         )}
       </div>
     </>
+  );
+}
+
+// Master Spec 9.4: "Delete icon must work. Deletion requires confirmation
+// and reason; it archives/cancels the visit and preserves audit history."
+// Gated by the same costsEditable a day's cost inputs already respect --
+// once a day's form is Finalized, its visit list is part of the approved
+// record and shouldn't change underneath it.
+function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean }) {
+  const cancelVisit = useCancelSiteVisit();
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirmCancel() {
+    setError(null);
+    if (!reason.trim()) {
+      setError('A reason is required.');
+      return;
+    }
+    try {
+      await cancelVisit.mutateAsync({ id: visit.id, reason: reason.trim() });
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to cancel this visit'));
+    }
+  }
+
+  return (
+    <div className={styles.visitCard}>
+      <div className={styles.visitTop}>
+        <div className={styles.visitName}>{visit.name}</div>
+        {canCancel && !cancelling && (
+          <button type="button" className={styles.visitCancelIcon} title="Cancel this visit" aria-label={`Cancel visit for ${visit.name}`} onClick={() => setCancelling(true)}>
+            ✕
+          </button>
+        )}
+      </div>
+      <div className={styles.visitMeta}>
+        {visit.contact} · {accompaniedText(visit.people, visit.accompanied)} accompanied
+      </div>
+      {visit.purpose && <div className={styles.visitField}>Purpose: {visit.purpose}</div>}
+      {visit.pickup && <div className={styles.visitField}>Pick-up: {visit.pickup}</div>}
+      {visit.transport && <div className={styles.visitField}>Transport: {visit.transport}</div>}
+      {visit.feedbackAfter && <div className={styles.visitField}>Feedback: {visit.feedbackAfter}</div>}
+      <div className={styles.visitField}>Staff: {visit.agentName}</div>
+
+      {cancelling && (
+        <div className={styles.cancelBox}>
+          <label className={styles.fieldHint}>Reason for cancelling (required)</label>
+          <input className={styles.input} placeholder="e.g. Client rescheduled" value={reason} onChange={(e) => setReason(e.target.value)} />
+          {error && <p className={styles.errorMsg}>{error}</p>}
+          <div className={styles.confirmRow}>
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={() => {
+                setCancelling(false);
+                setReason('');
+                setError(null);
+              }}
+            >
+              Back
+            </button>
+            <button type="button" className={styles.visitCancelConfirmBtn} disabled={cancelVisit.isPending} onClick={confirmCancel}>
+              {cancelVisit.isPending ? 'Cancelling…' : 'Yes, cancel visit'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

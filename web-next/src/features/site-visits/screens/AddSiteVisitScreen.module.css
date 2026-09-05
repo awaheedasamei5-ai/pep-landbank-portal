@@ -52,3 +52,55 @@
   cursor: pointer;
 }
 .save:disabled { opacity: .6; cursor: default; }
+
+.dayChipRow { display: flex; gap: 6px; flex-wrap: wrap; }
+.dayChip {
+  flex: 1 1 auto;
+  min-width: 44px;
+  padding: 9px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dayChipOn { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+
+.dupWarning {
+  background: color-mix(in srgb, var(--c-danger) 10%, var(--c-card));
+  border: 1px solid var(--c-danger);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: var(--c-text);
+}
+.dupWarning p { margin: 0; }
+.dupOverrideRow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 700; cursor: pointer; }
+.dupNote { color: var(--c-muted); margin-top: 6px !important; }
+
+.confirmCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: 28px 20px;
+  text-align: center;
+}
+.confirmCheck {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  color: #fff;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.confirmNote { color: var(--c-muted); font-size: 12.5px; margin: 12px 0 0; }
+
+.newClientNote { color: var(--c-muted); font-size: 12px; margin: -8px 0 14px; line-height: 1.4; }

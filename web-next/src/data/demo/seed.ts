@@ -251,6 +251,10 @@ export function seedDemo(): DemoDb {
       status: 'Pending',
       createdAt: isoPlusDays(t, -12),
       leadId: leads.find((l) => l.name === 'Mercy Owusu')!.id,
+      deletedAt: null,
+      deletedBy: null,
+      deletedByName: null,
+      cancellationReason: null,
     },
     {
       id: uid(),
@@ -279,6 +283,10 @@ export function seedDemo(): DemoDb {
       status: 'Pending',
       createdAt: isoPlusDays(t, -3),
       leadId: leads.find((l) => l.name === 'Abena Boateng')!.id,
+      deletedAt: null,
+      deletedBy: null,
+      deletedByName: null,
+      cancellationReason: null,
     },
   ];
 

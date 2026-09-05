@@ -100,9 +100,41 @@
   padding: 12px 14px;
   box-shadow: var(--shadow);
 }
+.visitTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .visitName { font-weight: 700; font-size: 14px; }
 .visitMeta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
 .visitField { font-size: 12px; color: var(--c-text); margin-top: 4px; }
+
+.visitCancelIcon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.visitCancelIcon:hover { color: var(--c-danger); border-color: var(--c-danger); }
+
+.cancelBox {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-line);
+}
+.visitCancelConfirmBtn {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-danger);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.visitCancelConfirmBtn:disabled { opacity: .6; cursor: default; }
 
 .costCard {
   background: var(--c-card);

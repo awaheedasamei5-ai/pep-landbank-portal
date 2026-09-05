@@ -60,6 +60,26 @@ export function allowedDayIsos(weekStartIso: string): string[] {
   return out.filter((iso) => ALLOWED_DAYS.includes(new Date(`${iso}T00:00:00`).getDay()));
 }
 
+// Master Spec 9.1's actual weekly schedule, now enforced (not just
+// commented on): Monday-Saturday default to 9:00am, Sunday to 12:00pm.
+// JS Date.getDay() keys, 0=Sunday.
+export const DAY_DEFAULT_TIME: Record<number, string> = { 0: '12:00pm', 1: '9:00am', 2: '9:00am', 3: '9:00am', 4: '9:00am', 5: '9:00am', 6: '9:00am' };
+
+// Ported behavior from Master Spec 9.2: "When staff chooses [a day], the
+// calendar must open with only [that day] enabled. The user can select
+// this [day] or a future [day]." Returns the next `count` real calendar
+// dates (today included) that fall on the given day-of-week.
+export function upcomingDatesForDay(dayOfWeek: number, count = 6): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  for (let guard = 0; out.length < count && guard < 400; guard++) {
+    if (d.getDay() === dayOfWeek) out.push(isoDateOnly(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 export function fmtLongDate(iso: string): string {
   if (!iso) return '';
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });

@@ -390,6 +390,13 @@ export interface DataSource {
     // Master Spec Section 4's Site Visits lead-record section -- real
     // site_visits.lead_id FK, not a fuzzy name/contact match at read time.
     listForLead(leadId: string): Promise<SiteVisit[]>;
+    // Master Spec 9.4: "Delete icon must work. Deletion requires
+    // confirmation and reason; it archives/cancels the visit and
+    // preserves audit history." A soft cancel (UPDATE, deleted_at set),
+    // never a hard DELETE -- real site_visits_del RLS would allow a hard
+    // delete, but that would destroy the cost/history record the spec
+    // explicitly says must survive.
+    cancel(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<void>;
   };
   // Master Spec Section 4's "combined activity timeline" lead-record
   // section. Real activity_log.lead_id FK (added this session, see
@@ -1421,10 +1428,10 @@ function createDemoDataSource(): DataSource {
     },
     siteVisits: {
       async listForAgent(agentKey) {
-        return demoLoad().siteVisits.filter((v) => v.agentKey === agentKey);
+        return demoLoad().siteVisits.filter((v) => v.agentKey === agentKey && !v.deletedAt);
       },
       async listAll() {
-        return demoLoad().siteVisits;
+        return demoLoad().siteVisits.filter((v) => !v.deletedAt);
       },
       async create(agentKey, agentName, input) {
         const visit: SiteVisit = {
@@ -1454,6 +1461,10 @@ function createDemoDataSource(): DataSource {
           status: 'Pending',
           createdAt: new Date().toISOString(),
           leadId: input.leadId ?? null,
+          deletedAt: null,
+          deletedBy: null,
+          deletedByName: null,
+          cancellationReason: null,
         };
         const db = demoLoad();
         db.siteVisits.push(visit);
@@ -1461,7 +1472,15 @@ function createDemoDataSource(): DataSource {
         return visit;
       },
       async listForLead(leadId) {
-        return demoLoad().siteVisits.filter((v) => v.leadId === leadId);
+        return demoLoad().siteVisits.filter((v) => v.leadId === leadId && !v.deletedAt);
+      },
+      async cancel(id, reason, deletedBy, deletedByName) {
+        const db = demoLoad();
+        const index = db.siteVisits.findIndex((v) => v.id === id);
+        if (index === -1) throw new Error('Site visit not found');
+        const updated: SiteVisit = { ...db.siteVisits[index], deletedAt: new Date().toISOString(), deletedBy, deletedByName, cancellationReason: reason };
+        db.siteVisits = [...db.siteVisits.slice(0, index), updated, ...db.siteVisits.slice(index + 1)];
+        demoSave();
       },
     },
     activityLog: {
@@ -3194,12 +3213,12 @@ function createLiveDataSource(): DataSource {
     },
     siteVisits: {
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('site_visits').select('*').eq('agent_key', agentKey).order('visit_date', { ascending: false });
+        const { data, error } = await requireClient().from('site_visits').select('*').eq('agent_key', agentKey).is('deleted_at', null).order('visit_date', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('site_visits').select('*').order('visit_date', { ascending: false });
+        const { data, error } = await requireClient().from('site_visits').select('*').is('deleted_at', null).order('visit_date', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
@@ -3235,9 +3254,16 @@ function createLiveDataSource(): DataSource {
         return mapSiteVisitRow(data);
       },
       async listForLead(leadId) {
-        const { data, error } = await requireClient().from('site_visits').select('*').eq('lead_id', leadId).order('visit_date', { ascending: false });
+        const { data, error } = await requireClient().from('site_visits').select('*').eq('lead_id', leadId).is('deleted_at', null).order('visit_date', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
+      },
+      async cancel(id, reason, deletedBy, deletedByName) {
+        const { error } = await requireClient()
+          .from('site_visits')
+          .update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy, deleted_by_name: deletedByName, cancellation_reason: reason })
+          .eq('id', id);
+        if (error) throw error;
       },
     },
     activityLog: {

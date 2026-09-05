@@ -697,6 +697,14 @@ export interface SiteVisit {
   // match against `leads`; new ones are set explicitly by the picker on
   // AddSiteVisitScreen instead of relying on fuzzy matching going forward.
   leadId: string | null;
+  // Real columns added 2026-09-05 (Master Spec 9.4: "Delete icon must
+  // work. Deletion requires confirmation and reason; it archives/cancels
+  // the visit and preserves audit history.") -- a soft cancel via UPDATE,
+  // never a hard DELETE, so the row (and its costs/history) survives.
+  deletedAt: string | null;
+  deletedBy: string | null;
+  deletedByName: string | null;
+  cancellationReason: string | null;
 }
 
 export interface NewSiteVisit {
