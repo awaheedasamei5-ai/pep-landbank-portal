@@ -24,6 +24,7 @@ import {
   isLeadOverdue,
   type PipelineFilters,
 } from '../lib/pipelineListLogic';
+import { qtyOfType } from '../lib/pipelineLogic';
 import type { Lead } from '../../../types/domain';
 import styles from './PipelineListScreen.module.css';
 
@@ -470,7 +471,7 @@ export function PipelineListScreen() {
                     <td className={styles.td}>{l.contact}</td>
                     <td className={styles.td}>
                       {l.plotType}
-                      {l.noPlots > 1 ? ` ×${l.noPlots}` : ''}
+                      {qtyOfType(l.plotType, l.noPlots) > 1 ? ` ×${qtyOfType(l.plotType, l.noPlots)}` : ''}
                     </td>
                     <td className={`${styles.td} ${styles.tdMono}`}>{ghs(l.grandTotal)}</td>
                     <td className={`${styles.td} ${styles.tdMono}`}>{ghs(l.amtPaid)}</td>

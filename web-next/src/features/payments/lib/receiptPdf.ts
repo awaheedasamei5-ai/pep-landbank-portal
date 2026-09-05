@@ -112,9 +112,16 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.line(colRx, y + 1.5, colRx + 16, y + 1.5);
   y += 8;
   const rowH = 10.5;
+  // lead.noPlots is a full-plot-equivalent count (0.5 = one Half Plot,
+  // see previewGrandTotal's own comment in pipelineLogic.ts) -- a client-
+  // facing receipt reads better showing how many of the ACTUAL type they
+  // bought ("Half Plot x 1", not the confusing "Half Plot x 0.5"), so
+  // this converts back to qty-of-type for display only.
+  const eqPerUnit = lead?.plotType === 'Half Plot' ? 0.5 : 1;
+  const qtyOfType = lead ? (lead.noPlots || eqPerUnit) / eqPerUnit : 1;
   const billRows: [string, string][] = [
     ['Name', clientName],
-    ['Plot', lead ? `${lead.plotType || 'Plot'} × ${lead.noPlots || 1}` : '—'],
+    ['Plot', lead ? `${lead.plotType || 'Plot'} × ${qtyOfType}` : '—'],
     ['Phone', lead?.contact || '—'],
     ['Email', '—'],
   ];
@@ -150,9 +157,8 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.text('TOTAL', tblX[3] + 3, y + 5.3);
   y += 8;
   const grand = lead?.grandTotal ?? 0;
-  const noPlots = lead ? lead.noPlots || 1 : 1;
   const desc = lead ? `${lead.plotType || 'Plot'} — ${siteName}` : 'Payment received';
-  const unitPrice = lead ? ghs(grand / noPlots) : '—';
+  const unitPrice = lead ? ghs(grand / qtyOfType) : '—';
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
   doc.rect(L, y, R - L, 9.5);
@@ -160,7 +166,7 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setFontSize(8.5);
   doc.setTextColor(...DARK);
   doc.text(fitText(doc, desc, tblW[0] - 6), tblX[0] + 3, y + 6.2);
-  doc.text(String(noPlots), tblX[1] + 3, y + 6.2);
+  doc.text(String(qtyOfType), tblX[1] + 3, y + 6.2);
   doc.text(unitPrice, tblX[2] + tblW[2] - 3, y + 6.2, { align: 'right' });
   doc.setFont('helvetica', 'bold');
   doc.text(ghs(payment.amount), tblX[3] + tblW[3] - 3, y + 6.2, { align: 'right' });

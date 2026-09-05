@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -22,13 +22,23 @@ const PLANS: PaymentPlanKey[] = ['Full Payment', '3 Months', '6 Months', '9 Mont
 export function QuotationScreen() {
   const { data: config, isLoading } = useConfig();
   const [plotType, setPlotType] = useState<PlotType>('Full Plot');
+  // noPlots is a full-plot-equivalent count -- 0.5 is one standard Half
+  // Plot (see computeQuotationTotals's own comment), so switching plot
+  // type re-defaults it to the standard single-unit value unless the
+  // staff member has already typed their own number.
   const [noPlots, setNoPlots] = useState(1);
+  const [noPlotsTouched, setNoPlotsTouched] = useState(false);
   const [plan, setPlan] = useState<PaymentPlanKey>('12 Months');
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
   const [clientAddress, setClientAddress] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const downloadPdf = useDownloadQuotationPdf();
+
+  useEffect(() => {
+    if (noPlotsTouched) return;
+    setNoPlots(plotType === 'Half Plot' ? 0.5 : 1);
+  }, [plotType, noPlotsTouched]);
 
   const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan) : null;
 
@@ -60,7 +70,17 @@ export function QuotationScreen() {
           </div>
           <div className={styles.field}>
             <label className={styles.label}>No. of plots</label>
-            <input className={styles.input} type="number" min={1} step={1} value={noPlots} onChange={(e) => setNoPlots(Math.max(1, Number(e.target.value) || 1))} />
+            <input
+              className={styles.input}
+              type="number"
+              min={0.5}
+              step={0.5}
+              value={noPlots}
+              onChange={(e) => {
+                setNoPlotsTouched(true);
+                setNoPlots(Math.max(0.5, Number(e.target.value) || 0.5));
+              }}
+            />
           </div>
         </div>
         <div className={styles.field}>
@@ -151,6 +171,7 @@ export function QuotationScreen() {
               downloadPdf.mutate({
                 totals,
                 noPlots,
+                plotType,
                 client: { name: clientName.trim(), contact: clientContact.trim(), address: clientAddress.trim(), email: clientEmail.trim() },
                 config,
               })

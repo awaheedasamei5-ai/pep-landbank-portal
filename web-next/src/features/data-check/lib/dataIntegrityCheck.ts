@@ -97,9 +97,13 @@ export function runDataIntegrityCheck(leads: Lead[], payments: Payment[], siteVi
     if (!l.noPlots) {
       push('Missing quantity', 'danger', 'No. of plots is zero or blank.');
     }
-    if (l.plotType === 'Half Plot' && l.noPlots > 0 && l.noPlots < 1) {
-      push('Quantity error', 'danger', `No. of plots is ${l.noPlots} on a Half Plot — that's half of an already-half unit. This almost always means it should be 1, not ${l.noPlots}.`);
-    }
+    // No longer flags a Half Plot with noPlots between 0 and 1 -- that
+    // used to be treated as "half of an already-half unit", but noPlots
+    // is now a full-plot-equivalent count everywhere (0.5 IS one standard
+    // Half Plot; see previewGrandTotal's own comment in pipelineLogic.ts
+    // for the real production bug this fixed). A fractional value below
+    // 0.5 there is now a legitimate, small custom/partial lot, not an
+    // error -- see PartialPlotAdder.
 
     const isDead = l.stage === 'Lost' || l.amtPaid >= storedGrand;
     if (!l.contact) {

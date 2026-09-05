@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
+import { qtyOfType } from '../../pipeline/lib/pipelineLogic';
 import { StaffPipelineImportCard } from '../../pipeline/components/StaffPipelineImportCard';
 import { useDownloadCompanyLeadsPipeline } from '../../manager/hooks/usePipelineExcel';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -155,7 +156,7 @@ function LeadCard({ lead }: { lead: Lead }) {
             <div className={styles.name}>{lead.name}</div>
             <div className={styles.meta}>
               {lead.contact} &middot; {lead.plotType}
-              {lead.noPlots > 1 ? ` ×${lead.noPlots}` : ''}
+              {qtyOfType(lead.plotType, lead.noPlots) > 1 ? ` ×${qtyOfType(lead.plotType, lead.noPlots)}` : ''}
             </div>
           </div>
         </div>

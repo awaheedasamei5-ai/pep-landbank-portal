@@ -238,7 +238,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   const [showPartials, setShowPartials] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
 
-  const units = allocationUnitsNeeded(lead?.plotType ?? 'Full Plot', lead?.noPlots ?? 1);
+  const units = allocationUnitsNeeded(lead?.noPlots ?? 1);
   const multi = units.length > 1;
   const slots = multi ? units.length : 3;
 
@@ -535,7 +535,7 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
   const [reason, setReason] = useState('');
 
   const plots = (request.suggestedPlots ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const units = allocationUnitsNeeded(lead?.plotType ?? 'Full Plot', lead?.noPlots ?? 1);
+  const units = allocationUnitsNeeded(lead?.noPlots ?? 1);
   const multi = units.length > 1 && plots.length === units.length;
 
   async function doConfirm(plotNumber: string) {

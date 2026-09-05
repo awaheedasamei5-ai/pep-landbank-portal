@@ -29,7 +29,13 @@ export function seedDemo(): DemoDb {
       contact: '0240758072',
       date: isoPlusDays(t, -18),
       plotType: 'Half Plot',
-      noPlots: 1,
+      // noPlots is a full-plot-equivalent count -- 0.5 IS one standard
+      // Half Plot, not "half of a half plot" (see pipelineLogic.ts's own
+      // comment on this; a real production data-consistency bug, fixed
+      // live 2026-09-05, had 26 real leads at noPlots=1 for one half plot
+      // and 6 at 0.5 for the same thing, with 4 of those 6 silently
+      // undercharged 50% by the old qty-based formula).
+      noPlots: 0.5,
       // Real pricing engine, computed by hand once so this stays a real
       // worked example rather than a round guess: net = 24000 (config
       // halfPrice, no discount) + interest 750 (config int6=1500 * the
@@ -79,14 +85,14 @@ export function seedDemo(): DemoDb {
     { id: uid(), agent: 'emmanuel', name: 'Efua Ansah', contact: '0248877665', date: isoPlusDays(t, -60), plotType: 'Full Plot', noPlots: 2, unitPrice: 48000, paymentPlan: 'Full Payment', amtPaid: 96000, grandTotal: 96000, stage: '4' },
     // grandTotal 24375 = net 24000 + real 3-month Half Plot interest 375
     // (config int3=750 * the 0.5 half-plot eq factor).
-    { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 1, unitPrice: 24000, paymentPlan: '3 Months', amtPaid: 5000, grandTotal: 24375, stage: '2A' },
+    { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 0.5, unitPrice: 24000, paymentPlan: '3 Months', amtPaid: 5000, grandTotal: 24375, stage: '2A' },
     { id: uid(), agent: 'elizabeth', name: 'Ama Serwaa', contact: '0201998877', date: isoPlusDays(t, -33), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 49500, stage: 'Lost' },
     // 'company' -- clients who came to the company directly, not through a
     // specific agent (real agent_key='company' pattern, confirmed live).
     // Appended at the end so existing leads[N] index references elsewhere
     // in this file (Commission's seed) stay correct.
     { id: uid(), agent: 'company', name: 'Nana Yeboah', contact: '0244009988', date: isoPlusDays(t, -3), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: 'Full Payment', amtPaid: 0, grandTotal: 48000, stage: '1', leadSource: 'Facebook' },
-    { id: uid(), agent: 'company', name: 'Adjoa Frimpong', contact: '0559112233', date: isoPlusDays(t, -8), plotType: 'Half Plot', noPlots: 1, unitPrice: 24000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 24750, stage: '1' },
+    { id: uid(), agent: 'company', name: 'Adjoa Frimpong', contact: '0559112233', date: isoPlusDays(t, -8), plotType: 'Half Plot', noPlots: 0.5, unitPrice: 24000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 24750, stage: '1' },
   ];
 
   const payments: DemoDb['payments'] = [

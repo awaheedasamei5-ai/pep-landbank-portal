@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { fmtLongDate, ghs } from '../../../shared/lib/format';
-import { computeLeadQuotationTotals, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
+import { computeLeadQuotationTotals, pricingFor, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
 import type { Config, Lead } from '../../../types/domain';
 
 // Faithful port of index.html's Contract of Sale document (index.html:
@@ -169,10 +169,13 @@ function contractBody(doc: jsPDF, y: number, n: number, text: string, dense?: bo
 
 // A "full plot" is 70x100ft (7,000 sqft = 0.1607 acres); a "half plot" is
 // half that -- matches the reference contract's own math (2 full plots =
-// 0.32 acres exactly).
+// 0.32 acres exactly). lead.noPlots is a full-plot-equivalent count (0.5
+// = one Half Plot, see previewGrandTotal's own comment in
+// pipelineLogic.ts), so the Full Plot acreage constant alone converts it
+// regardless of which plot type is selected -- no separate Half Plot
+// constant needed any more.
 function contractAcres(lead: Lead): number {
-  const perPlot = lead.plotType === 'Half Plot' ? 0.0804 : 0.1607;
-  return Math.round(perPlot * (lead.noPlots || 1) * 100) / 100;
+  return Math.round(0.1607 * (lead.noPlots || 1) * 100) / 100;
 }
 
 // The reference document underlines the Purchaser's name+address
@@ -280,6 +283,11 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   const vendorName = (config.quoteCompanyName || 'Trulander JSF Limited').toUpperCase();
   const ceo = (config.contractCeoName || 'FRANK ADU PEPRAH').toUpperCase();
   const acres = contractAcres(lead);
+  // lead.noPlots is a full-plot-equivalent count -- a signed legal
+  // contract needs to read "1 x Half Plot" for one half plot, not the
+  // confusing "0.5 x Half Plot" (see previewGrandTotal's own comment in
+  // pipelineLogic.ts).
+  const qtyOfType = (lead.noPlots || 1) / pricingFor(config, lead.plotType).eq;
   let n = 1;
   let y: number;
 
@@ -418,7 +426,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractCheckbox(doc, 52, y, '', false);
   doc.text('Credit', 60, y);
   contractCheckbox(doc, 73, y, '', false);
-  contractField(doc, 81, y, pageW - 14 - 81, 'Number of plots', (lead.noPlots || 1) + ' x ' + (lead.plotType || 'Full Plot'));
+  contractField(doc, 81, y, pageW - 14 - 81, 'Number of plots', qtyOfType + ' x ' + (lead.plotType || 'Full Plot'));
   y += 10;
   contractField(doc, 14, y, 86, 'Agreed price GHS', ghs(t.grand).replace('GHS ', ''));
   contractField(doc, 108, y, 86, 'Amount paid GHS', ghs(lead.amtPaid).replace('GHS ', ''));

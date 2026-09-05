@@ -310,9 +310,14 @@ export type ImportPlanItem =
 // from the pricing config), so it's read straight from the row.
 function freshTotals(config: Config, unitPrice: number, noPlots: number, discount: number, paymentPlan: PaymentPlan, plotType: PlotType): { net: number; grand: number } {
   const p = pricingFor(config, plotType);
-  const gross = unitPrice * noPlots;
+  // noPlots is a full-plot-equivalent count (0.5 = one Half Plot), same as
+  // previewGrandTotal/computeLeadQuotationTotals -- see pipelineLogic.ts's
+  // previewGrandTotal for why. qty is how many of the selected type's own
+  // units that is, needed only to scale that type's own list price.
+  const eq = noPlots || 1;
+  const qty = eq / p.eq;
+  const gross = unitPrice * qty;
   const net = Math.max(gross - discount, 0);
-  const eq = p.eq * noPlots;
   const interestTotal = interestFor(config, paymentPlan) * eq;
   return { net, grand: net + interestTotal };
 }

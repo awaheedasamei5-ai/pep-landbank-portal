@@ -123,6 +123,15 @@ export function AddLeadScreen() {
   // override, auto-fill stops so it never clobbers a deliberate custom
   // price.
   const [unitPriceManuallyEdited, setUnitPriceManuallyEdited] = useState(false);
+  // Same pattern as unitPriceManuallyEdited above -- No. of plots is a
+  // full-plot-equivalent count (0.5 IS one standard Half Plot, not "half
+  // of a half plot"; see previewGrandTotal's own comment in
+  // pipelineLogic.ts for the real production bug this fixed), so
+  // switching plot type re-defaults it to the standard single-unit value
+  // (0.5 for Half, 1 for Full) unless the staff member has typed their
+  // own number -- e.g. via the partial-plot calculator below, or a real
+  // multi-plot deal.
+  const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(false);
   const {
     register,
     handleSubmit,
@@ -156,7 +165,16 @@ export function AddLeadScreen() {
   const amtPaid = watch('amtPaid') || 0;
   const paymentPlan = watch('paymentPlan') || 'Full Payment';
   const discountRaw = watch('discount');
-  const discountNum = discountRaw != null && discountRaw !== '' ? (discountMode === 'perplot' ? Number(discountRaw) * Number(noPlots || 1) : Number(discountRaw)) : null;
+  // "Discount is per plot" means per unit of the type actually being
+  // bought (per Half Plot if that's selected, per Full Plot otherwise) --
+  // noPlots itself is a full-plot-equivalent count (0.5 = one Half Plot,
+  // see previewGrandTotal's own comment), so the multiplier here is qty
+  // (how many of the selected type that represents), not noPlots directly,
+  // or a per-plot discount on a Half Plot deal would silently come out
+  // half of what was typed.
+  const eqPerUnit = plotType === 'Half Plot' ? 0.5 : 1;
+  const qtyOfType = Number(noPlots || eqPerUnit) / eqPerUnit;
+  const discountNum = discountRaw != null && discountRaw !== '' ? (discountMode === 'perplot' ? Number(discountRaw) * qtyOfType : Number(discountRaw)) : null;
 
   // Real interest-by-payment-plan/discount-aware pricing (previewGrandTotal,
   // same engine Pipeline Detail's own edit already uses), not the naive
@@ -183,6 +201,11 @@ export function AddLeadScreen() {
     if (!config || unitPriceManuallyEdited) return;
     setValue('unitPrice', plotType === 'Half Plot' ? config.halfPrice : config.fullPrice);
   }, [config, plotType, unitPriceManuallyEdited, setValue]);
+
+  useEffect(() => {
+    if (noPlotsManuallyEdited) return;
+    setValue('noPlots', plotType === 'Half Plot' ? 0.5 : 1);
+  }, [plotType, noPlotsManuallyEdited, setValue]);
 
   const watchedName = watch('name') || '';
   const watchedContact = watch('contact') || '';
@@ -302,14 +325,17 @@ export function AddLeadScreen() {
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>No. of plots</label>
-                  <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots')} />
+                  <input className={styles.input} type="number" min={0.5} step={0.5} {...register('noPlots', { onChange: () => setNoPlotsManuallyEdited(true) })} />
                 </div>
               </div>
               {config && (
                 <PartialPlotAdder
                   config={config}
                   plotType={plotType}
-                  onAdd={(eq) => setValue('noPlots', Math.round((Number(noPlots || 0) + eq) * 100) / 100)}
+                  onAdd={(eq) => {
+                    setNoPlotsManuallyEdited(true);
+                    setValue('noPlots', Math.round((Number(noPlots || 0) + eq) * 100) / 100);
+                  }}
                 />
               )}
               <div className={styles.field}>

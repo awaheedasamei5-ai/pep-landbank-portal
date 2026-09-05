@@ -70,10 +70,16 @@ function computeInstallmentPlan(net: number, interestTotal: number, planMonths: 
 
 export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey): QuotationTotals {
   const p = pricingFor(config, plotType);
-  const listTotal = p.list * noPlots;
-  const discountTotal = p.disc * noPlots;
+  // noPlots is a full-plot-equivalent count (0.5 = one Half Plot), matching
+  // previewGrandTotal/computeLeadQuotationTotals below -- see
+  // pipelineLogic.ts's previewGrandTotal for the real production bug this
+  // fixed. qty is how many of the selected type's own units that is,
+  // needed only to scale that type's own list price/discount.
+  const eq = noPlots || 1;
+  const qty = eq / p.eq;
+  const listTotal = p.list * qty;
+  const discountTotal = p.disc * qty;
   const net = Math.max(listTotal - discountTotal, 0);
-  const eq = p.eq * noPlots;
   const interestTotal = interestFor(config, plan) * eq;
   const planMonths = PLAN_MONTHS[plan] ?? 0;
   const ip = computeInstallmentPlan(net, interestTotal, planMonths, QUOTE_DEPOSIT_PCT);
@@ -91,11 +97,13 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
 // to the same standard-pricing math computeQuotationTotals() uses.
 export function computeLeadQuotationTotals(config: Config, lead: Lead): QuotationTotals {
   const p = pricingFor(config, lead.plotType);
-  const qty = lead.noPlots;
+  // lead.noPlots is a full-plot-equivalent count -- see
+  // previewGrandTotal's own comment (pipelineLogic.ts) for why.
+  const eq = lead.noPlots || 1;
+  const qty = eq / p.eq;
   const gross = (lead.unitPrice || p.list) * qty;
   const disc = lead.discount != null ? lead.discount : p.disc * qty;
   const computedNet = Math.max(gross - disc, 0);
-  const eq = p.eq * qty;
   const interestTotal = interestFor(config, lead.paymentPlan) * eq;
 
   const net = lead.netTotal != null ? lead.netTotal : computedNet;

@@ -6,6 +6,18 @@ import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
 // 2846-2854, 17138-17139).
 export const STAGES: Stage[] = ['1', '2A', '2B', '3', '4', 'Lost'];
 
+// noPlots is a full-plot-equivalent count everywhere in the app (0.5 = one
+// Half Plot -- see previewGrandTotal's own comment below for the real
+// production bug this fixed), but a "×N" display next to the plot TYPE
+// needs qty of that actual type (1 for one Half Plot, 2 for two Half
+// Plots, not 0.5/1.0) or it reads backwards to a client/staff member. The
+// eq factor only depends on plotType, not config, so no config lookup is
+// needed to convert.
+export function qtyOfType(plotType: PlotType, noPlots: number): number {
+  const eqPerUnit = plotType === 'Half Plot' ? 0.5 : 1;
+  return (noPlots || eqPerUnit) / eqPerUnit;
+}
+
 // Internal code -> staff-facing display code (reversed numbering, per the
 // deliberate "pipeline stage display flip" business decision already
 // shipped in index.html).
@@ -58,25 +70,36 @@ export function previewGrandTotal(
   paymentPlan: PaymentPlanKey
 ): { net: number; interest: number; grand: number; disc: number; listPrice: number } {
   const p = plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
-  const qty = noPlots || 1;
+  // noPlots is a full-plot-equivalent count, not "count of the selected
+  // type's own units" -- 0.5 IS one standard Half Plot, matching how a
+  // half plot is literally half a plot. Real production bug fixed live
+  // 2026-09-05: under the old "count of type" reading, staff who typed
+  // 0.5 for a single half plot (an entirely reasonable reading of a
+  // field called "No. of plots") got silently charged for a QUARTER
+  // plot instead -- 4 real leads were undercharged 50% this way before
+  // the data was corrected. `eq` (used for interest, already a
+  // full-plot-equivalent) is now just noPlots itself; `qty` (how many of
+  // the selected type's own units that is, needed only to scale that
+  // type's own list price/discount) is derived from it, not the reverse.
+  const eq = noPlots || 1;
+  const qty = eq / p.eq;
   const unit = unitPrice || p.list;
   const gross = unit * qty;
   const disc = discount != null ? discount : p.disc * qty;
   const net = Math.max(gross - disc, 0);
-  const eq = p.eq * qty;
   const interestTable: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
   const interest = (interestTable[paymentPlan] ?? 0) * eq;
   return { net, interest, grand: net + interest, disc, listPrice: p.list };
 }
 
 // Ported from index.html's allocationUnitsNeeded() (index.html:2660-2675) --
-// breaks a lead's plotType+noPlots into the real physical units Allocations
-// needs to hand over, e.g. 1.5 Full Plot -> ['Full Plot','Half Plot']. Uses
-// the same full-plot-equivalence (1 for Full, 0.5 for Half) the pricing
-// engine already uses, not a new invented concept.
-export function allocationUnitsNeeded(plotType: PlotType, noPlots: number): PlotType[] {
-  const eqPerUnit = plotType === 'Half Plot' ? 0.5 : 1;
-  const eq = eqPerUnit * (noPlots || 1);
+// breaks a lead's noPlots into the real physical units Allocations needs to
+// hand over, e.g. 1.5 -> ['Full Plot','Half Plot']. noPlots is already a
+// full-plot-equivalent count (see previewGrandTotal's own comment), so it
+// no longer needs a plotType to convert -- kept as a plain noPlots-only
+// function rather than a param neither branch of the old formula used.
+export function allocationUnitsNeeded(noPlots: number): PlotType[] {
+  const eq = noPlots || 1;
   const wholeCount = Math.floor(eq + 1e-9);
   const hasHalf = eq - wholeCount >= 0.5 - 1e-9;
   const units: PlotType[] = [];

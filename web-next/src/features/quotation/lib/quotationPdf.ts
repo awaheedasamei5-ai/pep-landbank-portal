@@ -119,7 +119,13 @@ export interface QuotationClientInfo {
   email?: string;
 }
 
-export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: QuotationClientInfo, config: Config, logoDataUri: string | null, preparedByName: string, preparerSignature: string | null): jsPDF {
+// qtyOfType is how many of the SELECTED plot type this is (1 for one Half
+// Plot, not the full-plot-equivalent 0.5 -- see previewGrandTotal's own
+// comment in pipelineLogic.ts) -- needed here only to divide q.listTotal/
+// discountTotal/interestTotal back down to a real per-unit figure for the
+// "Original Plot Price"/"Discount"/"Interest" rows below; the caller
+// converts from noPlots since this function has no plotType of its own.
+export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client: QuotationClientInfo, config: Config, logoDataUri: string | null, preparedByName: string, preparerSignature: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -168,11 +174,11 @@ export function buildQuotationPdf(q: QuotationTotals, noPlots: number, client: Q
   const rightRows: [string, string, [number, number, number] | null][] = [
     ['Date:', dateStr, null],
     ['Credit Period months', q.planMonths ? String(q.planMonths) : '—', QRED],
-    ['No of Plots', String(noPlots), QRED],
-    ['Original Plot Price', ghs(q.listTotal / noPlots), null],
-    ['Discount', ghs((q.discountTotal || 0) / noPlots), null],
-    ['Interest', ghs((q.interestTotal || 0) / noPlots), null],
-    ['Cost with Interest', ghs((q.net + q.interestTotal) / noPlots), null],
+    ['No of Plots', String(qtyOfType), QRED],
+    ['Original Plot Price', ghs(q.listTotal / qtyOfType), null],
+    ['Discount', ghs((q.discountTotal || 0) / qtyOfType), null],
+    ['Interest', ghs((q.interestTotal || 0) / qtyOfType), null],
+    ['Cost with Interest', ghs((q.net + q.interestTotal) / qtyOfType), null],
     ['Total', ghs(q.grand), null],
   ];
   let ly = y;

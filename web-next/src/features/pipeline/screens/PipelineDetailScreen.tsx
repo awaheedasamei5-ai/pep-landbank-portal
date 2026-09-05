@@ -8,7 +8,7 @@ import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/us
 import { usePlots, useUpdatePlot } from '../../plots/hooks/usePlots';
 import { useAllocationRequests, useCreateAllocationRequest } from '../../allocations/hooks/useAllocationRequests';
 import type { Lead, Payment } from '../../../types/domain';
-import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal } from '../lib/pipelineLogic';
+import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal, qtyOfType } from '../lib/pipelineLogic';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { StageBadge } from '../components/StageBadge';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
@@ -129,7 +129,7 @@ export function PipelineDetailScreen() {
           <h1 className={styles.name}>{lead.name}</h1>
           <p className={styles.meta}>
             {lead.contact} · {lead.plotType}
-            {lead.noPlots > 1 ? ` ×${lead.noPlots}` : ''} · <StageBadge stage={lead.stage} />
+            {qtyOfType(lead.plotType, lead.noPlots) > 1 ? ` ×${qtyOfType(lead.plotType, lead.noPlots)}` : ''} · <StageBadge stage={lead.stage} />
           </p>
         </div>
       </div>
@@ -433,6 +433,12 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
   const [editing, setEditing] = useState(false);
   const [plotType, setPlotType] = useState(lead.plotType);
   const [noPlots, setNoPlots] = useState(String(lead.noPlots));
+  // Only re-defaults No. of plots (0.5 for Half, 1 for Full -- a
+  // full-plot-equivalent count, see previewGrandTotal's own comment) when
+  // the staff member actually changes the Plot type dropdown themselves
+  // during this edit -- the initial value above must stay exactly what
+  // the lead already has, not get silently overwritten on open.
+  const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(false);
   const [unitPrice, setUnitPrice] = useState(String(lead.unitPrice));
   const [discount, setDiscount] = useState(lead.discount != null ? String(lead.discount) : '');
   const [paymentPlan, setPaymentPlan] = useState(lead.paymentPlan);
@@ -452,7 +458,7 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Plot type</span>
           <span>
-            {lead.plotType} ×{lead.noPlots}
+            {lead.plotType} ×{qtyOfType(lead.plotType, lead.noPlots)}
           </span>
         </div>
         <div className={styles.readRow}>
@@ -477,17 +483,42 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
       <div className={styles.grid2}>
         <div className={styles.field}>
           <label className={styles.label}>Plot type</label>
-          <select className={styles.input} value={plotType} onChange={(e) => setPlotType(e.target.value as Lead['plotType'])}>
+          <select
+            className={styles.input}
+            value={plotType}
+            onChange={(e) => {
+              const next = e.target.value as Lead['plotType'];
+              setPlotType(next);
+              if (!noPlotsManuallyEdited) setNoPlots(next === 'Half Plot' ? '0.5' : '1');
+            }}
+          >
             <option>Full Plot</option>
             <option>Half Plot</option>
           </select>
         </div>
         <div className={styles.field}>
           <label className={styles.label}>No. of plots</label>
-          <input className={styles.input} type="number" step="0.5" min="0.5" value={noPlots} onChange={(e) => setNoPlots(e.target.value)} />
+          <input
+            className={styles.input}
+            type="number"
+            step="0.5"
+            min="0.5"
+            value={noPlots}
+            onChange={(e) => {
+              setNoPlotsManuallyEdited(true);
+              setNoPlots(e.target.value);
+            }}
+          />
         </div>
       </div>
-      <PartialPlotAdder config={config} plotType={plotType} onAdd={(eq) => setNoPlots(String(Math.round((Number(noPlots || 0) + eq) * 100) / 100))} />
+      <PartialPlotAdder
+        config={config}
+        plotType={plotType}
+        onAdd={(eq) => {
+          setNoPlotsManuallyEdited(true);
+          setNoPlots(String(Math.round((Number(noPlots || 0) + eq) * 100) / 100));
+        }}
+      />
       <div className={styles.grid2}>
         <div className={styles.field}>
           <label className={styles.label}>Unit price (GHS)</label>

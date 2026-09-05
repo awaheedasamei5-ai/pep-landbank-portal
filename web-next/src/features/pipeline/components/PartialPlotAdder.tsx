@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { techBaseAreaSqft, techCustomLotArea, techHalfAreaSqft } from '../../quotation/lib/quotationLogic';
+import { techBaseAreaSqft, techCustomLotArea } from '../../quotation/lib/quotationLogic';
 import type { TechLot, TechLotShape } from '../../quotation/lib/quotationLogic';
 import type { Config, PlotType } from '../../../types/domain';
 import styles from './PartialPlotAdder.module.css';
@@ -14,20 +14,24 @@ function sqft(x: number): string {
 
 // A client standing in front of an irregular/partial lot shouldn't have a
 // guessed decimal typed into "No. of plots" -- this reuses Technical
-// Quotation's own area math (techCustomLotArea/techBaseAreaSqft/
-// techHalfAreaSqft, index.html's computeTechnicalQuotationTotals ported
-// in quotationLogic.ts) to turn real dimensions into an exact
-// plot-equivalent, then adds it into noPlots. noPlots is already a plain
-// fractional numeric field (schema: min 0.5, no integer step enforced at
-// the validator, only a UI stepper hint) -- so this needs no new lead
-// column and no separate geometry storage, matching v1's own real
-// behaviour where Technical Quotation is a calculation aid, never
-// something persisted onto a lead record.
+// Quotation's own area math (techCustomLotArea/techBaseAreaSqft,
+// index.html's computeTechnicalQuotationTotals ported in
+// quotationLogic.ts) to turn real dimensions into an exact
+// plot-equivalent, then adds it into noPlots. noPlots is a full-plot-
+// equivalent count everywhere in the app (see previewGrandTotal's own
+// comment in pipelineLogic.ts) -- so the baseline area used here is
+// ALWAYS the Full Plot's own footprint, regardless of which plot type is
+// currently selected on the lead, exactly matching how Technical
+// Quotation's own eq (interest scaling) always divides by the Full Plot
+// footprint too, never the Half Plot's. This needs no new lead column
+// and no separate geometry storage, matching v1's own real behaviour
+// where Technical Quotation is a calculation aid, never something
+// persisted onto a lead record.
 export function PartialPlotAdder({ config, plotType, onAdd }: { config: Config; plotType: PlotType; onAdd: (equivalentPlots: number) => void }) {
   const [open, setOpen] = useState(false);
   const [lots, setLots] = useState<TechLot[]>([emptyLot()]);
 
-  const baseArea = plotType === 'Half Plot' ? techHalfAreaSqft(config) : techBaseAreaSqft(config);
+  const baseArea = techBaseAreaSqft(config);
   const combinedArea = lots.reduce((s, l) => s + techCustomLotArea(l), 0);
   const equivalent = baseArea > 0 ? combinedArea / baseArea : 0;
 
@@ -52,7 +56,8 @@ export function PartialPlotAdder({ config, plotType, onAdd }: { config: Config; 
         </button>
       </div>
       <p className={styles.hint}>
-        Enter the actual dimensions in front of the client — this works out how much of a standard {plotType} ({sqft(baseArea)}) that is, so the plot count stays exact.
+        Enter the actual dimensions in front of the client — this works out how much of a standard Full Plot ({sqft(baseArea)}) that is, so the plot count stays exact
+        {plotType === 'Half Plot' ? ' (a Half Plot is 0.5 of that)' : ''}.
       </p>
       {lots.map((lot, i) => (
         <PartialLotRow key={i} lot={lot} onChange={(patch) => updateLot(i, patch)} onRemove={lots.length > 1 ? () => setLots((prev) => prev.filter((_, idx) => idx !== i)) : undefined} />
@@ -62,7 +67,7 @@ export function PartialPlotAdder({ config, plotType, onAdd }: { config: Config; 
       </button>
       <div className={styles.result}>
         <span className={styles.resultText}>
-          {sqft(combinedArea)} total &asymp; <strong>{equivalent.toFixed(2)}</strong> × {plotType}
+          {sqft(combinedArea)} total &asymp; <strong>{equivalent.toFixed(2)}</strong> plot-equivalents
         </span>
         <button
           type="button"

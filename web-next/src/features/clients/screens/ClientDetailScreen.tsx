@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { ghs, fmtLongDate } from '../../../shared/lib/format';
 import { Icon, type IconName } from '../../../shared/ui/Icon';
 import { StageBadge } from '../../pipeline/components/StageBadge';
+import { qtyOfType } from '../../pipeline/lib/pipelineLogic';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useClients } from '../hooks/useClients';
 import { useClientRelatedData } from '../hooks/useClientRelatedData';
@@ -99,7 +100,7 @@ export function ClientDetailScreen() {
                   <div className={styles.rowMain}>
                     <div className={styles.rowTitle}>
                       {l.plotType}
-                      {l.noPlots > 1 ? ` ×${l.noPlots}` : ''}
+                      {qtyOfType(l.plotType, l.noPlots) > 1 ? ` ×${qtyOfType(l.plotType, l.noPlots)}` : ''}
                     </div>
                     <div className={styles.rowSub}>
                       {l.date}
