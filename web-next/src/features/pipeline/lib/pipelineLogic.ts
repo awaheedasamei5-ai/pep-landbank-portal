@@ -41,6 +41,14 @@ export function computeGrandTotal(unitPrice: number, noPlots: number): number {
 // while a form is still being typed into -- both Pipeline Detail's Plot &
 // Pricing edit and Add Lead's own creation form need this same live-typing
 // preview, so it lives here rather than duplicated in each screen).
+// Widened (net/grand were the only fields before) so a form can show the
+// SAME transparent Net/+Interest/Grand breakdown v1's own paintCalc()
+// always showed -- a bare "Grand total" with no visible interest line is
+// exactly what made a correctly-computed number look broken/untrustworthy
+// live (real user feedback: "seeing the interest and price breakdowns not
+// working is scary"). listPrice is the real config default for this
+// plotType, exposed so a form can show/auto-fill it rather than silently
+// relying on the unitPrice||listPrice fallback with nothing visible.
 export function previewGrandTotal(
   config: Config,
   plotType: Lead['plotType'],
@@ -48,7 +56,7 @@ export function previewGrandTotal(
   unitPrice: number,
   discount: number | null,
   paymentPlan: PaymentPlanKey
-): { net: number; grand: number } {
+): { net: number; interest: number; grand: number; disc: number; listPrice: number } {
   const p = plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
   const qty = noPlots || 1;
   const unit = unitPrice || p.list;
@@ -58,7 +66,7 @@ export function previewGrandTotal(
   const eq = p.eq * qty;
   const interestTable: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
   const interest = (interestTable[paymentPlan] ?? 0) * eq;
-  return { net, grand: net + interest };
+  return { net, interest, grand: net + interest, disc, listPrice: p.list };
 }
 
 // Ported from index.html's allocationUnitsNeeded() (index.html:2660-2675) --

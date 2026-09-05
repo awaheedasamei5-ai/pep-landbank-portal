@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router';
 import { z } from 'zod';
@@ -114,10 +114,19 @@ export function AddLeadScreen() {
   // through router state since this screen has no other way to know which
   // list it was opened from.
   const returnTo = prefill?.returnTo ?? '/app/sales/pipeline';
+  // Tracks whether the staff member has actually typed into Unit Price
+  // themselves -- while false, it auto-fills from config the moment
+  // plotType or config changes (see the effect below), matching the
+  // user's own explicit ask ("I expect the system to display
+  // automatically the unit price"); the moment they type a real
+  // override, auto-fill stops so it never clobbers a deliberate custom
+  // price.
+  const [unitPriceManuallyEdited, setUnitPriceManuallyEdited] = useState(false);
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
@@ -157,11 +166,22 @@ export function AddLeadScreen() {
   // config has loaded, rather than crashing on an undefined config.
   const preview = config
     ? previewGrandTotal(config, plotType, Number(noPlots), Number(unitPrice), discountNum, paymentPlan)
-    : { net: Number(unitPrice) * Number(noPlots), grand: Number(unitPrice) * Number(noPlots) };
+    : { net: Number(unitPrice) * Number(noPlots), interest: 0, grand: Number(unitPrice) * Number(noPlots), disc: 0, listPrice: 0 };
   const grandTotal = preview.grand;
   const balanceAfter = Math.max(grandTotal - Number(amtPaid), 0);
   const depositTargetRaw = watch('depositTarget');
   const depositTargetPreview = depositTargetRaw?.trim() ? Number(depositTargetRaw) : Math.round(preview.net * 0.3);
+
+  // Real fix for the user's own explicit ask, live: "when I select either
+  // half or full plot I expect the system to know this basic principle
+  // and display automatically the unit price" -- auto-fills the moment
+  // plotType or config changes, but only while the staff member hasn't
+  // typed a real override into the field themselves (see
+  // unitPriceManuallyEdited above).
+  useEffect(() => {
+    if (!config || unitPriceManuallyEdited) return;
+    setValue('unitPrice', plotType === 'Half Plot' ? config.halfPrice : config.fullPrice);
+  }, [config, plotType, unitPriceManuallyEdited, setValue]);
 
   const watchedName = watch('name') || '';
   const watchedContact = watch('contact') || '';
@@ -286,8 +306,14 @@ export function AddLeadScreen() {
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Unit price (GHS) *</label>
-                <input className={styles.input} type="number" {...register('unitPrice')} />
+                <input className={styles.input} type="number" {...register('unitPrice', { onChange: () => setUnitPriceManuallyEdited(true) })} />
                 {errors.unitPrice && <div className={styles.err}>{errors.unitPrice.message}</div>}
+                {config && (
+                  <p className={styles.hint}>
+                    Standard rate: Full Plot {ghs(config.fullPrice)} · Half Plot {ghs(config.halfPrice)}
+                    {unitPriceManuallyEdited && Number(unitPrice) !== preview.listPrice ? ' — you’ve entered a custom price.' : ''}
+                  </p>
+                )}
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Discount (GHS)</label>
@@ -403,20 +429,44 @@ export function AddLeadScreen() {
 
           <div className={styles.sideCol}>
             <div className={styles.totalCard}>
-              <div className={styles.totalLabel}>Grand total</div>
-              <div className={styles.totalValue}>{ghs(grandTotal)}</div>
-              {canLogDeposit && Number(amtPaid) > 0 && (
-                <div className={styles.totalFootRow}>
-                  <div>
-                    <div className={styles.totalFootVal}>{ghs(Number(amtPaid))}</div>
-                    <div className={styles.totalFootLbl}>Paid now</div>
-                  </div>
-                  <div>
-                    <div className={styles.totalFootVal}>{ghs(balanceAfter)}</div>
-                    <div className={styles.totalFootLbl}>Balance</div>
-                  </div>
+              {/* Full transparent breakdown (Net -> +Interest -> Grand),
+                  not just a bare Grand Total -- real fix for exactly what
+                  the user flagged live: a single opaque number gives no
+                  way to see whether the plan's real interest was actually
+                  applied, which is what made a correctly-computed total
+                  look untrustworthy. Matches v1's own paintCalc() breakdown
+                  (Net total / +Interest / Grand total / Balance / Deposit
+                  target) field-for-field. */}
+              <div className={styles.calcRow}>
+                <span className={styles.calcLabel}>Net total</span>
+                <span className={styles.calcVal}>{ghs(preview.net)}</span>
+              </div>
+              {preview.interest > 0 && (
+                <div className={styles.calcRow}>
+                  <span className={styles.calcLabel}>+ Interest ({paymentPlan})</span>
+                  <span className={styles.calcVal}>{ghs(preview.interest)}</span>
                 </div>
               )}
+              <div className={styles.totalLabel}>Grand total</div>
+              <div className={styles.totalValue}>{ghs(grandTotal)}</div>
+              <div className={styles.totalFootRow}>
+                <div>
+                  <div className={styles.totalFootVal}>{ghs(depositTargetPreview)}</div>
+                  <div className={styles.totalFootLbl}>Deposit target</div>
+                </div>
+                {canLogDeposit && Number(amtPaid) > 0 && (
+                  <>
+                    <div>
+                      <div className={styles.totalFootVal}>{ghs(Number(amtPaid))}</div>
+                      <div className={styles.totalFootLbl}>Paid now</div>
+                    </div>
+                    <div>
+                      <div className={styles.totalFootVal}>{ghs(balanceAfter)}</div>
+                      <div className={styles.totalFootLbl}>Balance</div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className={styles.card}>

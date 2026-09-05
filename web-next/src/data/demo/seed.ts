@@ -30,10 +30,15 @@ export function seedDemo(): DemoDb {
       date: isoPlusDays(t, -18),
       plotType: 'Half Plot',
       noPlots: 1,
-      unitPrice: 48000,
+      // Real pricing engine, computed by hand once so this stays a real
+      // worked example rather than a round guess: net = 24000 (config
+      // halfPrice, no discount) + interest 750 (config int6=1500 * the
+      // real 0.5 half-plot eq factor -- exactly the GHS 750 the user
+      // confirmed for Half Plot/6 Months) = grandTotal 24750.
+      unitPrice: 24000,
       paymentPlan: '6 Months',
-      amtPaid: 24000,
-      grandTotal: 48000,
+      amtPaid: 12000,
+      grandTotal: 24750,
       stage: '2B',
       address: 'House No. 12, Spintex Road, Accra',
       kyc: {
@@ -53,38 +58,48 @@ export function seedDemo(): DemoDb {
         landUsageDetail: '',
       },
     },
-    { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 60000, grandTotal: 60000, stage: '4' },
+    { id: uid(), agent: AGENT_KEY, name: 'Kwame Asante', contact: '0201234567', date: isoPlusDays(t, -40), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: 'Full Payment', amtPaid: 48000, grandTotal: 48000, stage: '4' },
     // priority:'High' with no nextAction -- gives Smart Insights' "high
     // priority, no follow-up planned" nudge a real row to surface,
     // purely additive (priority feeds nothing else app-wide).
-    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 36000, stage: '1', priority: 'High' },
+    // unitPrice stays a deliberate 36000 (a real, isolated old-promo
+    // mismatch vs the real 48000 default -- Data Check's own Price-
+    // mismatch scan is meant to catch exactly this). grandTotal 39000 is
+    // that 36000 correctly PLUS the real 12-month interest (3000) --
+    // leaving it at 36000 would silently drop the interest the client
+    // actually owes, the exact class of bug the user flagged live.
+    { id: uid(), agent: AGENT_KEY, name: 'Abena Boateng', contact: '0559876543', date: isoPlusDays(t, -5), plotType: 'Full Plot', noPlots: 1, unitPrice: 36000, paymentPlan: '12 Months', amtPaid: 0, grandTotal: 39000, stage: '1', priority: 'High' },
     // Other agents' leads -- not visible to the logged-in demo agent's own
     // screens (listForAgent still filters correctly), only exist so
     // Manager Home's company-wide overview has real multi-agent shape to
     // aggregate instead of a single flat bar.
-    { id: uid(), agent: 'emmanuel', name: 'Yaw Sarpong', contact: '0271122334', date: isoPlusDays(t, -25), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: '9 Months', amtPaid: 45000, grandTotal: 60000, stage: '3' },
-    { id: uid(), agent: 'emmanuel', name: 'Efua Ansah', contact: '0248877665', date: isoPlusDays(t, -60), plotType: 'Full Plot', noPlots: 2, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 120000, grandTotal: 120000, stage: '4' },
-    { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '3 Months', amtPaid: 16000, grandTotal: 48000, stage: '2A' },
-    { id: uid(), agent: 'elizabeth', name: 'Ama Serwaa', contact: '0201998877', date: isoPlusDays(t, -33), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 60000, stage: 'Lost' },
+    // grandTotal 50250 = net 48000 + real 9-month interest 2250 (config
+    // int9, the user's own confirmed figure).
+    { id: uid(), agent: 'emmanuel', name: 'Yaw Sarpong', contact: '0271122334', date: isoPlusDays(t, -25), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '9 Months', amtPaid: 45000, grandTotal: 50250, stage: '3' },
+    { id: uid(), agent: 'emmanuel', name: 'Efua Ansah', contact: '0248877665', date: isoPlusDays(t, -60), plotType: 'Full Plot', noPlots: 2, unitPrice: 48000, paymentPlan: 'Full Payment', amtPaid: 96000, grandTotal: 96000, stage: '4' },
+    // grandTotal 24375 = net 24000 + real 3-month Half Plot interest 375
+    // (config int3=750 * the 0.5 half-plot eq factor).
+    { id: uid(), agent: 'elizabeth', name: 'Kofi Mensah', contact: '0559001122', date: isoPlusDays(t, -9), plotType: 'Half Plot', noPlots: 1, unitPrice: 24000, paymentPlan: '3 Months', amtPaid: 5000, grandTotal: 24375, stage: '2A' },
+    { id: uid(), agent: 'elizabeth', name: 'Ama Serwaa', contact: '0201998877', date: isoPlusDays(t, -33), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 49500, stage: 'Lost' },
     // 'company' -- clients who came to the company directly, not through a
     // specific agent (real agent_key='company' pattern, confirmed live).
     // Appended at the end so existing leads[N] index references elsewhere
     // in this file (Commission's seed) stay correct.
-    { id: uid(), agent: 'company', name: 'Nana Yeboah', contact: '0244009988', date: isoPlusDays(t, -3), plotType: 'Full Plot', noPlots: 1, unitPrice: 60000, paymentPlan: 'Full Payment', amtPaid: 0, grandTotal: 60000, stage: '1', leadSource: 'Facebook' },
-    { id: uid(), agent: 'company', name: 'Adjoa Frimpong', contact: '0559112233', date: isoPlusDays(t, -8), plotType: 'Half Plot', noPlots: 1, unitPrice: 48000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 48000, stage: '1' },
+    { id: uid(), agent: 'company', name: 'Nana Yeboah', contact: '0244009988', date: isoPlusDays(t, -3), plotType: 'Full Plot', noPlots: 1, unitPrice: 48000, paymentPlan: 'Full Payment', amtPaid: 0, grandTotal: 48000, stage: '1', leadSource: 'Facebook' },
+    { id: uid(), agent: 'company', name: 'Adjoa Frimpong', contact: '0559112233', date: isoPlusDays(t, -8), plotType: 'Half Plot', noPlots: 1, unitPrice: 24000, paymentPlan: '6 Months', amtPaid: 0, grandTotal: 24750, stage: '1' },
   ];
 
   const payments: DemoDb['payments'] = [
-    { id: uid(), leadId: leads[0].id, agentKey: AGENT_KEY, amount: 24000, date: isoPlusDays(t, -18), clientName: leads[0].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
-    { id: uid(), leadId: leads[1].id, agentKey: AGENT_KEY, amount: 60000, date: isoPlusDays(t, -3), clientName: leads[1].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[0].id, agentKey: AGENT_KEY, amount: 12000, date: isoPlusDays(t, -18), clientName: leads[0].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[1].id, agentKey: AGENT_KEY, amount: 48000, date: isoPlusDays(t, -3), clientName: leads[1].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
     // Backing approved payments for the other agents' leads' amtPaid --
     // without these, Data Check's Ledger mismatch scan (amtPaid vs sum of
     // approved payments) would flag all three as false positives just
     // because this hand-crafted seed set amtPaid directly on the lead
     // instead of building it up through payment rows.
     { id: uid(), leadId: leads[3].id, agentKey: 'emmanuel', amount: 45000, date: isoPlusDays(t, -20), clientName: leads[3].name, paymentMethod: 'Ecobank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
-    { id: uid(), leadId: leads[4].id, agentKey: 'emmanuel', amount: 120000, date: isoPlusDays(t, -55), clientName: leads[4].name, paymentMethod: 'Stanbic Bank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
-    { id: uid(), leadId: leads[5].id, agentKey: 'elizabeth', amount: 16000, date: isoPlusDays(t, -7), clientName: leads[5].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[4].id, agentKey: 'emmanuel', amount: 96000, date: isoPlusDays(t, -55), clientName: leads[4].name, paymentMethod: 'Stanbic Bank', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
+    { id: uid(), leadId: leads[5].id, agentKey: 'elizabeth', amount: 5000, date: isoPlusDays(t, -7), clientName: leads[5].name, paymentMethod: 'MTN MoMo', status: 'approved', decidedBy: null, decidedByName: null, decidedAt: null, receiptNumber: null, note: null },
     // A pending payment 'elias' logged on emmanuel's lead -- exercises the
     // full real workflow in demo mode: shows in Pending Approvals for the
     // manager persona, and does NOT show up in leads[3]'s amtPaid above
@@ -123,12 +138,17 @@ export function seedDemo(): DemoDb {
     commissionFullCap: 1000,
     commissionHalfCap: 500,
     commissionPoolPerPlot: 500,
-    // Matches what most seeded leads were actually priced at (60000/48000)
-    // -- keeps Data Check's Price mismatch check meaningful (Abena Boateng
-    // at 36000 stays a genuine, isolated old-promo flag) instead of every
-    // populated lead flagging against a stale reference price.
-    fullPrice: 60000,
-    halfPrice: 48000,
+    // Real current company pricing (confirmed live on production config,
+    // and the exact figures the user gave directly): GHS 48,000 for a
+    // Full Plot, GHS 24,000 for a Half Plot. A previous version of this
+    // seed deliberately mis-set these to 60000/48000 "to match what most
+    // seeded leads were priced at" -- backwards: the seed should match
+    // reality, not the other way around. Abena Boateng's unitPrice stays
+    // a deliberate 36000 (a genuine, isolated old-promo mismatch for Data
+    // Check's own Price-mismatch scan to catch) -- that still works
+    // correctly against the now-real 48000 default.
+    fullPrice: 48000,
+    halfPrice: 24000,
     fullDiscount: 0,
     halfDiscount: 0,
     int3: 750,

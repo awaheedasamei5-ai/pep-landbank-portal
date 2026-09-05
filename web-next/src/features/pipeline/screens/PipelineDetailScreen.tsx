@@ -508,6 +508,16 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
       </div>
       <div className={styles.calcBox}>
         <div>
+          <div className={styles.calcLabel}>Net total</div>
+          <div className={styles.calcValue}>{ghs(preview.net)}</div>
+        </div>
+        {preview.interest > 0 && (
+          <div>
+            <div className={styles.calcLabel}>+ Interest</div>
+            <div className={styles.calcValue}>{ghs(preview.interest)}</div>
+          </div>
+        )}
+        <div>
           <div className={styles.calcLabel}>Grand total</div>
           <div className={styles.calcValue}>{ghs(preview.grand)}</div>
         </div>
