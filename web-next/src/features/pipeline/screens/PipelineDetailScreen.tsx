@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs, today } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -46,14 +46,25 @@ function initialsOf(name: string): string {
 export function PipelineDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
   // Real bug the user caught live: Master Pipeline (PipelineListScreen in
   // its company-wide mode) drills into this same shared detail screen,
   // but every close/back/delete-redirect here was hardcoded back to the
   // agent-scoped /app/sales/pipeline list -- which for a manager shows few
   // or no real leads. A manager who got here from Master Pipeline needs
-  // Close/Back to return there, not strand them on an empty list.
-  const backTo = profile?.role === 'manager' ? '/app/mgr/pipeline' : '/app/sales/pipeline';
+  // Close/Back to return there, not strand them on an empty list. Now
+  // route-derived (three real entry points share this one detail screen:
+  // My Pipeline, Master Pipeline, Company Leads) rather than just
+  // role-derived -- a manager can open a lead from any of the three, and
+  // a non-manager with Company Leads access (elias/emmanuel/elizabeth)
+  // needs Company Leads' own path back too, which the old role-only
+  // logic could never produce.
+  const backTo = location.pathname.startsWith('/app/mgr/pipeline')
+    ? '/app/mgr/pipeline'
+    : location.pathname.startsWith('/app/sales/company-leads')
+      ? '/app/sales/company-leads'
+      : '/app/sales/pipeline';
   const canLog = useCanLogPayments();
   const { data: lead, isLoading } = useLead(id ?? '');
   const { data: payments } = usePayments(id ?? '');
@@ -311,7 +322,7 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
   const [assignTo, setAssignTo] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const staffName = staff?.find((s) => s.key === lead.agent)?.name ?? lead.agent;
+  const staffName = lead.agent === 'company' ? 'Company Leads (unassigned)' : staff?.find((s) => s.key === lead.agent)?.name ?? lead.agent;
   const isManager = profile?.role === 'manager';
 
   if (!editing) {

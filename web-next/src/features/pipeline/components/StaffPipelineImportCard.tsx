@@ -8,20 +8,23 @@ import styles from './PipelineImportCard.module.css';
 // company-wide). Same canonical-workbook algorithm and the same real
 // guarantees the master flow already earned live -- Lead-ID-first
 // matching, no duplicates on re-upload, Amount Paid always locked -- but
-// every scan/commit here is scoped to just this staff member's own leads
-// (usePipelineImport's `scope` param), so a staff member can correct
-// their own pipeline offline and re-upload it, without ever being able to
-// see, edit, or reassign a colleague's lead through this file. Caught
-// live: "My pipeline" only ever had an export icon -- Master Pipeline's
-// import capability never had a staff-facing counterpart.
-export function StaffPipelineImportCard() {
+// every scan/commit here is scoped to just one pool of leads
+// (usePipelineImport's `scope` param): either one staff member's own
+// (the default, `companyOnly` unset), or Company Leads' own real pool
+// (agent_key='company', `companyOnly` passed from that screen) -- so a
+// staff member/Company Leads can correct its own data offline and
+// re-upload it, without ever being able to see, edit, or reassign a
+// lead outside that scope through this file. Caught live: "My pipeline"
+// only ever had an export icon -- Master Pipeline's import capability
+// never had a staff-facing counterpart; Company Leads had neither.
+export function StaffPipelineImportCard({ companyOnly }: { companyOnly?: boolean } = {}) {
   const profile = useSessionStore((s) => s.profile);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [scanResult, setScanResult] = useState<ImportScanOutcome | null>(null);
   const [commitResult, setCommitResult] = useState<ImportCommitResult | null>(null);
   const [archiveMissing, setArchiveMissing] = useState(false);
-  const scope = profile ? { staffKey: profile.key } : undefined;
+  const scope = companyOnly ? ({ companyOnly: true } as const) : profile ? { staffKey: profile.key } : undefined;
   const scanMutation = useScanPipelineImport(scope);
   const commitMutation = useCommitPipelineImport(scope);
 
@@ -66,9 +69,9 @@ export function StaffPipelineImportCard() {
 
   return (
     <>
-      <div className={styles.sectitle}>Import pipeline (.xlsx)</div>
+      <div className={styles.sectitle}>{companyOnly ? 'Import Company Leads (.xlsx)' : 'Import pipeline (.xlsx)'}</div>
       <p className={styles.sub}>
-        Upload an edited LEADS sheet exported from your own pipeline to bulk-update it. Matches by Lead ID first &mdash; re-uploading the same file twice never creates duplicates. You can only affect your own leads this way; Amount Paid is always locked, log or correct a payment through Log Payment.
+        Upload an edited LEADS sheet exported from {companyOnly ? 'Company Leads' : 'your own pipeline'} to bulk-update it. Matches by Lead ID first &mdash; re-uploading the same file twice never creates duplicates. You can only affect {companyOnly ? "Company Leads' own" : 'your own'} leads this way -- a row can never reassign one to a real staff member through this file, only the Assign to agent button does that; Amount Paid is always locked, log or correct a payment through Log Payment.
       </p>
       <div className={styles.card}>
         <input ref={fileInputRef} className={styles.fileInput} type="file" accept=".xlsx" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />

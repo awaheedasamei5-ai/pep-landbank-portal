@@ -49,6 +49,40 @@ export function useDownloadMasterPipeline() {
   });
 }
 
+// Company Leads' own export -- same canonical workbook/columns as Master
+// Pipeline and every agent's own, just filtered to agent_key='company' so
+// it round-trips through the exact same import pipeline (scope
+// {companyOnly:true}, see usePipelineImport's own comment on why that
+// scope can never reassign a row to a real staff member through a file).
+export function useDownloadCompanyLeadsPipeline() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
+  return useMutation({
+    mutationFn: async () => {
+      if (!profile) throw new Error('Not signed in.');
+      const ds = getDataSource(demoMode);
+      const [allLeads, allPayments, allocations, staff] = await Promise.all([ds.leads.listAll(), ds.payments.listAll(), ds.allocationRequests.list(profile.key, profile.role), ds.staff.listAll()]);
+      const leads = allLeads.filter((l) => l.agent === 'company');
+      const leadIds = new Set(leads.map((l) => l.id));
+      const payments = allPayments.filter((p) => leadIds.has(p.leadId));
+      const { buffer } = await buildCanonicalPipelineWorkbook({
+        leads,
+        payments,
+        allocations: allocations.filter((a) => a.agentKey === 'company'),
+        staff: staff.map((s) => ({ key: s.key, name: s.name })),
+        exportedByKey: profile.key,
+        exportedByName: profile.name,
+        sourceLabel: 'Company Leads',
+      });
+      const filename = canonicalPipelineFilename('CompanyLeads', today());
+      downloadBlob(new Blob([buffer], { type: XLSX_MIME }), filename);
+      logDownload(filename, 'excel', arrayBufferToDataUri(buffer, XLSX_MIME));
+      return leads.length;
+    },
+  });
+}
+
 export function useDownloadAgentPipeline() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);

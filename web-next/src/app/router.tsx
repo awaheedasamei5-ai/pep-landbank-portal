@@ -285,7 +285,14 @@ export const router = createBrowserRouter([
       { path: 'sales/enquiries', element: <EnquiriesScreen /> },
       { path: 'sales/enquiries/new', element: <AddEnquiryScreen /> },
       { path: 'sales/complaints', element: <ComplaintsScreen /> },
-      { path: 'sales/company-leads', element: <CompanyLeadsScreen /> },
+      {
+        // Nested :id shares PipelineDetailScreen with My/Master Pipeline
+        // (same lead entity, per Master Spec 17.1) -- PipelineDetailScreen's
+        // own backTo is route-derived so Close/Back correctly returns here.
+        path: 'sales/company-leads',
+        element: <CompanyLeadsScreen />,
+        children: [{ path: ':id', element: <PipelineDetailScreen /> }],
+      },
       { path: 'sales/allocations', element: <AllocationRequestsScreen /> },
       { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },

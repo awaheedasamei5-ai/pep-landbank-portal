@@ -32,7 +32,15 @@ export function useAssignCompanyLead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, agentKey }: { id: string; agentKey: string }) => getDataSource(demoMode).leads.assign(id, agentKey),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companyLeads'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['companyLeads'] });
+      // The lead now genuinely belongs to a real agent (Master Spec
+      // 17.1: "Assignment changes owner") -- their own Pipeline/Master
+      // Pipeline queries need to see it too, not just stop showing it
+      // here.
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leadsAll'] });
+    },
   });
 }
 

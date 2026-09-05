@@ -74,7 +74,12 @@ export function AddLeadScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
-  const createLead = useCreateLead();
+  // Company Leads' own "+ Add lead" passes agentKeyOverride:'company' so
+  // this creates into that real pool instead of the signed-in staff
+  // member's own pipeline -- see useCreateLead's own comment for why the
+  // auto follow-up task is also skipped in that case.
+  const prefill = location.state as { name?: string; contact?: string; returnTo?: string; agentKeyOverride?: string } | null;
+  const createLead = useCreateLead(prefill?.agentKeyOverride);
   const { data: leads } = useLeads();
   const { data: clients } = useClients();
   const { data: config } = useConfig();
@@ -108,7 +113,6 @@ export function AddLeadScreen() {
   // same reasoning as PipelineDetailScreen's own backTo fix, just threaded
   // through router state since this screen has no other way to know which
   // list it was opened from.
-  const prefill = location.state as { name?: string; contact?: string; returnTo?: string } | null;
   const returnTo = prefill?.returnTo ?? '/app/sales/pipeline';
   const {
     register,

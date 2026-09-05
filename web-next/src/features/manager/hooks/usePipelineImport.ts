@@ -46,12 +46,17 @@ export interface ImportScanOutcome {
   buckets: ScanBuckets;
 }
 
-// Passed by the staff-scoped "My Pipeline" import card only -- scopes both
-// the scan and the commit to one agent's own leads (see StaffPipelineImportCard).
-// The manager-only Reports import never passes this and keeps its existing
-// company-wide behavior unchanged.
-export interface ImportScope {
-  staffKey: string;
+// Passed by the staff-scoped "My Pipeline" import card -- scopes both the
+// scan and the commit to one agent's own leads (see StaffPipelineImportCard).
+// `companyOnly` is the same idea for Company Leads' own import (its own
+// real pool, agent_key='company') -- neither variant can see or touch a
+// lead outside its own scope. The manager-only Reports import never
+// passes a scope at all and keeps its existing company-wide behavior
+// unchanged.
+export type ImportScope = { staffKey: string; companyOnly?: undefined } | { staffKey?: undefined; companyOnly: true };
+
+function scopeOwnKey(scope: ImportScope): string {
+  return scope.companyOnly ? 'company' : scope.staffKey;
 }
 
 export function useScanPipelineImport(scope?: ImportScope) {
@@ -64,7 +69,7 @@ export function useScanPipelineImport(scope?: ImportScope) {
       const rows = readImportRows(ws, cols);
       const ds = getDataSource(demoMode);
       const [ownLeads, allLeads, staff] = await Promise.all([
-        scope ? ds.leads.listForAgent(scope.staffKey) : ds.leads.listAll(),
+        scope ? ds.leads.listForAgent(scopeOwnKey(scope)) : ds.leads.listAll(),
         scope ? ds.leads.listAll() : Promise.resolve<undefined>(undefined),
         ds.staff.listAll(),
       ]);
@@ -76,7 +81,7 @@ export function useScanPipelineImport(scope?: ImportScope) {
       // wrongly flagged Invalid on a plain re-upload. Real bug caught live
       // while testing, not by inspection.
       const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
-      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scope.staffKey).map((l) => l.id)) : undefined;
+      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scopeOwnKey(scope)).map((l) => l.id)) : undefined;
       const buckets = scanImportRows(rows, freshLeads, validStaffKeys, exportedAt, foreignLeadIds);
       const fileIds = new Set(rows.map((r) => r.leadId).filter(Boolean));
       const possiblyDeletedLeads = freshLeads.filter((l) => !fileIds.has(l.id));
@@ -135,7 +140,7 @@ export function useCommitPipelineImport(scope?: ImportScope) {
       if (!profile) throw friendlyErrorObj('Not signed in.');
       const ds = getDataSource(demoMode);
       const [ownLeads, allLeads, staff] = await Promise.all([
-        scope ? ds.leads.listForAgent(scope.staffKey) : ds.leads.listAll(),
+        scope ? ds.leads.listForAgent(scopeOwnKey(scope)) : ds.leads.listAll(),
         scope ? ds.leads.listAll() : Promise.resolve<undefined>(undefined),
         ds.staff.listAll(),
       ]);
@@ -147,8 +152,8 @@ export function useCommitPipelineImport(scope?: ImportScope) {
       // wrongly flagged Invalid on a plain re-upload. Real bug caught live
       // while testing, not by inspection.
       const validStaffKeys = new Set([...staff.map((s) => s.key), 'company']);
-      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scope.staffKey).map((l) => l.id)) : undefined;
-      const plan = planImportRows(rows, freshLeads, config as Config, validStaffKeys, profile.key, exportedAt, foreignLeadIds, scope?.staffKey ?? null);
+      const foreignLeadIds = scope && allLeads ? new Set(allLeads.filter((l) => l.agent !== scopeOwnKey(scope)).map((l) => l.id)) : undefined;
+      const plan = planImportRows(rows, freshLeads, config as Config, validStaffKeys, profile.key, exportedAt, foreignLeadIds, scope ? scopeOwnKey(scope) : null);
 
       let added = 0;
       let updated = 0;
@@ -215,7 +220,7 @@ export function useCommitPipelineImport(scope?: ImportScope) {
       }
 
       await ds.importBatches.create(profile.key, profile.name, {
-        sourceLabel: scope ? `${profile.name}'s pipeline (own leads, canonical workbook)` : 'Master Pipeline (company-wide, canonical workbook)',
+        sourceLabel: !scope ? 'Master Pipeline (company-wide, canonical workbook)' : scope.companyOnly ? 'Company Leads (canonical workbook)' : `${profile.name}'s pipeline (own leads, canonical workbook)`,
         addedCount: added,
         updatedCount: updated,
         unchangedCount: unchanged,
