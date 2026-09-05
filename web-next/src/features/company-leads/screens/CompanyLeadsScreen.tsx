@@ -5,6 +5,8 @@ import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
 import { StaffPipelineImportCard } from '../../pipeline/components/StaffPipelineImportCard';
 import { useDownloadCompanyLeadsPipeline } from '../../manager/hooks/usePipelineExcel';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useDownloadLeadQuotationPdf } from '../../quotation/hooks/useQuotationPdf';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useAgentRoster, useAssignCompanyLead, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
 import type { Lead } from '../../../types/domain';
@@ -139,6 +141,8 @@ function LeadCard({ lead }: { lead: Lead }) {
   const { data: agents } = useAgentRoster();
   const assign = useAssignCompanyLead();
   const setSource = useSetLeadSource();
+  const { data: config } = useConfig();
+  const downloadQuotation = useDownloadLeadQuotationPdf();
   const [assigning, setAssigning] = useState(false);
   const bal = Math.max(lead.grandTotal - lead.amtPaid, 0);
 
@@ -199,6 +203,15 @@ function LeadCard({ lead }: { lead: Lead }) {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className={styles.cancelBtn}
+            disabled={!config || downloadQuotation.isPending}
+            onClick={() => config && downloadQuotation.mutate({ lead, config })}
+            title="Download quotation"
+          >
+            🧾 Quotation
+          </button>
           <button type="button" className={styles.assignBtn} disabled={assign.isPending} onClick={() => setAssigning(true)}>
             Assign to agent →
           </button>

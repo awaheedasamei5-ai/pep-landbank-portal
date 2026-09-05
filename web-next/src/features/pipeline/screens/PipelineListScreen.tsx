@@ -12,6 +12,8 @@ import { StageBadge } from '../components/StageBadge';
 import { StaffPipelineImportCard } from '../components/StaffPipelineImportCard';
 import { PipelineImportCard } from '../../manager/components/PipelineImportCard';
 import { useDownloadAgentPipeline, useDownloadMasterPipeline } from '../../manager/hooks/usePipelineExcel';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useDownloadLeadQuotationPdf } from '../../quotation/hooks/useQuotationPdf';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import {
   EMPTY_FILTERS,
@@ -106,6 +108,8 @@ export function PipelineListScreen() {
   const deleteLead = useDeleteLead();
   const downloadAgentPipeline = useDownloadAgentPipeline();
   const downloadMasterPipeline = useDownloadMasterPipeline();
+  const { data: config } = useConfig();
+  const downloadLeadQuotation = useDownloadLeadQuotationPdf();
 
   const [query, setQuery] = useState('');
   // Seeded once from Manager Home's own drill-down links
@@ -480,6 +484,16 @@ export function PipelineListScreen() {
                     </td>
                     <td className={styles.td}>{l.priority || 'Low'}</td>
                     <td className={styles.td}>
+                      <button
+                        type="button"
+                        className={styles.editIconBtn}
+                        title="Download quotation"
+                        aria-label={`Download quotation for ${l.name}`}
+                        disabled={!config || downloadLeadQuotation.isPending}
+                        onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
+                      >
+                        🧾
+                      </button>
                       <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`${basePath}/${l.id}`)}>
                         ✎
                       </button>
@@ -515,6 +529,16 @@ export function PipelineListScreen() {
                   </div>
                 </div>
               </div>
+              <button
+                type="button"
+                className={styles.editIconBtnMobile}
+                title="Download quotation"
+                aria-label={`Download quotation for ${l.name}`}
+                disabled={!config || downloadLeadQuotation.isPending}
+                onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
+              >
+                🧾
+              </button>
               <button
                 type="button"
                 className={styles.editIconBtnMobile}
