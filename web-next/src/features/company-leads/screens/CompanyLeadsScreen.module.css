@@ -143,6 +143,16 @@
   font-family: inherit;
 }
 
+/* Real bug caught live on a narrow phone (360px): with the source select
+   plus two action buttons all competing for one row, `flex:1;min-width:0`
+   let the select get crushed down to a couple of visible characters
+   ("Fa") instead of ever wrapping -- flex-wrap only forces a new line
+   once an item refuses to shrink further, and min-width:0 removes that
+   floor entirely. Giving the select a flex-basis of 100% makes it claim
+   the whole row by itself, which pushes the two buttons onto their own
+   line below instead of squeezing everyone together. */
+.sourceSelect { flex: 1 1 100%; }
+
 .assignBtn {
   flex-shrink: 0;
   padding: 8px 14px;

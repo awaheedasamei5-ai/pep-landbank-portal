@@ -137,8 +137,18 @@
   gap: 6px;
   overflow-x: auto;
   padding-bottom: 4px;
+  padding-right: 4px;
   min-width: 0;
   scrollbar-width: none;
+  /* Real bug caught live on a narrow phone (360px): overflow-x:auto clips
+     whatever tab is mid-scroll right at the container's edge, so a label
+     like "Qualified" gets sliced to "Qualifie" sitting flush against the
+     always-visible Filters button next to it -- reads as one broken,
+     overlapping shape rather than an obviously-still-scrollable row. A
+     fade mask lets the clipped tab dissolve to transparent instead of
+     hard-cutting mid-word, and also visually signals "more to scroll". */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
 }
 .stageTabs::-webkit-scrollbar { display: none; }
 
