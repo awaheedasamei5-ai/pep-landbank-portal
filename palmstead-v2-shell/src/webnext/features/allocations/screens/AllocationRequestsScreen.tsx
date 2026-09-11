@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
+import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
@@ -709,15 +710,20 @@ function FixResubmit({ request }: { request: AllocationRequest }) {
 // photo is required before Confirm is enabled, but the AI read below is
 // informational only, never a hard block, so a Groq outage can never stop
 // a real allocation.
-function AuthDocGate({ request, plotsForDoc }: { request: AllocationRequest; plotsForDoc: string }) {
-  const { data: config } = useConfig();
+function AuthDocGate({ request, plotsForDoc, combos }: { request: AllocationRequest; plotsForDoc: string; combos: string[][] }) {
   const profile = useSessionStore((s) => s.profile);
   const upload = useUploadAllocationAuthDoc();
   const analyze = useAnalyzeAllocationAuthDoc();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function generatePdf() {
-    const doc = buildAllocationAuthorizationPdf({ ...request, plotNumber: request.plotNumber ?? plotsForDoc }, config?.quoteCompanyName, profile?.name);
+  async function generatePdf() {
+    let logo: string | null = null;
+    try {
+      logo = await loadImageAsDataUri('/trulander-logo.png');
+    } catch {
+      // Missing/blocked logo shouldn't stop the form from generating.
+    }
+    const doc = buildAllocationAuthorizationPdf(request, combos, logo, profile?.name, profile?.signatureData);
     doc.save(allocationAuthFilename(request.clientName));
   }
 
@@ -849,7 +855,7 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
           </label>
         ))}
       </div>
-      <AuthDocGate request={request} plotsForDoc={plotsForDoc} />
+      <AuthDocGate request={request} plotsForDoc={plotsForDoc} combos={combos} />
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.allocateActions}>
         <button
