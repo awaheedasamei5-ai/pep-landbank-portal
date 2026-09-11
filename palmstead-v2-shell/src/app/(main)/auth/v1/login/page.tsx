@@ -3,18 +3,27 @@ import { LoginForm } from "../../_components/login-form";
 // Palmstead's real sign-in screen. No self-registration and no OAuth --
 // staff accounts are provisioned by Management (real `profiles` row per
 // staff member), matching v1/web-next's own access model exactly.
+//
+// Real user ask (2026-09-11): replace the plain blue panel with a real
+// video background, and drop the "Sign in to your staff account" line.
+// v1's own real source has no such video anywhere (confirmed via an
+// exhaustive grep across both its main and redesign branches) -- this
+// is new work built from the two video files the user attached directly
+// in chat, not a port. autoPlay+muted+loop+playsInline is the standard
+// combination every browser actually allows to autoplay without a user
+// gesture; a dark gradient overlay keeps the logo legible over whatever
+// the footage looks like at any given frame.
 export default function LoginV1() {
   return (
     <div className="flex h-dvh">
-      <div className="hidden bg-primary lg:block lg:w-1/3">
-        <div className="flex h-full flex-col items-center justify-center p-12 text-center">
+      <div className="relative hidden overflow-hidden bg-primary lg:block lg:w-1/3">
+        <video className="absolute inset-0 size-full object-cover" src="/login-bg.mp4" autoPlay muted loop playsInline />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
+        <div className="relative flex h-full flex-col items-center justify-center p-12 text-center">
           <div className="space-y-6">
             {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size mark on a static page, not worth next/image's config */}
             <img src="/trulander-logo.png" alt="Trulander JSF Limited" className="mx-auto size-16 rounded-lg bg-white p-1" />
-            <div className="space-y-2">
-              <h1 className="font-light text-5xl text-primary-foreground">Palmstead</h1>
-              <p className="text-primary-foreground/80 text-xl">Sign in to your staff account</p>
-            </div>
+            <h1 className="font-light text-5xl text-white">Palmstead</h1>
           </div>
         </div>
       </div>
