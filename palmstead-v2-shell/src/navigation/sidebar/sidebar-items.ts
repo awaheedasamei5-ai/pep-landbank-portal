@@ -115,7 +115,7 @@ export const sidebarItems: NavGroup[] = [
       { id: "quotation", title: "Quotation", url: "/dashboard/quotation", icon: ReceiptText },
       { id: "leave", title: "Leave", url: NOT_BUILT_YET, icon: CalendarClock },
       { id: "notes", title: "Notes", url: NOT_BUILT_YET, icon: StickyNote },
-      { id: "banner-tracking", title: "Banner Tracking", url: NOT_BUILT_YET, icon: Megaphone },
+      { id: "banner-tracking", title: "Banner Tracking", url: "/dashboard/banners", icon: Megaphone },
       { id: "expenses", title: "Expenses", url: NOT_BUILT_YET, icon: Banknote },
       { id: "site-visit-authorization", title: "Site Visit Authorization", url: NOT_BUILT_YET, icon: ShieldCheck },
       { id: "staff-report", title: "Staff Report", url: NOT_BUILT_YET, icon: ClipboardList },
