@@ -225,7 +225,12 @@ export function useSendSveDayReport() {
       const ds = getDataSource(demoMode);
       let logo: string | null = null;
       try {
-        logo = await loadImageAsDataUri('/trulander-logo.png');
+        // Real user rule (2026-09-11): "the green logo featuring the
+        // house and key, is for internal docs ... like reports" -- this
+        // report goes to Management, never the client, so it gets the
+        // internal green logo, not the orange client-facing one every
+        // other PDF in this app uses.
+        logo = await loadImageAsDataUri('/logo.png');
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
@@ -264,7 +269,8 @@ export function useDownloadSveDayReportPdf() {
     mutationFn: async (report: SveDayReport) => {
       let logo: string | null = null;
       try {
-        logo = await loadImageAsDataUri('/trulander-logo.png');
+        // Internal document -- see useSendSveDayReport's own comment.
+        logo = await loadImageAsDataUri('/logo.png');
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }

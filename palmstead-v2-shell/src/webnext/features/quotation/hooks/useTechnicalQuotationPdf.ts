@@ -12,11 +12,15 @@ export function useDownloadTechnicalQuotationPdf() {
   const profile = useSessionStore((s) => s.profile);
   return useMutation({
     mutationFn: async ({ totals, client, config }: { totals: TechnicalQuotationTotals; client: QuotationClientInfo; config: Config }) => {
-      let logo: string | null = null;
-      try {
-        logo = await loadImageAsDataUri('/trulander-logo.png');
-      } catch {
-        // Missing/blocked logo shouldn't stop the quotation from generating.
+      // Real user ask: a Template Settings logo upload override -- see
+      // useQuotationPdf.ts's own comment.
+      let logo: string | null = config.quoteLogoImage;
+      if (!logo) {
+        try {
+          logo = await loadImageAsDataUri('/trulander-logo.png');
+        } catch {
+          // Missing/blocked logo shouldn't stop the quotation from generating.
+        }
       }
       const doc = buildTechnicalQuotationPdf(totals, client, config, logo, profile?.name ?? '', profile?.signatureData ?? null);
       doc.save(technicalQuotationFilename(client.name));

@@ -416,6 +416,24 @@ export interface DataSource {
           | 'leaveTotalDays'
           | 'eidObservingStaff'
           | 'eidWindows'
+          // Real bug fixed 2026-09-11 (see the implementation's own
+          // comment): these were already read by mapConfigRow and shown
+          // on real PDFs, but never whitelisted here for writing at all --
+          // no settings UI built against this interface could ever have
+          // saved them.
+          | 'quoteCompanyName'
+          | 'quoteSiteName'
+          | 'companyPhone'
+          | 'companyEmail'
+          | 'companyTin'
+          | 'quoteFooterAddress'
+          | 'receiptThanksText'
+          | 'receiptLogoImage'
+          | 'quoteDocTypeText'
+          | 'quoteNotesText'
+          | 'quoteLandNoteText'
+          | 'quoteLogoImage'
+          | 'quoteAccentColor'
         >
       >
     ): Promise<Config>;
@@ -1896,6 +1914,29 @@ function createLiveDataSource(): DataSource {
         if (patch.leaveTotalDays !== undefined) dbPatch.leave_total_days = patch.leaveTotalDays;
         if (patch.eidObservingStaff !== undefined) dbPatch.eid_observing_staff = patch.eidObservingStaff;
         if (patch.eidWindows !== undefined) dbPatch.eid_windows = patch.eidWindows;
+        // Real bug found 2026-09-11 building the new Template Settings tab
+        // (user ask: "we can edit company name, address of company, the
+        // note section, even the logo"): every one of these fields was
+        // already read by mapConfigRow and rendered on the real PDFs, but
+        // NONE of them were ever whitelisted here for writing -- the exact
+        // same "silently dropped" class of bug this function's own
+        // office/attendance-fields comment above already describes having
+        // fixed once before, just for a different set of columns this time.
+        // Any settings UI built on top of update() as it stood would have
+        // shown "Saved" while writing nothing at all.
+        if (patch.quoteCompanyName !== undefined) dbPatch.quote_company_name = patch.quoteCompanyName;
+        if (patch.quoteSiteName !== undefined) dbPatch.quote_site_name = patch.quoteSiteName;
+        if (patch.companyPhone !== undefined) dbPatch.company_phone = patch.companyPhone;
+        if (patch.companyEmail !== undefined) dbPatch.company_email = patch.companyEmail;
+        if (patch.companyTin !== undefined) dbPatch.company_tin = patch.companyTin;
+        if (patch.quoteFooterAddress !== undefined) dbPatch.quote_footer_address = patch.quoteFooterAddress;
+        if (patch.receiptThanksText !== undefined) dbPatch.receipt_thanks_text = patch.receiptThanksText;
+        if (patch.receiptLogoImage !== undefined) dbPatch.receipt_logo_image = patch.receiptLogoImage;
+        if (patch.quoteDocTypeText !== undefined) dbPatch.quote_doc_type_text = patch.quoteDocTypeText;
+        if (patch.quoteNotesText !== undefined) dbPatch.quote_notes_text = patch.quoteNotesText;
+        if (patch.quoteLandNoteText !== undefined) dbPatch.quote_land_note_text = patch.quoteLandNoteText;
+        if (patch.quoteLogoImage !== undefined) dbPatch.quote_logo_image = patch.quoteLogoImage;
+        if (patch.quoteAccentColor !== undefined) dbPatch.quote_accent_color = patch.quoteAccentColor;
         const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);

@@ -658,6 +658,8 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     quoteDocTypeText: (r.quote_doc_type_text as string) ?? 'Quotation with Payment Plan Schedule',
     quoteNotesText: (r.quote_notes_text as string) ?? '',
     quoteLandNoteText: (r.quote_land_note_text as string) ?? '',
+    quoteLogoImage: (r.quote_logo_image as string) ?? null,
+    quoteAccentColor: (r.quote_accent_color as string) ?? null,
     contractCeoName: (r.contract_ceo_name as string) ?? 'FRANK ADU PEPRAH',
     contractPreamble: (r.contract_preamble as string) ?? '',
     contractDefinitions: (r.contract_definitions as string) ?? '',

@@ -15,11 +15,17 @@ export function useDownloadQuotationPdf() {
   const profile = useSessionStore((s) => s.profile);
   return useMutation({
     mutationFn: async ({ totals, noPlots, plotType, client, config }: { totals: QuotationTotals; noPlots: number; plotType: PlotType; client: QuotationClientInfo; config: Config }) => {
-      let logo: string | null = null;
-      try {
-        logo = await loadImageAsDataUri('/trulander-logo.png');
-      } catch {
-        // Missing/blocked logo shouldn't stop the quotation from generating.
+      // Real user ask: a Template Settings logo upload that "would
+      // replace the current logo" -- config.quoteLogoImage is already a
+      // full data URI once uploaded (see useUploadQuoteLogo), so it needs
+      // no async load; only the real bundled default does.
+      let logo: string | null = config.quoteLogoImage;
+      if (!logo) {
+        try {
+          logo = await loadImageAsDataUri('/trulander-logo.png');
+        } catch {
+          // Missing/blocked logo shouldn't stop the quotation from generating.
+        }
       }
       // noPlots is a full-plot-equivalent count -- buildQuotationPdf needs
       // qty of the SELECTED type instead (see its own comment).
@@ -43,11 +49,13 @@ export function useDownloadLeadQuotationPdf() {
     mutationFn: async ({ lead, config }: { lead: Lead; config: Config }) => {
       const totals = computeLeadQuotationTotals(config, lead);
       const client: QuotationClientInfo = { name: lead.name, contact: lead.contact };
-      let logo: string | null = null;
-      try {
-        logo = await loadImageAsDataUri('/trulander-logo.png');
-      } catch {
-        // Missing/blocked logo shouldn't stop the quotation from generating.
+      let logo: string | null = config.quoteLogoImage;
+      if (!logo) {
+        try {
+          logo = await loadImageAsDataUri('/trulander-logo.png');
+        } catch {
+          // Missing/blocked logo shouldn't stop the quotation from generating.
+        }
       }
       const qtyOfType = (lead.noPlots || 1) / pricingFor(config, lead.plotType).eq;
       const doc = buildQuotationPdf(totals, qtyOfType, client, config, logo, profile?.name ?? '', profile?.signatureData ?? null);

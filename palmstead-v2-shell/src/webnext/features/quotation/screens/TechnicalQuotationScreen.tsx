@@ -3,9 +3,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadTechnicalQuotationPdf } from '../hooks/useTechnicalQuotationPdf';
 import { computeTechnicalQuotationTotals, techCustomLotArea, type PaymentPlanKey, type TechLot, type TechLotShape } from '../lib/quotationLogic';
+import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
+import { TemplateSettingsTab } from './TemplateSettingsTab';
+import { PricingQuotationSettingsTab } from './PricingQuotationSettingsTab';
 import styles from './TechnicalQuotationScreen.module.css';
 
 const PLANS: PaymentPlanKey[] = ['Full Payment', '3 Months', '6 Months', '9 Months', '12 Months'];
@@ -30,7 +34,9 @@ function emptyLot(): TechLot {
 // (config.targets-style per-quote overrides aren't modeled in web-next's
 // Standard Quotation screen either -- same established scope-narrowing).
 export function TechnicalQuotationScreen() {
+  const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const { data: config, isLoading } = useConfig();
+  const [activeTab, setActiveTab] = useState<QuotationAppTab>('calculator');
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
   const [clientAddress, setClientAddress] = useState('');
@@ -66,6 +72,13 @@ export function TechnicalQuotationScreen() {
       <h1 className={styles.title}>Custom land area pricing</h1>
       <p className={styles.sub}>Standard plots plus any custom/irregular lots, all priced at one dynamic GHS/sq.ft rate &mdash; never a hardcoded figure.</p>
 
+      <QuotationAppTabs activeTab={activeTab} onTabChange={setActiveTab} calculatorLabel="Calculator" isManager={isManager} />
+
+      {activeTab === 'template' && config && <TemplateSettingsTab config={config} />}
+      {activeTab === 'pricing' && config && <PricingQuotationSettingsTab config={config} />}
+
+      {activeTab === 'calculator' && (
+        <>
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       <div className={styles.card}>
@@ -199,6 +212,8 @@ export function TechnicalQuotationScreen() {
           >
             {downloadPdf.isPending ? 'Generating…' : !hasAnyPlot ? 'Add at least one plot' : '⬇ Download PDF'}
           </button>
+        </>
+      )}
         </>
       )}
     </div>

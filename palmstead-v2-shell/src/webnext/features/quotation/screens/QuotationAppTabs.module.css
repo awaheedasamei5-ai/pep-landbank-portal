@@ -1,0 +1,24 @@
+.tabRow {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 4px 0 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+.tabRow::-webkit-scrollbar { display: none; }
+
+.tabBtn {
+  flex-shrink: 0;
+  padding: 9px 4px;
+  margin-right: 18px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tabBtnOn { color: var(--c-text); border-bottom-color: var(--c-accent); }

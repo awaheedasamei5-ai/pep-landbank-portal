@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 import { ghs, today } from '../../../shared/lib/format';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
-import { greenBar, greenTable, kv, quoteBg, QGREEN_DARK, QGREEN_LIGHT, QRED, type QuotationClientInfo } from './quotationPdf';
+import { greenBar, greenTable, kv, quoteBg, themeFromConfig, DEFAULT_QUOTE_THEME, type QuoteTheme, QRED, type QuotationClientInfo } from './quotationPdf';
 import type { Config } from '../../../types/domain';
 import type { TechnicalQuotationTotals } from './quotationLogic';
 
@@ -30,12 +30,12 @@ interface LineItem {
 
 // Same green-header/striped-row visual language as greenTable so it reads
 // as one continuous branded document rather than a bolted-on section.
-function lineItemTable(doc: jsPDF, y: number, pageW: number, pageH: number, rows: LineItem[]): number {
+function lineItemTable(doc: jsPDF, y: number, pageW: number, pageH: number, rows: LineItem[], theme: QuoteTheme = DEFAULT_QUOTE_THEME): number {
   const usableW = pageW - 24;
   const labelX = 12 + 3;
   const valueRightX = pageW - 12;
   const rowH = 6.2;
-  doc.setFillColor(...QGREEN_DARK);
+  doc.setFillColor(...theme.dark);
   doc.rect(12, y, usableW, rowH, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
@@ -46,11 +46,11 @@ function lineItemTable(doc: jsPDF, y: number, pageW: number, pageH: number, rows
   rows.forEach((r, i) => {
     if (y > 270) {
       doc.addPage();
-      quoteBg(doc, pageW, pageH);
+      quoteBg(doc, pageW, pageH, theme);
       y = 16;
     }
     if (r.bold) {
-      doc.setFillColor(...QGREEN_LIGHT);
+      doc.setFillColor(...theme.light);
       doc.rect(12, y, usableW, rowH, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
@@ -86,7 +86,8 @@ export function buildTechnicalQuotationPdf(
   const siteName = config.quoteSiteName || 'P.O Box CO3644, Tema, Accra-Ghana';
   const companyName = config.quoteCompanyName || 'Trulander JSF Limited';
   const docType = 'Technical Quotation — Custom Land Area Pricing';
-  quoteBg(doc, pageW, pageH);
+  const theme = themeFromConfig(config);
+  quoteBg(doc, pageW, pageH, theme);
 
   if (logoDataUri) {
     try {
@@ -142,12 +143,12 @@ export function buildTechnicalQuotationPdf(
   ];
   let ly = y;
   leftRows.forEach((r) => {
-    const n = kv(doc, leftX, ly, r[0], r[1], null, leftColWidth);
+    const n = kv(doc, leftX, ly, r[0], r[1], null, leftColWidth, theme);
     ly += n > 1 ? n * 4.6 + 4.5 : 8.6;
   });
   let ry = y;
   rightRows.forEach((r) => {
-    const n = kv(doc, rightX, ry, r[0], r[1], r[2], rightColWidth);
+    const n = kv(doc, rightX, ry, r[0], r[1], r[2], rightColWidth, theme);
     ry += n > 1 ? n * 4.6 + 4.5 : 8.6;
   });
   y = Math.max(ly, ry) + 7;
@@ -165,7 +166,7 @@ export function buildTechnicalQuotationPdf(
     items.push({ label: `Custom Plot ${i + 1} (${dims})`, value: sqft(q.customAreas[i]) });
   });
   items.push({ label: 'Combined Total Area', value: sqft(q.totalArea), bold: true });
-  y = lineItemTable(doc, y, pageW, pageH, items);
+  y = lineItemTable(doc, y, pageW, pageH, items, theme);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(20, 20, 20);
@@ -174,21 +175,27 @@ export function buildTechnicalQuotationPdf(
   y += 8;
 
   if (q.planMonths) {
-    y = greenBar(doc, y, pageW, [
-      { label: 'Total Value', value: ghs(q.grand) },
-      { label: 'Deposit', value: ghs(q.deposit), color: QRED },
-      { label: 'Balance', value: ghs(q.balance) },
-      { label: 'Monthly Due', value: ghs(q.monthlyDue) },
-    ]);
-    y = greenTable(doc, y, pageW, q.schedule);
+    y = greenBar(
+      doc,
+      y,
+      pageW,
+      [
+        { label: 'Total Value', value: ghs(q.grand) },
+        { label: 'Deposit', value: ghs(q.deposit), color: QRED },
+        { label: 'Balance', value: ghs(q.balance) },
+        { label: 'Monthly Due', value: ghs(q.monthlyDue) },
+      ],
+      theme
+    );
+    y = greenTable(doc, y, pageW, q.schedule, theme);
   } else {
-    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }]);
+    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }], theme);
   }
   y += 4;
 
   if (y > 265) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     y = 20;
   }
   const notesStartY = y;
@@ -227,7 +234,7 @@ export function buildTechnicalQuotationPdf(
 
   if (y > 260) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     y = 20;
   }
   doc.setFont('helvetica', 'bold');
@@ -264,12 +271,12 @@ export function buildTechnicalQuotationPdf(
   let footerY = Math.max(pageH - 16, y + 8);
   if (footerY > pageH - 8) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     footerY = pageH - 16;
   }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...QGREEN_DARK);
+  doc.setTextColor(...theme.dark);
   doc.text('Thank you for your business!', pageW / 2, footerY, { align: 'center' });
   doc.setFontSize(8);
   doc.setTextColor(120, 130, 124);

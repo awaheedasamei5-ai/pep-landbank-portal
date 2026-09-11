@@ -29,16 +29,55 @@ export const QGREEN_BG: [number, number, number] = [238, 244, 235];
 export const QRED: [number, number, number] = [196, 42, 30];
 const QCOL_FRACS = [0, 0.2, 0.48, 0.74, 1];
 
-export function quoteBg(doc: jsPDF, pageW: number, pageH: number) {
-  doc.setFillColor(...QGREEN_BG);
+// Real user ask (2026-09-11): a Template Settings tab where Management
+// can "even change the colours of the template ... because the company
+// may rebrand." Rather than a full per-element color picker, this
+// derives the whole existing 4-shade palette (dark band/header text,
+// label text, light row-stripe, pale page background) from ONE chosen
+// brand color, the same relationship the real hardcoded greens above
+// already have to each other (each lighter shade is the dark color
+// mixed toward white) -- so a custom color still reads as one coherent
+// theme instead of clashing with itself. `theme` is an optional last
+// argument on every primitive below, defaulting to the real hardcoded
+// green -- every existing call site across this file and
+// technicalQuotationPdf.ts keeps working unchanged; only
+// buildQuotationPdf/buildTechnicalQuotationPdf actually compute and pass
+// a real one, from config.quoteAccentColor.
+export interface QuoteTheme {
+  dark: [number, number, number];
+  label: [number, number, number];
+  light: [number, number, number];
+  bg: [number, number, number];
+}
+export const DEFAULT_QUOTE_THEME: QuoteTheme = { dark: QGREEN_DARK, label: QGREEN_LABEL, light: QGREEN_LIGHT, bg: QGREEN_BG };
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function mixTowardWhite(rgb: [number, number, number], amount: number): [number, number, number] {
+  return rgb.map((c) => Math.round(c + (255 - c) * amount)) as [number, number, number];
+}
+
+export function themeFromConfig(config: Config): QuoteTheme {
+  const rgb = config.quoteAccentColor ? hexToRgb(config.quoteAccentColor) : null;
+  if (!rgb) return DEFAULT_QUOTE_THEME;
+  return { dark: rgb, label: mixTowardWhite(rgb, 0.18), light: mixTowardWhite(rgb, 0.82), bg: mixTowardWhite(rgb, 0.92) };
+}
+
+export function quoteBg(doc: jsPDF, pageW: number, pageH: number, theme: QuoteTheme = DEFAULT_QUOTE_THEME) {
+  doc.setFillColor(...theme.bg);
   doc.rect(0, 0, pageW, pageH, 'F');
 }
 
-export function kv(doc: jsPDF, x: number, y: number, label: string, value: string, valueColor: [number, number, number] | null, maxWidth: number | null): number {
+export function kv(doc: jsPDF, x: number, y: number, label: string, value: string, valueColor: [number, number, number] | null, maxWidth: number | null, theme: QuoteTheme = DEFAULT_QUOTE_THEME): number {
   const labelText = `${String(label).replace(/:\s*$/, '')}:`;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(...QGREEN_LABEL);
+  doc.setTextColor(...theme.label);
   doc.text(labelText, x, y);
   const gap = doc.getTextWidth(labelText) + 1.6;
   doc.setFont('helvetica', 'normal');
@@ -52,9 +91,9 @@ export function kv(doc: jsPDF, x: number, y: number, label: string, value: strin
   return lines.length;
 }
 
-export function greenBar(doc: jsPDF, y: number, pageW: number, items: { label: string; value: string; color?: [number, number, number] }[]): number {
+export function greenBar(doc: jsPDF, y: number, pageW: number, items: { label: string; value: string; color?: [number, number, number] }[], theme: QuoteTheme = DEFAULT_QUOTE_THEME): number {
   const barH = 13;
-  doc.setFillColor(...QGREEN_DARK);
+  doc.setFillColor(...theme.dark);
   doc.rect(12, y, pageW - 24, barH, 'F');
   const usableW = pageW - 24;
   const fracs = items.length === 4 ? QCOL_FRACS : items.map((_, i) => i / items.length).concat([1]);
@@ -74,12 +113,12 @@ export function greenBar(doc: jsPDF, y: number, pageW: number, items: { label: s
   return y + barH + 6;
 }
 
-export function greenTable(doc: jsPDF, y: number, pageW: number, rows: { month: number; opening: number; payment: number; closing: number }[]): number {
+export function greenTable(doc: jsPDF, y: number, pageW: number, rows: { month: number; opening: number; payment: number; closing: number }[], theme: QuoteTheme = DEFAULT_QUOTE_THEME): number {
   const usableW = pageW - 24;
   const colX = [12 + usableW * QCOL_FRACS[0], 12 + usableW * QCOL_FRACS[1], 12 + usableW * QCOL_FRACS[2], 12 + usableW * QCOL_FRACS[3]];
   const rowH = 5.6;
   const drawHeader = (yy: number) => {
-    doc.setFillColor(...QGREEN_DARK);
+    doc.setFillColor(...theme.dark);
     doc.rect(12, yy, usableW, rowH, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.8);
@@ -96,13 +135,13 @@ export function greenTable(doc: jsPDF, y: number, pageW: number, rows: { month: 
   rows.forEach((r, i) => {
     if (y > 280) {
       doc.addPage();
-      quoteBg(doc, pageW, 297);
+      quoteBg(doc, pageW, 297, theme);
       y = 16;
       drawHeader(y);
       y += rowH;
     }
     if (i % 2 === 1) {
-      doc.setFillColor(...QGREEN_LIGHT);
+      doc.setFillColor(...theme.light);
       doc.rect(12, y, usableW, rowH, 'F');
     }
     doc.setTextColor(20, 20, 20);
@@ -143,7 +182,8 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   // gets none of the greenTable rows below, so the title shouldn't
   // promise one either.
   const docType = q.planMonths ? config.quoteDocTypeText || 'Quotation with Payment Plan Schedule' : 'Quotation';
-  quoteBg(doc, pageW, pageH);
+  const theme = themeFromConfig(config);
+  quoteBg(doc, pageW, pageH, theme);
 
   if (logoDataUri) {
     try {
@@ -217,32 +257,38 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   ];
   let ly = y;
   leftRows.forEach((r) => {
-    const n = kv(doc, leftX, ly, r[0], r[1], null, leftColWidth);
+    const n = kv(doc, leftX, ly, r[0], r[1], null, leftColWidth, theme);
     ly += n > 1 ? n * 4.6 + 4.5 : 8.6;
   });
   let ry = y;
   rightRows.forEach((r) => {
-    const n = kv(doc, rightX, ry, r[0], r[1], r[2], rightColWidth);
+    const n = kv(doc, rightX, ry, r[0], r[1], r[2], rightColWidth, theme);
     ry += n > 1 ? n * 4.6 + 4.5 : 8.6;
   });
   y = Math.max(ly, ry) + 5;
 
   if (q.planMonths) {
-    y = greenBar(doc, y, pageW, [
-      { label: 'Total Value', value: ghs(q.grand) },
-      { label: 'Deposit', value: ghs(q.deposit), color: QRED },
-      { label: 'Balance', value: ghs(q.balance) },
-      { label: 'Monthly Due', value: ghs(q.monthlyDue) },
-    ]);
-    y = greenTable(doc, y, pageW, q.schedule);
+    y = greenBar(
+      doc,
+      y,
+      pageW,
+      [
+        { label: 'Total Value', value: ghs(q.grand) },
+        { label: 'Deposit', value: ghs(q.deposit), color: QRED },
+        { label: 'Balance', value: ghs(q.balance) },
+        { label: 'Monthly Due', value: ghs(q.monthlyDue) },
+      ],
+      theme
+    );
+    y = greenTable(doc, y, pageW, q.schedule, theme);
   } else {
-    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }]);
+    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }], theme);
   }
   y += 4;
 
   if (y > 265) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     y = 20;
   }
   const notesStartY = y;
@@ -281,7 +327,7 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
 
   if (y > 260) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     y = 20;
   }
   // Prepared-by signoff -- whoever's signed in and generating this quote,
@@ -328,12 +374,12 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   let footerY = Math.max(pageH - 16, y + 8);
   if (footerY > pageH - 8) {
     doc.addPage();
-    quoteBg(doc, pageW, pageH);
+    quoteBg(doc, pageW, pageH, theme);
     footerY = pageH - 16;
   }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...QGREEN_DARK);
+  doc.setTextColor(...theme.dark);
   doc.text('Thank you for your business!', pageW / 2, footerY, { align: 'center' });
   doc.setFontSize(8);
   doc.setTextColor(120, 130, 124);

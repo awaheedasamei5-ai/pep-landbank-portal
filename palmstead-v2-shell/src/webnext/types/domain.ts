@@ -589,6 +589,12 @@ export interface Config {
   quoteDocTypeText: string;
   quoteNotesText: string;
   quoteLandNoteText: string;
+  // Real columns quote_logo_image/quote_accent_color, added 2026-09-11
+  // for the new Template Settings tab -- an uploaded logo/brand-color
+  // override for the Quotation and Technical Quotation PDFs. Null falls
+  // back to the existing hardcoded orange logo file / green brand color.
+  quoteLogoImage: string | null;
+  quoteAccentColor: string | null;
   // Real columns contract_ceo_name/contract_preamble/contract_definitions/
   // contract_terms/contract_cover_image/contract_wordmark_image (confirmed
   // live) -- feed the Contract of Sale PDF (buildContractOfSalePDF).

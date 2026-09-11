@@ -3,10 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
 import { computeQuotationTotals, type PaymentPlanKey } from '../lib/quotationLogic';
 import type { PlotType } from '../../../types/domain';
+import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
+import { TemplateSettingsTab } from './TemplateSettingsTab';
+import { PricingQuotationSettingsTab } from './PricingQuotationSettingsTab';
 import styles from './QuotationScreen.module.css';
 
 const PLOT_TYPES: PlotType[] = ['Full Plot', 'Half Plot'];
@@ -22,7 +26,9 @@ const PLANS: PaymentPlanKey[] = ['Full Payment', '3 Months', '6 Months', '9 Mont
 // is `auth.uid() IS NOT NULL`, not manager-gated), matching how
 // index.html's Quotation tile has no role restriction either.
 export function QuotationScreen() {
+  const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const { data: config, isLoading } = useConfig();
+  const [activeTab, setActiveTab] = useState<QuotationAppTab>('calculator');
   const [plotType, setPlotType] = useState<PlotType>('Full Plot');
   // noPlots is a full-plot-equivalent count -- 0.5 is one standard Half
   // Plot (see computeQuotationTotals's own comment), so switching plot
@@ -60,6 +66,13 @@ export function QuotationScreen() {
         </Link>
       </p>
 
+      <QuotationAppTabs activeTab={activeTab} onTabChange={setActiveTab} calculatorLabel="Calculator" isManager={isManager} />
+
+      {activeTab === 'template' && config && <TemplateSettingsTab config={config} />}
+      {activeTab === 'pricing' && config && <PricingQuotationSettingsTab config={config} />}
+
+      {activeTab === 'calculator' && (
+        <>
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
 
       <div className={styles.card}>
@@ -196,6 +209,8 @@ export function QuotationScreen() {
           >
             {downloadPdf.isPending ? 'Generating…' : '⬇ Download PDF'}
           </button>
+        </>
+      )}
         </>
       )}
     </div>
