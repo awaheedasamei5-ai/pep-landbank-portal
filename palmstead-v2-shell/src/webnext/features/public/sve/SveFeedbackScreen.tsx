@@ -18,7 +18,7 @@ const SITE_DESC_OPTIONS = ['Exceeded expectations', 'Met expectations', 'Below e
 const PURCHASE_INTENT_OPTIONS = ['Ready to purchase', 'Need more time to decide', 'Not at this time', 'Undecided'];
 const SITE_OPTIONS = ['Royal Palm Enclave, Tsopoli', 'Other'];
 
-type Screen = 'loading' | 'not_found' | 'already_submitted' | 'form' | 'thanks' | 'unavailable';
+type Screen = 'loading' | 'not_found' | 'already_submitted' | 'form' | 'review' | 'thanks' | 'unavailable';
 
 // Public, unauthenticated -- no RequireAuth, no session, no demoMode. See
 // the SiteVisitInvite type's comment in types/domain.ts for the RPC-based
@@ -61,6 +61,13 @@ export function SveFeedbackScreen() {
   const [purchaseIntent, setPurchaseIntent] = useState('');
   const [additionalComments, setAdditionalComments] = useState('');
   const [validationErr, setValidationErr] = useState<string | null>(null);
+  // Real user ask: "the cleint is able to fill the form once they can
+  // preview and go back and edit but when they submit they cant reused
+  // the link again to avoid double submissions." A separate boolean
+  // (not folded into the `screen` derivation below) since it's the one
+  // piece of this flow that's genuinely just local UI state, not derived
+  // from server/query state the way every other screen value is.
+  const [reviewing, setReviewing] = useState(false);
 
   // Real v1 behavior (index.html:25636-25642): the client can confirm or
   // correct which site/date they actually visited rather than this form
@@ -86,7 +93,9 @@ export function SveFeedbackScreen() {
             ? 'not_found'
             : invite.alreadySubmitted
               ? 'already_submitted'
-              : 'form';
+              : reviewing
+                ? 'review'
+                : 'form';
 
   // Real v1 required set (index.html:25682) -- name, phone, visit date,
   // journey rating, overall rating, NPS score, improvement suggestions and
@@ -105,10 +114,22 @@ export function SveFeedbackScreen() {
     return null;
   }
 
+  function goToReview() {
+    const missing = firstMissingField();
+    if (missing) {
+      setValidationErr(`Please fill in: ${missing}.`);
+      return;
+    }
+    setValidationErr(null);
+    setReviewing(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   async function handleSubmit() {
     if (!token) return;
     const missing = firstMissingField();
     if (missing) {
+      setReviewing(false);
       setValidationErr(`Please fill in: ${missing}.`);
       return;
     }
@@ -320,13 +341,132 @@ export function SveFeedbackScreen() {
             </div>
 
             {validationErr && <div className={styles.submitErr}>{validationErr}</div>}
-            <button type="button" className={styles.submitBtn} onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Submitting…' : 'Submit feedback'}
+            <button type="button" className={styles.submitBtn} onClick={goToReview}>
+              Review my answers →
             </button>
-            {submitError && <div className={styles.submitErr}>{submitError}</div>}
           </>
         )}
+
+        {screen === 'review' && (
+          <ReviewScreen
+            fullName={fullName}
+            phone={phone}
+            siteVisited={siteVisited === 'Other' ? siteVisitedOther : siteVisited}
+            visitDate={visitDate}
+            journeyRating={journeyRating}
+            siteManagerName={siteManagerName}
+            relationshipRating={relationshipRating}
+            handlingFeedback={handlingFeedback}
+            siteDescriptionRating={siteDescriptionRating}
+            belowExpectationReason={belowExpectationReason}
+            overallRating={overallRating}
+            npsScore={npsScore}
+            improvementSuggestions={improvementSuggestions}
+            purchaseIntent={purchaseIntent}
+            additionalComments={additionalComments}
+            submitting={submitting}
+            submitError={submitError}
+            onEdit={() => setReviewing(false)}
+            onConfirm={handleSubmit}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+// Read-only summary of every answer, grouped under the same section
+// titles the form itself uses, so nothing looks unfamiliar between the
+// two screens -- just editable vs. not. `onEdit` returns to the form
+// with all state intact (nothing is cleared); `onConfirm` is the one and
+// only real submit call in this whole flow.
+function ReviewScreen({
+  fullName,
+  phone,
+  siteVisited,
+  visitDate,
+  journeyRating,
+  siteManagerName,
+  relationshipRating,
+  handlingFeedback,
+  siteDescriptionRating,
+  belowExpectationReason,
+  overallRating,
+  npsScore,
+  improvementSuggestions,
+  purchaseIntent,
+  additionalComments,
+  submitting,
+  submitError,
+  onEdit,
+  onConfirm,
+}: {
+  fullName: string;
+  phone: string;
+  siteVisited: string;
+  visitDate: string;
+  journeyRating: string;
+  siteManagerName: string;
+  relationshipRating: number;
+  handlingFeedback: string;
+  siteDescriptionRating: string;
+  belowExpectationReason: string;
+  overallRating: number;
+  npsScore: number | undefined;
+  improvementSuggestions: string;
+  purchaseIntent: string;
+  additionalComments: string;
+  submitting: boolean;
+  submitError: string | null;
+  onEdit: () => void;
+  onConfirm: () => void;
+}) {
+  const stars = (n: number) => (n > 0 ? '★'.repeat(n) + '☆'.repeat(5 - n) : '—');
+  return (
+    <>
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Your details</div>
+        <ReviewRow label="Full name" value={fullName} />
+        <ReviewRow label="Phone number" value={phone} />
+        <ReviewRow label="Site visited" value={siteVisited} />
+        <ReviewRow label="Date of visit" value={visitDate} />
+      </div>
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Your journey</div>
+        <ReviewRow label="Journey" value={journeyRating} />
+        <ReviewRow label="Who looked after you" value={siteManagerName} />
+        <ReviewRow label="Handling rating" value={stars(relationshipRating)} />
+        <ReviewRow label="Handling feedback" value={handlingFeedback} />
+      </div>
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>The site itself</div>
+        <ReviewRow label="Matched expectations?" value={siteDescriptionRating} />
+        {siteDescriptionRating === 'Below expectations' && <ReviewRow label="What fell short" value={belowExpectationReason} />}
+      </div>
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Overall</div>
+        <ReviewRow label="Overall rating" value={stars(overallRating)} />
+        <ReviewRow label="Recommend to a friend" value={npsScore != null ? `${npsScore} / 10` : '—'} />
+        <ReviewRow label="Purchase readiness" value={purchaseIntent} />
+        <ReviewRow label="What we could improve" value={improvementSuggestions} />
+        <ReviewRow label="Anything else" value={additionalComments} />
+      </div>
+      <button type="button" className={styles.submitBtn} onClick={onConfirm} disabled={submitting}>
+        {submitting ? 'Submitting…' : 'Confirm & submit'}
+      </button>
+      <button type="button" className={styles.editAnswersBtn} onClick={onEdit} disabled={submitting}>
+        ← Edit my answers
+      </button>
+      {submitError && <div className={styles.submitErr}>{submitError}</div>}
+    </>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.reviewRow}>
+      <span className={styles.reviewLabel}>{label}</span>
+      <span className={styles.reviewValue}>{value?.trim() ? value : '—'}</span>
     </div>
   );
 }
