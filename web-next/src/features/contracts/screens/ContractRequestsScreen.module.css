@@ -43,6 +43,25 @@
   box-shadow: var(--shadow);
 }
 
+.rowWrap { display: flex; flex-direction: column; }
+
+.rowBtn {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.expandedPanel {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-top: none;
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  margin-top: -8px;
+  padding: 4px 15px 14px;
+}
+
 .avatar {
   width: 36px;
   height: 36px;

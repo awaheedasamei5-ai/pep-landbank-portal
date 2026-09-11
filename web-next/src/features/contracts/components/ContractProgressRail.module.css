@@ -1,0 +1,52 @@
+.rail {
+  display: flex;
+  align-items: flex-start;
+  padding: 14px 4px 4px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.stepLine {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.connector {
+  flex: 1;
+  height: 2px;
+  background: var(--c-line);
+}
+.connectorDone { background: var(--c-success); }
+
+.dot {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--c-muted);
+  background: var(--c-paper);
+  border: 2px solid var(--c-line);
+}
+.dotDone { background: var(--c-success); border-color: var(--c-success); color: #fff; }
+.dotCurrent { border-color: var(--c-accent); color: var(--c-accent); }
+
+.label {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--c-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+.labelCurrent { color: var(--c-accent); font-weight: 700; }

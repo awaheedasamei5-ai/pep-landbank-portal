@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useContractRequests, useCreateContractRequest, useCanFulfilContracts, useFulfilContractRequest } from '../hooks/useContractRequests';
+import { ContractProgressRail } from '../components/ContractProgressRail';
 import { Icon } from '../../../shared/ui/Icon';
 import type { Lead, ContractRequest } from '../../../types/domain';
 import styles from './ContractRequestsScreen.module.css';
@@ -139,24 +140,33 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
 
 function RequestRow({ request, canFulfil }: { request: ContractRequest; canFulfil: boolean }) {
   const fulfil = useFulfilContractRequest();
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className={styles.row}>
-      <span className={styles.avatar}>{initials(request.clientName)}</span>
-      <div className={styles.rowMain}>
-        <div className={styles.name}>{request.clientName}</div>
-        <div className={styles.meta}>
-          Requested by {request.requestedByName} · {request.createdAt.slice(0, 10)}
+    <div className={styles.rowWrap}>
+      <button type="button" className={`${styles.row} ${styles.rowBtn}`} onClick={() => setExpanded((v) => !v)}>
+        <span className={styles.avatar}>{initials(request.clientName)}</span>
+        <div className={styles.rowMain}>
+          <div className={styles.name}>{request.clientName}</div>
+          <div className={styles.meta}>
+            Requested by {request.requestedByName} · {request.createdAt.slice(0, 10)}
+          </div>
+          {request.note && <div className={styles.note}>{request.note}</div>}
         </div>
-        {request.note && <div className={styles.note}>{request.note}</div>}
-      </div>
-      {request.status === 'fulfilled' ? (
-        <span className={styles.doneTag}>Fulfilled</span>
-      ) : canFulfil ? (
-        <button type="button" className={styles.fulfilBtn} disabled={fulfil.isPending} onClick={() => fulfil.mutate(request.id)}>
-          {fulfil.isPending ? '…' : 'Mark fulfilled'}
-        </button>
-      ) : (
-        <span className={styles.pendingTag}>Pending</span>
+        {request.status === 'fulfilled' ? (
+          <span className={styles.doneTag}>Fulfilled</span>
+        ) : (
+          <span className={styles.pendingTag}>Pending</span>
+        )}
+      </button>
+      {expanded && (
+        <div className={styles.expandedPanel}>
+          <ContractProgressRail request={request} />
+          {canFulfil && request.status === 'pending' && (
+            <button type="button" className={styles.fulfilBtn} disabled={fulfil.isPending} onClick={() => fulfil.mutate(request.id)}>
+              {fulfil.isPending ? '…' : 'Mark fulfilled'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

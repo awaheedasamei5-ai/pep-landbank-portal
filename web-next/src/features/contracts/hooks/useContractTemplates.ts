@@ -103,6 +103,15 @@ export function useCreateContractField() {
   });
 }
 
+// CONTRACT_OF_SALE_BLUEPRINT.md §5 -- feeds the staff-facing progress rail
+// (a generation existing for a lead is the real "Draft"/"Downloaded"
+// signal; RLS already scopes list() to manager/elizabeth or the lead's
+// own agent, matching who's allowed to see a request's rail at all).
+export function useContractGenerations() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['contractGenerations'], queryFn: () => getDataSource(demoMode).contractGenerations.list() });
+}
+
 export function useContractApprovals(templateVersionId: string) {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({
