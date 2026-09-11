@@ -131,7 +131,7 @@
 .mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 1200px; padding: 28px 32px 100px; }
+  .wrap { max-width: 100%; padding: 28px 32px 100px; }
   /* Real fix, not the earlier one: forcing a card to grow and fill
      whatever leftover space grid's default stretch left behind (previous
      version of this rule) just moves the "empty space" problem inside a

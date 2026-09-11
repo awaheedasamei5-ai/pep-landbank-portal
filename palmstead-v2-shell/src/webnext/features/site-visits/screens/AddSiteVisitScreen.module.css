@@ -130,7 +130,7 @@
 .mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 1200px; padding: 28px 32px 100px; }
+  .wrap { max-width: 100%; padding: 28px 32px 100px; }
   .grid { grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
 
   .actions {
