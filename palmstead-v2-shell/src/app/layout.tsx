@@ -40,6 +40,13 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       suppressHydrationWarning
     >
       <head>
+        {/* Real Palmstead/Trulander favicon (same files web-next serves) --
+            overrides the template's default src/app/favicon.ico, which
+            Next.js otherwise auto-serves at a higher priority than a
+            public/favicon.ico of the same name. */}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         {/* Real web-next webfonts (Bricolage Grotesque/Plus Jakarta Sans/
             IBM Plex Mono) -- previously only linked in web-next's own
             index.html <head>, which this shell doesn't have. */}

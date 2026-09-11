@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 
-import { Landmark } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -40,7 +39,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link prefetch={false} href="/dashboard/default">
-                <Landmark />
+                {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
+                <img src="/trulander-logo.png" alt="" width={20} height={20} className="rounded-sm object-contain" />
                 <span className="font-semibold text-base">{APP_CONFIG.name}</span>
               </Link>
             </SidebarMenuButton>

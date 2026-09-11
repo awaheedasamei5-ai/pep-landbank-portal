@@ -338,10 +338,13 @@
 .tile_HeldforApproval:hover { opacity: .88; }
 .tile_Blocked { background: var(--c-danger-bg); border-color: var(--c-danger); color: var(--c-danger); }
 .tile_Blocked:hover { opacity: .88; }
-.tile_Disputed { background: var(--c-danger); border-color: var(--c-danger); color: #fff; }
+/* Disputed/Archived: same distinct hues as their legend dots above (see
+   that comment) -- solid maroon/sepia fills, not the ones Blocked and
+   Subdivided already use. */
+.tile_Disputed { background: #7A1F3D; border-color: #7A1F3D; color: #fff; }
 .tile_Disputed:hover { opacity: .88; }
-.tile_Archived { background: var(--c-paper); border-color: var(--c-line); color: var(--c-faint); }
-.tile_Archived:hover { border-color: var(--c-faint); }
+.tile_Archived { background: #F3EEE4; border-color: #A68A64; color: #8A6D45; }
+.tile_Archived:hover { border-color: #8A6D45; }
 
 /* Legend dot -- solid swatches, distinct classes from the .badge* chip
    styles below so the two visual treatments never depend on selector
@@ -353,8 +356,15 @@
 .dotReserved { background: var(--c-info); }
 .dotHeldForApproval { background: var(--c-accent); }
 .dotBlocked { background: var(--c-danger); }
-.dotDisputed { background: var(--c-danger); }
-.dotArchived { background: var(--c-faint); }
+/* Disputed and Archived reused Blocked's and Subdivided's exact dot
+   colors respectively -- fine on the tile/badge (light-bg-vs-solid-fill
+   tells them apart there) but a small solid legend dot has no room for
+   that distinction, so the two pairs were visually identical in the
+   status strip. Distinct hues, still each in its own family (red-family
+   for the two "trouble" statuses, neutral-family for the two "inactive
+   record" statuses) so the legend still groups them sensibly. */
+.dotDisputed { background: #7A1F3D; }
+.dotArchived { background: #A68A64; }
 .dotAllocatedSplit { background: linear-gradient(135deg, #1D4ED8, #38BDF8); }
 .dotAllocatedPartial { background: linear-gradient(135deg, #3B4FA0, #6FA8E0); }
 
@@ -384,13 +394,17 @@
 .badge { display: inline-block; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 700; margin-top: 4px; }
 .badgeAvailable { background: var(--c-success-bg); color: var(--c-success); }
 .badgeRunningSearch { background: var(--c-warn-bg); color: var(--c-warn); }
-.badgeAllocated { background: var(--c-danger-bg); color: var(--c-danger); }
+/* Was var(--c-danger-bg)/var(--c-danger) -- literally the same light-red
+   chip as Blocked below, so a sold plot and an administratively-blocked
+   one read identically in the row list. Matches the tile's own solid
+   ink fill instead. */
+.badgeAllocated { background: var(--c-ink); color: #fff; }
 .badgeSubdivided { background: var(--c-paper); color: var(--c-muted); }
 .badgeReserved { background: var(--c-info-bg); color: var(--c-info); }
 .badgeHeldForApproval { background: var(--c-accent-bg); color: var(--c-accent); }
 .badgeBlocked { background: var(--c-danger-bg); color: var(--c-danger); }
-.badgeDisputed { background: var(--c-danger); color: #fff; }
-.badgeArchived { background: var(--c-paper); color: var(--c-faint); }
+.badgeDisputed { background: #7A1F3D; color: #fff; }
+.badgeArchived { background: #F3EEE4; color: #8A6D45; }
 
 /* Board/list toggle, placed after BOTH base rules (.board and .list
    above) so this media query actually wins the cascade at >=1024px
