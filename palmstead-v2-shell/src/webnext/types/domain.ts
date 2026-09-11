@@ -162,6 +162,11 @@ export interface LeadUpdate {
   // Added for the pipeline Excel import's canonical LEADS sheet ("Source"
   // column, spec 5.1) -- same reasoning as priority above.
   leadSource?: string;
+  // Real column `banner_id` -- previously only ever set at lead creation
+  // (AddLeadScreen); an existing lead's Source could be changed to
+  // "Banner" but had no way to actually peg it to a real banner row, so
+  // it never counted toward that banner's totals in Banner Tracking.
+  bannerId?: string | null;
   // Real column `address` (confirmed live) had NO write path anywhere in
   // the app before this -- 4 separate PDF generators (Quotation, Technical
   // Quotation, Receipt, Contract of Sale) read it and always got blank.

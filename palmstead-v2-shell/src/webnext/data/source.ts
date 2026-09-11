@@ -89,6 +89,7 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
   if ('priority' in patch) dbPatch.priority = patch.priority;
   if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
+  if ('bannerId' in patch) dbPatch.banner_id = patch.bannerId;
   if ('address' in patch) dbPatch.address = patch.address;
   if ('kyc' in patch) dbPatch.kyc = patch.kyc;
   if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { useBanners } from '../../banners/hooks/useBanners';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs, today } from '../../../shared/lib/format';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -325,6 +326,7 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
   const update = useUpdateLead();
   const assignLead = useAssignLead();
   const { data: staff } = useStaffDirectory();
+  const { data: banners } = useBanners();
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState(lead.leadSource ?? '');
   const [priority, setPriority] = useState(lead.priority ?? '');
@@ -332,6 +334,17 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
   const [reassigning, setReassigning] = useState(false);
   const [assignTo, setAssignTo] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Real gap the user caught: this section could change Source to
+  // "Banner" but never showed AddLeadScreen's own Area/Banner sub-picker,
+  // so it was impossible to actually peg an existing lead to a real
+  // banner row end-to-end with Banner Tracking. Pre-filled from the
+  // lead's current bannerId (if it already has one) so re-opening Edit
+  // doesn't lose the existing pick.
+  const currentBanner = banners?.find((b) => b.id === lead.bannerId);
+  const [bannerArea, setBannerArea] = useState(currentBanner?.area ?? '');
+  const [bannerId, setBannerId] = useState(lead.bannerId ?? '');
+  const bannerAreas = useMemo(() => Array.from(new Set((banners ?? []).map((b) => b.area))).sort(), [banners]);
+  const bannersInArea = useMemo(() => (banners ?? []).filter((b) => b.area === bannerArea), [banners, bannerArea]);
 
   const staffName = lead.agent === 'company' ? 'Company Leads (unassigned)' : staff?.find((s) => s.key === lead.agent)?.name ?? lead.agent;
   const isManager = profile?.role === 'manager';
@@ -396,7 +409,17 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
       <h2 className={styles.sectionTitle}>Lead details</h2>
       <div className={styles.field}>
         <label className={styles.label}>Source</label>
-        <select className={styles.input} value={source} onChange={(e) => setSource(e.target.value)}>
+        <select
+          className={styles.input}
+          value={source}
+          onChange={(e) => {
+            setSource(e.target.value);
+            if (e.target.value !== 'Banner') {
+              setBannerArea('');
+              setBannerId('');
+            }
+          }}
+        >
           <option value="">Where did they hear about us?</option>
           {LEAD_SOURCES.map((s) => (
             <option key={s} value={s}>
@@ -405,6 +428,38 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
           ))}
         </select>
       </div>
+      {source === 'Banner' && (
+        <div className={styles.grid2}>
+          <div className={styles.field}>
+            <label className={styles.label}>Area</label>
+            <select
+              className={styles.input}
+              value={bannerArea}
+              onChange={(e) => {
+                setBannerArea(e.target.value);
+                setBannerId('');
+              }}
+            >
+              <option value="">Select an area…</option>
+              {bannerAreas.map((a) => (
+                <option key={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Banner</label>
+            <select className={styles.input} value={bannerId} onChange={(e) => setBannerId(e.target.value)} disabled={!bannerArea}>
+              <option value="">{bannerArea ? (bannersInArea.length ? 'Select a banner…' : 'No banners in this area yet') : 'Select an area first…'}</option>
+              {bannersInArea.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <p className={styles.helpText}>This lead will count toward this banner's totals in Banner Tracking.</p>
+          </div>
+        </div>
+      )}
       <div className={styles.field}>
         <label className={styles.label}>Priority</label>
         <select className={styles.input} value={priority} onChange={(e) => setPriority(e.target.value)}>
@@ -431,7 +486,16 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
           onClick={() => {
             setError(null);
             update
-              .mutateAsync({ id: lead.id, patch: { leadSource: source.trim() || undefined, priority: priority || undefined, address: address.trim() || undefined, expectedVersion: lead.version ?? undefined } })
+              .mutateAsync({
+                id: lead.id,
+                patch: {
+                  leadSource: source.trim() || undefined,
+                  bannerId: source === 'Banner' ? bannerId || undefined : null,
+                  priority: priority || undefined,
+                  address: address.trim() || undefined,
+                  expectedVersion: lead.version ?? undefined,
+                },
+              })
               .then(
               () => setEditing(false),
               (e) => setError(friendlyError(e, 'Failed to save')),
