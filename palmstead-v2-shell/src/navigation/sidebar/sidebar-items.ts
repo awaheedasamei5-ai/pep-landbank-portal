@@ -92,7 +92,7 @@ export const sidebarItems: NavGroup[] = [
     id: 2,
     label: "Sales",
     items: [
-      { id: "master-pipeline", title: "Master Pipeline", url: NOT_BUILT_YET, icon: Gauge },
+      { id: "master-pipeline", title: "Master Pipeline", url: "/dashboard/pipeline", icon: Gauge },
       { id: "client-database", title: "Client Database", url: NOT_BUILT_YET, icon: Users },
       { id: "plot-inventory", title: "Plot Inventory", url: NOT_BUILT_YET, icon: Boxes },
       { id: "allocations", title: "Allocations", url: NOT_BUILT_YET, icon: MapPin },
