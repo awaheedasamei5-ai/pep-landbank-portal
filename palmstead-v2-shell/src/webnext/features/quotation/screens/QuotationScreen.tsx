@@ -31,6 +31,10 @@ export function QuotationScreen() {
   const [noPlots, setNoPlots] = useState(1);
   const [noPlotsTouched, setNoPlotsTouched] = useState(false);
   const [plan, setPlan] = useState<PaymentPlanKey>('12 Months');
+  // Same real client-preference toggle Technical Quotation has: deposit
+  // as 30% of net alone (standard, unchanged default) or of net+interest
+  // together. See computeInstallmentPlan's own comment in quotationLogic.ts.
+  const [depositIncludesInterest, setDepositIncludesInterest] = useState(false);
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
   const [clientAddress, setClientAddress] = useState('');
@@ -42,7 +46,7 @@ export function QuotationScreen() {
     setNoPlots(plotType === 'Half Plot' ? 0.5 : 1);
   }, [plotType, noPlotsTouched]);
 
-  const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan) : null;
+  const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest) : null;
 
   return (
     <div className={styles.wrap}>
@@ -95,6 +99,17 @@ export function QuotationScreen() {
             ))}
           </select>
         </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Deposit calculation</label>
+          <select
+            className={styles.select}
+            value={depositIncludesInterest ? 'with' : 'without'}
+            onChange={(e) => setDepositIncludesInterest(e.target.value === 'with')}
+          >
+            <option value="without">Before interest &mdash; 30% of the net price only</option>
+            <option value="with">After interest &mdash; 30% of net + interest combined</option>
+          </select>
+        </div>
       </div>
 
       <div className={styles.card}>
@@ -131,7 +146,7 @@ export function QuotationScreen() {
           {totals.planMonths > 0 ? (
             <>
               <div className={styles.card}>
-                <SummaryRow label="Deposit (30% of net)" value={ghs(totals.deposit)} />
+                <SummaryRow label={`Deposit (30% of ${depositIncludesInterest ? 'net + interest' : 'net'})`} value={ghs(totals.deposit)} />
                 <SummaryRow label="Balance after deposit" value={ghs(totals.balance)} />
                 <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={ghs(totals.monthlyDue)} strong />
               </div>

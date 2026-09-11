@@ -38,6 +38,13 @@ export interface QuotationTotals {
   balance: number;
   monthlyDue: number;
   schedule: InstallmentScheduleRow[];
+  // Which base the deposit above was actually calculated against -- lets
+  // a PDF/screen read Deposit % against the right number instead of
+  // always assuming net (see technicalQuotationPdf.ts's own comment).
+  // computeLeadQuotationTotals doesn't use this toggle at all (a lead's
+  // deposit is its own stored depositTarget override, not a % choice),
+  // so it's always false there.
+  depositIncludesInterest: boolean;
 }
 
 export function pricingFor(config: Config, plotType: PlotType): { list: number; disc: number; eq: number } {
@@ -49,11 +56,10 @@ export function interestFor(config: Config, plan: PaymentPlanKey): number {
   return table[plan] ?? 0;
 }
 
-// depositIncludesInterest defaults to false (Standard Quotation's own,
-// already-tested behavior -- see QUOTE_DEPOSIT_PCT's own comment above:
-// deposit is 30% of net only). Technical Quotation is the one real caller
-// that ever passes true, per the client's own explicit choice on that
-// screen -- deposit as 30% of the net+interest grand instead.
+// depositIncludesInterest defaults to false (the original, already-tested
+// behavior -- see QUOTE_DEPOSIT_PCT's own comment above: deposit is 30%
+// of net only). Standard and Technical Quotation both now let the client
+// choose true instead -- deposit as 30% of the net+interest grand.
 function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number, depositIncludesInterest = false): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
   const grand = net + interestTotal;
   let deposit = 0;
@@ -75,7 +81,7 @@ function computeInstallmentPlan(net: number, interestTotal: number, planMonths: 
   return { grand, deposit, balance, monthlyDue, schedule };
 }
 
-export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey): QuotationTotals {
+export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey, depositIncludesInterest = false): QuotationTotals {
   const p = pricingFor(config, plotType);
   // noPlots is a full-plot-equivalent count (0.5 = one Half Plot), matching
   // previewGrandTotal/computeLeadQuotationTotals below -- see
@@ -89,8 +95,8 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
   const net = Math.max(listTotal - discountTotal, 0);
   const interestTotal = interestFor(config, plan) * eq;
   const planMonths = PLAN_MONTHS[plan] ?? 0;
-  const ip = computeInstallmentPlan(net, interestTotal, planMonths, QUOTE_DEPOSIT_PCT);
-  return { listTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule };
+  const ip = computeInstallmentPlan(net, interestTotal, planMonths, QUOTE_DEPOSIT_PCT, depositIncludesInterest);
+  return { listTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
 }
 
 // Ported from index.html's computeLead()+computeLeadQuotationTotals()
@@ -134,7 +140,7 @@ export function computeLeadQuotationTotals(config: Config, lead: Lead): Quotatio
       opening = closing;
     }
   }
-  return { listTotal: gross, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule };
+  return { listTotal: gross, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule, depositIncludesInterest: false };
 }
 
 // ---- Technical Quotation: geometry-driven pricing -----------------------
