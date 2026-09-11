@@ -64,7 +64,7 @@ export function useCreateSiteVisit() {
       const ds = getDataSource(demoMode);
       const rec = await ds.siteVisits.create(agentKey, agentName, input);
       if (input.contact) {
-        const whenPart = `${fmtLongDate(rec.visitDate)}${rec.visitTime ? ' at ' + rec.visitTime : ''}`;
+        const whenPart = `${fmtLongDate(rec.visitDate)}${rec.visitTime ? ' (' + rec.visitTime + ')' : ''}`;
         const pickupPart = rec.pickup ? ` We'll pick you up at ${rec.pickup}.` : '';
         ds.sms
           .send(
@@ -78,13 +78,13 @@ export function useCreateSiteVisit() {
       const managers = await ds.staff.list().catch(() => []);
       const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
       if (toManagers.length > 0) {
-        const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' at ' + rec.visitTime : ''}.`;
+        const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' (' + rec.visitTime + ')' : ''}.`;
         ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), body, 'site_visit_logged', 'site_visit', rec.id).catch(() => {});
         const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
         if (config?.companyPhone) phones.add(config.companyPhone);
         for (const phone of phones) ds.sms.send(phone, body, 'site_visit_logged', agentKey).catch(() => {});
       } else if (config?.companyPhone) {
-        const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' at ' + rec.visitTime : ''}.`;
+        const body = `${agentName} logged a site visit for ${rec.name} on ${rec.visitDate}${rec.visitTime ? ' (' + rec.visitTime + ')' : ''}.`;
         ds.sms.send(config.companyPhone, body, 'site_visit_logged', agentKey).catch(() => {});
       }
       return rec;
@@ -98,12 +98,34 @@ export function useCreateSiteVisit() {
 
 // Master Spec 9.4: soft cancel (never a hard delete) -- see the
 // DataSource siteVisits.cancel() comment in data/source.ts.
+//
+// Real gap fixed 2026-09-06: cancelling a visit here (Site Visit
+// Authorization, usually Management acting on someone else's logged
+// visit) never told the staff member who actually logged it -- they'd
+// only find out by noticing the visit missing from their own list, with
+// no idea why or by whom. Same in-app-notify + best-effort-SMS pattern
+// every other cross-staff state change in this app already uses.
 export function useCancelSiteVisit() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).siteVisits.cancel(id, reason, profile?.key ?? '', profile?.name ?? ''),
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const ds = getDataSource(demoMode);
+      const updated = await ds.siteVisits.cancel(id, reason, profile?.key ?? '', profile?.name ?? '');
+      if (updated.agentKey && updated.agentKey !== profile?.key) {
+        const body = `${profile?.name || 'A manager'} cancelled the site visit for ${updated.name} on ${fmtLongDate(updated.visitDate)}. Reason: ${reason}`;
+        ds.notifications.notify(profile?.key ?? '', profile?.name ?? '', [updated.agentKey], body, 'site_visit_cancelled', 'site_visit', updated.id).catch(() => {});
+        ds.staff
+          .list()
+          .then((staff) => {
+            const phone = staff.find((s) => s.key === updated.agentKey)?.phone;
+            if (phone) ds.sms.send(phone, body, 'site_visit_cancelled', profile?.key ?? null).catch(() => {});
+          })
+          .catch(() => {});
+      }
+      return updated;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
       queryClient.invalidateQueries({ queryKey: ['weekSiteVisits'] });

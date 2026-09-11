@@ -1,79 +1,139 @@
 import { jsPDF } from 'jspdf';
-import { ghs } from '../../../shared/lib/format';
-import { pdfBrandedHeader, pdfReportFooter, pdfSectionTitle, pdfSimpleTable, PDF_MUTED } from '../../../shared/lib/pdfReport';
+import { sitePdfHeader, svaGridRow, SITE_INK } from '../../site-visits/lib/sitePdfPrimitives';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
-import { COST_ROWS, accompaniedText, costTotal, fmtLongDate } from './siteVisitAuthLogic';
+import { accompaniedText, COST_ROWS, costTotal, fmtLongDate, weekRangeLabel } from './siteVisitAuthLogic';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 
-// Port of index.html's buildWeeklyVisitAuthPDF() (index.html:15563-15629),
-// re-laid-out with this app's own shared branded-report toolkit instead
-// of v1's bespoke svaGridRow grid primitive -- same real columns
-// (SVA_VISIT_COLS, index.html:15052-15053) and cost rows, same
-// preparer/approver signature blocks, so a manager who prints this still
-// gets a document that matches what the day's actual costs/visits are.
+// Exact port of index.html's buildWeeklyVisitAuthPDF() (index.html:15563-
+// 15629) -- the user supplied v1's own real generated PDF as ground
+// truth. This is a real spreadsheet-style bordered grid table (svaGridRow,
+// one rect() per cell), not the card-based layout an earlier pass here
+// used -- same column widths, same reserved blank rows for handwritten
+// entries, same "-" for a zero cost cell, same preparer/approver
+// signature block below the table.
+const COL_W = [30, 20, 18, 24, 30, 24, 22, 18]; // Client Name, Contact, Accompanied, Purpose, Pick-up, Transport, Feedback, Staff
+const VISIT_COLS: { label: string; key: keyof SiteVisit | 'accompanied' }[] = [
+  { label: 'Client Name', key: 'name' },
+  { label: 'Contact', key: 'contact' },
+  { label: 'Accompanied', key: 'accompanied' },
+  { label: 'Purpose of visit', key: 'purpose' },
+  { label: 'Pick-up Location', key: 'pickup' },
+  { label: 'Transport Medium', key: 'transport' },
+  { label: 'Feedback/Remarks', key: 'feedbackAfter' },
+  { label: 'Staff', key: 'agentName' },
+];
+
+function svaMoney(n: number): string {
+  return n ? n.toFixed(2) : '-';
+}
+
 export function buildSiteVisitAuthPdf(form: WeeklyVisitForm, visits: SiteVisit[], preparerSignature: string | null, logoDataUri: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const rightLines = [`Site manager: ${form.siteManagerName || '—'}`, new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })];
-  let y = pdfBrandedHeader(doc, 'SITE VISIT AUTHORIZATION', `Tsopoli site visit  ·  ${fmtLongDate(form.visitDate)}`, rightLines, logoDataUri);
+  let y = sitePdfHeader(doc, 'SITE VISIT AUTHORIZATION', logoDataUri);
   y += 6;
 
-  y = pdfSectionTitle(doc, y, pageW, `Visits (${visits.length})`);
-  y = pdfSimpleTable(
-    doc,
-    y,
-    pageW,
-    ['CLIENT', 'CONTACT', 'ACCOMPANIED', 'PURPOSE', 'PICK-UP', 'TRANSPORT', 'FEEDBACK', 'STAFF'],
-    visits.length
-      ? visits.map((v) => [v.name || '—', v.contact || '—', accompaniedText(v.people, v.accompanied), v.purpose || '—', v.pickup || '—', v.transport || '—', v.feedbackAfter || '—', v.agentName || '—'])
-      : [['No site visits logged for this day yet.', '', '', '', '', '', '', '']],
-    [0.16, 0.13, 0.11, 0.12, 0.14, 0.12, 0.12, 0.1]
-  );
+  const x0 = 12;
+  const tableW = COL_W.reduce((a, b) => a + b, 0);
+  const tableTop = y;
 
-  y = pdfSectionTitle(doc, y, pageW, 'Cost breakdown', form.status === 'Finalized' ? 'Finalized' : 'Open');
-  y = pdfSimpleTable(
+  y += svaGridRow(doc, x0, y, COL_W, [{ text: 'AUTHORIZATION FORM-TSOPOLI SITE VISIT', span: 8, bold: true, align: 'center', size: 10.5 }], 8.5);
+  y += svaGridRow(doc, x0, y, COL_W, [{ text: 'Site manager in charge' }, { text: form.siteManagerName || '', span: 7 }]);
+  y += svaGridRow(doc, x0, y, COL_W, [
+    { text: 'Date of visit' },
+    { text: fmtLongDate(form.visitDate) || weekRangeLabel(form.weekStart).replace(/–/g, '-'), span: 3 },
+    { text: '' },
+    { text: 'Approved By:' },
+    { text: form.status === 'Finalized' ? form.approvedByName || '' : '', span: 2 },
+  ]);
+  y += svaGridRow(
     doc,
+    x0,
     y,
-    pageW,
-    ['ESTIMATED COST', 'AMOUNT', 'ACTUAL EXPENSES', 'AMOUNT'],
-    COST_ROWS.map((r) => [r.estLabel, ghs(form[r.estKey]), r.actLabel, form.status === 'Finalized' || form[r.actKey] ? ghs(form[r.actKey]) : '—']),
-    [0.28, 0.22, 0.28, 0.22]
+    COL_W,
+    VISIT_COLS.map((c) => ({ text: c.label, bold: true }))
   );
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(20, 20, 20);
-  doc.text(`TOTAL ESTIMATED: ${ghs(costTotal(form, 'Est'))}`, 12, y);
-  doc.text(`TOTAL ACTUAL: ${form.status === 'Finalized' || costTotal(form, 'Act') ? ghs(costTotal(form, 'Act')) : '—'}`, pageW - 12, y, { align: 'right' });
-  y += 14;
+  visits.forEach((v) => {
+    if (y > 272) {
+      doc.addPage();
+      y = 16;
+    }
+    y += svaGridRow(
+      doc,
+      x0,
+      y,
+      COL_W,
+      VISIT_COLS.map((c) => ({ text: c.key === 'accompanied' ? accompaniedText(v.people, v.accompanied) : (v[c.key as keyof SiteVisit] as string) || '' }))
+    );
+  });
+  const blankRows = Math.max(3, 8 - visits.length);
+  for (let i = 0; i < blankRows; i++) {
+    if (y > 272) {
+      doc.addPage();
+      y = 16;
+    }
+    y += svaGridRow(
+      doc,
+      x0,
+      y,
+      COL_W,
+      VISIT_COLS.map(() => ({ text: '' }))
+    );
+  }
 
   if (y > 250) {
     doc.addPage();
     y = 16;
   }
+  y += svaGridRow(doc, x0, y, COL_W, [{ text: '' }, { text: 'ESTIMATED COST', bold: true }, { text: '', span: 3 }, { text: 'ACTUAL EXPENSES', bold: true }, { text: '', span: 2 }]);
+  COST_ROWS.forEach((r) => {
+    if (y > 272) {
+      doc.addPage();
+      y = 16;
+    }
+    y += svaGridRow(doc, x0, y, COL_W, [
+      { text: r.estLabel },
+      { text: svaMoney(Number(form[r.estKey] ?? 0)), align: 'right' },
+      { text: '', span: 3 },
+      { text: r.actLabel },
+      { text: form.status === 'Finalized' || Number(form[r.actKey] ?? 0) ? svaMoney(Number(form[r.actKey] ?? 0)) : '', align: 'right' },
+      { text: '' },
+    ]);
+  });
+  y += svaGridRow(doc, x0, y, COL_W, [
+    { text: 'TOTAL COST GHS', bold: true },
+    { text: svaMoney(costTotal(form, 'Est')), bold: true, align: 'right' },
+    { text: '', span: 3 },
+    { text: 'TOTAL COST GHS', bold: true },
+    { text: form.status === 'Finalized' || costTotal(form, 'Act') ? svaMoney(costTotal(form, 'Act')) : '', bold: true, align: 'right' },
+    { text: '' },
+  ]);
+  doc.setDrawColor(...SITE_INK);
+  doc.setLineWidth(0.7);
+  doc.rect(x0, tableTop, tableW, y - tableTop);
+
+  y += 14;
+  if (y > 264) {
+    doc.addPage();
+    y = 16;
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(20, 20, 20);
-  doc.text('Signed: .....................................', 12, y);
-  doc.text('Date: .....................................', 12, y + 9);
-  if (preparerSignature) pdfStampSignature(doc, 12 + doc.getTextWidth('Signed: '), y, 30, 10, preparerSignature);
-  doc.text(fmtLongDate(new Date().toISOString().slice(0, 10)), 12 + doc.getTextWidth('Date: '), y + 9);
+  doc.setTextColor(...SITE_INK);
+  doc.text('Signed:.....................................', x0, y);
+  doc.text('Date:.....................................', x0, y + 9);
+  if (preparerSignature) pdfStampSignature(doc, x0 + doc.getTextWidth('Signed: '), y, 30, 10, preparerSignature);
+  doc.text(fmtLongDate(new Date().toISOString().slice(0, 10)), x0 + doc.getTextWidth('Date: '), y + 9);
 
-  const rx = pageW - 84;
-  doc.text('Approved by: .....................................', rx, y);
-  doc.text('Signed: .....................................', rx, y + 9);
-  doc.text('Date: .....................................', rx, y + 18);
+  const rx = x0 + tableW - 72;
+  doc.text('Approved By:.....................................', rx, y);
+  doc.text('Signed:.....................................', rx, y + 9);
+  doc.text('Date:.....................................', rx, y + 18);
   if (form.status === 'Finalized') {
-    if (form.approvedByName) doc.text(form.approvedByName, rx + doc.getTextWidth('Approved by: '), y);
+    if (form.approvedByName) doc.text(form.approvedByName, rx + doc.getTextWidth('Approved By: '), y);
     if (form.approvedSignature) pdfStampSignature(doc, rx + doc.getTextWidth('Signed: '), y + 9, 30, 10, form.approvedSignature);
     if (form.finalizedAt) doc.text(fmtLongDate(form.finalizedAt.slice(0, 10)), rx + doc.getTextWidth('Date: '), y + 18);
-  } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8);
-    doc.setTextColor(...PDF_MUTED);
-    doc.text('Awaiting Management approval', rx, y + 26);
   }
 
-  pdfReportFooter(doc, 'Trulander JSF Limited');
   return doc;
 }
 

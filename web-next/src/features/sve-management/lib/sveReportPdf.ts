@@ -1,91 +1,91 @@
 import { jsPDF } from 'jspdf';
-import { pdfBrandedHeader, pdfReportFooter, pdfSectionTitle, pdfSimpleTable, PDF_MUTED } from '../../../shared/lib/pdfReport';
-import type { SiteVisit, SveSubmissionRecord } from '../../../types/domain';
+import { sitePdfFields, sitePdfHeader, sitePdfSectionBar, SITE_MUTED, SITE_NAVY } from '../../site-visits/lib/sitePdfPrimitives';
+import { pdfReportFooter } from '../../../shared/lib/pdfReport';
+import { sanitizePdfText } from '../../../shared/lib/pdfText';
+import { reviewDigest } from './sveReviewDigest';
+import type { SveDayReport } from '../../../types/domain';
 
-// Real user ask: an AI-assisted Site Visit Experience report Management
-// can open from an SMS link. Built on the same shared branded-report
-// toolkit every other internal report PDF in this app uses, so it reads
-// as one document family rather than a one-off layout. The client's own
-// name/contact are shown here (this is an INTERNAL report a staff member
-// reviewed and is choosing to send, not the redacted payload the AI
-// itself was given) -- see useGenerateSveReportDraft's own comment for
-// why the AI call itself never sees them.
-export function buildSveReportPdf(siteVisit: SiteVisit, submission: SveSubmissionRecord, reportText: string, preparedByName: string, logoDataUri: string | null): jsPDF {
+// Full rebuild, real user asks (2026-09-05): (1) "the report isn't
+// supposed to be for a single client after client but a full report
+// after every site visit" -- this now takes one SveDayReport (every
+// client visited that day), not one SiteVisit/SveSubmissionRecord pair;
+// (2) "when u look at the report the system currently generates its
+// lazily done ... look at how the text even looks stretched stupidly not
+// alignment" -- the old version built on the generic navy/gold
+// pdfReport.ts toolkit (a different visual family from the real v1-style
+// site-visit documents); this instead reuses sitePdfPrimitives.ts, the
+// same exact-ported v1 primitives already proven correct for the Site
+// Visit Request/Authorization forms, so all three site-visit documents
+// now read as one consistent, deliberately-designed family instead of a
+// bespoke one-off layout.
+function fmtLongDate(iso: string): string {
+  if (!iso) return '';
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const rightLines = [`Prepared by ${preparedByName}`, new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })];
-  let y = pdfBrandedHeader(doc, 'SITE VISIT EXPERIENCE REPORT', `${siteVisit.name}  ·  ${siteVisit.visitDate}`, rightLines, logoDataUri);
+  let y = sitePdfHeader(doc, 'SITE VISIT EXPERIENCE REPORT', logoDataUri);
   y += 6;
 
-  y = pdfSectionTitle(doc, y, pageW, 'Visit summary');
-  y = pdfSimpleTable(
-    doc,
-    y,
-    pageW,
-    ['FIELD', 'DETAIL'],
-    [
-      ['Client', submission.fullName || siteVisit.name || '—'],
-      ['Site visited', submission.siteVisited || siteVisit.site || '—'],
-      ['Visit date', submission.visitDate || siteVisit.visitDate || '—'],
-      ['Site manager', submission.siteManagerName || '—'],
-      ['Overall rating', submission.overallRating != null ? `${submission.overallRating}/5` : '—'],
-      ['Relationship/handling', submission.relationshipRating != null ? `${submission.relationshipRating}/5` : '—'],
-      ['NPS score', submission.npsScore != null ? `${submission.npsScore}/10` : '—'],
-      ['Purchase intent', submission.purchaseIntent || '—'],
-    ],
-    [0.32, 0.68]
-  );
-
-  y = pdfSectionTitle(doc, y, pageW, 'AI-assisted report', 'reviewed by staff before sending');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...SITE_NAVY);
+  doc.text(sanitizePdfText(`${report.site} - ${fmtLongDate(report.visitDate)}`), 12, y);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(20, 20, 20);
-  const paragraphs = reportText.split(/\n+/).filter(Boolean);
-  for (const para of paragraphs) {
-    const lines = doc.splitTextToSize(para, pageW - 24);
-    if (y + lines.length * 4.6 > 275) {
-      doc.addPage();
-      y = 16;
-    }
-    doc.text(lines, 12, y);
-    y += lines.length * 4.6 + 5;
+  doc.setFontSize(9);
+  doc.setTextColor(...SITE_MUTED);
+  doc.text(sanitizePdfText(`${report.entries.length} client${report.entries.length === 1 ? '' : 's'} visited · prepared by ${report.preparedByName || '-'}`), 12, y + 6);
+  y += 13;
+
+  const daySummary = report.siteSummaryAi || report.siteSummary;
+  if (daySummary) {
+    y = sitePdfSectionBar(doc, y, pageW, "SITE MANAGER'S SUMMARY OF THE DAY");
+    y = sitePdfFields(doc, y, [[report.preparedByName ? `As reported by ${report.preparedByName}` : 'Site manager summary', daySummary]]);
+    y += 3;
   }
 
-  if (submission.handlingFeedback || submission.improvementSuggestions || submission.additionalComments) {
-    if (y > 250) {
+  y = sitePdfSectionBar(doc, y, pageW, `CLIENT-BY-CLIENT FEEDBACK (${report.entries.length})`);
+  if (report.entries.length === 0) {
+    y = sitePdfFields(doc, y, [['Clients', 'No site visits were logged for this day.']]);
+  }
+  report.entries.forEach((entry, i) => {
+    if (y > 245) {
       doc.addPage();
       y = 16;
     }
-    y = pdfSectionTitle(doc, y, pageW, "Client's own words");
-    const quotes: [string, string | null][] = [
-      ['On the handling', submission.handlingFeedback],
-      ['Improvement ideas', submission.improvementSuggestions],
-      ['Additional comments', submission.additionalComments],
-    ];
-    for (const [label, value] of quotes) {
-      if (!value) continue;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(...PDF_MUTED);
-      doc.text(label.toUpperCase(), 12, y);
-      y += 4.5;
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9.5);
-      doc.setTextColor(20, 20, 20);
-      const lines = doc.splitTextToSize(`"${value}"`, pageW - 24);
-      if (y + lines.length * 4.6 > 275) {
-        doc.addPage();
-        y = 16;
-      }
-      doc.text(lines, 12, y);
-      y += lines.length * 4.6 + 6;
+    if (i > 0) {
+      doc.setDrawColor(226, 231, 237);
+      doc.setLineWidth(0.3);
+      doc.line(12, y - 3, pageW - 12, y - 3);
     }
-  }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(...SITE_NAVY);
+    doc.text(sanitizePdfText(entry.clientName || 'Client'), 12, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...SITE_MUTED);
+    doc.text(sanitizePdfText(entry.clientContact || ''), pageW - 12, y, { align: 'right' });
+    y += 6;
+
+    const fields: [string, string | null][] = [
+      ['Client feedback', entry.aiFeedbackSummary || (entry.submissionId ? 'Feedback submitted but not yet analyzed.' : 'No feedback survey submitted for this client.')],
+      ["Site manager's debrief", entry.managerNotesAi || reviewDigest(entry.managerReview) || null],
+    ];
+    y = sitePdfFields(
+      doc,
+      y,
+      fields.filter(([, v]) => v)
+    );
+    y += 2;
+  });
 
   pdfReportFooter(doc, 'Trulander JSF Limited');
   return doc;
 }
 
-export function sveReportFilename(clientName: string): string {
-  return `SVE_Report_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
+export function sveDayReportFilename(visitDate: string): string {
+  return `SVE_Report_${visitDate}.pdf`;
 }

@@ -54,6 +54,7 @@
 .save:disabled { opacity: .6; cursor: default; }
 
 .dayChipRow { display: flex; gap: 6px; flex-wrap: wrap; }
+
 .dayChip {
   flex: 1 1 auto;
   min-width: 44px;
@@ -89,6 +90,7 @@
   padding: 28px 20px;
   text-align: center;
 }
+
 .confirmCheck {
   width: 52px;
   height: 52px;
@@ -118,3 +120,27 @@
 .pdfBtn:disabled { opacity: .6; cursor: default; }
 
 .newClientNote { color: var(--c-muted); font-size: 12px; margin: -8px 0 14px; line-height: 1.4; }
+
+/* Same fix already shipped for AddLeadScreen (Premium UI spec 6.D): the
+   page was hard-capped at 480px even on a wide desktop viewport, reading
+   as a mistake -- "empty spaces on the sides of the log a site visit
+   page." Below 1024px this stays a plain single-column stack, unchanged. */
+.grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+.mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 1200px; padding: 28px 32px 100px; }
+  .grid { grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+
+  .actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--c-paper);
+    padding: 14px 0 4px;
+    margin-top: 6px;
+    border-top: 1px solid var(--c-line);
+    justify-content: flex-end;
+  }
+
+  .cancel, .save { flex: 0 0 auto; min-width: 160px; }
+}

@@ -5,11 +5,12 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import { useCreateSiteVisit, useSiteVisits, findDuplicateVisit } from '../hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
+import { DayLockedCalendar } from '../components/DayLockedCalendar';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
-import { DAY_DEFAULT_TIME, fmtLongDate, upcomingDatesForDay } from '../../site-visit-auth/lib/siteVisitAuthLogic';
+import { DAY_DEFAULT_TIME, dayTimeLabel, fmtLongDate, upcomingDatesForDay } from '../../site-visit-auth/lib/siteVisitAuthLogic';
 import type { SiteVisit } from '../../../types/domain';
 import styles from './AddSiteVisitScreen.module.css';
 
@@ -83,6 +84,7 @@ export function AddSiteVisitScreen() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const [duplicateOverride, setDuplicateOverride] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -97,7 +99,7 @@ export function AddSiteVisitScreen() {
     defaultValues: {
       site: 'Royal Palm Enclave, Tsopoli',
       visitDate: upcomingDatesForDay(today.getDay(), 1)[0],
-      visitTime: DAY_DEFAULT_TIME[today.getDay()],
+      visitTime: dayTimeLabel(today.getDay()),
       transport: TRANSPORT_OPTIONS[0],
       purpose: PURPOSE_OPTIONS[0],
       people: '0',
@@ -119,14 +121,14 @@ export function AddSiteVisitScreen() {
   function pickDay(dow: number) {
     const [nextDate] = upcomingDatesForDay(dow, 1);
     setValue('visitDate', nextDate);
-    setValue('visitTime', DAY_DEFAULT_TIME[dow]);
+    setValue('visitTime', dayTimeLabel(dow));
     setDuplicateOverride(false);
   }
 
   function onDateChange(iso: string) {
     if (!iso) return;
     setValue('visitDate', iso);
-    setValue('visitTime', DAY_DEFAULT_TIME[new Date(`${iso}T00:00:00`).getDay()]);
+    setValue('visitTime', dayTimeLabel(new Date(`${iso}T00:00:00`).getDay()));
     setDuplicateOverride(false);
   }
 
@@ -200,156 +202,159 @@ export function AddSiteVisitScreen() {
       <h1 className={styles.title}>Log a site visit</h1>
       <p className={styles.sub}>Saved against your own visits.</p>
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className={styles.section} style={{ marginTop: 0 }}>
-          1.0 Client personal information
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Full name *</label>
-          <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
-          {errors.name && <div className={styles.err}>{errors.name.message}</div>}
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Contact *</label>
-          <input className={styles.input} placeholder="e.g. 0244 000 000" {...register('contact')} />
-          {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
-        </div>
-        {!isKnownClient && (
-          <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
-        )}
-        <div className={styles.field}>
-          <label className={styles.label}>Pick-up location</label>
-          <input className={styles.input} placeholder="e.g. Tsopoli junction" {...register('pickup')} />
-        </div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Place of work</label>
-            <input className={styles.input} placeholder="e.g. Ministry of Health" {...register('placeOfWork')} />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Position</label>
-            <input className={styles.input} placeholder="e.g. Nurse" {...register('position')} />
-          </div>
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Nationality</label>
-          <input className={styles.input} placeholder="e.g. Ghanaian" {...register('nationality')} />
-        </div>
+        <div className={styles.grid}>
+          <div className={styles.mainCol}>
+            <div className={styles.section} style={{ marginTop: 0 }}>
+              1.0 Client personal information
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Full name *</label>
+              <input className={styles.input} placeholder="e.g. Kwame Mensah" {...register('name')} />
+              {errors.name && <div className={styles.err}>{errors.name.message}</div>}
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Contact *</label>
+              <input className={styles.input} placeholder="e.g. 0244 000 000" {...register('contact')} />
+              {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
+            </div>
+            {!isKnownClient && (
+              <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
+            )}
+            <div className={styles.field}>
+              <label className={styles.label}>Pick-up location</label>
+              <input className={styles.input} placeholder="e.g. Tsopoli junction" {...register('pickup')} />
+            </div>
+            <div className={styles.grid2}>
+              <div className={styles.field}>
+                <label className={styles.label}>Place of work</label>
+                <input className={styles.input} placeholder="e.g. Ministry of Health" {...register('placeOfWork')} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Position</label>
+                <input className={styles.input} placeholder="e.g. Nurse" {...register('position')} />
+              </div>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Nationality</label>
+              <input className={styles.input} placeholder="e.g. Ghanaian" {...register('nationality')} />
+            </div>
 
-        <div className={styles.section}>2.0 Interested in buying</div>
-        <div className={styles.field}>
-          <select className={styles.select} value={interestPreset} onChange={(e) => setInterestPreset(e.target.value)}>
-            {PLOT_PRESETS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-            <option value={PLOT_MORE}>{PLOT_MORE}</option>
-          </select>
-        </div>
-        {interestPreset === PLOT_MORE && (
-          <div className={styles.field}>
-            <label className={styles.label}>Preferred number of plots</label>
-            <input className={styles.input} type="number" min={0.5} step={0.5} placeholder="e.g. 5" value={interestCustom} onChange={(e) => setInterestCustom(e.target.value)} />
-          </div>
-        )}
+            <div className={styles.section}>2.0 Interested in buying</div>
+            <div className={styles.field}>
+              <select className={styles.select} value={interestPreset} onChange={(e) => setInterestPreset(e.target.value)}>
+                {PLOT_PRESETS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+                <option value={PLOT_MORE}>{PLOT_MORE}</option>
+              </select>
+            </div>
+            {interestPreset === PLOT_MORE && (
+              <div className={styles.field}>
+                <label className={styles.label}>Preferred number of plots</label>
+                <input className={styles.input} type="number" min={0.5} step={0.5} placeholder="e.g. 5" value={interestCustom} onChange={(e) => setInterestCustom(e.target.value)} />
+              </div>
+            )}
 
-        <div className={styles.section}>3.0 Visit preferences</div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Mode of transportation</label>
-            <select className={styles.select} {...register('transport')}>
-              {TRANSPORT_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Purpose of visit</label>
-            <select className={styles.select} {...register('purpose')}>
-              {PURPOSE_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Site</label>
-          <input className={styles.input} {...register('site')} />
-          {errors.site && <div className={styles.err}>{errors.site.message}</div>}
-        </div>
+            <div className={styles.section}>3.0 Visit preferences</div>
+            <div className={styles.grid2}>
+              <div className={styles.field}>
+                <label className={styles.label}>Mode of transportation</label>
+                <select className={styles.select} {...register('transport')}>
+                  {TRANSPORT_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Purpose of visit</label>
+                <select className={styles.select} {...register('purpose')}>
+                  {PURPOSE_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Site</label>
+              <input className={styles.input} {...register('site')} />
+              {errors.site && <div className={styles.err}>{errors.site.message}</div>}
+            </div>
 
-        <div className={styles.field}>
-          <label className={styles.label}>Site visit day — Monday to Saturday 9:00am, Sunday 12:00pm</label>
-          <div className={styles.dayChipRow}>
-            {DAY_CHIPS.map((d) => (
-              <button key={d.dow} type="button" className={`${styles.dayChip} ${selectedDow === d.dow ? styles.dayChipOn : ''}`} onClick={() => pickDay(d.dow)}>
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Exact date *</label>
-            <input className={styles.input} type="date" min={upcomingDatesForDay(today.getDay(), 1)[0]} value={watchedDate} onChange={(e) => onDateChange(e.target.value)} />
-            {errors.visitDate && <div className={styles.err}>{errors.visitDate.message}</div>}
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Time (fixed by day)</label>
-            <input className={styles.input} value={DAY_DEFAULT_TIME[selectedDow]} disabled readOnly />
-          </div>
-        </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Site visit day — Monday to Saturday 9:00am, Sunday 12:00pm</label>
+              <div className={styles.dayChipRow}>
+                {DAY_CHIPS.map((d) => (
+                  <button key={d.dow} type="button" className={`${styles.dayChip} ${selectedDow === d.dow ? styles.dayChipOn : ''}`} onClick={() => pickDay(d.dow)}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={styles.grid2}>
+              <div className={styles.field}>
+                <label className={styles.label}>Exact date *</label>
+                <DayLockedCalendar value={watchedDate} allowedDow={selectedDow} minIso={todayIso} onChange={onDateChange} />
+                {errors.visitDate && <div className={styles.err}>{errors.visitDate.message}</div>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Time (fixed by day)</label>
+                <input className={styles.input} value={DAY_DEFAULT_TIME[selectedDow]} disabled readOnly />
+              </div>
+            </div>
 
-        {duplicate && (
-          <div className={styles.dupWarning}>
-            <p>
-              {watchedName} already has a visit logged for {fmtLongDate(watchedDate)}. Prevent duplicate bookings unless Management explicitly allows it.
-            </p>
-            {isManager ? (
-              <label className={styles.dupOverrideRow}>
-                <input type="checkbox" checked={duplicateOverride} onChange={(e) => setDuplicateOverride(e.target.checked)} />
-                Book anyway
-              </label>
-            ) : (
-              <p className={styles.dupNote}>Ask a manager if this visit genuinely needs to be booked again.</p>
+            {duplicate && (
+              <div className={styles.dupWarning}>
+                <p>
+                  {watchedName} already has a visit logged for {fmtLongDate(watchedDate)}. Prevent duplicate bookings unless Management explicitly allows it.
+                </p>
+                {isManager ? (
+                  <label className={styles.dupOverrideRow}>
+                    <input type="checkbox" checked={duplicateOverride} onChange={(e) => setDuplicateOverride(e.target.checked)} />
+                    Book anyway
+                  </label>
+                ) : (
+                  <p className={styles.dupNote}>Ask a manager if this visit genuinely needs to be booked again.</p>
+                )}
+              </div>
             )}
           </div>
-        )}
 
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>No. of client accompaniment</label>
-            <input className={styles.input} type="number" min={0} placeholder="0" {...register('people')} />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Who is accompanying?</label>
-            <input className={styles.input} placeholder="e.g. Spouse, Relative — leave blank if none" {...register('accompanied')} />
-          </div>
-        </div>
+          <div className={styles.sideCol}>
+            <div className={styles.section} style={{ marginTop: 0 }}>
+              Accompaniment
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>No. of client accompaniment</label>
+              <input className={styles.input} type="number" min={0} placeholder="0" {...register('people')} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Who is accompanying?</label>
+              <input className={styles.input} placeholder="e.g. Spouse, Relative — leave blank if none" {...register('accompanied')} />
+            </div>
 
-        <div className={styles.section}>Notes (optional — can fill now or after the visit)</div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Discussion so far</label>
-            <textarea className={styles.textarea} placeholder="What's been discussed with the client so far" {...register('discussionSoFar')} />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Key understanding about client</label>
-            <textarea className={styles.textarea} placeholder="What matters most to them, budget, timeline" {...register('keyUnderstanding')} />
-          </div>
-        </div>
-        <div className={styles.grid2}>
-          <div className={styles.field}>
-            <label className={styles.label}>Feedback after site visit</label>
-            <textarea className={styles.textarea} placeholder="How the visit actually went" {...register('feedbackAfter')} />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Key next steps</label>
-            <textarea className={styles.textarea} placeholder="What happens next with this client" {...register('keyNextSteps')} />
+            <div className={styles.section}>Notes (optional — can fill now or after the visit)</div>
+            <div className={styles.field}>
+              <label className={styles.label}>Discussion so far</label>
+              <textarea className={styles.textarea} placeholder="What's been discussed with the client so far" {...register('discussionSoFar')} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Key understanding about client</label>
+              <textarea className={styles.textarea} placeholder="What matters most to them, budget, timeline" {...register('keyUnderstanding')} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Feedback after site visit</label>
+              <textarea className={styles.textarea} placeholder="How the visit actually went" {...register('feedbackAfter')} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Key next steps</label>
+              <textarea className={styles.textarea} placeholder="What happens next with this client" {...register('keyNextSteps')} />
+            </div>
           </div>
         </div>
 

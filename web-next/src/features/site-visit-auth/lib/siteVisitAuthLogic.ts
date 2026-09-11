@@ -65,6 +65,20 @@ export function allowedDayIsos(weekStartIso: string): string[] {
 // JS Date.getDay() keys, 0=Sunday.
 export const DAY_DEFAULT_TIME: Record<number, string> = { 0: '12:00pm', 1: '9:00am', 2: '9:00am', 3: '9:00am', 4: '9:00am', 5: '9:00am', 6: '9:00am' };
 
+// Real bug fixed 2026-09-06: AddSiteVisitScreen used to store `visitTime`
+// as JUST the clock time (e.g. "12:00pm"), while siteVisitFormPdf.ts's
+// checkbox-matching DAY_OPTIONS list needed the combined "Sunday 12:00pm"
+// string -- a real submission (not stale seed data) came through with a
+// bare time that could never match any checkbox option, so NONE of them
+// ticked regardless of which day was actually picked. This is the single
+// source of truth for that combined label going forward, used by both
+// the form that writes `visitTime` and the PDF that matches against it,
+// so the two can never drift out of sync with each other again.
+export const DAY_NAME: Record<number, string> = { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' };
+export function dayTimeLabel(dow: number): string {
+  return `${DAY_NAME[dow]} ${DAY_DEFAULT_TIME[dow]}`;
+}
+
 // Ported behavior from Master Spec 9.2: "When staff chooses [a day], the
 // calendar must open with only [that day] enabled. The user can select
 // this [day] or a future [day]." Returns the next `count` real calendar

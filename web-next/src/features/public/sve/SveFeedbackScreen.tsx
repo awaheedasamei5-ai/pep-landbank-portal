@@ -9,12 +9,12 @@ import styles from './SveFeedbackScreen.module.css';
 
 const JOURNEY_OPTIONS = ['Excellent', 'Good', 'Average', 'Poor'];
 const SITE_DESC_OPTIONS = ['Exceeded expectations', 'Met expectations', 'Below expectations'];
-const PURCHASE_INTENT_OPTIONS = [
-  { value: 'ready', label: "I'm ready to move forward" },
-  { value: 'need more time', label: 'I need more time to decide' },
-  { value: 'not at this time', label: 'Not at this time' },
-  { value: 'undecided', label: 'Still undecided' },
-];
+// Real v1 values verbatim (index.html:25652, formClientSiteVisit's own
+// radioGroup) -- these read straight into the AI-report/PDF pipeline
+// downstream, so they need to already be properly-cased prose, not
+// internal slugs like 'ready'/'need more time' this screen used before.
+const PURCHASE_INTENT_OPTIONS = ['Ready to purchase', 'Need more time to decide', 'Not at this time', 'Undecided'];
+const SITE_OPTIONS = ['Royal Palm Enclave, Tsopoli', 'Other'];
 
 type Screen = 'loading' | 'not_found' | 'already_submitted' | 'form' | 'thanks' | 'unavailable';
 
@@ -43,6 +43,10 @@ export function SveFeedbackScreen() {
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [siteVisited, setSiteVisited] = useState('');
+  const [siteVisitedOther, setSiteVisitedOther] = useState('');
+  const [visitDate, setVisitDate] = useState('');
+  const [loadedInviteToken, setLoadedInviteToken] = useState<string | null>(null);
   const [journeyRating, setJourneyRating] = useState('');
   const [siteManagerName, setSiteManagerName] = useState('');
   const [relationshipRating, setRelationshipRating] = useState(0);
@@ -55,6 +59,18 @@ export function SveFeedbackScreen() {
   const [purchaseIntent, setPurchaseIntent] = useState('');
   const [additionalComments, setAdditionalComments] = useState('');
   const [validationErr, setValidationErr] = useState<string | null>(null);
+
+  // Real v1 behavior (index.html:25636-25642): the client can confirm or
+  // correct which site/date they actually visited rather than this form
+  // just trusting whatever staff originally logged -- seeded from the
+  // invite once it loads (derived during render, not an effect, same
+  // "adjusting state when a prop changes" pattern used elsewhere).
+  if (invite && loadedInviteToken !== token) {
+    setLoadedInviteToken(token ?? null);
+    setSiteVisited(invite.site && SITE_OPTIONS.includes(invite.site) ? invite.site : invite.site ? 'Other' : SITE_OPTIONS[0]);
+    setSiteVisitedOther(invite.site && !SITE_OPTIONS.includes(invite.site) ? invite.site : '');
+    setVisitDate(invite.visitDate ?? '');
+  }
 
   const screen: Screen = !token
     ? 'not_found'
@@ -70,10 +86,28 @@ export function SveFeedbackScreen() {
               ? 'already_submitted'
               : 'form';
 
+  // Real v1 required set (index.html:25682) -- name, phone, visit date,
+  // journey rating, overall rating, NPS score, improvement suggestions and
+  // purchase intent are all mandatory there; this screen previously only
+  // ever checked name/phone, letting a submission through with none of
+  // the ratings Management's report actually depends on.
+  function firstMissingField(): string | null {
+    if (!fullName.trim()) return 'your name';
+    if (!phone.trim()) return 'your phone number';
+    if (!visitDate.trim()) return 'the date of your visit';
+    if (!journeyRating) return 'how your journey went';
+    if (!overallRating) return 'your overall rating';
+    if (npsScore == null) return 'your recommendation score';
+    if (!improvementSuggestions.trim()) return 'what we could improve';
+    if (!purchaseIntent) return 'your purchase readiness';
+    return null;
+  }
+
   async function handleSubmit() {
     if (!token) return;
-    if (!fullName.trim() || !phone.trim()) {
-      setValidationErr('Please enter your name and phone number.');
+    const missing = firstMissingField();
+    if (missing) {
+      setValidationErr(`Please fill in: ${missing}.`);
       return;
     }
     setValidationErr(null);
@@ -83,8 +117,8 @@ export function SveFeedbackScreen() {
       const result = await submitSiteVisitExperience(token, {
         fullName: fullName.trim(),
         phone: phone.trim(),
-        siteVisited: invite?.site ?? undefined,
-        visitDate: invite?.visitDate ?? undefined,
+        siteVisited: (siteVisited === 'Other' ? siteVisitedOther.trim() : siteVisited) || undefined,
+        visitDate: visitDate || undefined,
         journeyRating: journeyRating || undefined,
         siteManagerName: siteManagerName || undefined,
         relationshipRating: relationshipRating || undefined,
@@ -159,20 +193,12 @@ export function SveFeedbackScreen() {
 
         {screen === 'form' && (
           <>
-            {invite && (invite.site || invite.visitDate) && (
+            {invite?.plot && (
               <div className={styles.card}>
                 <div className={styles.visitMeta}>
-                  {invite.site && (
-                    <div className={styles.visitMetaLine}>
-                      Visited <strong>{invite.site}</strong>
-                      {invite.plot ? ` (${invite.plot})` : ''}
-                    </div>
-                  )}
-                  {invite.visitDate && (
-                    <div className={styles.visitMetaLine}>
-                      On <strong>{invite.visitDate}</strong>
-                    </div>
-                  )}
+                  <div className={styles.visitMetaLine}>
+                    Plot of interest <strong>{invite.plot}</strong>
+                  </div>
                 </div>
               </div>
             )}
@@ -187,12 +213,29 @@ export function SveFeedbackScreen() {
                 <label className={styles.label}>Phone number *</label>
                 <input className={styles.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0244…" />
               </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Which site did you visit?</label>
+                <div className={styles.pillGroup}>
+                  {SITE_OPTIONS.map((opt) => (
+                    <button key={opt} type="button" className={`${styles.pillOption} ${siteVisited === opt ? styles.pillOptionActive : ''}`} onClick={() => setSiteVisited(opt)}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                {siteVisited === 'Other' && (
+                  <input className={styles.input} style={{ marginTop: 8 }} value={siteVisitedOther} onChange={(e) => setSiteVisitedOther(e.target.value)} placeholder="Which site?" />
+                )}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Date of visit *</label>
+                <input className={styles.input} type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+              </div>
             </div>
 
             <div className={styles.card}>
               <div className={styles.sectionTitle}>Your journey</div>
               <div className={styles.field}>
-                <label className={styles.label}>How was your overall journey to the site?</label>
+                <label className={styles.label}>How was your overall journey to the site? *</label>
                 <div className={styles.pillGroup}>
                   {JOURNEY_OPTIONS.map((opt) => (
                     <button key={opt} type="button" className={`${styles.pillOption} ${journeyRating === opt ? styles.pillOptionActive : ''}`} onClick={() => setJourneyRating(opt)}>
@@ -243,11 +286,11 @@ export function SveFeedbackScreen() {
             <div className={styles.card}>
               <div className={styles.sectionTitle}>Overall</div>
               <div className={styles.field}>
-                <label className={styles.label}>Overall, how was your experience?</label>
+                <label className={styles.label}>Overall, how was your experience? *</label>
                 <StarRating value={overallRating} onChange={setOverallRating} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>How likely are you to recommend Palmstead to a friend?</label>
+                <label className={styles.label}>How likely are you to recommend Palmstead to a friend? *</label>
                 <NpsScale value={npsScore} onChange={setNpsScore} />
                 <div className={styles.npsLabels}>
                   <span>Not likely</span>
@@ -255,22 +298,17 @@ export function SveFeedbackScreen() {
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Where are you at right now?</label>
+                <label className={styles.label}>Where are you at right now? *</label>
                 <div className={styles.pillGroup}>
                   {PURCHASE_INTENT_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={`${styles.pillOption} ${purchaseIntent === opt.value ? styles.pillOptionActive : ''}`}
-                      onClick={() => setPurchaseIntent(opt.value)}
-                    >
-                      {opt.label}
+                    <button key={opt} type="button" className={`${styles.pillOption} ${purchaseIntent === opt ? styles.pillOptionActive : ''}`} onClick={() => setPurchaseIntent(opt)}>
+                      {opt}
                     </button>
                   ))}
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>What could we improve?</label>
+                <label className={styles.label}>What could we improve? *</label>
                 <textarea className={styles.textarea} value={improvementSuggestions} onChange={(e) => setImprovementSuggestions(e.target.value)} />
               </div>
               <div className={styles.field}>
