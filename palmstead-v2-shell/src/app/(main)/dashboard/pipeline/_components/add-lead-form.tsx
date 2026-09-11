@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,12 +41,17 @@ const labelClass = "text-xs font-medium text-muted-foreground";
 
 export function AddLeadForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const profile = useAuthStore((s) => s.profile);
   const { data: config } = useAppConfig();
   const createLead = useCreateLead();
 
-  const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
+  // Client Database's own "+ New deal for this client" row action lands
+  // here with the client's name/contact pre-filled via query params --
+  // same real intent as web-next's router-state prefill (Master Rebuild
+  // Spec 17.2's "new deal" affordance on Customer 360).
+  const [name, setName] = useState(searchParams.get("name") ?? "");
+  const [contact, setContact] = useState(searchParams.get("contact") ?? "");
   const [date, setDate] = useState(today());
   const [address, setAddress] = useState("");
   const [plotType, setPlotType] = useState<PlotType>("Full Plot");

@@ -2,22 +2,24 @@
 
 import { useMemo, useState } from "react";
 
+import { useRouter } from "next/navigation";
+
 import { Search, Users, Wallet } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { clientKey, groupLeadsByClient } from "@/lib/palmstead/client-logic";
 import { ghs } from "@/lib/palmstead/format";
 import { usePipelineLeads } from "@/lib/palmstead/use-pipeline-leads";
 
-// Client Database, phase 1 -- real client-side grouping of the same real
-// leads Master Pipeline already fetches (no separate `clients` table in
-// the schema, direct port of web-next's groupClients.ts logic). Search
-// matches name, digit-normalized phone (so different formatting of the
-// same number still matches), or an exact lead ID. Honestly not yet
-// ported: the Customer 360 detail drawer and per-row "new deal" action
-// from the real web-next screen -- a real, deliberately scoped first
-// cut, same discipline as Master Pipeline's own phase 1.
+// Real client-side grouping of the same real leads Master Pipeline
+// already fetches (no separate `clients` table in the schema, direct
+// port of web-next's groupClients.ts logic). Search matches name,
+// digit-normalized phone (so different formatting of the same number
+// still matches), or an exact lead ID. Clicking a row opens the real
+// Customer 360 detail (_components/client-detail.tsx); "+ New deal"
+// lands on Add Lead prefilled with this client's name/contact.
 function initials(name: string): string {
   return name
     .trim()
@@ -32,6 +34,7 @@ function normDigits(s: string): string {
 }
 
 export function ClientList() {
+  const router = useRouter();
   const { data: leads, isLoading } = usePipelineLeads();
   const [query, setQuery] = useState("");
 
@@ -109,26 +112,31 @@ export function ClientList() {
                 <TableHead className="pl-6">Client</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead className="text-right">Deals</TableHead>
-                <TableHead className="pr-6 text-right">Total value</TableHead>
+                <TableHead className="text-right">Total value</TableHead>
+                <TableHead className="pr-6" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               )}
               {!isLoading && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     {clients.length === 0 ? "No clients yet." : `No clients match "${query}".`}
                   </TableCell>
                 </TableRow>
               )}
               {filtered.map((c) => (
-                <TableRow key={clientKey(c.name, c.contact)}>
+                <TableRow
+                  key={clientKey(c.name, c.contact)}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/dashboard/clients/${encodeURIComponent(clientKey(c.name, c.contact))}`)}
+                >
                   <TableCell className="pl-6 font-medium">
                     <div className="flex items-center gap-3">
                       <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 font-semibold text-primary text-xs">
@@ -139,7 +147,22 @@ export function ClientList() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.contact}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.leadCount}</TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">{ghs(c.totalValue)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{ghs(c.totalValue)}</TableCell>
+                  <TableCell className="pr-6 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(
+                          `/dashboard/pipeline/new?name=${encodeURIComponent(c.name)}&contact=${encodeURIComponent(c.contact)}`,
+                        );
+                      }}
+                    >
+                      + New deal
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
