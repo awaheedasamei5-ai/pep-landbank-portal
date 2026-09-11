@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
 
@@ -75,4 +75,106 @@ async function fetchPlots(): Promise<PlotRow[]> {
 
 export function usePlots() {
   return useQuery({ queryKey: ["plots"], queryFn: fetchPlots });
+}
+
+export interface NewPlot {
+  site: string;
+  plotNumber: string;
+  plotType: PlotType;
+  status: PlotStatus;
+  price?: number | null;
+  section?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
+}
+
+export interface PlotPatch {
+  status?: PlotStatus;
+  plotType?: PlotType;
+  price?: number | null;
+  clientName?: string | null;
+  clientContact?: string | null;
+  agentKey?: string | null;
+  notes?: string | null;
+  section?: string | null;
+  widthFt?: number | null;
+  lengthFt?: number | null;
+}
+
+function buildPlotDbPatch(patch: PlotPatch): Record<string, unknown> {
+  const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ("status" in patch) dbPatch.status = patch.status;
+  if ("plotType" in patch) dbPatch.plot_type = patch.plotType;
+  if ("price" in patch) dbPatch.price = patch.price;
+  if ("clientName" in patch) dbPatch.client_name = patch.clientName;
+  if ("clientContact" in patch) dbPatch.client_contact = patch.clientContact;
+  if ("agentKey" in patch) dbPatch.agent_key = patch.agentKey;
+  if ("notes" in patch) dbPatch.notes = patch.notes;
+  if ("section" in patch) dbPatch.section = patch.section;
+  if ("widthFt" in patch) dbPatch.width_ft = patch.widthFt;
+  if ("lengthFt" in patch) dbPatch.length_ft = patch.lengthFt;
+  return dbPatch;
+}
+
+// Real write capability (plots_ins/plots_upd/plots_del RLS, manager/
+// elias/emmanuel only -- same gate usePlots() itself already enforces at
+// the query level) plus the real split_plot_for_half_sale RPC. Direct
+// port of web-next's usePlots.ts mutations.
+export function useCreatePlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: NewPlot) => {
+      const { error } = await requireSupabase()
+        .from("plots")
+        .insert({
+          site: input.site,
+          plot_number: input.plotNumber,
+          plot_type: input.plotType,
+          status: input.status,
+          price: input.price ?? null,
+          section: input.section ?? null,
+          width_ft: input.widthFt ?? null,
+          length_ft: input.lengthFt ?? null,
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["plots"] }),
+  });
+}
+
+export function useUpdatePlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: PlotPatch }) => {
+      const { error } = await requireSupabase().from("plots").update(buildPlotDbPatch(patch)).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["plots"] }),
+  });
+}
+
+// Real hard DELETE (matches web-next/production exactly -- plots has no
+// soft-delete column) -- irreversible, gated by the same "type to
+// confirm" style danger-zone UI as everywhere else destructive in this
+// shell.
+export function useDeletePlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await requireSupabase().from("plots").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["plots"] }),
+  });
+}
+
+export function useSplitPlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (plotId: string) => {
+      const { error } = await requireSupabase().rpc("split_plot_for_half_sale", { p_plot_id: plotId });
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["plots"] }),
+  });
 }

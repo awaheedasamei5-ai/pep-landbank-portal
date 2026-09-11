@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { ghs } from "@/lib/palmstead/format";
 import {
   type BoardUnit,
@@ -38,6 +40,7 @@ const TILE_CLASS: Record<string, string> = {
 };
 
 function PlotTile({ p, inSplit = false }: { p: PlotRow; inSplit?: boolean }) {
+  const router = useRouter();
   const fraction = tileFractionLabel(p);
   const visual = tileVisualStatus(p, inSplit);
   const isDark =
@@ -46,6 +49,7 @@ function PlotTile({ p, inSplit = false }: { p: PlotRow; inSplit?: boolean }) {
     <button
       type="button"
       title={`${p.plotNumber} · ${p.plotType} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ""}`}
+      onClick={() => router.push(`/dashboard/plots/${p.id}`)}
       className={`relative flex w-[76px] min-h-[58px] flex-col items-center justify-center gap-0.5 rounded-lg border-[1.5px] p-1 transition-colors ${TILE_CLASS[visual] ?? TILE_CLASS.Subdivided}`}
     >
       {fraction && (

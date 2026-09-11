@@ -2,23 +2,28 @@
 
 import { useMemo, useState } from "react";
 
-import { Map as MapIcon, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { Map as MapIcon, Plus, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { ghs } from "@/lib/palmstead/format";
 import { boardUnits } from "@/lib/palmstead/plot-board-logic";
 import { type PlotRow, type PlotStatus, usePlots } from "@/lib/palmstead/use-plots";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { AddPlotForm } from "./add-plot-form";
 import { PlotBoard } from "./plot-board";
 
 // Plot Inventory -- real plot data, real status summary, the real
 // status-colored tile board (ported into ./plot-board.tsx from
 // web-next's PlotInventoryScreen, per the user's explicit direction to
 // use that version rather than a simplified table). Real manager/elias/
-// emmanuel write-access gate (plots_ins/plots_upd/plots_del RLS).
-// Honestly not yet ported: the Add plot form and the plot detail drawer.
+// emmanuel write-access gate (plots_ins/plots_upd/plots_del RLS). Real
+// "+ Add plot" toggle form and click-a-tile-to-open-the-real-detail-page
+// (routes to _components/plot-detail.tsx).
 const STATUS_BADGE: Record<PlotStatus, string> = {
   Available: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
   "Running Search": "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
@@ -56,12 +61,14 @@ const STATUSES: PlotStatus[] = [
 ];
 
 export function PlotInventory() {
+  const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const hasAccess = !!profile && (profile.role === "manager" || profile.key === "elias" || profile.key === "emmanuel");
   const { data: plots, isLoading } = usePlots();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<PlotStatus | "">("");
   const [section, setSection] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const sections = useMemo(
     () => Array.from(new Set((plots ?? []).map((p) => p.section).filter((s): s is string => !!s))).sort(),
@@ -119,12 +126,21 @@ export function PlotInventory() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Plot Inventory</h1>
-        <p className="text-muted-foreground text-sm">
-          {isLoading ? "Loading…" : `${plots?.length ?? 0} plots on record`}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-semibold text-2xl tracking-tight">Plot Inventory</h1>
+          <p className="text-muted-foreground text-sm">
+            {isLoading ? "Loading…" : `${plots?.length ?? 0} plots on record`}
+          </p>
+        </div>
+        <Button type="button" onClick={() => setAddOpen((v) => !v)}>
+          <Plus className="size-4" /> Add plot
+        </Button>
       </div>
+
+      {addOpen && (
+        <AddPlotForm defaultSite={plots?.[0]?.site ?? "Royal Palm Enclave, Tsopoli"} onDone={() => setAddOpen(false)} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
@@ -252,9 +268,11 @@ export function PlotInventory() {
               <div className="flex flex-col gap-2 lg:hidden">
                 {boardUnits(sitePlots).map((unit) =>
                   unit.tiles.map((p, i) => (
-                    <div
+                    <button
+                      type="button"
                       key={p.id}
-                      className={`flex items-center justify-between rounded-xl border bg-card p-3 ${i > 0 ? "ml-5 border-l-2" : ""}`}
+                      onClick={() => router.push(`/dashboard/plots/${p.id}`)}
+                      className={`flex w-full items-center justify-between rounded-xl border bg-card p-3 text-left ${i > 0 ? "ml-5 border-l-2" : ""}`}
                     >
                       <div>
                         <div className="flex items-center gap-2">
@@ -273,7 +291,7 @@ export function PlotInventory() {
                           {p.status}
                         </Badge>
                       </div>
-                    </div>
+                    </button>
                   )),
                 )}
               </div>
