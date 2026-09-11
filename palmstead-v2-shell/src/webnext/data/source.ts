@@ -1272,7 +1272,16 @@ function createLiveDataSource(): DataSource {
         return data ? mapLeadRow(data) : undefined;
       },
       async listAll() {
-        const { data, error } = await requireClient().from('leads').select('*').order('name');
+        // Real bug found live: Home dashboard's own leads query already
+        // filtered deleted_at (fixed earlier this session), but this one
+        // -- which powers Master Pipeline, Client Database, Log Payment's
+        // lead search, and Referrals' lead picker via useAllLeads()/
+        // useAllLeadsForLinking() -- didn't, so Master Pipeline/Client
+        // Database showed a real, different (higher) total lead count
+        // than Home. useLead()'s own fallback through this same method
+        // already documents the intended behavior: a deleted lead should
+        // "vanish from a subsequent refetch," not keep appearing here.
+        const { data, error } = await requireClient().from('leads').select('*').is('deleted_at', null).order('name');
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
