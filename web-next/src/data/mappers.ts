@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, LeaderboardRow, LeaderboardWeights, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -69,8 +69,8 @@ export function mapPaymentRow(r: Record<string, unknown>): Payment {
   };
 }
 
-const DB_TO_DOMAIN_STATUS: Record<string, ScheduleItemStatus> = { open: 'open', in_progress: 'in_progress', done: 'closed', cancelled: 'cancelled', rescheduled: 'rescheduled' };
-const DOMAIN_TO_DB_STATUS: Record<ScheduleItemStatus, string> = { open: 'open', in_progress: 'in_progress', closed: 'done', cancelled: 'cancelled', rescheduled: 'rescheduled' };
+const DB_TO_DOMAIN_STATUS: Record<string, ScheduleItemStatus> = { open: 'open', in_progress: 'in_progress', blocked: 'blocked', done: 'closed', cancelled: 'cancelled', rescheduled: 'rescheduled' };
+const DOMAIN_TO_DB_STATUS: Record<ScheduleItemStatus, string> = { open: 'open', in_progress: 'in_progress', blocked: 'blocked', closed: 'done', cancelled: 'cancelled', rescheduled: 'rescheduled' };
 
 export function mapScheduleItemRow(r: Record<string, unknown>): ScheduleItem {
   return {
@@ -80,17 +80,75 @@ export function mapScheduleItemRow(r: Record<string, unknown>): ScheduleItem {
     ownerName: (r.owner_name as string) ?? undefined,
     assignedTo: (r.assigned_to as string) ?? (r.owner_key as string),
     assignedToName: (r.assigned_to_name as string) ?? undefined,
+    assignedBy: (r.assigned_by as string) ?? null,
+    assignedByName: (r.assigned_by_name as string) ?? null,
     date: (r.item_date as string) ?? (r.due_date as string),
+    dueDate: (r.due_date as string) ?? null,
+    startTime: (r.start_time as string) ?? null,
+    endTime: (r.end_time as string) ?? null,
     status: DB_TO_DOMAIN_STATUS[r.status as string] ?? 'open',
     title: r.title as string,
     description: (r.description as string) ?? null,
+    notes: (r.notes as string) ?? null,
     category: (r.category as string) ?? null,
     priority: (r.priority as string) ?? null,
+    linkedLeadId: (r.linked_lead_id as string) ?? null,
+    linkedSiteVisitId: (r.linked_site_visit_id as string) ?? null,
+    blockedById: (r.blocked_by_id as string) ?? null,
+    meetingLocation: (r.meeting_location as string) ?? null,
+    recursFreq: (r.recurs_freq as ScheduleItem['recursFreq']) ?? null,
+    recursInterval: r.recurs_interval == null ? null : Number(r.recurs_interval),
+    recursUntil: (r.recurs_until as string) ?? null,
+    recursParentId: (r.recurs_parent_id as string) ?? null,
+    tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
+    completedAt: (r.completed_at as string) ?? null,
+    createdAt: (r.created_at as string) ?? undefined,
   };
 }
 
 export function domainStatusToDb(status: ScheduleItemStatus): string {
   return DOMAIN_TO_DB_STATUS[status];
+}
+
+export function mapScheduleItemInviteeRow(r: Record<string, unknown>): ScheduleItemInvitee {
+  return {
+    id: r.id as string,
+    scheduleItemId: r.schedule_item_id as string,
+    staffKey: r.staff_key as string,
+    staffName: (r.staff_name as string) ?? null,
+    status: (r.status as ScheduleItemInvitee['status']) ?? 'invited',
+    respondedAt: (r.responded_at as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapTaskEventRow(r: Record<string, unknown>): TaskEvent {
+  return {
+    id: r.id as string,
+    taskId: r.task_id as string,
+    type: r.type as string,
+    actorKey: (r.actor_key as string) ?? null,
+    actorName: (r.actor_name as string) ?? null,
+    fromKey: (r.from_key as string) ?? null,
+    fromName: (r.from_name as string) ?? null,
+    toKey: (r.to_key as string) ?? null,
+    toName: (r.to_name as string) ?? null,
+    note: (r.note as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapScheduleItemAttachmentRow(r: Record<string, unknown>): ScheduleItemAttachment {
+  return {
+    id: r.id as string,
+    scheduleItemId: r.schedule_item_id as string,
+    fileName: r.file_name as string,
+    storagePath: r.storage_path as string,
+    contentType: (r.content_type as string) ?? null,
+    uploadedBy: (r.uploaded_by as string) ?? null,
+    uploadedByName: (r.uploaded_by_name as string) ?? null,
+    createdAt: r.created_at as string,
+  };
 }
 
 export function mapStreakRow(r: Record<string, unknown>): StreakRow {
@@ -309,6 +367,8 @@ export function mapEnquiryRow(r: Record<string, unknown>): Enquiry {
     follow: (r.follow as string) ?? null,
     followDate: (r.follow_date as string) ?? null,
     createdAt: r.created_at as string,
+    status: (r.status as string) ?? 'Open',
+    owner: (r.owner as string) ?? null,
   };
 }
 
@@ -332,6 +392,9 @@ export function mapAttendanceRow(r: Record<string, unknown>): AttendanceRecord {
     isOffSiteIn: r.is_off_site_in == null ? null : !!r.is_off_site_in,
     isOffSiteOut: r.is_off_site_out == null ? null : !!r.is_off_site_out,
     signInPhoto: (r.sign_in_photo as string) ?? null,
+    signInAccuracyMeters: r.sign_in_accuracy_meters == null ? null : Number(r.sign_in_accuracy_meters),
+    signOutAccuracyMeters: r.sign_out_accuracy_meters == null ? null : Number(r.sign_out_accuracy_meters),
+    deviceInfo: (r.device_info as string) ?? null,
   };
 }
 
@@ -415,6 +478,24 @@ export function mapSveSubmissionRow(r: Record<string, unknown>): SveSubmissionRe
   };
 }
 
+export function mapSveDayReportRow(r: Record<string, unknown>): SveDayReport {
+  return {
+    id: r.id as string,
+    visitDate: r.visit_date as string,
+    site: (r.site as string) ?? 'Royal Palm Enclave',
+    preparedBy: (r.prepared_by as string) ?? null,
+    preparedByName: (r.prepared_by_name as string) ?? null,
+    entries: Array.isArray(r.entries) ? (r.entries as SveDayReportEntry[]) : [],
+    siteSummary: (r.site_summary as string) ?? null,
+    siteSummaryAi: (r.site_summary_ai as string) ?? null,
+    status: (r.status as SveDayReport['status']) ?? 'draft',
+    reportPdfPath: (r.report_pdf_path as string) ?? null,
+    sentAt: (r.sent_at as string) ?? null,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  };
+}
+
 export function mapChatMessageRow(r: Record<string, unknown>): ChatMessage {
   return {
     id: r.id as string,
@@ -483,6 +564,10 @@ export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
     decidedBy: (r.decided_by as string) ?? null,
     decidedByName: (r.decided_by_name as string) ?? null,
     decidedSignature: (r.decided_signature as string) ?? null,
+    isEmergency: !!r.is_emergency,
+    deductQuota: r.deduct_quota !== false,
+    rescheduleNote: (r.reschedule_note as string) ?? null,
+    usedConfirmedAt: (r.used_confirmed_at as string) ?? null,
   };
 }
 
@@ -585,6 +670,7 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     leaveTotalDays: Number(r.leave_total_days ?? 20),
     workDays: (r.work_days as number[]) ?? [1, 2, 3, 4, 5],
     eidObservingStaff: (r.eid_observing_staff as string[]) ?? [],
+    eidWindows: (r.eid_windows as Config['eidWindows']) ?? [],
     referralPointsPerReferral: Number(r.referral_points_per_referral ?? 50),
     officeLat: r.office_lat != null ? Number(r.office_lat) : null,
     officeLng: r.office_lng != null ? Number(r.office_lng) : null,
@@ -607,6 +693,17 @@ export function mapContractRow(r: Record<string, unknown>): Contract {
   };
 }
 
+// Raw get_attendance_month_comparison() RPC row -> domain shape.
+// ATTENDANCE_BLUEPRINT.md §6.
+export function mapAttendanceComparisonRow(r: Record<string, unknown>): { staffKey: string; staffName: string; daysAttended: number; onTimeDays: number } {
+  return {
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    daysAttended: Number(r.days_attended ?? 0),
+    onTimeDays: Number(r.on_time_days ?? 0),
+  };
+}
+
 // Raw leaderboard_rows() RPC row -> domain shape, minus `points` (computed
 // separately by agentPoints() once the caller also has the weights config).
 export function mapLeaderboardRawRow(r: Record<string, unknown>): Omit<LeaderboardRow, 'points'> {
@@ -621,6 +718,89 @@ export function mapLeaderboardRawRow(r: Record<string, unknown>): Omit<Leaderboa
     todosCompleted: Number(r.todos_completed ?? 0),
     daysAttended: Number(r.days_attended ?? 0),
     onTimeDays: Number(r.on_time_days ?? 0),
+  };
+}
+
+// Row from the persisted, server-authoritative `leaderboard_scores` table
+// (written by recompute_leaderboard_scores() RPC) -- unlike
+// mapLeaderboardRawRow above, `points` is already a real server
+// calculation here, never recomputed client-side. See
+// project-leaderboard-v3-audit-and-plan memory for why this exists
+// alongside the older raw-rows path (Staff Report still needs unscored
+// rows, so leaderboard_rows()/mapLeaderboardRawRow stay as they are).
+export function mapLeaderboardScoreRow(r: Record<string, unknown>): LeaderboardRow {
+  return {
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    totalCollected: Number(r.total_collected ?? 0),
+    dealsClosedYear: Number(r.deals_closed_year ?? 0),
+    siteVisits: Number(r.site_visits ?? 0),
+    tasksCompleted: Number(r.tasks_completed ?? 0),
+    avgTaskDays: r.avg_task_days != null ? Math.round(Number(r.avg_task_days) * 10) / 10 : null,
+    todosCompleted: Number(r.todos_completed ?? 0),
+    daysAttended: Number(r.days_attended ?? 0),
+    onTimeDays: Number(r.on_time_days ?? 0),
+    points: Number(r.points ?? 0),
+  };
+}
+
+export function mapOfficeLocationRow(r: Record<string, unknown>): OfficeLocation {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    radiusMeters: Number(r.radius_meters ?? 150),
+    isActive: !!r.is_active,
+    createdBy: (r.created_by as string) ?? null,
+    createdByName: (r.created_by_name as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapAttendanceExceptionRow(r: Record<string, unknown>): AttendanceException {
+  return {
+    id: r.id as string,
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    exceptionDate: r.exception_date as string,
+    exceptionType: r.exception_type as AttendanceException['exceptionType'],
+    reason: r.reason as string,
+    status: r.status as AttendanceException['status'],
+    requestedBy: r.requested_by as string,
+    requestedByName: r.requested_by_name as string,
+    decidedBy: (r.decided_by as string) ?? null,
+    decidedByName: (r.decided_by_name as string) ?? null,
+    decidedAt: (r.decided_at as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapAttendancePolicyRow(r: Record<string, unknown>): AttendancePolicy {
+  return {
+    id: r.id as string,
+    workStartTime: r.work_start_time as string,
+    workEndTime: r.work_end_time as string,
+    graceMinutes: Number(r.grace_minutes ?? 0),
+    workDays: (r.work_days as number[]) ?? [],
+    isActive: !!r.is_active,
+    effectiveFrom: r.effective_from as string,
+    createdBy: (r.created_by as string) ?? null,
+    createdByName: (r.created_by_name as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapLeaderboardScoreHistoryRow(r: Record<string, unknown>): LeaderboardScoreHistoryEntry {
+  return {
+    id: r.id as string,
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    periodFrom: r.period_from as string,
+    periodTo: r.period_to as string,
+    oldPoints: Number(r.old_points ?? 0),
+    newPoints: Number(r.new_points ?? 0),
+    changedAt: r.changed_at as string,
   };
 }
 
@@ -676,6 +856,38 @@ export function mapAuditEventRow(r: Record<string, unknown>): AuditEvent {
     summary: r.summary as string,
     detail: (r.detail as Record<string, unknown>) ?? null,
     source: r.source as string,
+  };
+}
+
+export function mapAttendanceNoteRow(r: Record<string, unknown>): AttendanceNote {
+  return {
+    id: r.id as string,
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    kind: r.kind as AttendanceNote['kind'],
+    reason: r.reason as string,
+    workDate: r.work_date as string,
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+// ATTENDANCE_BLUEPRINT.md §13.
+export function mapAttendanceReviewRow(r: Record<string, unknown>): AttendanceReview {
+  return {
+    id: r.id as string,
+    attendanceLogId: r.attendance_log_id as string,
+    staffKey: r.staff_key as string,
+    staffName: r.staff_name as string,
+    reviewType: r.review_type as AttendanceReview['reviewType'],
+    status: r.status as AttendanceReview['status'],
+    classification: (r.classification as AttendanceReview['classification']) ?? null,
+    note: (r.note as string | null) ?? null,
+    reviewedBy: (r.reviewed_by as string | null) ?? null,
+    reviewedByName: (r.reviewed_by_name as string | null) ?? null,
+    reviewedAt: (r.reviewed_at as string | null) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

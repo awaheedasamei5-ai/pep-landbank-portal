@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Icon } from '../../../shared/ui/Icon';
+import { useSessionStore } from '../../../auth/useSessionStore';
+import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { Complaint } from '../../../types/domain';
 import { useComplaints, useUpdateComplaint } from '../hooks/useComplaints';
 import styles from './ComplaintsScreen.module.css';
@@ -30,15 +32,22 @@ function priorityClass(priority: string | null): string {
 // whoever can see the complaint, no manager gate, no RPC.
 export function ComplaintsScreen() {
   const navigate = useNavigate();
+  const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const { data: complaints, isLoading } = useComplaints();
+  const { data: staff } = useStaffDirectory();
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  function ownerName(ownerKey: string | null): string | null {
+    if (!ownerKey) return null;
+    return staff?.find((s) => s.key === ownerKey)?.name ?? ownerKey;
+  }
 
   return (
     <div className={styles.wrap}>
       <div className={styles.head}>
         <div>
           <h1 className={styles.title}>Complaints</h1>
-          <p className={styles.sub}>{complaints?.length ?? 0} logged</p>
+          <p className={styles.sub}>{isManager ? `${complaints?.length ?? 0} across the team` : `${complaints?.length ?? 0} logged or assigned to you`}</p>
         </div>
         <button type="button" className={styles.addBtn} onClick={() => navigate('/app/sales/complaints/new')}>
           + Log complaint
@@ -57,6 +66,7 @@ export function ComplaintsScreen() {
                 <div className={styles.meta}>
                   {c.contact}
                   {c.category ? ` · ${c.category}` : ''}
+                  {ownerName(c.owner) ? ` · Assigned: ${ownerName(c.owner)}` : ''}
                 </div>
               </div>
               <div className={styles.right}>
@@ -70,7 +80,7 @@ export function ComplaintsScreen() {
                 <Icon name="chevronDown" size={15} />
               </span>
             </button>
-            {isOpen && <ComplaintDetail complaint={c} />}
+            {isOpen && <ComplaintDetail complaint={c} staff={staff ?? []} />}
           </div>
         );
       })}
@@ -79,7 +89,7 @@ export function ComplaintsScreen() {
   );
 }
 
-function ComplaintDetail({ complaint }: { complaint: Complaint }) {
+function ComplaintDetail({ complaint, staff }: { complaint: Complaint; staff: { key: string; name: string }[] }) {
   const update = useUpdateComplaint();
   const [status, setStatus] = useState(complaint.status);
   const [priority, setPriority] = useState(complaint.priority ?? '');
@@ -111,8 +121,15 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
         </div>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>Owner</label>
-        <input className={styles.input} placeholder="Who's handling this?" value={owner} onChange={(e) => setOwner(e.target.value)} />
+        <label className={styles.label}>Owner — who's handling this</label>
+        <select className={styles.select} value={owner} onChange={(e) => setOwner(e.target.value)}>
+          <option value="">Unassigned</option>
+          {staff.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.name}
+            </option>
+          ))}
+        </select>
       </div>
       <div className={styles.field}>
         <label className={styles.label}>Resolution</label>
@@ -122,7 +139,14 @@ function ComplaintDetail({ complaint }: { complaint: Complaint }) {
         type="button"
         className={styles.saveBtn}
         disabled={!dirty || update.isPending}
-        onClick={() => update.mutate({ id: complaint.id, patch: { status, priority: priority || undefined, owner: owner || undefined, resolution: resolution || undefined } })}
+        onClick={() =>
+          update.mutate({
+            id: complaint.id,
+            patch: { status, priority: priority || undefined, owner: owner || undefined, resolution: resolution || undefined },
+            previousOwner: complaint.owner,
+            complaintName: complaint.name,
+          })
+        }
       >
         {update.isPending ? 'Saving…' : 'Save changes'}
       </button>

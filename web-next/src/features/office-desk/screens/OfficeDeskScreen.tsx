@@ -3,6 +3,8 @@ import { useCanLogPayments } from '../../payments/hooks/useLogPayment';
 import { useCanManageExpenses } from '../../expenses/hooks/useFundRequests';
 import { useCanViewSiteVisitAuth } from '../../site-visit-auth/hooks/useSiteVisitAuth';
 import { useCanViewStaffReport } from '../../staff-report/hooks/useStaffReport';
+import { useCanDecideLeave } from '../../leave/hooks/useLeaveRequests';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { TileGrid, type TileItem } from '../../../shared/ui/TileGrid';
 import styles from './OfficeDeskScreen.module.css';
 
@@ -15,18 +17,46 @@ export function OfficeDeskScreen() {
   const canManageExpenses = useCanManageExpenses();
   const canViewSiteVisitAuth = useCanViewSiteVisitAuth();
   const canViewStaffReport = useCanViewStaffReport();
+  const canDecideLeave = useCanDecideLeave();
+  const isManager = useSessionStore((s) => s.profile?.role === 'manager');
 
   const items: TileItem[] = [
-    { key: 'duties', label: 'My Day', sub: "Today's to-do list", color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/myday') },
-    { key: 'taskboard', label: 'Task Board', sub: 'Assign & track ongoing work, kanban-style', color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/tasks') },
+    // Real user ask (2026-09-06): My Day/Task Board/Week/Month/Team
+    // Schedule/Meetings are one app, not six tiles -- one tile into the
+    // OperationsTrackerScreen shell, which owns its own tab navigation.
+    { key: 'operations', label: 'Operations Tracker', sub: 'Your day, week, tasks, team & meetings -- one app', color: 'purple', icon: 'checklist', onOpen: () => navigate('/app/office/operations') },
     { key: 'memo', label: 'Memorandum', sub: 'Internal correspondence', color: 'teal', icon: 'note', onOpen: () => navigate('/app/office/memos') },
     { key: 'attendance', label: 'Attendance', sub: 'Sign in & out for the day', color: 'blue', icon: 'check', onOpen: () => navigate('/app/office/attendance') },
+    ...(isManager
+      ? [
+          {
+            key: 'attendanceRecords',
+            label: 'Attendance Records',
+            sub: 'Filter, compare staff & pull a report',
+            color: 'blue',
+            icon: 'check',
+            onOpen: () => navigate('/app/office/attendance/records'),
+          } satisfies TileItem,
+        ]
+      : []),
     ...(canLogPayments
       ? [{ key: 'payment', label: 'Log Payment', sub: 'Record & approve client payments', color: 'orange', icon: 'card', onOpen: () => navigate('/app/office/payments') } satisfies TileItem]
       : []),
     { key: 'contracts', label: 'Contract requests', sub: 'Request & track contracts of sale', color: 'red', icon: 'document', onOpen: () => navigate('/app/office/contracts') },
     { key: 'quotation', label: 'Quotation', sub: 'Full or Half Plot pricing & payment plans', color: 'green', icon: 'calculator', onOpen: () => navigate('/app/office/quotation') },
     { key: 'leave', label: 'Leave', sub: 'Request & approve staff leave', color: 'blue', icon: 'palm', onOpen: () => navigate('/app/office/leave') },
+    ...(canDecideLeave
+      ? [
+          {
+            key: 'leaveDashboard',
+            label: 'Leave Dashboard',
+            sub: 'Every staff plan, remaining days & upcoming alerts',
+            color: 'blue',
+            icon: 'palm',
+            onOpen: () => navigate('/app/office/leave/dashboard'),
+          } satisfies TileItem,
+        ]
+      : []),
     { key: 'notes', label: 'Notes', sub: 'Quick private notes, just for you', color: 'purple', icon: 'notepad', onOpen: () => navigate('/app/office/notes') },
     { key: 'banners', label: 'Banner Tracking', sub: 'Add, track & route to every placement', color: 'orange', icon: 'pin', onOpen: () => navigate('/app/office/banners') },
     ...(canManageExpenses

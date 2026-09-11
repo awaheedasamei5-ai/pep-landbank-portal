@@ -10,8 +10,14 @@ import { AddLeadScreen } from '../features/pipeline/screens/AddLeadScreen';
 import { ArchivedLeadsScreen } from '../features/pipeline/screens/ArchivedLeadsScreen';
 import { PipelineDetailScreen } from '../features/pipeline/screens/PipelineDetailScreen';
 import { OfficeDeskScreen } from '../features/office-desk/screens/OfficeDeskScreen';
+import { OperationsTrackerScreen } from '../features/ops-tracker/screens/OperationsTrackerScreen';
+import { OpsDashboardTab } from '../features/ops-tracker/screens/OpsDashboardTab';
 import { MyDayScreen } from '../features/ops-tracker/screens/MyDayScreen';
 import { TaskBoardScreen } from '../features/ops-tracker/screens/TaskBoardScreen';
+import { WeekCalendarScreen } from '../features/ops-tracker/screens/WeekCalendarScreen';
+import { MonthCalendarScreen } from '../features/ops-tracker/screens/MonthCalendarScreen';
+import { TeamScheduleScreen } from '../features/ops-tracker/screens/TeamScheduleScreen';
+import { MeetingsScreen } from '../features/ops-tracker/screens/MeetingsScreen';
 import { PlotInventoryScreen } from '../features/plots/screens/PlotInventoryScreen';
 import { PlotDetailScreen } from '../features/plots/screens/PlotDetailScreen';
 import { PlotReconciliationScreen } from '../features/plots/screens/PlotReconciliationScreen';
@@ -24,6 +30,8 @@ import { AddReferralScreen } from '../features/referrals/screens/AddReferralScre
 import { EnquiriesScreen } from '../features/enquiries/screens/EnquiriesScreen';
 import { AddEnquiryScreen } from '../features/enquiries/screens/AddEnquiryScreen';
 import { AttendanceScreen } from '../features/attendance/screens/AttendanceScreen';
+import { AttendanceTodayScreen } from '../features/attendance/screens/AttendanceTodayScreen';
+import { AttendanceRecordsScreen } from '../features/attendance/screens/AttendanceRecordsScreen';
 import { MemosScreen } from '../features/memos/screens/MemosScreen';
 import { ComposeMemoScreen } from '../features/memos/screens/ComposeMemoScreen';
 import { MoreScreen } from '../features/more/screens/MoreScreen';
@@ -39,6 +47,7 @@ import { LogPaymentScreen } from '../features/payments/screens/LogPaymentScreen'
 import { ComplaintsScreen } from '../features/complaints/screens/ComplaintsScreen';
 import { AddComplaintScreen } from '../features/complaints/screens/AddComplaintScreen';
 import { LeaderboardScreen } from '../features/manager/screens/LeaderboardScreen';
+import { LeaderboardAdminScreen } from '../features/manager/screens/LeaderboardAdminScreen';
 import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
@@ -50,6 +59,8 @@ import { ReportsScreen } from '../features/manager/screens/ReportsScreen';
 import { QuotationScreen } from '../features/quotation/screens/QuotationScreen';
 import { TechnicalQuotationScreen } from '../features/quotation/screens/TechnicalQuotationScreen';
 import { LeaveScreen } from '../features/leave/screens/LeaveScreen';
+import { LeaveHomeScreen } from '../features/leave/screens/LeaveHomeScreen';
+import { LeaveDashboardScreen } from '../features/leave/screens/LeaveDashboardScreen';
 import { AllocationRequestsScreen } from '../features/allocations/screens/AllocationRequestsScreen';
 import { BannerTrackingScreen } from '../features/banners/screens/BannerTrackingScreen';
 import { ExpensesScreen } from '../features/expenses/screens/ExpensesScreen';
@@ -119,6 +130,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireRole role="manager">
             <LeaderboardScreen />
+          </RequireRole>
+        ),
+      },
+      {
+        path: 'mgr/leaderboard/admin',
+        element: (
+          <RequireRole role="manager">
+            <LeaderboardAdminScreen />
           </RequireRole>
         ),
       },
@@ -298,9 +317,51 @@ export const router = createBrowserRouter([
       { path: 'sales/allocations', element: <AllocationRequestsScreen /> },
       { path: 'sales/complaints/new', element: <AddComplaintScreen /> },
       { path: 'office', element: <OfficeDeskScreen /> },
-      { path: 'office/myday', element: <MyDayScreen /> },
-      { path: 'office/tasks', element: <TaskBoardScreen /> },
-      { path: 'office/attendance', element: <AttendanceScreen /> },
+      // Real user ask (2026-09-06): My Day/Task Board/Week/Month/Team
+      // Schedule/Meetings must read as ONE app, not six separate sidebar
+      // entries -- one shell (OperationsTrackerScreen) with a real
+      // SegmentedTabs bar and these six as nested routes under it via
+      // <Outlet/>, matching the nested-route convention CompanyLeadsScreen
+      // already uses for its own :id child. The 6 old flat paths stay
+      // alive as redirects so no existing bookmark/link 404s.
+      {
+        path: 'office/operations',
+        element: <OperationsTrackerScreen />,
+        children: [
+          { index: true, element: <OpsDashboardTab /> },
+          { path: 'myday', element: <MyDayScreen /> },
+          { path: 'week', element: <WeekCalendarScreen /> },
+          { path: 'month', element: <MonthCalendarScreen /> },
+          { path: 'tasks', element: <TaskBoardScreen /> },
+          { path: 'team', element: <TeamScheduleScreen /> },
+          { path: 'meetings', element: <MeetingsScreen /> },
+        ],
+      },
+      { path: 'office/myday', element: <Navigate to="/app/office/operations/myday" replace /> },
+      { path: 'office/tasks', element: <Navigate to="/app/office/operations/tasks" replace /> },
+      { path: 'office/schedule/week', element: <Navigate to="/app/office/operations/week" replace /> },
+      { path: 'office/schedule/month', element: <Navigate to="/app/office/operations/month" replace /> },
+      { path: 'office/schedule/team', element: <Navigate to="/app/office/operations/team" replace /> },
+      { path: 'office/meetings', element: <Navigate to="/app/office/operations/meetings" replace /> },
+      // Real user correction 2026-09-11: Attendance and Attendance Records
+      // must read as ONE app, not two sidebar entries -- same
+      // shell+SegmentedTabs+<Outlet/> nested-route fix already applied to
+      // Operations Tracker above.
+      {
+        path: 'office/attendance',
+        element: <AttendanceScreen />,
+        children: [
+          { index: true, element: <AttendanceTodayScreen /> },
+          {
+            path: 'records',
+            element: (
+              <RequireRole role="manager">
+                <AttendanceRecordsScreen />
+              </RequireRole>
+            ),
+          },
+        ],
+      },
       { path: 'office/memos', element: <MemosScreen /> },
       { path: 'office/memos/new', element: <ComposeMemoScreen /> },
       // Finer manager/'elias'-only restriction lives in LogPaymentScreen
@@ -313,7 +374,24 @@ export const router = createBrowserRouter([
       { path: 'office/contracts/generate', element: <ContractGeneratorScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
       { path: 'office/quotation/technical', element: <TechnicalQuotationScreen /> },
-      { path: 'office/leave', element: <LeaveScreen /> },
+      // Real user correction 2026-09-11: Leave and Leave Dashboard must
+      // read as ONE app, not two sidebar entries -- same shell+
+      // SegmentedTabs+<Outlet/> nested-route fix as Attendance above.
+      {
+        path: 'office/leave',
+        element: <LeaveScreen />,
+        children: [
+          { index: true, element: <LeaveHomeScreen /> },
+          {
+            path: 'dashboard',
+            element: (
+              <RequireRole role="manager">
+                <LeaveDashboardScreen />
+              </RequireRole>
+            ),
+          },
+        ],
+      },
       { path: 'office/notes', element: <NotesScreen /> },
       { path: 'office/banners', element: <BannerTrackingScreen /> },
       { path: 'office/expenses', element: <ExpensesScreen /> },

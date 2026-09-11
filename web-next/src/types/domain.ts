@@ -311,44 +311,189 @@ export interface PaymentDecisionResult {
   };
 }
 
-// Real DB check constraint (schedule_items_status_check, confirmed live):
-// open/in_progress/done/cancelled/rescheduled. 'closed' here is this app's
-// own domain name for DB 'done' (see mapScheduleItemRow's translation
-// table) -- kept as-is rather than renamed, so every existing My Day call
-// site touching a todo's status is untouched. 'in_progress' is new --
-// previously collapsed into 'open' by the mapper (never distinguished
-// anywhere in web-next, since only My Day's todos existed before Task
-// Board), so an in-progress task would have shown as not-yet-started.
-export type ScheduleItemStatus = 'open' | 'in_progress' | 'closed' | 'cancelled' | 'rescheduled';
+// Real DB check constraint (schedule_items_status_check, confirmed live
+// 2026-09-06): open/in_progress/done/cancelled/rescheduled/blocked/
+// awaiting_approval. 'closed' here is this app's own domain name for DB
+// 'done' (see mapScheduleItemRow's translation table) -- kept as-is
+// rather than renamed, so every existing My Day call site touching a
+// todo's status is untouched. 'blocked' is Master Spec 10.1's Task Board
+// column -- a REAL stored status (confirmed live in the DB constraint,
+// not something this app needs to derive/compute), set automatically
+// when a task's blockedById predecessor is still open and cleared once
+// that predecessor completes (see useTasks.ts). 'awaiting_approval' also
+// exists in the live constraint but has no product definition anywhere
+// in the spec or this app yet -- deliberately not surfaced here until it
+// does; TS will reject anyone trying to set it by accident.
+export type ScheduleItemStatus = 'open' | 'in_progress' | 'blocked' | 'closed' | 'cancelled' | 'rescheduled';
 
-// Extended for Task Board (Master Spec Section 10.2's task model, scoped
-// down -- see TaskBoardScreen's own comment for what's deliberately not
-// built yet: dependencies, recurrence UI, meetings, linked lead/site
-// visit). Every field below already exists as a real column on
-// schedule_items; My Day's plain todo rows just never needed them.
+export type ScheduleItemKind = 'todo' | 'task' | 'meeting';
+
+// Real DB check constraint (schedule_items_recurs_freq_check).
+export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly';
+
+// Master Spec Section 10.2's full task model, plus 10.3's Meetings (a
+// meeting is a third `kind` on this SAME table, per the spec's own "My
+// Day/Week/Month/Team Schedule/Task Board" views all being one shared
+// schedule -- not a parallel table). Every field below is a real column
+// on schedule_items (confirmed live 2026-09-06) -- most already existed
+// from an earlier phase but were never mapped/used until now; linkedLeadId/
+// linkedSiteVisitId/blockedById/meetingLocation were added this session
+// specifically to close the remaining spec 10.2/10.3 gaps.
 export interface ScheduleItem {
   id: string;
-  kind: 'todo' | 'task';
+  kind: ScheduleItemKind;
   ownerKey: string;
   ownerName?: string;
   assignedTo: string;
   assignedToName?: string;
+  // Who assigned this to assignedTo (creator of the assignment, distinct
+  // from ownerKey which never changes) -- real column, written on
+  // create/reassign, never surfaced in the UI before this session.
+  assignedBy?: string | null;
+  assignedByName?: string | null;
   date: string;
+  // The real deadline, distinct from `date` (which day this item is
+  // slotted/shown on) -- both map to real, separate columns
+  // (item_date/due_date); `date` keeps its existing item_date-first
+  // fallback so no existing call site changes behavior.
+  dueDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
   status: ScheduleItemStatus;
   title: string;
   description?: string | null;
+  notes?: string | null;
   category?: string | null;
   priority?: string | null;
+  // Real FKs added 2026-09-06 (Master Spec 10.2: "linked lead, linked
+  // site visit").
+  linkedLeadId?: string | null;
+  linkedSiteVisitId?: string | null;
+  // Real FK added 2026-09-06 (Master Spec 10.2: "Dependencies: Blocked
+  // by / Blocking"). A single predecessor -- "Blocking" is just the
+  // inverse, computed by asking which other items point their
+  // blockedById at this one, not a second stored column.
+  blockedById?: string | null;
+  // Real column added 2026-09-06 (Master Spec 10.3: "Meeting links/
+  // location supported") -- only meaningful when kind='meeting'.
+  meetingLocation?: string | null;
+  recursFreq?: RecurrenceFreq | null;
+  recursInterval?: number | null;
+  recursUntil?: string | null;
+  recursParentId?: string | null;
+  // Real column added 2026-09-05 (reference "Add New Task" screen's own
+  // Tags field) -- free-text labels, distinct from the fixed category
+  // enum, genuinely stored and editable, not a cosmetic-only chip list.
+  tags?: string[];
+  // Real column, now actually stamped on close (see useTasks.ts's own
+  // comment) -- the live leaderboard_rows() RPC's tasks_completed/
+  // avg_task_days already depend on this, but nothing ever set it before
+  // this session, so every task closed through this app undercounted.
+  completedAt?: string | null;
+  createdAt?: string;
 }
 
 export interface NewTask {
   title: string;
   description?: string;
+  notes?: string;
   category?: string;
   priority?: string;
   assignedTo: string;
   assignedToName: string;
   dueDate?: string;
+  startTime?: string;
+  endTime?: string;
+  linkedLeadId?: string;
+  linkedSiteVisitId?: string;
+  blockedById?: string;
+  recursFreq?: RecurrenceFreq;
+  recursInterval?: number;
+  recursUntil?: string;
+  tags?: string[];
+}
+
+// Editable fields after creation -- Master Spec 10.2 implies a task's
+// full record (title/description/notes/category/priority/dates/times/
+// links/dependency) can be revised as work develops, not fixed forever
+// at creation time.
+export interface ScheduleItemPatch {
+  title?: string;
+  description?: string | null;
+  notes?: string | null;
+  category?: string | null;
+  priority?: string | null;
+  date?: string;
+  dueDate?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  linkedLeadId?: string | null;
+  linkedSiteVisitId?: string | null;
+  blockedById?: string | null;
+  tags?: string[];
+}
+
+// Master Spec 10.3's Meetings ride the same schedule_items row (kind=
+// 'meeting') as a task/todo -- this is just the extra fields a meeting
+// needs when creating one, mirroring NewTask's shape.
+export interface NewMeeting {
+  title: string;
+  description?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  meetingLocation?: string;
+  inviteeKeys: string[];
+}
+
+// Real table `schedule_item_invitees` (confirmed live 2026-09-06, RLS
+// already in place from an earlier phase) -- one row per invited staff
+// member on a meeting, Master Spec 10.3's "Attendees can accept/decline;
+// organizer sees responses."
+export interface ScheduleItemInvitee {
+  id: string;
+  scheduleItemId: string;
+  staffKey: string;
+  staffName: string | null;
+  status: 'invited' | 'accepted' | 'declined';
+  respondedAt: string | null;
+  createdAt: string;
+}
+
+// Real table `task_events` (confirmed live 2026-09-06, RLS already in
+// place) -- Master Spec 10.2's "activity history" and "Task reassignment
+// records who reassigned and why." `type` is a short verb ('created',
+// 'status_changed', 'reassigned', 'blocked', 'unblocked', etc.); from/to
+// carry whatever changed (staff keys for reassignment, status values for
+// a status change) so one generic table covers every kind of event.
+export interface TaskEvent {
+  id: string;
+  taskId: string;
+  type: string;
+  actorKey: string | null;
+  actorName: string | null;
+  fromKey: string | null;
+  fromName: string | null;
+  toKey: string | null;
+  toName: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+// Real table `schedule_item_attachments` (added 2026-09-06, Master Spec
+// 10.2: "attachments"). Storage path convention `{scheduleItemId}/
+// {filename}` in the `task-attachments` bucket -- lets storage RLS reuse
+// the same can_see_task() visibility this metadata row's own RLS uses,
+// instead of a second, separately-derived access rule.
+export interface ScheduleItemAttachment {
+  id: string;
+  scheduleItemId: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string | null;
+  uploadedBy: string | null;
+  uploadedByName: string | null;
+  createdAt: string;
 }
 
 export interface StreakRow {
@@ -369,6 +514,17 @@ export interface LeaderboardWeights {
   taskSpeedBonus: number;
   regularity: number;
   punctuality: number;
+}
+
+// Real user/spec ask (Master Spec 12.3): Eid dates cannot be reliably
+// predicted, so Management maintains this list directly instead of an
+// algorithmic Islamic-calendar calculation.
+export interface EidWindow {
+  id: string;
+  name: string;
+  centerDate: string;
+  daysBefore: number;
+  daysAfter: number;
 }
 
 export interface Config {
@@ -454,6 +610,11 @@ export interface Config {
   leaveTotalDays: number;
   workDays: number[];
   eidObservingStaff: string[];
+  // Real column eid_windows (added 2026-09-05, Master Spec 12.3) -- a
+  // Management-maintained list of Eid windows, replacing an earlier
+  // algorithmic Islamic-calendar prediction the spec explicitly says is
+  // the wrong approach ("cannot be reliably calculated in advance").
+  eidWindows: EidWindow[];
   // Real column referral_points_per_referral (confirmed live, current
   // value 50) -- the default point award clear_referral() expects a
   // caller to pass explicitly (the RPC takes points as a free parameter,
@@ -475,6 +636,89 @@ export interface Config {
   officeRadiusMeters: number;
   attendanceCutoffTime: string;
   workStartTime: string;
+}
+
+// Real V3 chapter-01 entity, new 2026-09-10 -- supersedes the single flat
+// Config.officeLat/officeLng/officeRadiusMeters above with a genuine
+// multi-site list (real companies have more than one office/yard). The
+// old Config fields are kept, not deleted. The real authoritative check
+// lives server-side (a DB trigger, recompute_attendance_offsite(), fires
+// on attendance_log write and prefers the nearest active row here,
+// falling back to the legacy single point only if none exist) -- the
+// CLIENT's own off-site check (AttendanceScreen's computeOffSite()) still
+// only reads the legacy single point and is UX-only regardless, so it
+// stays visually accurate to the real point only until it's updated to
+// read this list too (not yet done). See project-attendance-v3-chapter01-gap memory.
+export interface OfficeLocation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  isActive: boolean;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface NewOfficeLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+}
+
+// Real V3 chapter-01 entity (attendance_policy table, new 2026-09-10) --
+// a versioned shift/grace-period policy, exactly one row is_active=true
+// at a time (enforced by a partial unique index server-side). Written
+// only via the set_attendance_policy() SECURITY DEFINER RPC (manager-
+// only, atomically deactivates the old row and inserts the new one) --
+// never a direct table write. Not yet wired into any late-detection
+// logic (AttendanceScreen still compares against the legacy flat
+// Config.attendanceCutoffTime/Config.workDays) -- see
+// project-attendance-v3-chapter01-gap memory.
+// Real V3 chapter-01 entity (attendance_exceptions table, new
+// 2026-09-10) -- a pre-authorized off-site request for a planned errand/
+// site-visit/field-assignment, decided by Management ahead of time,
+// instead of the only-ever-reactive off-site reason box on the sign-in
+// form itself. Not yet wired into computeOffSite()/the sign-in flow --
+// see project-attendance-v3-chapter01-gap memory.
+export type AttendanceExceptionType = 'errand' | 'site_visit' | 'field_assignment' | 'other';
+export type AttendanceExceptionStatus = 'pending' | 'approved' | 'declined';
+
+export interface AttendanceException {
+  id: string;
+  staffKey: string;
+  staffName: string;
+  exceptionDate: string;
+  exceptionType: AttendanceExceptionType;
+  reason: string;
+  status: AttendanceExceptionStatus;
+  requestedBy: string;
+  requestedByName: string;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface NewAttendanceException {
+  exceptionDate: string;
+  exceptionType: AttendanceExceptionType;
+  reason: string;
+}
+
+export interface AttendancePolicy {
+  id: string;
+  workStartTime: string;
+  workEndTime: string;
+  graceMinutes: number;
+  workDays: number[];
+  isActive: boolean;
+  effectiveFrom: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  createdAt: string;
 }
 
 // One payment's contribution to an agent's personal commission, and what it
@@ -531,6 +775,22 @@ export interface LeaderboardRow {
   daysAttended: number;
   onTimeDays: number;
   points: number;
+}
+
+// One row from `leaderboard_score_history` -- a real audit-trail entry,
+// written by a DB trigger only when a persisted leaderboard_scores row's
+// points actually changed (see recompute_leaderboard_scores() SQL fn).
+// Backs the Leaderboard admin workspace's "Recent score changes" panel --
+// the part of V3's "score audits" requirement this phase actually built.
+export interface LeaderboardScoreHistoryEntry {
+  id: string;
+  staffKey: string;
+  staffName: string;
+  periodFrom: string;
+  periodTo: string;
+  oldPoints: number;
+  newPoints: number;
+  changedAt: string;
 }
 
 // Corrected against the real live vocabulary (index.html's own PLOT_STATUSES
@@ -833,6 +1093,13 @@ export interface Enquiry {
   follow: string | null;
   followDate: string | null;
   createdAt: string;
+  // Real columns added 2026-09-05 (user ask: "what stage is it at
+  // closed/escalated to another staff or etc") -- enquiries previously had
+  // no status or assignment concept at all, unlike complaints which
+  // already had both (just not wired to reach the assignee -- fixed the
+  // same day).
+  status: string;
+  owner: string | null;
 }
 
 export interface NewEnquiry {
@@ -843,6 +1110,13 @@ export interface NewEnquiry {
   plot?: string;
   source?: string;
   details?: string;
+  follow?: string;
+  followDate?: string;
+}
+
+export interface EnquiryUpdate {
+  status?: string;
+  owner?: string;
   follow?: string;
   followDate?: string;
 }
@@ -884,11 +1158,21 @@ export interface AttendanceRecord {
   isOffSiteIn: boolean | null;
   isOffSiteOut: boolean | null;
   signInPhoto: string | null;
+  // Real columns added 2026-09-05 (Master Spec 11.1: "Store photo,
+  // timestamp, coordinates, accuracy, late/off-site reason and
+  // device/session metadata") -- accuracy was already read from the
+  // browser's geolocation API (shared/lib/geolocation.ts) but discarded
+  // before reaching here; device metadata was never captured at all.
+  signInAccuracyMeters: number | null;
+  signOutAccuracyMeters: number | null;
+  deviceInfo: string | null;
 }
 
 export interface SignInInput {
   lat?: number;
   lng?: number;
+  accuracy?: number;
+  deviceInfo?: string;
   offSite?: boolean;
   reason?: string;
   late?: boolean;
@@ -902,8 +1186,52 @@ export interface SignInInput {
 export interface SignOutInput {
   lat?: number;
   lng?: number;
+  accuracy?: number;
   offSite?: boolean;
   reason?: string;
+}
+
+// Real table `attendance_notes` (new, Master Spec 11.3: "Praise / Warning
+// action with reason and audit trail" -- zero precedent in index.html,
+// confirmed via exhaustive grep, so this schema is new rather than ported).
+// staff_key/work_date are plain columns, not a foreign key onto
+// attendance_log -- a warning must be issuable against an Absent day too,
+// which has no attendance_log row at all. Append-only by design (no
+// update/delete RLS policy): an audit trail that could be edited or
+// deleted after the fact isn't an audit trail (same lesson already
+// learned the hard way on payment corrections -- see
+// pipeline-payment-integrity in project memory).
+export interface AttendanceNote {
+  id: string;
+  staffKey: string;
+  staffName: string;
+  kind: 'praise' | 'warning';
+  reason: string;
+  workDate: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+// ATTENDANCE_BLUEPRINT.md §13 -- distinct from AttendanceException (ask
+// permission ahead of time): this is Management labeling an off-site
+// sign-in/out AFTER it already happened, real Master Spec 11.2 requirement.
+// `classification` is a real enum column (added 2026-09-11), not encoded
+// into `note` -- the whole point of this session's schema work has been
+// avoiding exactly that kind of string-prefix hack.
+export interface AttendanceReview {
+  id: string;
+  attendanceLogId: string;
+  staffKey: string;
+  staffName: string;
+  reviewType: 'exception';
+  status: 'pending' | 'reviewed';
+  classification: 'authorized' | 'exception' | null;
+  note: string | null;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
 }
 
 // Real tables `memos` + `memo_recipients` (confirmed live, 6 real memo
@@ -1074,6 +1402,81 @@ export interface SveVisitStatus {
   submission: SveSubmissionRecord | null;
 }
 
+// v1's real, already-proven per-client debrief schema (index.html:15226-
+// 15237, SVE_REVIEW_QUESTIONS) -- confirmed live in v1's own production
+// Site Visit Experience "Reports" tab, and the user explicitly asked to
+// reuse it ("i hope u used the experience form from v1 because it was
+// good. so use that one") rather than the plain single free-text note
+// this session first built. Real professional CRM site-visit-debrief
+// conventions (objections, how handled, interest level, confidence to
+// close) instead of one vague comment box -- also what actually gives
+// the AI-polish pass something concrete to compose from, per the user's
+// "make sure the ai doesn't write basic English that doesn't make any
+// technical sense."
+export const SVE_REVIEW_QUESTIONS = [
+  { key: 'communication', label: 'How would you rate your communication with this client during the visit?', type: 'rating' },
+  { key: 'clientFeedback', label: "What was the client's overall feedback about the site?", type: 'textarea' },
+  { key: 'objections', label: 'Did the client raise any concerns or objections? If so, what were they?', type: 'textarea' },
+  { key: 'howHandled', label: 'How did you personally address those concerns?', type: 'textarea' },
+  { key: 'questionsAsked', label: 'What specific questions did the client ask?', type: 'textarea' },
+  { key: 'interestLevel', label: "What is the client's current level of interest?", type: 'select', options: ['Very interested', 'Somewhat interested', 'Undecided', 'Not interested'] },
+  { key: 'followUp', label: 'What follow-up actions were agreed with the client?', type: 'textarea' },
+  { key: 'riskFactors', label: 'Any red flags or risk factors for this client?', type: 'textarea' },
+  { key: 'confidenceToClose', label: 'How confident are you this client will proceed to purchase?', type: 'rating' },
+  { key: 'additionalNotes', label: 'Any additional notes for Management?', type: 'textarea' },
+] as const satisfies readonly { key: string; label: string; type: 'rating' | 'textarea' | 'select'; options?: string[] }[];
+
+export type SveReviewAnswers = Partial<Record<(typeof SVE_REVIEW_QUESTIONS)[number]['key'], string | number>>;
+
+// Real table `sve_day_reports` (added 2026-09-05) -- one row per real
+// site-visit day, covering every client who visited that day. Replaces
+// the earlier one-report-per-submission flow: real user ask, "the report
+// isn't supposed to be for a single client after client but a full
+// report after every site visit." `entries` is a JSONB array (not a
+// child table -- nothing outside this one report ever queries into it)
+// with one item per client visited that day: the AI's own feedback
+// summary of what they said (from their SveSubmissionRecord, if they
+// submitted one), plus the site manager's own structured debrief for
+// that client (SveReviewAnswers, v1's own real question set -- covers a
+// client who never submitted a survey too, unlike v1's own model which
+// can only attach a review to an existing submission row) and its
+// AI-composed narrative. `siteSummary`/`siteSummaryAi` are the same
+// raw/polished pair but for the site manager's overall day-level account
+// of what happened on site, not tied to one client.
+export interface SveDayReportEntry {
+  siteVisitId: string;
+  clientName: string;
+  clientContact: string;
+  submissionId: string | null;
+  aiFeedbackSummary: string | null;
+  managerReview: SveReviewAnswers | null;
+  managerNotesAi: string | null;
+}
+
+export interface SveDayReport {
+  id: string;
+  visitDate: string;
+  site: string;
+  preparedBy: string | null;
+  preparedByName: string | null;
+  entries: SveDayReportEntry[];
+  siteSummary: string | null;
+  siteSummaryAi: string | null;
+  status: 'draft' | 'sent';
+  reportPdfPath: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SveDayReportPatch {
+  entries?: SveDayReportEntry[];
+  siteSummary?: string | null;
+  siteSummaryAi?: string | null;
+  preparedBy?: string;
+  preparedByName?: string;
+}
+
 // Real table `messages` (confirmed live) -- strictly 1:1 staff-to-staff,
 // no group/company-wide channel. This same table doubles as a generic
 // staff-notification bus in production (schedule invites, allocation
@@ -1237,17 +1640,47 @@ export interface LeaveRequest {
   dates: string[];
   daysCount: number;
   letterText: string | null;
-  status: 'pending' | 'approved' | 'declined';
+  // 'planned' is v1's real private-draft stage (index.html's leave engine,
+  // status 'planned' -> 'pending' -> approved/declined/rescheduled) --
+  // Master Spec 12.1's "save a plan as Draft and later submit it" maps
+  // directly onto it, ported here under the same name v1 uses.
+  status: 'planned' | 'pending' | 'approved' | 'declined' | 'rescheduled';
   createdAt: string;
   decidedAt: string | null;
   decidedBy: string | null;
   decidedByName: string | null;
   decidedSignature: string | null;
+  // Real columns is_emergency/deduct_quota/reschedule_note (confirmed
+  // live) -- Master Spec 12.4: existed on the table already but were
+  // never mapped, exposed, or wired into decide() until 2026-09-05.
+  // deductQuota is normally true; Management can set it false when
+  // approving/rescheduling an emergency request as an exceptional case
+  // (their call at decision time, not the requester's own choice).
+  // rescheduleNote holds whichever note Management attaches to a
+  // decline or reschedule decision.
+  isEmergency: boolean;
+  deductQuota: boolean;
+  rescheduleNote: string | null;
+  // Real column `used_confirmed_at` (new 2026-09-05, migration
+  // leave_requests_add_used_confirmed_at). User correction: leave must NOT
+  // count as "used" the moment it's approved -- only once the dates have
+  // actually passed AND the staff member confirms they took it. This is
+  // separate from the entitlement-protecting "reserved" count
+  // (leaveDaysUsed/leaveDaysRemaining in leaveLogic.ts, unchanged --
+  // pending/approved-but-not-yet-taken leave must still count against the
+  // annual cap, or nothing stops someone stacking more requests than their
+  // entitlement before any of them are confirmed used). See
+  // leaveIsConfirmedUsed/leaveDaysConfirmedUsed in leaveLogic.ts.
+  usedConfirmedAt: string | null;
 }
 
 export interface NewLeaveRequest {
   dates: string[];
   letterText?: string;
+  isEmergency?: boolean;
+  // v1's real "save as Draft" -- creates the row as 'planned' instead of
+  // going straight to 'pending'/Management's queue.
+  asDraft?: boolean;
 }
 
 // Real table `allocation_requests` (confirmed live), same manager/elias/

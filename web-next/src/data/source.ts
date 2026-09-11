@@ -1,7 +1,8 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeadUpdate, LeaderboardRow, LeaveRequest, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveVisitStatus, StreakRow, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
+import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
@@ -9,7 +10,10 @@ import {
   mapAchievementDefRow,
   mapActivityLogRow,
   mapAllocationRequestRow,
+  mapAttendanceComparisonRow,
+  mapAttendanceNoteRow,
   mapAttendanceRow,
+  mapAttendanceReviewRow,
   mapAuditEventRow,
   mapBackupRow,
   mapBannerRow,
@@ -26,8 +30,13 @@ import {
   mapDownloadRow,
   mapEnquiryRow,
   mapStaffAchievementRow,
+  mapAttendanceExceptionRow,
+  mapAttendancePolicyRow,
   mapLeaderboardRawRow,
+  mapLeaderboardScoreHistoryRow,
+  mapLeaderboardScoreRow,
   mapLeadRow,
+  mapOfficeLocationRow,
   mapLeaveRequestRow,
   mapMemoRow,
   mapNoteRow,
@@ -37,11 +46,15 @@ import {
   mapProfileRow,
   mapReferralRow,
   mapReportArchiveRow,
+  mapScheduleItemAttachmentRow,
+  mapScheduleItemInviteeRow,
   mapScheduleItemRow,
   mapSiteVisitRow,
+  mapSveDayReportRow,
   mapSveInviteRow,
   mapSveSubmissionRow,
   mapStreakRow,
+  mapTaskEventRow,
   mapConfigRow,
   domainStatusToDb,
 } from './mappers';
@@ -75,6 +88,18 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   if ('address' in patch) dbPatch.address = patch.address;
   if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
   return dbPatch;
+}
+
+// Master Spec 10.2: "Recurring tasks create future instances without
+// duplicating history." Advances a date by one recurrence step -- used
+// by scheduleItems.updateStatus (both demo and real) when a recurring
+// task is closed, to compute the next instance's due date.
+function nextRecurrenceDate(dateIso: string, freq: 'daily' | 'weekly' | 'monthly', interval: number): string {
+  const d = new Date(`${dateIso}T00:00:00`);
+  if (freq === 'daily') d.setDate(d.getDate() + interval);
+  else if (freq === 'weekly') d.setDate(d.getDate() + interval * 7);
+  else d.setMonth(d.getMonth() + interval);
+  return d.toISOString().slice(0, 10);
 }
 
 // Small realistic roster for demo mode's staff picker -- names/keys match
@@ -289,8 +314,23 @@ export interface DataSource {
     // documented demo/live boundary as SVE invites.
     issueReceiptLink(paymentId: string, pdfBlob: Blob, createdBy: string): Promise<string>;
   };
+  // Master Spec Section 10 (Operations Tracker) -- schedule_items is the
+  // one shared table behind My Day (kind='todo'), Task Board/Team
+  // Schedule/Week/Month Calendar (kind='task'), and Meetings (kind=
+  // 'meeting'). schedule_item_invitees/task_events/schedule_item_attachments
+  // are separate real tables (added or discovered live 2026-09-06) this
+  // one feature also owns.
   scheduleItems: {
     listForAgentOnDate(agentKey: string, date: string): Promise<ScheduleItem[]>;
+    // Week/Month Calendar and Team Schedule all need a date-range read
+    // rather than My Day's single-day one -- kind is deliberately NOT
+    // filtered here (a calendar view shows todos+tasks+meetings together
+    // on the days they fall), unlike listForAgentOnDate which stays
+    // todo-only so My Day's existing behavior never changes.
+    listForAgentInRange(agentKey: string, fromDate: string, toDate: string): Promise<ScheduleItem[]>;
+    // Team Schedule (manager-only, gated client-side like every other
+    // company-wide list here) -- every staff member's items in range.
+    listAllInRange(fromDate: string, toDate: string): Promise<ScheduleItem[]>;
     // assignedTo defaults to the creator (agentKey) when omitted, matching
     // every existing call site's behavior exactly. When it's a different
     // key, this is a real "assign a task to a colleague" write -- owner_key
@@ -300,7 +340,22 @@ export interface DataSource {
     // colleague's own listForAgentOnDate already filters by assigned_to
     // (not owner_key), so this needs no read-side change at all.
     create(agentKey: string, date: string, title: string, assignedTo?: string): Promise<ScheduleItem>;
-    updateStatus(id: string, status: ScheduleItemStatus): Promise<ScheduleItem>;
+    // Full-record edit (title/description/notes/category/priority/dates/
+    // times/links/dependency) -- real gap closed 2026-09-06: nothing
+    // before this could revise a task/todo after creation at all.
+    update(id: string, patch: ScheduleItemPatch): Promise<ScheduleItem>;
+    // actorKey/actorName log a real task_events row for every status
+    // change (Master Spec 10.2's "activity history"), and a transition
+    // into/out of 'closed' now actually stamps completed_at -- real bug
+    // fixed 2026-09-06: the live leaderboard_rows() RPC's tasks_completed/
+    // avg_task_days already depended on completed_at, but nothing ever
+    // set it, so every task closed through this app previously
+    // undercounted. Completing a task also auto-clears 'blocked' on any
+    // OTHER task whose blockedById pointed at this one and whose
+    // predecessor is now actually done (Master Spec 10.2: "a task cannot
+    // be marked ready when a required predecessor is incomplete" implies
+    // the reverse too -- it becomes ready the moment that predecessor is).
+    updateStatus(id: string, status: ScheduleItemStatus, actorKey: string, actorName: string): Promise<ScheduleItem>;
     // Task Board (kind='task', distinct from My Day's kind='todo' rows
     // above -- same table, always filtered apart). listAllTasks() is
     // manager-only (gated client-side, matching every other company-wide
@@ -308,13 +363,48 @@ export interface DataSource {
     // member's own board shows, same shape either way.
     listTasksForAgent(agentKey: string): Promise<ScheduleItem[]>;
     listAllTasks(): Promise<ScheduleItem[]>;
+    // If input.blockedById names a predecessor that isn't done yet, the
+    // new task starts life with status='blocked' instead of 'open' --
+    // real enforcement of Master Spec 10.2's dependency gate, not just a
+    // label.
     createTask(ownerKey: string, ownerName: string, input: NewTask): Promise<ScheduleItem>;
     // Real reassignment (owner_key never changes -- matches create()'s own
     // owner/assignee split above); byKey/byName are stamped as
     // assigned_by/assigned_by_name so a reassign is attributable, per the
-    // master spec's "records who reassigned and why" -- the "why" itself
-    // isn't collected yet (no reason field wired into this pass).
-    reassignTask(id: string, toKey: string, toName: string, byKey: string, byName: string): Promise<ScheduleItem>;
+    // master spec's "records who reassigned and why" -- reason is now
+    // collected and logged to task_events (real gap closed 2026-09-06).
+    reassignTask(id: string, toKey: string, toName: string, byKey: string, byName: string, reason: string): Promise<ScheduleItem>;
+    // Master Spec 10.3 Meetings -- one schedule_items row (kind='meeting')
+    // plus one schedule_item_invitees row per invited staff member.
+    createMeeting(ownerKey: string, ownerName: string, input: NewMeeting): Promise<ScheduleItem>;
+    listMeetingsForAgent(agentKey: string, fromDate: string, toDate: string): Promise<ScheduleItem[]>;
+    // Real conflict check via the check_schedule_conflicts() SECURITY
+    // DEFINER function (added 2026-09-06) -- returns only a boolean per
+    // staff key, never the conflicting event's own details, since a
+    // non-manager organizer has no RLS visibility into a colleague's
+    // actual schedule (same real limitation useColleagueAvailability.ts
+    // already documented for task counts).
+    checkConflicts(staffKeys: string[], date: string, startTime: string, endTime: string, excludeId?: string): Promise<{ staffKey: string; hasConflict: boolean }[]>;
+  };
+  scheduleItemInvitees: {
+    listForItem(scheduleItemId: string): Promise<ScheduleItemInvitee[]>;
+    respond(inviteeId: string, status: 'accepted' | 'declined'): Promise<ScheduleItemInvitee>;
+  };
+  // Real table `task_events` (discovered live 2026-09-06, RLS already in
+  // place from an earlier phase, zero application code touched it before
+  // now) -- Master Spec 10.2's "activity history."
+  taskEvents: {
+    listForTask(taskId: string): Promise<TaskEvent[]>;
+    log(taskId: string, type: string, actorKey: string, actorName: string, extra?: { fromKey?: string | null; fromName?: string | null; toKey?: string | null; toName?: string | null; note?: string | null }): Promise<void>;
+  };
+  // Real table `schedule_item_attachments` (added 2026-09-06) -- Master
+  // Spec 10.2's "attachments." Storage path convention
+  // `{scheduleItemId}/{filename}` in the `task-attachments` bucket.
+  scheduleItemAttachments: {
+    listForItem(scheduleItemId: string): Promise<ScheduleItemAttachment[]>;
+    upload(scheduleItemId: string, file: Blob, fileName: string, contentType: string, uploadedBy: string, uploadedByName: string): Promise<ScheduleItemAttachment>;
+    getUrl(storagePath: string): Promise<string | null>;
+    remove(attachmentId: string, storagePath: string): Promise<void>;
   };
   streaks: {
     history(staffKey: string, days: number): Promise<StreakRow[]>;
@@ -353,6 +443,16 @@ export interface DataSource {
           | 'techFullPlotWidthFt'
           | 'techHalfPlotLengthFt'
           | 'techHalfPlotWidthFt'
+          | 'officeLat'
+          | 'officeLng'
+          | 'officeRadiusMeters'
+          | 'attendanceCutoffTime'
+          | 'workStartTime'
+          | 'workEndTime'
+          | 'workDays'
+          | 'leaveTotalDays'
+          | 'eidObservingStaff'
+          | 'eidWindows'
         >
       >
     ): Promise<Config>;
@@ -396,7 +496,7 @@ export interface DataSource {
     // never a hard DELETE -- real site_visits_del RLS would allow a hard
     // delete, but that would destroy the cost/history record the spec
     // explicitly says must survive.
-    cancel(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<void>;
+    cancel(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<SiteVisit>;
   };
   // Master Spec Section 4's "combined activity timeline" lead-record
   // section. Real activity_log.lead_id FK (added this session, see
@@ -440,9 +540,13 @@ export interface DataSource {
   // Agent-scoped via agent_key exactly like leads/site_visits (confirmed
   // live) -- straightforward, unlike referrals' lead-linked scoping.
   enquiries: {
+    // listForAgent now also matches `owner` (RLS updated the same day to
+    // match) -- an enquiry escalated to a colleague via owner must reach
+    // that colleague's own view, same fix as complaints.
     listForAgent(agentKey: string): Promise<Enquiry[]>;
     listAll(): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
+    update(id: string, patch: EnquiryUpdate): Promise<Enquiry>;
   };
   // Agent-scoped via agent_key exactly like enquiries -- but unlike
   // payments, complaints_upd (confirmed live) is ALSO agent-scoped, not
@@ -490,7 +594,40 @@ export interface DataSource {
   leaveRequests: {
     list(): Promise<LeaveRequest[]>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
-    decide(id: string, approve: boolean, decidedBy: string, decidedByName: string, decidedSignature: string | null): Promise<LeaveRequest>;
+    // Master Spec 12.4: "Management may approve, decline or reschedule
+    // with reason". Exact port of v1's own split (index.html:5503-5532):
+    // decide() only ever does approve/declined (apiDecideLeaveRequest) --
+    // reschedule is its own method below (apiRescheduleLeaveRequest), since
+    // v1's real reschedule has two distinct outcomes decide() can't express.
+    // note on decline carries the decline reason (stored in the real
+    // reschedule_note column, same as v1); deductQuota is Management's
+    // explicit call at approval time (12.4's "normally yes, Management can
+    // choose no for exceptional cases"), left unchanged when omitted.
+    decide(id: string, outcome: 'approved' | 'declined', decidedBy: string, decidedByName: string, decidedSignature: string | null, note?: string, deductQuota?: boolean): Promise<LeaveRequest>;
+    // Exact port of v1's apiRescheduleLeaveRequest (index.html:5513-5532).
+    // Two real outcomes: newDates given (Management picked the actual
+    // replacement date(s) via the calendar in the reschedule UI) -- this
+    // IS the reschedule, dates are updated in place and it's approved+
+    // signed immediately, nothing further needed from the staff member.
+    // newDates omitted/empty -- Management just needs different dates from
+    // the staff member; frees the original dates back up (status
+    // 'rescheduled' doesn't block, same as leaveIsBlocking()) without
+    // approving anything yet.
+    reschedule(id: string, note: string | undefined, newDates: string[] | null, decidedBy: string, decidedByName: string, decidedSignature: string | null): Promise<LeaveRequest>;
+    // v1's real "planned -> pending" transition (index.html's
+    // sendPlannedLeaveNow) -- a private draft becomes a real request
+    // Management can see/act on.
+    sendPlanned(id: string): Promise<LeaveRequest>;
+    // v1's real delete-a-planned-entry action (data-leaveplandel) -- only
+    // ever offered in the UI for a still-'planned' row, never a sent one.
+    remove(id: string): Promise<void>;
+    // New 2026-09-05, genuinely no v1 precedent. Real column
+    // `used_confirmed_at` -- only the requester themselves can confirm they
+    // actually took an approved, already-passed leave, which is what backs
+    // leaveDaysConfirmedUsed() (see leaveLogic.ts's header comment on why
+    // this is a separate concept from the entitlement-protecting "reserved"
+    // count that leaveDaysUsed() still computes from status alone).
+    confirmUsed(id: string): Promise<LeaveRequest>;
   };
   // Real table `banners` (confirmed live) -- physical banner/scouted-
   // location tracking. Unlike Plot Inventory, banners_sel/ins/upd RLS is
@@ -527,6 +664,36 @@ export interface DataSource {
     list(): Promise<PricingPromotion[]>;
     create(createdBy: string, createdByName: string, input: Omit<PricingPromotion, 'id' | 'createdBy' | 'createdByName' | 'createdAt'>): Promise<PricingPromotion>;
     remove(id: string): Promise<void>;
+  };
+  // Real V3 chapter-01 entity (office_locations table, new 2026-09-10) --
+  // a genuine multi-site geofence list, superseding the single flat
+  // Config.officeLat/officeLng. Readable by any authenticated staff member
+  // (AttendanceScreen's off-site check needs to read it too, not just
+  // Management); writes are manager-only, RLS-enforced. See
+  // project-attendance-v3-chapter01-gap memory.
+  officeLocations: {
+    list(): Promise<OfficeLocation[]>;
+    create(createdBy: string, createdByName: string, input: NewOfficeLocation): Promise<OfficeLocation>;
+    update(id: string, patch: Partial<NewOfficeLocation & { isActive: boolean }>): Promise<OfficeLocation>;
+    remove(id: string): Promise<void>;
+  };
+  // Real V3 chapter-01 entity (attendance_policy table) -- see
+  // AttendancePolicy's own doc comment in types/domain.ts. `update()`
+  // calls the set_attendance_policy() SECURITY DEFINER RPC (manager-only,
+  // atomically versions the row) rather than a direct table write.
+  attendancePolicy: {
+    current(): Promise<AttendancePolicy | null>;
+    history(): Promise<AttendancePolicy[]>;
+    update(createdBy: string, createdByName: string, input: { workStartTime: string; workEndTime: string; graceMinutes: number; workDays: number[] }): Promise<AttendancePolicy>;
+  };
+  // Real V3 chapter-01 entity (attendance_exceptions table) -- see
+  // AttendanceException's own doc comment in types/domain.ts. list()
+  // trusts RLS to scope results (own requests, or every request for a
+  // manager session), same pattern as leaveRequests.list().
+  attendanceExceptions: {
+    list(): Promise<AttendanceException[]>;
+    create(agentKey: string, agentName: string, input: NewAttendanceException): Promise<AttendanceException>;
+    decide(id: string, status: 'approved' | 'declined', decidedBy: string, decidedByName: string): Promise<AttendanceException>;
   };
   // Real table `fund_requests` -- see the FundRequest type's comment in
   // types/domain.ts for the real reason this is only ever the request/
@@ -727,8 +894,75 @@ export interface DataSource {
   attendance: {
     today(staffKey: string): Promise<AttendanceRecord | null>;
     history(staffKey: string, days: number): Promise<AttendanceRecord[]>;
+    // Real user ask (2026-09-05): "all attendance needs to go to
+    // management in real time with all the data" -- today()/history()
+    // above are staff-scoped only; Management had no way to see anyone's
+    // attendance at all before this, live or otherwise.
+    listToday(): Promise<AttendanceRecord[]>;
+    // Company-wide, trailing-window (unlike history() above, which is one
+    // staff member's own). Backs the AI attendance-pattern suggestions
+    // (attendanceRosterLogic.ts's detectAttendancePatterns) -- new
+    // 2026-09-07, user correction: Praise/Warning must come from the
+    // system detecting a real pattern, not Management clicking a button
+    // per staff member.
+    listRange(days: number): Promise<AttendanceRecord[]>;
+    // Explicit from/to bounds (inclusive), company-wide -- backs the
+    // Attendance Records screen's date-range filter (new 2026-09-10, user
+    // correction: "the attandance app doenst have a records page,
+    // analytics nothing and managemnt cant even pull filter or compare
+    // staff attendance trends or even pull a report on attendance").
+    // Deliberately its own method rather than reusing listRange(days) --
+    // a UI-driven date picker needs real bounds, not "N days back from
+    // whenever this happens to be called".
+    listBetween(startDate: string, endDate: string): Promise<AttendanceRecord[]>;
     signIn(staffKey: string, staffName: string, input: SignInInput): Promise<AttendanceRecord>;
     signOut(staffKey: string, id: string, input: SignOutInput): Promise<AttendanceRecord>;
+    // ATTENDANCE_BLUEPRINT.md §8 -- Management-only record correction
+    // (sign-in/out time only, matching the real `al_upd_own_or_mgr` RLS
+    // policy already live) and delete (real `al_del_mgr` policy, manager-
+    // only). Callers gate the UI to role==='manager'; RLS is the real
+    // backstop on production.
+    update(id: string, patch: { signInAt?: string | null; signOutAt?: string | null }): Promise<AttendanceRecord>;
+    remove(id: string): Promise<void>;
+    // ATTENDANCE_BLUEPRINT.md §6 "You vs the team" -- a regular staff
+    // session can't read anyone else's attendance_log rows at all under
+    // real RLS (al_sel_own_or_mgr is staff_key = my_key() OR manager,
+    // confirmed live 2026-09-11), so this can't be computed from listRange
+    // client-side the way the blueprint first assumed. Aggregate-only,
+    // same privacy shape as the leaderboard rankings already visible to
+    // every staff member (no coordinates/photos/reasons).
+    monthComparison(monthKey: string, cutoff: string): Promise<{ staffKey: string; staffName: string; daysAttended: number; onTimeDays: number }[]>;
+    // ATTENDANCE_BLUEPRINT.md §9 -- Management-only, company-wide, deletes
+    // every attendance_log row. Real `al_del_mgr` RLS already permits a
+    // manager to delete any row; no new policy needed, the client just
+    // issues one unscoped delete instead of one row at a time. Gated
+    // behind two sequential confirm() dialogs in the UI (v1's exact
+    // pattern for this specific destructive action).
+    resetAll(): Promise<void>;
+  };
+  // Real table `attendance_notes` (new -- Master Spec 11.3's Praise/Warning
+  // action, no v1 precedent). SELECT RLS is own-or-manager (same shape as
+  // attendance_log); INSERT is manager-only. Append-only by design -- no
+  // update()/remove() here, matching the fact that no UPDATE/DELETE policy
+  // exists on the table either. list() returns every note the caller is
+  // allowed to see (their own, or -- for a manager -- everyone's), same
+  // unfiltered-then-RLS-scoped shape as leaveRequests.list().
+  attendanceNotes: {
+    list(): Promise<AttendanceNote[]>;
+    issue(staffKey: string, staffName: string, kind: AttendanceNote['kind'], reason: string, workDate: string, createdBy: string, createdByName: string): Promise<AttendanceNote>;
+  };
+  // ATTENDANCE_BLUEPRINT.md §13 -- post-hoc classification of an off-site
+  // sign-in/out, distinct from attendanceExceptions (ask permission ahead
+  // of time). Real table + RLS already existed from earlier schema-
+  // foundation work this session (own-or-manager SELECT, manager-only
+  // INSERT/UPDATE); this session added the real `classification` enum
+  // column. decide() always creates an already-'reviewed' row (the UI
+  // never shows an interim "pending" state -- Management picks a
+  // classification in the same action that opens the review), so no
+  // separate update() method is needed yet.
+  attendanceReviews: {
+    list(): Promise<AttendanceReview[]>;
+    decide(attendanceLogId: string, staffKey: string, staffName: string, classification: 'authorized' | 'exception', note: string, reviewedBy: string, reviewedByName: string): Promise<AttendanceReview>;
   };
   // Real `profiles` table -- needed as a recipient/CC picker for
   // Memorandum. RLS (p_profiles_sel) lets any authenticated staff member
@@ -793,6 +1027,24 @@ export interface DataSource {
     // the demo store has no multi-agent staff roster to rank, so this
     // returns [] in demo, same as apiLoadLeaderboardRows() always has.
     leaderboardRows(fromDate: string, toDate: string): Promise<Omit<LeaderboardRow, 'points'>[]>;
+    // Server-authoritative scored rows -- calls recompute_leaderboard_
+    // scores(), a SECURITY DEFINER SQL function that computes `points`
+    // itself (same formula as the old client-side agentPoints(), now
+    // fixing a real bug: total_collected used to be leads.amt_paid
+    // unscoped by date, now approved payments actually received in
+    // range) and persists it to leaderboard_scores, logging a
+    // leaderboard_score_history row whenever a score changes. Both
+    // Leaderboard and Portfolio must call this (not leaderboardRows +
+    // client agentPoints()) so score is computed once, in one place, and
+    // is auditable. See project-leaderboard-v3-audit-and-plan memory.
+    leaderboardScores(fromDate: string, toDate: string): Promise<LeaderboardRow[]>;
+    // Real audit trail from `leaderboard_score_history` -- a row only
+    // exists when a persisted score's points actually changed, written
+    // by a DB trigger, never by the client. Backs the Leaderboard admin
+    // workspace's "Recent score changes" panel. Demo mode has no
+    // persisted score ledger to audit (leaderboardScores() recomputes
+    // fresh client-side every call), so this returns [] there.
+    leaderboardScoreHistory(limit: number): Promise<LeaderboardScoreHistoryEntry[]>;
     // Unfiltered payments/leads (real payments_sel/leads_sel RLS confirmed
     // to let a manager session SELECT every row) + the agent roster --
     // commissionLogic.ts does the actual monthly computation client-side
@@ -828,6 +1080,18 @@ export interface DataSource {
     // stamps report_pdf_path/report_sent_at on the submission itself so
     // the UI knows a report already went out.
     issueReportLink(submissionId: string, pdfBlob: Blob, createdBy: string, createdByName: string): Promise<string>;
+    // Real table `sve_day_reports` -- one row per site-visit day, covering
+    // every client visited that day (not one row per submission). Real
+    // user ask: "the report isn't supposed to be for a single client
+    // after client but a full report after every site visit." Same
+    // getOrCreate/save shape as weeklyVisitForms.
+    getOrCreateDayReport(visitDate: string): Promise<SveDayReport>;
+    saveDayReport(id: string, patch: SveDayReportPatch): Promise<SveDayReport>;
+    listDayReports(): Promise<SveDayReport[]>;
+    // Same tokenized-share pattern as issueReportLink above, pointed at a
+    // day report instead of a single submission (sve_report_links.
+    // day_report_id, added alongside the existing nullable submission_id).
+    issueDayReportLink(dayReportId: string, pdfBlob: Blob, createdBy: string, createdByName: string): Promise<string>;
   };
   // Real table `messages` -- strictly 1:1 staff-to-staff, kind IS NULL
   // rows only (the same table also carries system notifications with a
@@ -1265,6 +1529,12 @@ function createDemoDataSource(): DataSource {
         // by kind already.
         return demoLoad().scheduleItems.filter((s) => s.kind === 'todo' && s.assignedTo === agentKey && s.date === date);
       },
+      async listForAgentInRange(agentKey, fromDate, toDate) {
+        return demoLoad().scheduleItems.filter((s) => (s.assignedTo === agentKey || s.ownerKey === agentKey) && s.date >= fromDate && s.date <= toDate);
+      },
+      async listAllInRange(fromDate, toDate) {
+        return demoLoad().scheduleItems.filter((s) => s.date >= fromDate && s.date <= toDate);
+      },
       async create(agentKey, date, title, assignedTo) {
         const item: ScheduleItem = {
           id: Math.random().toString(36).slice(2, 10),
@@ -1274,17 +1544,67 @@ function createDemoDataSource(): DataSource {
           date,
           status: 'open',
           title,
+          createdAt: new Date().toISOString(),
         };
         const db = demoLoad();
         db.scheduleItems.push(item);
         demoSave();
         return item;
       },
-      async updateStatus(id, status) {
+      async update(id, patch) {
         const db = demoLoad();
         const item = db.scheduleItems.find((s) => s.id === id);
         if (!item) throw new Error('Schedule item not found');
+        Object.assign(item, patch);
+        demoSave();
+        return item;
+      },
+      async updateStatus(id, status, actorKey, actorName) {
+        const db = demoLoad();
+        const item = db.scheduleItems.find((s) => s.id === id);
+        if (!item) throw new Error('Schedule item not found');
+        const fromStatus = item.status;
         item.status = status;
+        if (status === 'closed') item.completedAt = new Date().toISOString();
+        else if (fromStatus === 'closed') item.completedAt = null;
+        demoSave();
+        db.taskEvents = db.taskEvents ?? [];
+        db.taskEvents.push({
+          id: Math.random().toString(36).slice(2, 10),
+          taskId: id,
+          type: 'status_changed',
+          actorKey,
+          actorName,
+          fromKey: fromStatus,
+          fromName: null,
+          toKey: status,
+          toName: null,
+          note: null,
+          createdAt: new Date().toISOString(),
+        });
+        if (status === 'closed') {
+          db.scheduleItems.filter((s) => s.blockedById === id && s.status === 'blocked').forEach((s) => (s.status = 'open'));
+
+          if (item.recursFreq) {
+            const baseDate = item.date ?? new Date().toISOString().slice(0, 10);
+            const interval = item.recursInterval ?? 1;
+            const nextDate = nextRecurrenceDate(baseDate, item.recursFreq, interval);
+            if (!item.recursUntil || nextDate <= item.recursUntil) {
+              const spawn: ScheduleItem = {
+                ...item,
+                id: Math.random().toString(36).slice(2, 10),
+                date: nextDate,
+                dueDate: item.dueDate ? nextDate : null,
+                status: 'open',
+                completedAt: null,
+                recursParentId: item.recursParentId ?? id,
+                createdAt: new Date().toISOString(),
+              };
+              db.scheduleItems.push(spawn);
+              db.taskEvents.push({ id: Math.random().toString(36).slice(2, 10), taskId: spawn.id, type: 'created', actorKey, actorName, fromKey: null, fromName: null, toKey: null, toName: null, note: 'Recurring instance', createdAt: new Date().toISOString() });
+            }
+          }
+        }
         demoSave();
         return item;
       },
@@ -1296,6 +1616,8 @@ function createDemoDataSource(): DataSource {
         return demoLoad().scheduleItems.filter((s) => s.kind === 'task');
       },
       async createTask(ownerKey, ownerName, input) {
+        const db = demoLoad();
+        const predecessor = input.blockedById ? db.scheduleItems.find((s) => s.id === input.blockedById) : null;
         const item: ScheduleItem = {
           id: Math.random().toString(36).slice(2, 10),
           kind: 'task',
@@ -1303,26 +1625,161 @@ function createDemoDataSource(): DataSource {
           ownerName,
           assignedTo: input.assignedTo,
           assignedToName: input.assignedToName,
+          assignedBy: ownerKey,
+          assignedByName: ownerName,
           date: input.dueDate ?? new Date().toISOString().slice(0, 10),
-          status: 'open',
+          dueDate: input.dueDate ?? null,
+          startTime: input.startTime ?? null,
+          endTime: input.endTime ?? null,
+          status: predecessor && predecessor.status !== 'closed' ? 'blocked' : 'open',
           title: input.title,
           description: input.description ?? null,
+          notes: input.notes ?? null,
           category: input.category ?? null,
           priority: input.priority ?? null,
+          linkedLeadId: input.linkedLeadId ?? null,
+          linkedSiteVisitId: input.linkedSiteVisitId ?? null,
+          blockedById: input.blockedById ?? null,
+          recursFreq: input.recursFreq ?? null,
+          recursInterval: input.recursInterval ?? null,
+          recursUntil: input.recursUntil ?? null,
+          tags: input.tags ?? [],
+          createdAt: new Date().toISOString(),
         };
-        const db = demoLoad();
         db.scheduleItems.push(item);
+        demoSave();
+        db.taskEvents = db.taskEvents ?? [];
+        db.taskEvents.push({ id: Math.random().toString(36).slice(2, 10), taskId: item.id, type: 'created', actorKey: ownerKey, actorName: ownerName, fromKey: null, fromName: null, toKey: null, toName: null, note: null, createdAt: new Date().toISOString() });
         demoSave();
         return item;
       },
-      async reassignTask(id, toKey, toName) {
+      async reassignTask(id, toKey, toName, byKey, byName, reason) {
         const db = demoLoad();
         const item = db.scheduleItems.find((s) => s.id === id);
         if (!item) throw new Error('Task not found');
+        const fromKey = item.assignedTo;
+        const fromName = item.assignedToName ?? null;
         item.assignedTo = toKey;
         item.assignedToName = toName;
+        item.assignedBy = byKey;
+        item.assignedByName = byName;
+        demoSave();
+        db.taskEvents = db.taskEvents ?? [];
+        db.taskEvents.push({ id: Math.random().toString(36).slice(2, 10), taskId: id, type: 'reassigned', actorKey: byKey, actorName: byName, fromKey, fromName, toKey, toName, note: reason || null, createdAt: new Date().toISOString() });
         demoSave();
         return item;
+      },
+      async createMeeting(ownerKey, ownerName, input) {
+        const db = demoLoad();
+        const item: ScheduleItem = {
+          id: Math.random().toString(36).slice(2, 10),
+          kind: 'meeting',
+          ownerKey,
+          ownerName,
+          assignedTo: ownerKey,
+          assignedToName: ownerName,
+          date: input.date,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          status: 'open',
+          title: input.title,
+          description: input.description ?? null,
+          meetingLocation: input.meetingLocation ?? null,
+          createdAt: new Date().toISOString(),
+        };
+        db.scheduleItems.push(item);
+        db.scheduleItemInvitees = db.scheduleItemInvitees ?? [];
+        input.inviteeKeys.forEach((staffKey) => {
+          db.scheduleItemInvitees.push({ id: Math.random().toString(36).slice(2, 10), scheduleItemId: item.id, staffKey, staffName: null, status: 'invited', respondedAt: null, createdAt: new Date().toISOString() });
+        });
+        demoSave();
+        return item;
+      },
+      async listMeetingsForAgent(agentKey, fromDate, toDate) {
+        const db = demoLoad();
+        const invitedIds = new Set((db.scheduleItemInvitees ?? []).filter((i) => i.staffKey === agentKey).map((i) => i.scheduleItemId));
+        return db.scheduleItems.filter((s) => s.kind === 'meeting' && s.date >= fromDate && s.date <= toDate && (s.ownerKey === agentKey || invitedIds.has(s.id)));
+      },
+      async checkConflicts(staffKeys, date, startTime, endTime, excludeId) {
+        const db = demoLoad();
+        const overlapping = db.scheduleItems.filter(
+          (s) => s.id !== excludeId && s.date === date && s.status !== 'cancelled' && s.startTime && s.endTime && s.startTime < endTime && s.endTime > startTime
+        );
+        return staffKeys.map((staffKey) => {
+          const hasConflict = overlapping.some((s) => {
+            if (s.ownerKey === staffKey || s.assignedTo === staffKey) return true;
+            return (db.scheduleItemInvitees ?? []).some((i) => i.scheduleItemId === s.id && i.staffKey === staffKey && i.status !== 'declined');
+          });
+          return { staffKey, hasConflict };
+        });
+      },
+    },
+    scheduleItemInvitees: {
+      async listForItem(scheduleItemId) {
+        return (demoLoad().scheduleItemInvitees ?? []).filter((i) => i.scheduleItemId === scheduleItemId);
+      },
+      async respond(inviteeId, status) {
+        const db = demoLoad();
+        db.scheduleItemInvitees = db.scheduleItemInvitees ?? [];
+        const invitee = db.scheduleItemInvitees.find((i) => i.id === inviteeId);
+        if (!invitee) throw new Error('Invite not found');
+        invitee.status = status;
+        invitee.respondedAt = new Date().toISOString();
+        demoSave();
+        return invitee;
+      },
+    },
+    taskEvents: {
+      async listForTask(taskId) {
+        return (demoLoad().taskEvents ?? []).filter((e) => e.taskId === taskId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async log(taskId, type, actorKey, actorName, extra) {
+        const db = demoLoad();
+        db.taskEvents = db.taskEvents ?? [];
+        db.taskEvents.push({
+          id: Math.random().toString(36).slice(2, 10),
+          taskId,
+          type,
+          actorKey,
+          actorName,
+          fromKey: extra?.fromKey ?? null,
+          fromName: extra?.fromName ?? null,
+          toKey: extra?.toKey ?? null,
+          toName: extra?.toName ?? null,
+          note: extra?.note ?? null,
+          createdAt: new Date().toISOString(),
+        });
+        demoSave();
+      },
+    },
+    scheduleItemAttachments: {
+      async listForItem(scheduleItemId) {
+        return (demoLoad().scheduleItemAttachments ?? []).filter((a) => a.scheduleItemId === scheduleItemId);
+      },
+      async upload(scheduleItemId, _file, fileName, contentType, uploadedBy, uploadedByName) {
+        const db = demoLoad();
+        db.scheduleItemAttachments = db.scheduleItemAttachments ?? [];
+        const attachment: ScheduleItemAttachment = {
+          id: Math.random().toString(36).slice(2, 10),
+          scheduleItemId,
+          fileName,
+          storagePath: `demo/${scheduleItemId}/${fileName}`,
+          contentType,
+          uploadedBy,
+          uploadedByName,
+          createdAt: new Date().toISOString(),
+        };
+        db.scheduleItemAttachments.push(attachment);
+        demoSave();
+        return attachment;
+      },
+      async getUrl() {
+        return null;
+      },
+      async remove(attachmentId) {
+        const db = demoLoad();
+        db.scheduleItemAttachments = (db.scheduleItemAttachments ?? []).filter((a) => a.id !== attachmentId);
+        demoSave();
       },
     },
     streaks: {
@@ -1490,6 +1947,7 @@ function createDemoDataSource(): DataSource {
         const updated: SiteVisit = { ...db.siteVisits[index], deletedAt: new Date().toISOString(), deletedBy, deletedByName, cancellationReason: reason };
         db.siteVisits = [...db.siteVisits.slice(0, index), updated, ...db.siteVisits.slice(index + 1)];
         demoSave();
+        return updated;
       },
     },
     activityLog: {
@@ -1571,7 +2029,7 @@ function createDemoDataSource(): DataSource {
     },
     enquiries: {
       async listForAgent(agentKey) {
-        return demoLoad().enquiries.filter((e) => e.agentKey === agentKey);
+        return demoLoad().enquiries.filter((e) => e.agentKey === agentKey || e.owner === agentKey);
       },
       async listAll() {
         return demoLoad().enquiries;
@@ -1591,16 +2049,39 @@ function createDemoDataSource(): DataSource {
           follow: input.follow ?? null,
           followDate: input.followDate ?? null,
           createdAt: new Date().toISOString(),
+          status: 'Open',
+          owner: null,
         };
         const db = demoLoad();
         db.enquiries.push(enquiry);
         demoSave();
         return enquiry;
       },
+      async update(id, patch) {
+        const db = demoLoad();
+        const index = db.enquiries.findIndex((e) => e.id === id);
+        if (index === -1) throw new Error('Enquiry not found');
+        const updated: Enquiry = {
+          ...db.enquiries[index],
+          status: patch.status ?? db.enquiries[index].status,
+          owner: patch.owner ?? db.enquiries[index].owner,
+          follow: patch.follow ?? db.enquiries[index].follow,
+          followDate: patch.followDate ?? db.enquiries[index].followDate,
+        };
+        db.enquiries = [...db.enquiries.slice(0, index), updated, ...db.enquiries.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
     },
     complaints: {
+      // Real user ask (2026-09-05): "enquiries/complaints are supposed to
+      // reach the person theyre assigned to... escalated to another staff."
+      // `owner` is the real reassignment target -- a complaint escalated to
+      // a colleague via `owner` must show up in THAT colleague's own view,
+      // not just the original logging agent's, or the escalation is
+      // invisible to the person it was actually escalated to.
       async listForAgent(agentKey) {
-        return demoLoad().complaints.filter((c) => c.agentKey === agentKey);
+        return demoLoad().complaints.filter((c) => c.agentKey === agentKey || c.owner === agentKey);
       },
       async listAll() {
         return demoLoad().complaints;
@@ -1713,23 +2194,84 @@ function createDemoDataSource(): DataSource {
           dates: input.dates,
           daysCount: input.dates.length,
           letterText: input.letterText ?? null,
-          status: 'pending',
+          status: input.asDraft ? 'planned' : 'pending',
           createdAt: new Date().toISOString(),
           decidedAt: null,
           decidedBy: null,
           decidedByName: null,
           decidedSignature: null,
+          isEmergency: input.isEmergency ?? false,
+          deductQuota: true,
+          rescheduleNote: null,
+          usedConfirmedAt: null,
         };
         const db = demoLoad();
         db.leaveRequests.push(request);
         demoSave();
         return request;
       },
-      async decide(id, approve, decidedBy, decidedByName, decidedSignature) {
+      async sendPlanned(id) {
         const db = demoLoad();
         const index = db.leaveRequests.findIndex((r) => r.id === id);
         if (index === -1) throw new Error('Leave request not found');
-        const updated: LeaveRequest = { ...db.leaveRequests[index], status: approve ? 'approved' : 'declined', decidedAt: new Date().toISOString(), decidedBy, decidedByName, decidedSignature: approve ? decidedSignature : null };
+        const updated: LeaveRequest = { ...db.leaveRequests[index], status: 'pending' };
+        db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.leaveRequests = db.leaveRequests.filter((r) => r.id !== id);
+        demoSave();
+      },
+      async confirmUsed(id) {
+        const db = demoLoad();
+        const index = db.leaveRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Leave request not found');
+        const updated: LeaveRequest = { ...db.leaveRequests[index], usedConfirmedAt: new Date().toISOString() };
+        db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async decide(id, outcome, decidedBy, decidedByName, decidedSignature, note, deductQuota) {
+        const db = demoLoad();
+        const index = db.leaveRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Leave request not found');
+        const existing = db.leaveRequests[index];
+        const updated: LeaveRequest = {
+          ...existing,
+          status: outcome,
+          decidedAt: new Date().toISOString(),
+          decidedBy,
+          decidedByName,
+          decidedSignature: outcome === 'approved' ? decidedSignature : null,
+          rescheduleNote: note ?? existing.rescheduleNote,
+          deductQuota: deductQuota !== undefined ? deductQuota : existing.deductQuota,
+        };
+        db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async reschedule(id, note, newDates, decidedBy, decidedByName, decidedSignature) {
+        const db = demoLoad();
+        const index = db.leaveRequests.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Leave request not found');
+        const existing = db.leaveRequests[index];
+        const updated: LeaveRequest =
+          newDates && newDates.length
+            ? {
+                ...existing,
+                status: 'approved',
+                dates: newDates,
+                daysCount: newDates.length,
+                year: new Date(newDates[0]).getFullYear(),
+                rescheduleNote: note ?? null,
+                decidedAt: new Date().toISOString(),
+                decidedBy,
+                decidedByName,
+                decidedSignature,
+              }
+            : { ...existing, status: 'rescheduled', rescheduleNote: note ?? null, decidedAt: new Date().toISOString(), decidedBy, decidedByName };
         db.leaveRequests = [...db.leaveRequests.slice(0, index), updated, ...db.leaveRequests.slice(index + 1)];
         demoSave();
         return updated;
@@ -1796,6 +2338,97 @@ function createDemoDataSource(): DataSource {
         const db = demoLoad();
         db.pricingPromotions = (db.pricingPromotions ?? []).filter((p) => p.id !== id);
         demoSave();
+      },
+    },
+    officeLocations: {
+      async list() {
+        return (demoLoad().officeLocations ?? []).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      },
+      async create(createdBy, createdByName, input) {
+        const entry: OfficeLocation = { id: crypto.randomUUID(), name: input.name, lat: input.lat, lng: input.lng, radiusMeters: input.radiusMeters, isActive: true, createdBy, createdByName, createdAt: new Date().toISOString() };
+        const db = demoLoad();
+        db.officeLocations = [...(db.officeLocations ?? []), entry];
+        demoSave();
+        return entry;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        const list = db.officeLocations ?? [];
+        const idx = list.findIndex((o) => o.id === id);
+        if (idx < 0) throw new Error('Office location not found');
+        const updated: OfficeLocation = { ...list[idx], ...patch };
+        db.officeLocations = [...list.slice(0, idx), updated, ...list.slice(idx + 1)];
+        demoSave();
+        return updated;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.officeLocations = (db.officeLocations ?? []).filter((o) => o.id !== id);
+        demoSave();
+      },
+    },
+    attendancePolicy: {
+      async current() {
+        const history = demoLoad().attendancePolicyHistory ?? [];
+        return history.find((p) => p.isActive) ?? null;
+      },
+      async history() {
+        return (demoLoad().attendancePolicyHistory ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      },
+      async update(createdBy, createdByName, input) {
+        const db = demoLoad();
+        const prior = (db.attendancePolicyHistory ?? []).map((p) => ({ ...p, isActive: false }));
+        const entry: AttendancePolicy = {
+          id: crypto.randomUUID(),
+          workStartTime: input.workStartTime,
+          workEndTime: input.workEndTime,
+          graceMinutes: input.graceMinutes,
+          workDays: input.workDays,
+          isActive: true,
+          effectiveFrom: new Date().toISOString().slice(0, 10),
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        db.attendancePolicyHistory = [...prior, entry];
+        demoSave();
+        return entry;
+      },
+    },
+    attendanceExceptions: {
+      async list() {
+        return (demoLoad().attendanceExceptions ?? []).slice().sort((a, b) => b.exceptionDate.localeCompare(a.exceptionDate));
+      },
+      async create(agentKey, agentName, input) {
+        const entry: AttendanceException = {
+          id: crypto.randomUUID(),
+          staffKey: agentKey,
+          staffName: agentName,
+          exceptionDate: input.exceptionDate,
+          exceptionType: input.exceptionType,
+          reason: input.reason,
+          status: 'pending',
+          requestedBy: agentKey,
+          requestedByName: agentName,
+          decidedBy: null,
+          decidedByName: null,
+          decidedAt: null,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.attendanceExceptions = [...(db.attendanceExceptions ?? []), entry];
+        demoSave();
+        return entry;
+      },
+      async decide(id, status, decidedBy, decidedByName) {
+        const db = demoLoad();
+        const list = db.attendanceExceptions ?? [];
+        const idx = list.findIndex((e) => e.id === id);
+        if (idx < 0) throw new Error('Exception request not found');
+        const updated: AttendanceException = { ...list[idx], status, decidedBy, decidedByName, decidedAt: new Date().toISOString() };
+        db.attendanceExceptions = [...list.slice(0, idx), updated, ...list.slice(idx + 1)];
+        demoSave();
+        return updated;
       },
     },
     async leadBannerCounts() {
@@ -2304,6 +2937,25 @@ function createDemoDataSource(): DataSource {
           .attendance.filter((a) => a.staffKey === staffKey && a.workDate >= fromIso)
           .sort((a, b) => (a.workDate < b.workDate ? 1 : -1));
       },
+      async listToday() {
+        const workDate = new Date().toISOString().slice(0, 10);
+        return demoLoad()
+          .attendance.filter((a) => a.workDate === workDate)
+          .sort((a, b) => (a.signInAt ?? '').localeCompare(b.signInAt ?? ''));
+      },
+      async listRange(days) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const cutoffIso = cutoff.toISOString().slice(0, 10);
+        return demoLoad()
+          .attendance.filter((a) => a.workDate >= cutoffIso)
+          .sort((a, b) => (a.workDate < b.workDate ? -1 : 1));
+      },
+      async listBetween(startDate, endDate) {
+        return demoLoad()
+          .attendance.filter((a) => a.workDate >= startDate && a.workDate <= endDate)
+          .sort((a, b) => (a.workDate < b.workDate ? -1 : 1));
+      },
       async signIn(staffKey, staffName, input) {
         const workDate = new Date().toISOString().slice(0, 10);
         const db = demoLoad();
@@ -2329,6 +2981,9 @@ function createDemoDataSource(): DataSource {
           isOffSiteIn: input.offSite ?? false,
           isOffSiteOut: null,
           signInPhoto: input.photo ?? null,
+          signInAccuracyMeters: input.accuracy ?? null,
+          signOutAccuracyMeters: null,
+          deviceInfo: input.deviceInfo ?? null,
         };
         db.attendance.push(record);
         demoSave();
@@ -2344,8 +2999,95 @@ function createDemoDataSource(): DataSource {
         record.signOutLng = input.lng ?? null;
         record.isOffSiteOut = input.offSite ?? false;
         record.signOutReason = input.offSite ? (input.reason ?? null) : null;
+        record.signOutAccuracyMeters = input.accuracy ?? null;
         demoSave();
         return record;
+      },
+      // ATTENDANCE_BLUEPRINT.md §8 -- Management-only correction/delete from
+      // the per-record detail modal. RLS-equivalent gating (manager-only)
+      // is enforced by the caller (RosterRow/detail modal only renders this
+      // action for role==='manager'); demo mode has no RLS to mirror, so
+      // this trusts the call the same way every other demo write does.
+      async update(id, patch) {
+        const db = demoLoad();
+        const record = db.attendance.find((a) => a.id === id);
+        if (!record) throw new Error('Attendance record not found');
+        if (patch.signInAt !== undefined) record.signInAt = patch.signInAt;
+        if (patch.signOutAt !== undefined) record.signOutAt = patch.signOutAt;
+        demoSave();
+        return record;
+      },
+      async remove(id) {
+        const db = demoLoad();
+        db.attendance = db.attendance.filter((a) => a.id !== id);
+        demoSave();
+      },
+      async monthComparison(monthKey, cutoff) {
+        const db = demoLoad();
+        const staff = DEMO_STAFF.map((s) => applyStaffOverrides(s, db)).filter((s) => s.role === 'agent' && s.active);
+        return staff
+          .map((s) => {
+            const own = db.attendance.filter((a) => a.staffKey === s.key && a.workDate.slice(0, 7) === monthKey);
+            return {
+              staffKey: s.key,
+              staffName: s.name,
+              daysAttended: own.filter((a) => a.signInAt).length,
+              onTimeDays: own.filter((a) => a.signInAt && a.signInAt.slice(11, 16) <= cutoff).length,
+            };
+          })
+          .sort((a, b) => b.daysAttended - a.daysAttended);
+      },
+      async resetAll() {
+        const db = demoLoad();
+        db.attendance = [];
+        demoSave();
+      },
+    },
+    attendanceNotes: {
+      async list() {
+        return (demoLoad().attendanceNotes ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async issue(staffKey, staffName, kind, reason, workDate, createdBy, createdByName) {
+        const db = demoLoad();
+        const note: AttendanceNote = {
+          id: Math.random().toString(36).slice(2, 10),
+          staffKey,
+          staffName,
+          kind,
+          reason,
+          workDate,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        db.attendanceNotes = [note, ...(db.attendanceNotes ?? [])];
+        demoSave();
+        return note;
+      },
+    },
+    attendanceReviews: {
+      async list() {
+        return (demoLoad().attendanceReviews ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async decide(attendanceLogId, staffKey, staffName, classification, note, reviewedBy, reviewedByName) {
+        const db = demoLoad();
+        const review: AttendanceReview = {
+          id: Math.random().toString(36).slice(2, 10),
+          attendanceLogId,
+          staffKey,
+          staffName,
+          reviewType: 'exception',
+          status: 'reviewed',
+          classification,
+          note: note || null,
+          reviewedBy,
+          reviewedByName,
+          reviewedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        };
+        db.attendanceReviews = [review, ...(db.attendanceReviews ?? [])];
+        demoSave();
+        return review;
       },
     },
     staff: {
@@ -2527,6 +3269,19 @@ function createDemoDataSource(): DataSource {
           };
         });
       },
+      // Demo has no real DB to run recompute_leaderboard_scores() against,
+      // so this scores the same raw rows client-side with the real
+      // agentPoints() formula -- the one place agentPoints() is still
+      // legitimately called outside a "what-if" preview, since demo mode
+      // has no server to be authoritative instead.
+      async leaderboardScores(fromDate, toDate) {
+        const rawRows = await this.leaderboardRows(fromDate, toDate);
+        const weights = demoLoad().config.leaderboardWeights;
+        return rawRows.map((row) => ({ ...row, points: agentPoints(row, weights) })).sort((a, b) => b.points - a.points);
+      },
+      async leaderboardScoreHistory() {
+        return [];
+      },
       async commissionData() {
         const db = demoLoad();
         return {
@@ -2585,6 +3340,72 @@ function createDemoDataSource(): DataSource {
         const index = db.sveSubmissions.findIndex((s) => s.id === submissionId);
         if (index !== -1) {
           db.sveSubmissions[index] = { ...db.sveSubmissions[index], reportPdfPath: `demo/${submissionId}.pdf`, reportSentAt: new Date().toISOString() };
+        }
+        demoSave();
+        return token;
+      },
+      async getOrCreateDayReport(visitDate) {
+        const db = demoLoad();
+        db.sveDayReports = db.sveDayReports ?? [];
+        const existing = db.sveDayReports.find((r) => r.visitDate === visitDate);
+        if (existing) return existing;
+        // Real starting point for a new day report: every client actually
+        // visited that day, each carrying whatever feedback submission
+        // already exists for them (if any) -- the AI feedback summary
+        // itself is generated later, on demand, not auto-filled here.
+        const visitsForDay = db.siteVisits.filter((v) => v.visitDate === visitDate && !v.deletedAt);
+        const entries: SveDayReport['entries'] = visitsForDay.map((v) => {
+          const invite = db.sveInvites.find((i) => i.siteVisitId === v.id) ?? null;
+          const submission = invite ? (db.sveSubmissions.find((s) => s.inviteId === invite.id) ?? null) : null;
+          return {
+            siteVisitId: v.id,
+            clientName: v.name,
+            clientContact: v.contact,
+            submissionId: submission?.id ?? null,
+            aiFeedbackSummary: null,
+            managerReview: null,
+            managerNotesAi: null,
+          };
+        });
+        const now = new Date().toISOString();
+        const report: SveDayReport = {
+          id: Math.random().toString(36).slice(2, 10),
+          visitDate,
+          site: visitsForDay[0]?.site ?? 'Royal Palm Enclave',
+          preparedBy: null,
+          preparedByName: null,
+          entries,
+          siteSummary: null,
+          siteSummaryAi: null,
+          status: 'draft',
+          reportPdfPath: null,
+          sentAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        db.sveDayReports = [report, ...db.sveDayReports];
+        demoSave();
+        return report;
+      },
+      async saveDayReport(id, patch) {
+        const db = demoLoad();
+        const index = db.sveDayReports.findIndex((r) => r.id === id);
+        if (index === -1) throw new Error('Day report not found');
+        const updated: SveDayReport = { ...db.sveDayReports[index], ...patch, updatedAt: new Date().toISOString() };
+        db.sveDayReports = [...db.sveDayReports.slice(0, index), updated, ...db.sveDayReports.slice(index + 1)];
+        demoSave();
+        return updated;
+      },
+      async listDayReports() {
+        const db = demoLoad();
+        return [...(db.sveDayReports ?? [])].sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+      },
+      async issueDayReportLink(dayReportId) {
+        const db = demoLoad();
+        const token = 'demo-' + Math.random().toString(36).slice(2, 10);
+        const index = db.sveDayReports.findIndex((r) => r.id === dayReportId);
+        if (index !== -1) {
+          db.sveDayReports[index] = { ...db.sveDayReports[index], status: 'sent', reportPdfPath: `demo/${dayReportId}.pdf`, sentAt: new Date().toISOString() };
         }
         demoSave();
         return token;
@@ -3035,6 +3856,21 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
+      async listForAgentInRange(agentKey, fromDate, toDate) {
+        const { data, error } = await requireClient()
+          .from('schedule_items')
+          .select('*')
+          .or(`assigned_to.eq.${agentKey},owner_key.eq.${agentKey}`)
+          .gte('item_date', fromDate)
+          .lte('item_date', toDate);
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemRow);
+      },
+      async listAllInRange(fromDate, toDate) {
+        const { data, error } = await requireClient().from('schedule_items').select('*').gte('item_date', fromDate).lte('item_date', toDate);
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemRow);
+      },
       async create(agentKey, date, title, assignedTo) {
         const { data, error } = await requireClient()
           .from('schedule_items')
@@ -3044,14 +3880,94 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapScheduleItemRow(data);
       },
-      async updateStatus(id, status) {
-        const { data, error } = await requireClient()
-          .from('schedule_items')
-          .update({ status: domainStatusToDb(status) })
-          .eq('id', id)
-          .select()
-          .single();
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if ('title' in patch) dbPatch.title = patch.title;
+        if ('description' in patch) dbPatch.description = patch.description;
+        if ('notes' in patch) dbPatch.notes = patch.notes;
+        if ('category' in patch) dbPatch.category = patch.category;
+        if ('priority' in patch) dbPatch.priority = patch.priority;
+        if ('date' in patch) dbPatch.item_date = patch.date;
+        if ('dueDate' in patch) dbPatch.due_date = patch.dueDate;
+        if ('startTime' in patch) dbPatch.start_time = patch.startTime;
+        if ('endTime' in patch) dbPatch.end_time = patch.endTime;
+        if ('linkedLeadId' in patch) dbPatch.linked_lead_id = patch.linkedLeadId;
+        if ('linkedSiteVisitId' in patch) dbPatch.linked_site_visit_id = patch.linkedSiteVisitId;
+        if ('blockedById' in patch) dbPatch.blocked_by_id = patch.blockedById;
+        const { data, error } = await requireClient().from('schedule_items').update(dbPatch).eq('id', id).select().single();
         if (error) throw error;
+        return mapScheduleItemRow(data);
+      },
+      async updateStatus(id, status, actorKey, actorName) {
+        const client = requireClient();
+        const existing = await client.from('schedule_items').select('*').eq('id', id).single();
+        if (existing.error) throw existing.error;
+        const fromDbStatus = existing.data.status as string;
+        const dbStatus = domainStatusToDb(status);
+        const patch: Record<string, unknown> = { status: dbStatus };
+        if (dbStatus === 'done') patch.completed_at = new Date().toISOString();
+        else if (fromDbStatus === 'done') patch.completed_at = null;
+        if (dbStatus === 'cancelled') patch.cancelled_at = new Date().toISOString();
+        const { data, error } = await client.from('schedule_items').update(patch).eq('id', id).select().single();
+        if (error) throw error;
+        await client.from('task_events').insert({ task_id: id, type: 'status_changed', actor_key: actorKey, actor_name: actorName, from_key: fromDbStatus, to_key: dbStatus }).then(
+          () => {},
+          () => {}
+        );
+        if (dbStatus === 'done') {
+          // Real enforcement of Master Spec 10.2's dependency gate in
+          // reverse: a task blocked on this one becomes ready the moment
+          // this one is actually done, not left stuck on 'blocked' forever.
+          await client.from('schedule_items').update({ status: 'open' }).eq('blocked_by_id', id).eq('status', 'blocked');
+
+          // Real spawn of the next recurring instance -- a fresh row with
+          // its own id (so its own task_events/attachments start empty,
+          // "without duplicating history"), recurs_parent_id pointing at
+          // the ORIGINAL instance (not this one, if this itself was
+          // already a spawned instance) so the whole series stays linkable.
+          const freq = existing.data.recurs_freq as 'daily' | 'weekly' | 'monthly' | null;
+          if (freq) {
+            const baseDate = (existing.data.item_date as string) ?? (existing.data.due_date as string) ?? new Date().toISOString().slice(0, 10);
+            const interval = Number(existing.data.recurs_interval ?? 1) || 1;
+            const nextDate = nextRecurrenceDate(baseDate, freq, interval);
+            const until = existing.data.recurs_until as string | null;
+            if (!until || nextDate <= until) {
+              const spawn = await client
+                .from('schedule_items')
+                .insert({
+                  kind: existing.data.kind,
+                  owner_key: existing.data.owner_key,
+                  owner_name: existing.data.owner_name,
+                  assigned_to: existing.data.assigned_to,
+                  assigned_to_name: existing.data.assigned_to_name,
+                  assigned_by: existing.data.assigned_by,
+                  assigned_by_name: existing.data.assigned_by_name,
+                  title: existing.data.title,
+                  description: existing.data.description,
+                  notes: existing.data.notes,
+                  category: existing.data.category,
+                  priority: existing.data.priority,
+                  item_date: existing.data.item_date ? nextDate : null,
+                  due_date: existing.data.due_date ? nextDate : null,
+                  start_time: existing.data.start_time,
+                  end_time: existing.data.end_time,
+                  recurs_freq: freq,
+                  recurs_interval: interval,
+                  recurs_until: until,
+                  recurs_parent_id: (existing.data.recurs_parent_id as string | null) ?? id,
+                  status: 'open',
+                })
+                .select()
+                .single();
+              if (!spawn.error) {
+                await client.from('task_events').insert({ task_id: spawn.data.id, type: 'created', actor_key: actorKey, actor_name: actorName, note: 'Recurring instance' }).then(
+                  () => {},
+                  () => {}
+                );
+              }
+            }
+          }
+        }
         return mapScheduleItemRow(data);
       },
       async listTasksForAgent(agentKey) {
@@ -3065,7 +3981,13 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapScheduleItemRow);
       },
       async createTask(ownerKey, ownerName, input) {
-        const { data, error } = await requireClient()
+        const client = requireClient();
+        let initialStatus = 'open';
+        if (input.blockedById) {
+          const pred = await client.from('schedule_items').select('status').eq('id', input.blockedById).maybeSingle();
+          if (pred.data && pred.data.status !== 'done') initialStatus = 'blocked';
+        }
+        const { data, error } = await client
           .from('schedule_items')
           .insert({
             kind: 'task',
@@ -3077,25 +3999,162 @@ function createLiveDataSource(): DataSource {
             assigned_by_name: ownerName,
             title: input.title,
             description: input.description ?? null,
+            notes: input.notes ?? null,
             category: input.category ?? null,
             priority: input.priority ?? null,
             due_date: input.dueDate ?? null,
-            status: 'open',
+            start_time: input.startTime ?? null,
+            end_time: input.endTime ?? null,
+            linked_lead_id: input.linkedLeadId ?? null,
+            linked_site_visit_id: input.linkedSiteVisitId ?? null,
+            blocked_by_id: input.blockedById ?? null,
+            recurs_freq: input.recursFreq ?? null,
+            recurs_interval: input.recursInterval ?? null,
+            recurs_until: input.recursUntil ?? null,
+            tags: input.tags ?? [],
+            status: initialStatus,
           })
           .select()
           .single();
         if (error) throw error;
+        await client.from('task_events').insert({ task_id: data.id, type: 'created', actor_key: ownerKey, actor_name: ownerName }).then(
+          () => {},
+          () => {}
+        );
         return mapScheduleItemRow(data);
       },
-      async reassignTask(id, toKey, toName, byKey, byName) {
-        const { data, error } = await requireClient()
+      async reassignTask(id, toKey, toName, byKey, byName, reason) {
+        const client = requireClient();
+        const existing = await client.from('schedule_items').select('assigned_to,assigned_to_name').eq('id', id).single();
+        if (existing.error) throw existing.error;
+        const { data, error } = await client
           .from('schedule_items')
           .update({ assigned_to: toKey, assigned_to_name: toName, assigned_by: byKey, assigned_by_name: byName })
           .eq('id', id)
           .select()
           .single();
         if (error) throw error;
+        await client
+          .from('task_events')
+          .insert({ task_id: id, type: 'reassigned', actor_key: byKey, actor_name: byName, from_key: existing.data.assigned_to, from_name: existing.data.assigned_to_name, to_key: toKey, to_name: toName, note: reason || null })
+          .then(
+            () => {},
+            () => {}
+          );
         return mapScheduleItemRow(data);
+      },
+      async createMeeting(ownerKey, ownerName, input) {
+        const client = requireClient();
+        const { data, error } = await client
+          .from('schedule_items')
+          .insert({
+            kind: 'meeting',
+            owner_key: ownerKey,
+            owner_name: ownerName,
+            assigned_to: ownerKey,
+            assigned_to_name: ownerName,
+            title: input.title,
+            description: input.description ?? null,
+            item_date: input.date,
+            start_time: input.startTime,
+            end_time: input.endTime,
+            meeting_location: input.meetingLocation ?? null,
+            status: 'open',
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        if (input.inviteeKeys.length > 0) {
+          const { error: inviteErr } = await client.from('schedule_item_invitees').insert(input.inviteeKeys.map((staffKey) => ({ schedule_item_id: data.id, staff_key: staffKey })));
+          if (inviteErr) throw inviteErr;
+        }
+        return mapScheduleItemRow(data);
+      },
+      async listMeetingsForAgent(agentKey, fromDate, toDate) {
+        const client = requireClient();
+        const [ownedRes, inviteeRes] = await Promise.all([
+          client.from('schedule_items').select('*').eq('kind', 'meeting').eq('owner_key', agentKey).gte('item_date', fromDate).lte('item_date', toDate),
+          client.from('schedule_item_invitees').select('schedule_item_id').eq('staff_key', agentKey),
+        ]);
+        if (ownedRes.error) throw ownedRes.error;
+        if (inviteeRes.error) throw inviteeRes.error;
+        const invitedIds = (inviteeRes.data ?? []).map((r) => r.schedule_item_id as string);
+        let invited: Record<string, unknown>[] = [];
+        if (invitedIds.length > 0) {
+          const invitedRes = await client.from('schedule_items').select('*').eq('kind', 'meeting').in('id', invitedIds).gte('item_date', fromDate).lte('item_date', toDate);
+          if (invitedRes.error) throw invitedRes.error;
+          invited = invitedRes.data ?? [];
+        }
+        const byId = new Map<string, Record<string, unknown>>();
+        [...(ownedRes.data ?? []), ...invited].forEach((r) => byId.set(r.id as string, r));
+        return [...byId.values()].map(mapScheduleItemRow);
+      },
+      async checkConflicts(staffKeys, date, startTime, endTime, excludeId) {
+        const { data, error } = await requireClient().rpc('check_schedule_conflicts', {
+          p_staff_keys: staffKeys,
+          p_date: date,
+          p_start: startTime,
+          p_end: endTime,
+          p_exclude_id: excludeId ?? null,
+        });
+        if (error) throw error;
+        return (data ?? []).map((r: { staff_key: string; has_conflict: boolean }) => ({ staffKey: r.staff_key, hasConflict: !!r.has_conflict }));
+      },
+    },
+    scheduleItemInvitees: {
+      async listForItem(scheduleItemId) {
+        const { data, error } = await requireClient().from('schedule_item_invitees').select('*').eq('schedule_item_id', scheduleItemId);
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemInviteeRow);
+      },
+      async respond(inviteeId, status) {
+        const { data, error } = await requireClient().from('schedule_item_invitees').update({ status, responded_at: new Date().toISOString() }).eq('id', inviteeId).select().single();
+        if (error) throw error;
+        return mapScheduleItemInviteeRow(data);
+      },
+    },
+    taskEvents: {
+      async listForTask(taskId) {
+        const { data, error } = await requireClient().from('task_events').select('*').eq('task_id', taskId).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapTaskEventRow);
+      },
+      async log(taskId, type, actorKey, actorName, extra) {
+        const { error } = await requireClient()
+          .from('task_events')
+          .insert({ task_id: taskId, type, actor_key: actorKey, actor_name: actorName, from_key: extra?.fromKey ?? null, from_name: extra?.fromName ?? null, to_key: extra?.toKey ?? null, to_name: extra?.toName ?? null, note: extra?.note ?? null });
+        if (error) throw error;
+      },
+    },
+    scheduleItemAttachments: {
+      async listForItem(scheduleItemId) {
+        const { data, error } = await requireClient().from('schedule_item_attachments').select('*').eq('schedule_item_id', scheduleItemId).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapScheduleItemAttachmentRow);
+      },
+      async upload(scheduleItemId, file, fileName, contentType, uploadedBy, uploadedByName) {
+        const client = requireClient();
+        const path = `${scheduleItemId}/${Date.now()}-${fileName}`;
+        const { error: uploadError } = await client.storage.from('task-attachments').upload(path, file, { contentType, upsert: false });
+        if (uploadError) throw uploadError;
+        const { data, error } = await client
+          .from('schedule_item_attachments')
+          .insert({ schedule_item_id: scheduleItemId, file_name: fileName, storage_path: path, content_type: contentType, uploaded_by: uploadedBy, uploaded_by_name: uploadedByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapScheduleItemAttachmentRow(data);
+      },
+      async getUrl(storagePath) {
+        const { data, error } = await requireClient().storage.from('task-attachments').createSignedUrl(storagePath, 300);
+        if (error) return null;
+        return data?.signedUrl ?? null;
+      },
+      async remove(attachmentId, storagePath) {
+        const client = requireClient();
+        await client.storage.from('task-attachments').remove([storagePath]);
+        const { error } = await client.from('schedule_item_attachments').delete().eq('id', attachmentId);
+        if (error) throw error;
       },
     },
     streaks: {
@@ -3155,6 +4214,23 @@ function createLiveDataSource(): DataSource {
         if (patch.techFullPlotWidthFt !== undefined) dbPatch.tech_full_plot_width_ft = patch.techFullPlotWidthFt;
         if (patch.techHalfPlotLengthFt !== undefined) dbPatch.tech_half_plot_length_ft = patch.techHalfPlotLengthFt;
         if (patch.techHalfPlotWidthFt !== undefined) dbPatch.tech_half_plot_width_ft = patch.techHalfPlotWidthFt;
+        // Real gap found 2026-09-05 auditing Phase 6 (Attendance + Leave):
+        // these columns were already read by mapConfigRow and consumed by
+        // AttendanceScreen/leaveLogic, but never whitelisted here for
+        // WRITING -- a Management settings UI built on top of update()
+        // as it stood would have silently dropped every one of these
+        // fields, the exact "no Settings UI exists" gap traced to its
+        // real root cause instead of just re-adding a UI on the same bug.
+        if (patch.officeLat !== undefined) dbPatch.office_lat = patch.officeLat;
+        if (patch.officeLng !== undefined) dbPatch.office_lng = patch.officeLng;
+        if (patch.officeRadiusMeters !== undefined) dbPatch.office_radius_meters = patch.officeRadiusMeters;
+        if (patch.attendanceCutoffTime !== undefined) dbPatch.attendance_cutoff_time = patch.attendanceCutoffTime;
+        if (patch.workStartTime !== undefined) dbPatch.work_start_time = patch.workStartTime;
+        if (patch.workEndTime !== undefined) dbPatch.work_end_time = patch.workEndTime;
+        if (patch.workDays !== undefined) dbPatch.work_days = patch.workDays;
+        if (patch.leaveTotalDays !== undefined) dbPatch.leave_total_days = patch.leaveTotalDays;
+        if (patch.eidObservingStaff !== undefined) dbPatch.eid_observing_staff = patch.eidObservingStaff;
+        if (patch.eidWindows !== undefined) dbPatch.eid_windows = patch.eidWindows;
         const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
@@ -3280,11 +4356,14 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapSiteVisitRow);
       },
       async cancel(id, reason, deletedBy, deletedByName) {
-        const { error } = await requireClient()
+        const { data, error } = await requireClient()
           .from('site_visits')
           .update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy, deleted_by_name: deletedByName, cancellation_reason: reason })
-          .eq('id', id);
+          .eq('id', id)
+          .select()
+          .single();
         if (error) throw error;
+        return mapSiteVisitRow(data);
       },
     },
     activityLog: {
@@ -3344,8 +4423,11 @@ function createLiveDataSource(): DataSource {
       },
     },
     enquiries: {
+      // Same real fix as complaints -- an enquiry escalated via `owner`
+      // must reach that colleague's own view (RLS updated the same day
+      // to match, not just this client-side filter).
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('enquiries').select('*').eq('agent_key', agentKey).order('created_at', { ascending: false });
+        const { data, error } = await requireClient().from('enquiries').select('*').or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`).order('created_at', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapEnquiryRow);
       },
@@ -3375,10 +4457,27 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapEnquiryRow(data);
       },
+      async update(id, patch) {
+        const { data, error } = await requireClient()
+          .from('enquiries')
+          .update({
+            status: patch.status,
+            owner: patch.owner,
+            follow: patch.follow,
+            follow_date: patch.followDate,
+          })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapEnquiryRow(data);
+      },
     },
     complaints: {
+      // Same real fix as demo mode above -- a complaint whose `owner` was
+      // reassigned to a colleague must reach that colleague's own view too.
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('complaints').select('*').eq('agent_key', agentKey).order('created_at', { ascending: false });
+        const { data, error } = await requireClient().from('complaints').select('*').or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`).order('created_at', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapComplaintRow);
       },
@@ -3486,8 +4585,8 @@ function createLiveDataSource(): DataSource {
             dates: input.dates,
             days_count: input.dates.length,
             letter_text: input.letterText ?? null,
-            status: 'pending',
-            is_emergency: false,
+            status: input.asDraft ? 'planned' : 'pending',
+            is_emergency: input.isEmergency ?? false,
             deduct_quota: true,
           })
           .select()
@@ -3495,13 +4594,50 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
-      async decide(id, approve, decidedBy, decidedByName, decidedSignature) {
-        const { data, error } = await requireClient()
-          .from('leave_requests')
-          .update({ status: approve ? 'approved' : 'declined', decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName, decided_signature: approve ? decidedSignature : null })
-          .eq('id', id)
-          .select()
-          .single();
+      async decide(id, outcome, decidedBy, decidedByName, decidedSignature, note, deductQuota) {
+        const dbPatch: Record<string, unknown> = {
+          status: outcome,
+          decided_at: new Date().toISOString(),
+          decided_by: decidedBy,
+          decided_by_name: decidedByName,
+          decided_signature: outcome === 'approved' ? decidedSignature : null,
+        };
+        if (note !== undefined) dbPatch.reschedule_note = note;
+        if (deductQuota !== undefined) dbPatch.deduct_quota = deductQuota;
+        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async reschedule(id, note, newDates, decidedBy, decidedByName, decidedSignature) {
+        const dbPatch: Record<string, unknown> =
+          newDates && newDates.length
+            ? {
+                status: 'approved',
+                dates: newDates,
+                days_count: newDates.length,
+                year: new Date(newDates[0]).getFullYear(),
+                reschedule_note: note ?? null,
+                decided_at: new Date().toISOString(),
+                decided_by: decidedBy,
+                decided_by_name: decidedByName,
+                decided_signature: decidedSignature,
+              }
+            : { status: 'rescheduled', reschedule_note: note ?? null, decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName };
+        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async sendPlanned(id) {
+        const { data, error } = await requireClient().from('leave_requests').update({ status: 'pending' }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('leave_requests').delete().eq('id', id);
+        if (error) throw error;
+      },
+      async confirmUsed(id) {
+        const { data, error } = await requireClient().from('leave_requests').update({ used_confirmed_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
@@ -3569,6 +4705,93 @@ function createLiveDataSource(): DataSource {
       async remove(id) {
         const { error } = await requireClient().from('pricing_promotions').delete().eq('id', id);
         if (error) throw error;
+      },
+    },
+    officeLocations: {
+      async list() {
+        const { data, error } = await requireClient().from('office_locations').select('*').order('created_at', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapOfficeLocationRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('office_locations')
+          .insert({ name: input.name, lat: input.lat, lng: input.lng, radius_meters: input.radiusMeters, created_by: createdBy, created_by_name: createdByName })
+          .select('*')
+          .single();
+        if (error) throw error;
+        return mapOfficeLocationRow(data);
+      },
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if (patch.name !== undefined) dbPatch.name = patch.name;
+        if (patch.lat !== undefined) dbPatch.lat = patch.lat;
+        if (patch.lng !== undefined) dbPatch.lng = patch.lng;
+        if (patch.radiusMeters !== undefined) dbPatch.radius_meters = patch.radiusMeters;
+        if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
+        const { data, error } = await requireClient().from('office_locations').update(dbPatch).eq('id', id).select('*').single();
+        if (error) throw error;
+        return mapOfficeLocationRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('office_locations').delete().eq('id', id);
+        if (error) throw error;
+      },
+    },
+    attendancePolicy: {
+      async current() {
+        const { data, error } = await requireClient().from('attendance_policy').select('*').eq('is_active', true).maybeSingle();
+        if (error) throw error;
+        return data ? mapAttendancePolicyRow(data) : null;
+      },
+      async history() {
+        const { data, error } = await requireClient().from('attendance_policy').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendancePolicyRow);
+      },
+      async update(_createdBy, _createdByName, input) {
+        const { data, error } = await requireClient().rpc('set_attendance_policy', {
+          p_work_start_time: input.workStartTime,
+          p_work_end_time: input.workEndTime,
+          p_grace_minutes: input.graceMinutes,
+          p_work_days: input.workDays,
+        });
+        if (error) throw error;
+        return mapAttendancePolicyRow(data);
+      },
+    },
+    attendanceExceptions: {
+      async list() {
+        const { data, error } = await requireClient().from('attendance_exceptions').select('*').order('exception_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceExceptionRow);
+      },
+      async create(agentKey, agentName, input) {
+        const { data, error } = await requireClient()
+          .from('attendance_exceptions')
+          .insert({
+            staff_key: agentKey,
+            staff_name: agentName,
+            exception_date: input.exceptionDate,
+            exception_type: input.exceptionType,
+            reason: input.reason,
+            requested_by: agentKey,
+            requested_by_name: agentName,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceExceptionRow(data);
+      },
+      async decide(id, status, decidedBy, decidedByName) {
+        const { data, error } = await requireClient()
+          .from('attendance_exceptions')
+          .update({ status, decided_by: decidedBy, decided_by_name: decidedByName, decided_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceExceptionRow(data);
       },
     },
     async leadBannerCounts() {
@@ -3990,6 +5213,25 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapAttendanceRow);
       },
+      async listToday() {
+        const workDate = new Date().toISOString().slice(0, 10);
+        const { data, error } = await requireClient().from('attendance_log').select('*').eq('work_date', workDate).order('sign_in_at', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceRow);
+      },
+      async listRange(days) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const cutoffIso = cutoff.toISOString().slice(0, 10);
+        const { data, error } = await requireClient().from('attendance_log').select('*').gte('work_date', cutoffIso).order('work_date', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceRow);
+      },
+      async listBetween(startDate, endDate) {
+        const { data, error } = await requireClient().from('attendance_log').select('*').gte('work_date', startDate).lte('work_date', endDate).order('work_date', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceRow);
+      },
       async signIn(staffKey, staffName, input) {
         const client = requireClient();
         const workDate = new Date().toISOString().slice(0, 10);
@@ -4009,6 +5251,8 @@ function createLiveDataSource(): DataSource {
             sign_in_reason: input.offSite ? (input.reason ?? null) : null,
             late_reason: input.late ? (input.lateReason ?? null) : null,
             sign_in_photo: input.photo ?? null,
+            sign_in_accuracy_meters: input.accuracy ?? null,
+            device_info: input.deviceInfo ?? null,
           })
           .select()
           .single();
@@ -4028,6 +5272,7 @@ function createLiveDataSource(): DataSource {
             sign_out_lng: input.lng ?? null,
             is_off_site_out: input.offSite ?? false,
             sign_out_reason: input.offSite ? (input.reason ?? null) : null,
+            sign_out_accuracy_meters: input.accuracy ?? null,
           })
           .eq('id', id)
           .eq('staff_key', staffKey)
@@ -4035,6 +5280,76 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapAttendanceRow(data);
+      },
+      // ATTENDANCE_BLUEPRINT.md §8 -- no staff_key filter here (unlike
+      // signIn/signOut above): a manager corrects/deletes ANY staff
+      // member's record, not just their own. The real `al_upd_own_or_mgr`/
+      // `al_del_mgr` RLS policies (confirmed live 2026-09-11) are the
+      // actual backstop; the UI itself only renders this action for
+      // role==='manager'.
+      async update(id, patch) {
+        const dbPatch: Record<string, string | null> = {};
+        if (patch.signInAt !== undefined) dbPatch.sign_in_at = patch.signInAt;
+        if (patch.signOutAt !== undefined) dbPatch.sign_out_at = patch.signOutAt;
+        const { data, error } = await requireClient().from('attendance_log').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapAttendanceRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('attendance_log').delete().eq('id', id);
+        if (error) throw error;
+      },
+      async monthComparison(monthKey, cutoff) {
+        const { data, error } = await requireClient().rpc('get_attendance_month_comparison', { p_month_key: monthKey, p_cutoff: cutoff });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceComparisonRow);
+      },
+      async resetAll() {
+        const { error } = await requireClient().from('attendance_log').delete().gte('work_date', '1900-01-01');
+        if (error) throw error;
+      },
+    },
+    attendanceNotes: {
+      async list() {
+        const { data, error } = await requireClient().from('attendance_notes').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceNoteRow);
+      },
+      async issue(staffKey, staffName, kind, reason, workDate, createdBy, createdByName) {
+        const { data, error } = await requireClient()
+          .from('attendance_notes')
+          .insert({ staff_key: staffKey, staff_name: staffName, kind, reason, work_date: workDate, created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceNoteRow(data);
+      },
+    },
+    attendanceReviews: {
+      async list() {
+        const { data, error } = await requireClient().from('attendance_reviews').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapAttendanceReviewRow);
+      },
+      async decide(attendanceLogId, staffKey, staffName, classification, note, reviewedBy, reviewedByName) {
+        const { data, error } = await requireClient()
+          .from('attendance_reviews')
+          .insert({
+            attendance_log_id: attendanceLogId,
+            staff_key: staffKey,
+            staff_name: staffName,
+            review_type: 'exception',
+            status: 'reviewed',
+            classification,
+            note: note || null,
+            reviewed_by: reviewedBy,
+            reviewed_by_name: reviewedByName,
+            reviewed_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapAttendanceReviewRow(data);
       },
     },
     staff: {
@@ -4205,6 +5520,16 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapLeaderboardRawRow);
       },
+      async leaderboardScores(fromDate, toDate) {
+        const { data, error } = await requireClient().rpc('recompute_leaderboard_scores', { p_from: fromDate, p_to: toDate });
+        if (error) throw error;
+        return (data ?? []).map(mapLeaderboardScoreRow);
+      },
+      async leaderboardScoreHistory(limit) {
+        const { data, error } = await requireClient().from('leaderboard_score_history').select('*').order('changed_at', { ascending: false }).limit(limit);
+        if (error) throw error;
+        return (data ?? []).map(mapLeaderboardScoreHistoryRow);
+      },
       async commissionData() {
         const client = requireClient();
         const [paymentsRes, leadsRes, staffRes] = await Promise.all([client.from('payments').select('*'), client.from('leads').select('*'), client.from('profiles').select('agent_key,name').eq('role', 'agent')]);
@@ -4271,6 +5596,81 @@ function createLiveDataSource(): DataSource {
           .from('site_visit_experience_submissions')
           .update({ report_pdf_path: path, report_sent_at: new Date().toISOString() })
           .eq('id', submissionId);
+        if (updError) throw updError;
+        return data.token as string;
+      },
+      async getOrCreateDayReport(visitDate) {
+        const client = requireClient();
+        const existing = await client.from('sve_day_reports').select('*').eq('visit_date', visitDate).maybeSingle();
+        if (existing.error) throw existing.error;
+        if (existing.data) return mapSveDayReportRow(existing.data);
+
+        // Real starting point for a new day report: every client actually
+        // visited that day, each carrying whatever feedback submission
+        // already exists for them (if any) -- the AI feedback summary
+        // itself is generated later, on demand, not auto-filled here.
+        const [visitsRes, invitesRes, submissionsRes] = await Promise.all([
+          client.from('site_visits').select('*').eq('visit_date', visitDate).is('deleted_at', null),
+          client.from('site_visit_experience_invites').select('*'),
+          client.from('site_visit_experience_submissions').select('id,invite_id'),
+        ]);
+        if (visitsRes.error) throw visitsRes.error;
+        if (invitesRes.error) throw invitesRes.error;
+        if (submissionsRes.error) throw submissionsRes.error;
+        const visits = (visitsRes.data ?? []).map(mapSiteVisitRow);
+        const entries: SveDayReport['entries'] = visits.map((v) => {
+          const invite = (invitesRes.data ?? []).find((i) => i.site_visit_id === v.id) ?? null;
+          const submission = invite ? (submissionsRes.data ?? []).find((s) => s.invite_id === invite.id) : null;
+          return {
+            siteVisitId: v.id,
+            clientName: v.name,
+            clientContact: v.contact,
+            submissionId: (submission?.id as string) ?? null,
+            aiFeedbackSummary: null,
+            managerReview: null,
+            managerNotesAi: null,
+          };
+        });
+        const ins = await client
+          .from('sve_day_reports')
+          .insert({ visit_date: visitDate, site: visits[0]?.site ?? 'Royal Palm Enclave', entries })
+          .select()
+          .single();
+        if (ins.error) {
+          // Same unique-index race guard as weeklyVisitForms.getOrCreate --
+          // two staff opening the same day's report at once shouldn't error
+          // out, just fall back to whichever row won the insert race.
+          const retry = await client.from('sve_day_reports').select('*').eq('visit_date', visitDate).maybeSingle();
+          if (retry.error || !retry.data) throw retry.error ?? ins.error;
+          return mapSveDayReportRow(retry.data);
+        }
+        return mapSveDayReportRow(ins.data);
+      },
+      async saveDayReport(id, patch) {
+        const client = requireClient();
+        const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if ('entries' in patch) dbPatch.entries = patch.entries;
+        if ('siteSummary' in patch) dbPatch.site_summary = patch.siteSummary;
+        if ('siteSummaryAi' in patch) dbPatch.site_summary_ai = patch.siteSummaryAi;
+        if ('preparedBy' in patch) dbPatch.prepared_by = patch.preparedBy;
+        if ('preparedByName' in patch) dbPatch.prepared_by_name = patch.preparedByName;
+        const { data, error } = await client.from('sve_day_reports').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapSveDayReportRow(data);
+      },
+      async listDayReports() {
+        const { data, error } = await requireClient().from('sve_day_reports').select('*').order('visit_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapSveDayReportRow);
+      },
+      async issueDayReportLink(dayReportId, pdfBlob, createdBy, createdByName) {
+        const client = requireClient();
+        const path = `day-reports/${dayReportId}/report-${Date.now()}.pdf`;
+        const { error: uploadError } = await client.storage.from('sve-reports').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        if (uploadError) throw uploadError;
+        const { data, error } = await client.from('sve_report_links').insert({ day_report_id: dayReportId, storage_path: path, created_by: createdBy, created_by_name: createdByName }).select('token').single();
+        if (error) throw error;
+        const { error: updError } = await client.from('sve_day_reports').update({ status: 'sent', report_pdf_path: path, sent_at: new Date().toISOString() }).eq('id', dayReportId);
         if (updError) throw updError;
         return data.token as string;
       },

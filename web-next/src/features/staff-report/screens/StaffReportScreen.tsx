@@ -4,6 +4,7 @@ import { ghs } from '../../../shared/lib/format';
 import { reportPeriodRange, type ReportPeriodKey } from '../../manager/lib/managementReportLogic';
 import { useAgentRoster, useStaffReportData } from '../hooks/useStaffReport';
 import { useDownloadStaffReport } from '../hooks/useDownloadStaffReport';
+import { useAllAttendanceToday } from '../../attendance/hooks/useAttendance';
 import styles from './StaffReportScreen.module.css';
 
 const PERIOD_OPTIONS: { key: ReportPeriodKey; label: string }[] = [
@@ -37,6 +38,7 @@ export function StaffReportScreen() {
   const range = reportPeriodRange(periodKey, customFrom, customTo);
   const { isLoading, rows, one, dayOfWeek } = useStaffReportData(range, staffKey);
   const maxDay = Math.max(1, ...(dayOfWeek ?? [1]));
+  const { data: attendanceToday } = useAllAttendanceToday();
 
   return (
     <div className={styles.wrap}>
@@ -46,6 +48,32 @@ export function StaffReportScreen() {
       <div className={styles.eyebrow}>Office · Operations</div>
       <h1 className={styles.title}>Staff Report</h1>
       <p className={styles.sub}>Everything one staff member has done, across every app — pipeline, tasks, and attendance — or compare everyone at once.</p>
+
+      {/* Real user ask (2026-09-05): "all attendance needs to go to
+          management in real time with all the data" -- live sign-in/out
+          status for every staff member today, not the 90-day aggregate
+          further down. Backed by useDashboardRealtime's attendance_log
+          subscription, so this list updates the moment anyone signs in
+          or out, without a refresh. */}
+      <div className={styles.sectitle}>
+        Today&apos;s attendance <span className={styles.sectitleHint}>live</span>
+      </div>
+      <div className={styles.list}>
+        {(attendanceToday ?? []).length === 0 && <p className={styles.emptyMsg}>No one has signed in yet today.</p>}
+        {attendanceToday?.map((a) => (
+          <div className={styles.compRow} key={a.id}>
+            <div>
+              <div className={styles.compName}>{a.staffName ?? a.staffKey}</div>
+              <div className={styles.compMeta}>
+                In {a.signInAt ? new Date(a.signInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                {a.isOffSiteIn ? ' (off-site)' : ''}
+                {a.signOutAt ? ` · Out ${new Date(a.signOutAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ' · Still signed in'}
+                {a.lateReason ? ` · Late: ${a.lateReason}` : ''}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div className={styles.card}>
         <div className={styles.periodRow}>

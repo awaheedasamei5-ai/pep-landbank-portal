@@ -62,9 +62,72 @@ export function useDashboardRealtime() {
     };
     const invalidateLeave = () => {
       queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });
+      // useColleagueAvailability.ts (Ops Tracker's My Day assign-task flow)
+      // reads leave_requests directly but has its own 5-minute staleTime --
+      // without this, a leave request approved on one device wouldn't show
+      // up in an already-open Assign Task modal on another until it expired
+      // on its own.
+      queryClient.invalidateQueries({ queryKey: ['colleagueAvailability'] });
     };
     const invalidateImports = () => {
       queryClient.invalidateQueries({ queryKey: ['importBatches'] });
+    };
+    // Real gap found 2026-09-05, user-reported: "is the ops tracker even in
+    // sync with other apps... do they talk to each other" prompted a full
+    // audit -- allocation_requests/plots was the sharpest hit: two staff in
+    // the small allocate-capable pool (manager/elias/emmanuel) could each
+    // be looking at the same "Pending" request or "Available" plot and act
+    // on it before either screen refreshed, risking the same physical plot
+    // being confirmed to two different clients. Subscribed unfiltered for
+    // everyone (not just managers) since an agent mid-request is exactly
+    // who needs to see a plot go stale under them. Not per-agent filtered
+    // on the channel -- invalidation only triggers a normal, still
+    // RLS-scoped refetch, so there's no data exposure in skipping that.
+    const invalidateAllocations = () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    };
+    const invalidateContracts = () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      queryClient.invalidateQueries({ queryKey: ['contractRequests'] });
+    };
+    const invalidateReferrals = () => {
+      queryClient.invalidateQueries({ queryKey: ['referrals'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+    };
+    const invalidatePermissions = () => {
+      // Real key is ['permissionOverrides', demoMode] (usePermissions.ts) --
+      // prefix-matching on just the first element still catches both the
+      // true/false demoMode variants without needing to know which is cached.
+      queryClient.invalidateQueries({ queryKey: ['permissionOverrides'] });
+    };
+    // Real user ask (2026-09-05): "enquiries/complaints are supposed to
+    // reach the person theyre assigned to and management... memos too
+    // need to reach the person its been written to in real time... all
+    // attendants need to go to management in real time." Complaints/
+    // memos/attendance_log were confirmed already scoped correctly at the
+    // query level (or fixed the same day, complaints' owner-reassignment
+    // path) -- they were just never pushed live before.
+    const invalidateComplaints = () => {
+      queryClient.invalidateQueries({ queryKey: ['complaints'] });
+    };
+    const invalidateEnquiries = () => {
+      queryClient.invalidateQueries({ queryKey: ['enquiries'] });
+    };
+    const invalidateMemos = () => {
+      queryClient.invalidateQueries({ queryKey: ['memos'] });
+    };
+    const invalidateAttendance = () => {
+      queryClient.invalidateQueries({ queryKey: ['attendanceToday'] });
+      queryClient.invalidateQueries({ queryKey: ['attendanceHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['attendanceAllToday'] });
+    };
+    // Master Spec 11.3's Praise/Warning -- a manager on one device issuing
+    // one should update another manager's Management dashboard live, and
+    // land in the affected staff member's own attendance view without a
+    // refresh, same live-everything push as attendance_log got 2026-09-05.
+    const invalidateAttendanceNotes = () => {
+      queryClient.invalidateQueries({ queryKey: ['attendanceNotes'] });
     };
 
     const channel = client.channel(`dashboard-${myKey}`);
@@ -83,6 +146,22 @@ export function useDashboardRealtime() {
     if (isManager) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table: 'import_batches' }, invalidateImports);
     }
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allocation_requests' }, invalidateAllocations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plots' }, invalidateAllocations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contracts' }, invalidateContracts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_requests' }, invalidateContracts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, invalidateReferrals);
+    if (isManager) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'staff_permission_overrides' }, invalidatePermissions);
+    }
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, invalidateComplaints)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enquiries' }, invalidateEnquiries)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'memos' }, invalidateMemos)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'memo_recipients' }, invalidateMemos)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_log' }, invalidateAttendance)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_notes' }, invalidateAttendanceNotes);
     channel.subscribe();
 
     return () => {

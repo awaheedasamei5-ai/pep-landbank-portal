@@ -85,9 +85,16 @@ export function Sidebar() {
       key: 'office',
       label: 'Office',
       items: [
-        { key: 'myday', label: 'My Day', to: '/app/office/myday', icon: 'checklist' },
-        { key: 'tasks', label: 'Task Board', to: '/app/office/tasks', icon: 'checklist' },
+        // Real user ask (2026-09-06): My Day/Task Board/Week/Month/Team
+        // Schedule/Meetings are one app, not six sidebar entries -- one
+        // link into the OperationsTrackerScreen shell, which owns its own
+        // internal tab navigation between those six.
+        { key: 'operations', label: 'Operations Tracker', to: '/app/office/operations', icon: 'checklist' },
         { key: 'memos', label: 'Memorandum', to: '/app/office/memos', icon: 'note' },
+        // Real user correction 2026-09-11: Attendance Records and Leave
+        // Dashboard must NOT be separate sidebar entries -- each is a real
+        // nested route (SegmentedTabs + <Outlet/>) inside its own parent
+        // app now, same fix already applied to Operations Tracker above.
         { key: 'attendance', label: 'Attendance', to: '/app/office/attendance', icon: 'check' },
         ...(canLogPayments ? [{ key: 'payments', label: 'Log Payment', to: '/app/office/payments', icon: 'card' as IconName }] : []),
         { key: 'contracts', label: 'Contract Requests', to: '/app/office/contracts', icon: 'document' },

@@ -194,6 +194,7 @@ export function seedDemo(): DemoDb {
     leaveTotalDays: 20,
     workDays: [1, 2, 3, 4, 5],
     eidObservingStaff: ['adams'],
+    eidWindows: [],
     referralPointsPerReferral: 50,
     // Real production values (confirmed live) -- see Config's own comment.
     officeLat: 5.602694,
@@ -233,14 +234,14 @@ export function seedDemo(): DemoDb {
       site: 'Royal Palm Enclave',
       plot: 'B-01-H1',
       visitDate: isoPlusDays(t, -12),
-      visitTime: 'Saturday 11:00am',
+      visitTime: 'Saturday 9:00am',
       people: 2,
-      transport: 'Company bus',
+      transport: 'Company Vehicle',
       pickup: 'Tsopoli junction',
       placeOfWork: 'Ministry of Health',
       position: 'Nurse',
       nationality: 'Ghanaian',
-      purpose: 'First site inspection before committing to half-plot deposit',
+      purpose: 'Viewing',
       discussionSoFar: 'Walked the half-plot subdivision, explained payment plan options',
       keyUnderstanding: 'Understands 6-month plan, wants to confirm with spouse',
       feedbackAfter: null,
@@ -267,14 +268,14 @@ export function seedDemo(): DemoDb {
       site: 'Royal Palm Enclave',
       plot: 'A-02',
       visitDate: isoPlusDays(t, -3),
-      visitTime: 'Sunday 2:00pm',
+      visitTime: 'Sunday 12:00pm',
       people: 1,
-      transport: 'Self-drive',
+      transport: 'Personal Vehicle',
       pickup: null,
       placeOfWork: null,
       position: null,
       nationality: 'Ghanaian',
-      purpose: 'Second visit, ready to reserve',
+      purpose: 'Allocation',
       discussionSoFar: 'Confirmed plot boundaries and 12-month payment plan',
       keyUnderstanding: 'Ready to pay deposit this week',
       feedbackAfter: null,
@@ -414,6 +415,8 @@ export function seedDemo(): DemoDb {
       follow: 'Yes',
       followDate: isoPlusDays(t, 2),
       createdAt: isoPlusDays(t, -1),
+      status: 'Open',
+      owner: null,
     },
   ];
 
@@ -445,6 +448,9 @@ export function seedDemo(): DemoDb {
       isOffSiteIn: false,
       isOffSiteOut: false,
       signInPhoto: null,
+      signInAccuracyMeters: null,
+      signOutAccuracyMeters: null,
+      deviceInfo: null,
     });
   }
 
@@ -593,6 +599,10 @@ export function seedDemo(): DemoDb {
       decidedBy: null,
       decidedByName: null,
       decidedSignature: null,
+      isEmergency: false,
+      deductQuota: true,
+      rescheduleNote: null,
+      usedConfirmedAt: null,
     },
     {
       id: uid(),
@@ -608,6 +618,10 @@ export function seedDemo(): DemoDb {
       decidedBy: 'management',
       decidedByName: 'Management',
       decidedSignature: null,
+      isEmergency: false,
+      deductQuota: true,
+      rescheduleNote: null,
+      usedConfirmedAt: null,
     },
   ];
 
@@ -820,6 +834,11 @@ export function seedDemo(): DemoDb {
     referrals,
     enquiries,
     attendance,
+    // Genuinely empty on a fresh demo session -- a Praise/Warning audit
+    // trail with fabricated entries would misrepresent what a first-run
+    // Management dashboard actually looks like (same reasoning as
+    // `attendance` seeding no row for *today*).
+    attendanceNotes: [],
     memos,
     memoRecipients,
     complaints,
@@ -831,6 +850,10 @@ export function seedDemo(): DemoDb {
     staffSignatures: {},
     sveInvites,
     sveSubmissions,
+    sveDayReports: [],
+    scheduleItemInvitees: [],
+    taskEvents: [],
+    scheduleItemAttachments: [],
     chatMessages,
     contracts,
     receiptShareLinks: [],

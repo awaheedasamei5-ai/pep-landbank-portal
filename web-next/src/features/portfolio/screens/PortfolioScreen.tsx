@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router';
-import { usePortfolio } from '../hooks/usePortfolio';
+import { useSessionStore } from '../../../auth/useSessionStore';
+import { usePortfolio, useLeaderboardGapCoach } from '../hooks/usePortfolio';
 import styles from './PortfolioScreen.module.css';
 
 // New screen -- the data layer (usePortfolio.ts/portfolioLogic.ts) has
@@ -15,7 +16,13 @@ import styles from './PortfolioScreen.module.css';
 // always run, nothing ever showed a staff member what they'd earned.
 export function PortfolioScreen() {
   const navigate = useNavigate();
+  const profile = useSessionStore((s) => s.profile);
   const portfolio = usePortfolio();
+  const { data: gapCoach } = useLeaderboardGapCoach(
+    portfolio.rank != null && profile
+      ? { staffName: profile.name, rank: portfolio.rank, totalRanked: portfolio.totalRanked, points: portfolio.points, aboveName: portfolio.aboveName, gap: portfolio.gap, suggestions: portfolio.suggestions }
+      : null,
+  );
 
   return (
     <div className={styles.wrap}>
@@ -54,9 +61,13 @@ export function PortfolioScreen() {
                     ))}
                   </ul>
                 )}
+                {gapCoach && <p className={styles.gapCoach}>{gapCoach}</p>}
               </>
             ) : (
-              <div className={styles.gapValueZero}>You&apos;re #1 on the team — keep it up 🎉</div>
+              <div className={styles.gapValueZero}>
+                You&apos;re #1 on the team — keep it up 🎉
+                {gapCoach && <p className={styles.gapCoach}>{gapCoach}</p>}
+              </div>
             )}
           </div>
         </>

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
+import { getSupabaseClient } from '../../../data/client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
-import { agentPoints } from '../../manager/lib/leaderboardLogic';
 import { computeGapSuggestions, mergeReferralConversions } from '../lib/portfolioLogic';
 
-// Reads the exact same leaderboard_rows RPC + agentPoints() formula
-// Leaderboard itself uses (index.html's own comment on paintPerformance
-// Section makes this an explicit invariant: "an agent's own rank here
-// can never disagree with what Management sees on the Leaderboard") --
-// so this intentionally doesn't reuse useLeaderboard() as a black box,
-// it re-derives from the same two primitives to stay obviously in sync.
+// Reads the same server-authoritative leaderboardScores() RPC Leaderboard
+// itself uses (index.html's own comment on paintPerformanceSection makes
+// this an explicit invariant: "an agent's own rank here can never
+// disagree with what Management sees on the Leaderboard") -- both now
+// call recompute_leaderboard_scores() directly rather than separately
+// running agentPoints() client-side, so there is exactly one place
+// `points` is computed. See project-leaderboard-v3-audit-and-plan memory.
 export function usePortfolio() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -28,8 +29,8 @@ export function usePortfolio() {
     enabled: !!profile,
     queryFn: async () => {
       const ds = getDataSource(demoMode);
-      const [rawRows, conversions] = await Promise.all([ds.manager.leaderboardRows(from, to), ds.manager.referralConversions(from, to)]);
-      return mergeReferralConversions(rawRows, conversions);
+      const [scoredRows, conversions] = await Promise.all([ds.manager.leaderboardScores(from, to), ds.manager.referralConversions(from, to)]);
+      return mergeReferralConversions(scoredRows, conversions);
     },
   });
 
@@ -45,9 +46,9 @@ export function usePortfolio() {
   });
 
   const scored = useMemo(() => {
-    if (!rowsQuery.data || !config) return [];
-    return rowsQuery.data.map((r) => ({ ...r, points: agentPoints(r, config.leaderboardWeights) })).sort((a, b) => b.points - a.points);
-  }, [rowsQuery.data, config]);
+    if (!rowsQuery.data) return [];
+    return [...rowsQuery.data].sort((a, b) => b.points - a.points);
+  }, [rowsQuery.data]);
 
   const myIndex = scored.findIndex((r) => r.staffKey === myKey);
   const me = myIndex >= 0 ? scored[myIndex] : null;
@@ -73,7 +74,7 @@ export function usePortfolio() {
       let awardedAny = false;
       for (const def of defsQuery.data ?? []) {
         if (!def.active || earnedIds.has(def.id)) continue;
-        const val = (me as Record<string, unknown>)[def.criteriaType] as number | undefined;
+        const val = (me as unknown as Record<string, unknown>)[def.criteriaType] as number | undefined;
         const threshold = def.criteriaConfig?.threshold;
         if (val == null || threshold == null || val < threshold) continue;
         const rec = await ds.achievements.award(profile.key, profile.name, def.id, { value: val, threshold }).catch(() => null);
@@ -95,4 +96,41 @@ export function usePortfolio() {
     defs: defsQuery.data ?? [],
     earned: earnedQuery.data ?? [],
   };
+}
+
+// AI-drafted coaching paragraph on top of the plain-arithmetic
+// suggestions above -- same deterministic-calc/AI-drafts-language split
+// as Attendance's Praise/Warning: the gap and each suggestion are real
+// numbers computeGapSuggestions() already worked out, the model only
+// turns the most realistic one into a motivating sentence. Same
+// graceful-null pattern as useCommissionExplainer -- demo mode and an
+// unconfigured Groq key both simply show no coaching text.
+export function useLeaderboardGapCoach(input: { staffName: string; rank: number | null; totalRanked: number; points: number; aboveName: string | null; gap: number; suggestions: string[] } | null) {
+  return useQuery({
+    queryKey: ['leaderboardGapCoach', input?.staffName, input?.rank, input?.points, input?.gap],
+    enabled: !!input && input.rank != null,
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+    queryFn: async () => {
+      const client = getSupabaseClient();
+      if (!client || !input) return null;
+      const { data: res, error } = await client.functions.invoke('ai-insights', {
+        body: {
+          kind: 'leaderboard_gap_coach',
+          context: {
+            staffName: input.staffName,
+            rank: input.rank,
+            totalRanked: input.totalRanked,
+            points: input.points,
+            aboveName: input.aboveName,
+            gap: input.gap,
+            suggestions: input.suggestions,
+          },
+        },
+      });
+      if (error) return null;
+      const message = (res as { message?: string } | null)?.message;
+      return message && message.length > 0 ? message : null;
+    },
+  });
 }

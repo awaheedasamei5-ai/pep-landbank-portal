@@ -23,6 +23,7 @@ function fmtTime(iso: string): string {
 // on the right list.
 function targetRoute(n: ChatMessage): string | null {
   if (n.refType === 'allocation_request') return '/app/sales/allocations';
+  if (n.refType === 'attendance_note') return '/app/office/attendance';
   return null;
 }
 

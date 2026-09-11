@@ -38,7 +38,7 @@ export function TodayTasksCard() {
           <span>Done</span>
         </div>
       </div>
-      <Link to="/app/office/myday" className={styles.link}>
+      <Link to="/app/office/operations/myday" className={styles.link}>
         Open My Day →
       </Link>
     </div>

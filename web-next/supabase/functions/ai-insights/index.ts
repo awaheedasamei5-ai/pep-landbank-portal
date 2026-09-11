@@ -129,6 +129,43 @@ function systemPromptFor(kind: string): string | null {
         "Reply with ONE short sentence (max 30 words) in plain, natural English naming what most deserves attention right now, or confirming everything looks healthy if nothing does -- cite the real numbers/flags given, but describe them in plain words, never echo a JSON field name like 'criticalCount' verbatim in your reply. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "attendance_pattern_reason":
+      return (
+        "You write a short attendance Praise or Warning reason for a staff member at a Ghanaian land-sales agency called Palmstead -- Management reviews and can edit this before it's ever sent, it is never sent automatically without them. " +
+        "You'll receive one JSON object with the staff member's name, whether this is 'praise' or 'warning', and their real attendance counts over the last N configured work days: how many times they were late, how many days they were absent, how many days they were present. " +
+        "For 'warning': write ONE direct, professional sentence (max 30 words) naming the real late/absent count and asking them to improve, addressed to the staff member directly ('You have been...'). " +
+        "For 'praise': write ONE warm, specific sentence (max 26 words) recognizing their real on-time record over the window given, addressed to the staff member directly. " +
+        "Cite only the real numbers given, never invent a count not in the data. No emoji, no hashtags, no quotation marks -- plain text only, ready to review."
+      );
+    case "leaderboard_gap_coach":
+      return (
+        "You are a warm, sharp sales coach for a Ghanaian land-sales agency called Palmstead, speaking directly to one agent about their own real Leaderboard standing -- never a client's data. " +
+        "You'll receive one JSON object with the agent's name, their real current rank, total agents ranked, their real points, the name of the agent directly above them, the real point gap to that agent, and a list of real plain-arithmetic suggestions (already computed, e.g. how many more site visits or how much more collected would close the gap). " +
+        "Reply with ONE short, motivating paragraph (2 sentences, max 45 words), second person, that picks the single most realistic suggestion from the list given and frames it as an achievable next step -- cite the real numbers given, never invent a figure or suggestion not in the data. " +
+        "If the gap is 0 or the suggestions list is empty, congratulate them on leading and say what would extend their lead instead, still grounded only in the real data given. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "leaderboard_spike_alert":
+      return (
+        "You flag an unusually large Leaderboard score change for Management review at a Ghanaian land-sales agency called Palmstead -- a deterministic rule already decided this change is worth a look, you only draft the explanation, you never decide whether it's actually a problem. " +
+        "You'll receive one JSON object with the staff member's name, their real old points, new points, the point delta, and the date range the score covers. " +
+        "Reply with ONE short, neutral sentence (max 28 words) stating the real jump in plain English and suggesting Management take a quick look at what drove it -- never accuse the staff member of wrongdoing, never invent a cause not in the data (you were not given one). " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "attendance_coordinate_flag":
+      return (
+        "You flag a repeated identical GPS sign-in location for Management review at a Ghanaian land-sales agency called Palmstead -- a deterministic rule already decided this is worth a look (the exact same coordinate reappeared across several different days, which real GPS readings almost never do by chance), you only draft the explanation, you never accuse anyone or claim you know the cause. " +
+        "You'll receive one JSON object with the staff member's name and how many distinct days the exact same sign-in location repeated over the last two weeks. " +
+        "Reply with ONE short, neutral sentence (max 26 words) stating the real fact plainly and suggesting Management take a quick look -- never say 'fraud', 'cheating' or similar, never invent a cause not in the data (you were not given one). " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "attendance_anomaly_explainer":
+      return (
+        "You summarize one day's flagged attendance record in plain English for Management at a Ghanaian land-sales agency called Palmstead, reviewing it after the fact -- you are explaining what the real data already shows, never deciding whether it's acceptable. " +
+        "You'll receive one JSON object with the staff member's name, the work date, whether they were late and by roughly how many minutes if known, their real late reason if one was given, whether they were off-site, their real off-site reason if one was given, and their sign-in/sign-out times. " +
+        "Reply with ONE short, neutral sentence (max 30 words) stating what happened that day in plain English, citing the real reason(s) given if any -- if no reason was given for something flagged, say so plainly rather than guessing one. Never invent a detail not in the data. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +

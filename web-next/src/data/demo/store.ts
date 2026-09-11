@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, AllocationRequest, AttendanceRecord, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, Payment, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Referral, ReportArchiveEntry, ScheduleItem, SiteVisit, StaffAchievement, StaffInvite, SveInviteRecord, SveSubmissionRecord, StreakRow, WeeklyVisitForm } from '../../types/domain';
+import type { ActivityLogEntry, AllocationRequest, AttendanceException, AttendanceNote, AttendancePolicy, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, OfficeLocation, Payment, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -20,6 +20,7 @@ export interface DemoDb {
   referrals: Referral[];
   enquiries: Enquiry[];
   attendance: AttendanceRecord[];
+  attendanceNotes: AttendanceNote[];
   memos: Memo[];
   memoRecipients: MemoRecipient[];
   complaints: Complaint[];
@@ -39,6 +40,10 @@ export interface DemoDb {
   staffSignatures: Record<string, string | null>;
   sveInvites: SveInviteRecord[];
   sveSubmissions: SveSubmissionRecord[];
+  sveDayReports: SveDayReport[];
+  scheduleItemInvitees: ScheduleItemInvitee[];
+  taskEvents: TaskEvent[];
+  scheduleItemAttachments: ScheduleItemAttachment[];
   // kind is always null here -- this demo store never simulates the
   // notification-bus side of the real `messages` table, only plain chat.
   chatMessages: ChatMessage[];
@@ -51,6 +56,10 @@ export interface DemoDb {
   banners: Banner[];
   pricingHistory?: PricingHistoryEntry[];
   pricingPromotions?: PricingPromotion[];
+  officeLocations?: OfficeLocation[];
+  attendancePolicyHistory?: AttendancePolicy[];
+  attendanceExceptions?: AttendanceException[];
+  attendanceReviews?: AttendanceReview[];
   fundRequests: FundRequest[];
   weeklyVisitForms: WeeklyVisitForm[];
   downloads: DownloadRecord[];
@@ -70,7 +79,7 @@ export interface DemoDb {
   activityLog: ActivityLogEntry[];
 }
 
-const DEMO_VERSION = 57;
+const DEMO_VERSION = 65;
 const DEMO_KEY = 'pep_webnext_demo';
 
 let demoMem: DemoDb | null = null;
