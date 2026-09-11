@@ -370,7 +370,11 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        "no-scrollbar flex min-h-0 flex-1 flex-col gap-0 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // Was "no-scrollbar" (hides the scrollbar entirely) -- with this
+        // many real apps in the Sales/Office groups the list runs past
+        // the viewport, and management asked for a visible scroll
+        // affordance so it's clear there's more to scroll to.
+        "flex min-h-0 flex-1 flex-col gap-0 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}

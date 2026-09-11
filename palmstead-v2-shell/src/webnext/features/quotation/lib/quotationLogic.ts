@@ -49,14 +49,19 @@ export function interestFor(config: Config, plan: PaymentPlanKey): number {
   return table[plan] ?? 0;
 }
 
-function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
+// depositIncludesInterest defaults to false (Standard Quotation's own,
+// already-tested behavior -- see QUOTE_DEPOSIT_PCT's own comment above:
+// deposit is 30% of net only). Technical Quotation is the one real caller
+// that ever passes true, per the client's own explicit choice on that
+// screen -- deposit as 30% of the net+interest grand instead.
+function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number, depositIncludesInterest = false): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
   const grand = net + interestTotal;
   let deposit = 0;
   let balance = grand;
   let monthlyDue = 0;
   const schedule: InstallmentScheduleRow[] = [];
   if (planMonths && grand > 0) {
-    deposit = Math.round(net * depositPct);
+    deposit = Math.round((depositIncludesInterest ? grand : net) * depositPct);
     balance = grand - deposit;
     monthlyDue = Math.round(balance / planMonths);
     let opening = balance;
@@ -191,9 +196,10 @@ export interface TechnicalQuotationTotals {
   balance: number;
   monthlyDue: number;
   schedule: InstallmentScheduleRow[];
+  depositIncludesInterest: boolean;
 }
 
-export function computeTechnicalQuotationTotals(config: Config, fullCount: number, halfCount: number, customLots: TechLot[], plan: PaymentPlanKey, depositPctOverride: number | null): TechnicalQuotationTotals {
+export function computeTechnicalQuotationTotals(config: Config, fullCount: number, halfCount: number, customLots: TechLot[], plan: PaymentPlanKey, depositPctOverride: number | null, depositIncludesInterest = false): TechnicalQuotationTotals {
   const rate = techPricePerSqft(config);
   const baseArea = techBaseAreaSqft(config);
   const fullArea = baseArea * fullCount;
@@ -206,6 +212,6 @@ export function computeTechnicalQuotationTotals(config: Config, fullCount: numbe
   const interestTotal = Math.round(interestFor(config, plan) * eq);
   const planMonths = PLAN_MONTHS[plan] ?? 0;
   const depositPct = depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : QUOTE_DEPOSIT_PCT;
-  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct);
-  return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule };
+  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest);
+  return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
 }

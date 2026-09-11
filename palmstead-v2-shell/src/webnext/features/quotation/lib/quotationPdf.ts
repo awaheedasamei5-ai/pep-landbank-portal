@@ -179,8 +179,17 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
     ['No of Plots', String(qtyOfType), QRED],
     ['Original Plot Price', ghs(q.listTotal / qtyOfType), null],
     ['Discount', ghs((q.discountTotal || 0) / qtyOfType), null],
-    ['Interest', ghs((q.interestTotal || 0) / qtyOfType), null],
-    ['Cost with Interest', ghs((q.net + q.interestTotal) / qtyOfType), null],
+    // Was (q.interestTotal || 0) / qtyOfType -- for 1.5+ plots that showed
+    // only a single unit's interest (e.g. GHS 3,000) next to a "Cost with
+    // Interest" that quietly still divided the REAL, correctly-scaled
+    // total (GHS 4,500 for 1.5 units) back down by qtyOfType too, so
+    // neither row read as the actual interest charged on the deal.
+    // Unlike Plot Price/Discount, which are genuinely meaningful as a
+    // per-unit reference figure, interest is a whole-deal finance charge
+    // -- shown as the real total here, matching what the Total row below
+    // already (correctly) includes.
+    ['Interest', ghs(q.interestTotal || 0), null],
+    ['Cost with Interest', ghs(q.net + q.interestTotal), null],
     ['Total', ghs(q.grand), null],
   ];
   let ly = y;

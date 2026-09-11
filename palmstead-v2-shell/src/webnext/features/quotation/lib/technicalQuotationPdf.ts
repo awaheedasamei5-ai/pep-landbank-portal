@@ -113,7 +113,12 @@ export function buildTechnicalQuotationPdf(
   const rightX = 110;
   const leftColWidth = rightX - leftX - 4;
   const rightColWidth = pageW - 12 - rightX;
-  const depositPct = q.planMonths && q.net > 0 ? Math.round(((q.deposit || 0) / q.net) * 100) : null;
+  // Deposit % is read against whichever base the client chose on the
+  // screen (net alone, or net+interest) -- reading it against net alone
+  // regardless would show something other than 30% whenever interest was
+  // included, looking like a miscalculation.
+  const depositBase = q.depositIncludesInterest ? q.grand : q.net;
+  const depositPct = q.planMonths && depositBase > 0 ? Math.round(((q.deposit || 0) / depositBase) * 100) : null;
   const leftRows: [string, string][] = [
     ['Customer Name', client.name],
     ['Address', client.address || '—'],
@@ -121,7 +126,7 @@ export function buildTechnicalQuotationPdf(
     ['Email', client.email || '—'],
     ['Payment Plan', q.planMonths ? `${q.planMonths} Months` : 'Outright'],
     ['Deposit Amount', q.planMonths ? ghs(q.deposit) : '—'],
-    ['Deposit %', depositPct != null ? `${depositPct}%` : '—'],
+    ['Deposit %', depositPct != null ? `${depositPct}% (${q.depositIncludesInterest ? 'of net + interest' : 'of net'})` : '—'],
   ];
   const rightRows: [string, string, [number, number, number] | null][] = [
     ['Date:', dateStr, null],
