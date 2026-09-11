@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router';
 import { Icon } from '../../../shared/ui/Icon';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
+import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
+import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import type { Enquiry } from '../../../types/domain';
 import { useDeleteEnquiry, useEnquiries, useUpdateEnquiry } from '../hooks/useEnquiries';
 import styles from './EnquiriesScreen.module.css';
@@ -37,11 +39,14 @@ export function EnquiriesScreen() {
   const { data: enquiries, isLoading } = useEnquiries();
   const { data: staff } = useStaffDirectory();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const period = usePeriodFilter();
 
   function ownerName(ownerKey: string | null): string | null {
     if (!ownerKey) return null;
     return staff?.find((s) => s.key === ownerKey)?.name ?? ownerKey;
   }
+
+  const filtered = (enquiries ?? []).filter((e) => inPeriodRange(e.createdAt, period.range));
 
   return (
     <div className={styles.wrap}>
@@ -55,8 +60,10 @@ export function EnquiriesScreen() {
         </button>
       </div>
 
+      <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={enquiries?.length} />
+
       {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
-      {enquiries?.map((e) => {
+      {filtered.map((e) => {
         const isOpen = expanded === e.id;
         return (
           <div className={styles.card} key={e.id}>
@@ -95,6 +102,9 @@ export function EnquiriesScreen() {
         );
       })}
       {enquiries && enquiries.length === 0 && !isLoading && <p className={styles.emptyMsg}>No enquiries logged yet.</p>}
+      {enquiries && enquiries.length > 0 && filtered.length === 0 && !isLoading && (
+        <p className={styles.emptyMsg}>No enquiries logged for {period.label}. Widen the filter above to see older ones.</p>
+      )}
     </div>
   );
 }

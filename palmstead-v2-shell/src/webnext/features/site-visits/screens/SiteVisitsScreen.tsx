@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
+import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
+import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { SiteVisit } from '../../../types/domain';
 import { useAllSiteVisits, useCancelSiteVisit, useSiteVisits } from '../hooks/useSiteVisits';
@@ -56,6 +58,7 @@ export function SiteVisitsScreen() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [staffFilter, setStaffFilter] = useState('');
   const [query, setQuery] = useState('');
+  const period = usePeriodFilter();
   // Real user ask: "site visit... apps, we would be able to delete
   // logged data from our apps and it effects at the other ends of the
   // system in real time." Reuses the existing soft-cancel mutation
@@ -75,7 +78,14 @@ export function SiteVisitsScreen() {
 
   const byStaff = useMemo(() => (visits ?? []).filter((v) => !isManager || !staffFilter || v.agentKey === staffFilter), [visits, isManager, staffFilter]);
   const q = query.trim().toLowerCase();
-  const filtered = q ? byStaff.filter((v) => v.name.toLowerCase().includes(q) || v.contact.includes(q)) : byStaff;
+  const searched = q ? byStaff.filter((v) => v.name.toLowerCase().includes(q) || v.contact.includes(q)) : byStaff;
+  // Real user ask: "the tile list format of the data is not sustainable
+  // in the long run... it should be in build in filters where only
+  // recent (this month) data or history is shown on the current page."
+  // A text search is assumed to mean "find this specific record" --
+  // widens automatically past the period filter rather than making
+  // someone switch to "All time" first just to find an old visit by name.
+  const filtered = q ? searched : searched.filter((v) => inPeriodRange(v.visitDate, period.range));
 
   const thisMonthKey = new Date().toISOString().slice(0, 7);
   const kpis = useMemo(() => {
@@ -132,6 +142,8 @@ export function SiteVisitsScreen() {
           </div>
         </>
       )}
+
+      <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={byStaff.length} />
 
       {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {filtered.map((v) => {
@@ -231,7 +243,11 @@ export function SiteVisitsScreen() {
           </div>
         );
       })}
-      {!isLoading && filtered.length === 0 && <p className={styles.emptyMsg}>{byStaff.length === 0 ? 'No site visits logged yet.' : `No visits match "${query}".`}</p>}
+      {!isLoading && filtered.length === 0 && (
+        <p className={styles.emptyMsg}>
+          {byStaff.length === 0 ? 'No site visits logged yet.' : q ? `No visits match "${query}".` : `No visits logged for ${period.label}. Widen the filter above to see older ones.`}
+        </p>
+      )}
     </div>
   );
 }

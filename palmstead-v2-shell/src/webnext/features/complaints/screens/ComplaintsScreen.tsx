@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router';
 import { Icon } from '../../../shared/ui/Icon';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
+import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
+import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import type { Complaint } from '../../../types/domain';
 import { useComplaints, useDeleteComplaint, useUpdateComplaint } from '../hooks/useComplaints';
 import styles from './ComplaintsScreen.module.css';
@@ -39,11 +41,14 @@ export function ComplaintsScreen() {
   const { data: complaints, isLoading } = useComplaints();
   const { data: staff } = useStaffDirectory();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const period = usePeriodFilter();
 
   function ownerName(ownerKey: string | null): string | null {
     if (!ownerKey) return null;
     return staff?.find((s) => s.key === ownerKey)?.name ?? ownerKey;
   }
+
+  const filtered = (complaints ?? []).filter((c) => inPeriodRange(c.createdAt, period.range));
 
   return (
     <div className={styles.wrap}>
@@ -57,8 +62,10 @@ export function ComplaintsScreen() {
         </button>
       </div>
 
+      <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={complaints?.length} />
+
       {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
-      {complaints?.map((c) => {
+      {filtered.map((c) => {
         const isOpen = expanded === c.id;
         return (
           <div className={styles.card} key={c.id}>
@@ -88,6 +95,9 @@ export function ComplaintsScreen() {
         );
       })}
       {complaints && complaints.length === 0 && !isLoading && <p className={styles.emptyMsg}>No complaints logged yet.</p>}
+      {complaints && complaints.length > 0 && filtered.length === 0 && !isLoading && (
+        <p className={styles.emptyMsg}>No complaints logged for {period.label}. Widen the filter above to see older ones.</p>
+      )}
     </div>
   );
 }

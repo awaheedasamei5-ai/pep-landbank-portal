@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
+import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
@@ -59,13 +61,23 @@ export function AllocationRequestsScreen() {
   const canAllocate = useCanAllocatePlots();
   const [showForm, setShowForm] = useState(false);
 
-  const allocated = (requests ?? []).filter((r) => r.status === 'Allocated').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const allAllocated = (requests ?? []).filter((r) => r.status === 'Allocated').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Real user ask: "the tile list format of the data is not sustainable
+  // in the long run... it should be in build in filters where only
+  // recent (this month) data or history is shown." Only "Already
+  // allocated" grows unbounded over time -- Pending/Awaiting are active
+  // work queues, filtering those would hide real work still to be done.
+  const allocatedPeriod = usePeriodFilter();
+  const allocated = allAllocated.filter((r) => inPeriodRange(r.resolvedAt ?? r.createdAt, allocatedPeriod.range));
   // Second layer of the same real bug NewRequestForm's alreadyAllocated
   // check prevents going forward -- a stray open request for a lead that
   // ALSO has an Allocated one (found live: Damaris Odai, a leftover row
   // from before today, unrelated to how it got created) should never
-  // render as if it still needs a suggestion, whatever created it.
-  const allocatedLeadIds = new Set(allocated.map((r) => r.leadId));
+  // render as if it still needs a suggestion, whatever created it. Uses
+  // the UNFILTERED allocated set -- this is a data-integrity guard, not
+  // a display concern, so it must never miss an old allocation just
+  // because the history period filter below is narrowed to this month.
+  const allocatedLeadIds = new Set(allAllocated.map((r) => r.leadId));
   const pending = (requests ?? [])
     .filter((r) => r.status === 'Pending' && !allocatedLeadIds.has(r.leadId))
     .sort((a, b) => (b.percentPaid ?? 0) - (a.percentPaid ?? 0));
@@ -107,8 +119,12 @@ export function AllocationRequestsScreen() {
       </div>
 
       <div className={styles.sectitle}>Already allocated</div>
+      <PeriodFilterBar state={allocatedPeriod} resultCount={allocated.length} totalCount={allAllocated.length} />
       <div className={styles.list}>
-        {allocated.length === 0 && !isLoading && <p className={styles.emptyMsg}>No allocations yet.</p>}
+        {allAllocated.length === 0 && !isLoading && <p className={styles.emptyMsg}>No allocations yet.</p>}
+        {allAllocated.length > 0 && allocated.length === 0 && !isLoading && (
+          <p className={styles.emptyMsg}>No allocations for {allocatedPeriod.label}. Widen the filter above to see older ones.</p>
+        )}
         {allocated.map((r) => (
           <RequestRow key={r.id} request={r} canAllocate={canAllocate} />
         ))}

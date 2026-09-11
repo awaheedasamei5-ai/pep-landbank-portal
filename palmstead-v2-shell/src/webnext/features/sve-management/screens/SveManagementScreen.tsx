@@ -19,6 +19,8 @@ import { friendlyError } from '../../../shared/lib/friendlyError';
 import { reviewDigest, reviewIsAnswered } from '../lib/sveReviewDigest';
 import { SVE_REVIEW_QUESTIONS } from '../../../types/domain';
 import type { SveDayReportEntry } from '../../../types/domain';
+import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
+import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import styles from './SveManagementScreen.module.css';
 
 function initials(name: string): string {
@@ -69,6 +71,8 @@ export function SveManagementScreen() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'feedback' | 'reports'>('feedback');
   const [smsFailedId, setSmsFailedId] = useState<string | null>(null);
+  const feedbackPeriod = usePeriodFilter();
+  const filteredVisits = (visits ?? []).filter((v) => inPeriodRange(v.siteVisit.visitDate, feedbackPeriod.range));
 
   async function sendInviteFor(siteVisitId: string, clientName: string, clientContact: string) {
     setSmsFailedId((cur) => (cur === siteVisitId ? null : cur));
@@ -112,8 +116,9 @@ export function SveManagementScreen() {
 
       {tab === 'feedback' && (
         <>
+          <PeriodFilterBar state={feedbackPeriod} resultCount={filteredVisits.length} totalCount={visits?.length} />
           {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
-          {visits?.map(({ siteVisit, invite, submission }) => {
+          {filteredVisits.map(({ siteVisit, invite, submission }) => {
             const isOpen = expanded === siteVisit.id;
             return (
               <div className={styles.card} key={siteVisit.id}>
@@ -229,6 +234,9 @@ export function SveManagementScreen() {
             );
           })}
           {visits && visits.length === 0 && !isLoading && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
+          {visits && visits.length > 0 && filteredVisits.length === 0 && !isLoading && (
+            <p className={styles.emptyMsg}>No site visits for {feedbackPeriod.label}. Widen the filter above to see older ones.</p>
+          )}
         </>
       )}
 
@@ -240,11 +248,11 @@ export function SveManagementScreen() {
 function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSveVisits>['data']> }) {
   const { data: dayReports } = useSveDayReportsList();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo, setFilterTo] = useState('');
   const download = useDownloadSveDayReportPdf();
+  const daysPeriod = usePeriodFilter();
+  const sentPeriod = usePeriodFilter();
 
-  const days = useMemo(() => {
+  const allDays = useMemo(() => {
     const map = new Map<string, number>();
     visits.forEach((v) => {
       if (v.siteVisit.deletedAt) return;
@@ -252,18 +260,17 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
     });
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [visits]);
+  const days = useMemo(() => allDays.filter(([date]) => inPeriodRange(date, daysPeriod.range)), [allDays, daysPeriod.range]);
 
-  const sentReports = useMemo(() => {
-    return (dayReports ?? [])
-      .filter((r) => r.status === 'sent')
-      .filter((r) => (!filterFrom || r.visitDate >= filterFrom) && (!filterTo || r.visitDate <= filterTo));
-  }, [dayReports, filterFrom, filterTo]);
+  const allSentReports = useMemo(() => (dayReports ?? []).filter((r) => r.status === 'sent'), [dayReports]);
+  const sentReports = useMemo(() => allSentReports.filter((r) => inPeriodRange(r.visitDate, sentPeriod.range)), [allSentReports, sentPeriod.range]);
 
   if (selectedDate) return <DayReportEditor visitDate={selectedDate} onClose={() => setSelectedDate(null)} />;
 
   return (
     <>
       <p className={styles.sub}>Pick a day to build or review its Site Visit Experience report — one report covers every client visited that day.</p>
+      <PeriodFilterBar state={daysPeriod} resultCount={days.length} totalCount={allDays.length} />
       {days.map(([date, count]) => {
         const existing = dayReports?.find((r) => r.visitDate === date);
         return (
@@ -289,16 +296,13 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
           </div>
         );
       })}
-      {days.length === 0 && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
+      {allDays.length === 0 && <p className={styles.emptyMsg}>No site visits logged yet.</p>}
+      {allDays.length > 0 && days.length === 0 && <p className={styles.emptyMsg}>No site visits for {daysPeriod.label}. Widen the filter above to see older ones.</p>}
 
       <div className={styles.reportHead} style={{ marginTop: 22 }}>
         Sent reports
       </div>
-      <div className={styles.filterRow}>
-        <input type="date" className={styles.filterInput} value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} aria-label="From date" />
-        <span className={styles.filterSep}>to</span>
-        <input type="date" className={styles.filterInput} value={filterTo} onChange={(e) => setFilterTo(e.target.value)} aria-label="To date" />
-      </div>
+      <PeriodFilterBar state={sentPeriod} resultCount={sentReports.length} totalCount={allSentReports.length} />
       {sentReports.map((r) => (
         <div key={r.id} className={styles.card}>
           <div className={styles.row}>
