@@ -54,6 +54,7 @@ import { ContractRequestsScreen } from '../features/contracts/screens/ContractRe
 import { ContractGeneratorScreen } from '../features/contracts/screens/ContractGeneratorScreen';
 import { ContractsScreen } from '../features/contracts/screens/ContractsScreen';
 import { TemplateStudioScreen } from '../features/contracts/screens/TemplateStudioScreen';
+import { ContractReportsScreen } from '../features/contracts/screens/ContractReportsScreen';
 import { TemplateDetailScreen } from '../features/contracts/screens/TemplateDetailScreen';
 import { TemplatePreviewScreen } from '../features/contracts/screens/TemplatePreviewScreen';
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
@@ -382,6 +383,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <ContractRequestsScreen /> },
           { path: 'templates', element: <TemplateStudioScreen /> },
+          { path: 'reports', element: <ContractReportsScreen /> },
         ],
       },
       // Finer manager/'elizabeth'-only restriction lives in

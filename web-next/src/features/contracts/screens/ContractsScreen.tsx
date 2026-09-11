@@ -16,6 +16,7 @@ export function ContractsScreen() {
   const tabs: SegmentedTabItem[] = [
     { key: 'requests', label: 'Requests', to: '/app/office/contracts', end: true },
     ...(canManageTemplates ? [{ key: 'templates', label: 'Templates', to: '/app/office/contracts/templates' }] : []),
+    ...(canManageTemplates ? [{ key: 'reports', label: 'Reports', to: '/app/office/contracts/reports' }] : []),
   ];
 
   return (

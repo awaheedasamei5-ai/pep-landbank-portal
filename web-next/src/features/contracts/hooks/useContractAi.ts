@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { getSupabaseClient } from '../../../data/client';
+import { missingKycFieldLabels } from '../lib/contractFieldResolver';
 import type { Lead } from '../../../types/domain';
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §9 -- the 4 named AI capabilities, all
@@ -9,22 +10,12 @@ import type { Lead } from '../../../types/domain';
 // decided the facts below, the model only phrases them -- it's never
 // given room to invent what's missing or what changed.
 
-const KYC_FIELD_LABELS: [keyof NonNullable<Lead['kyc']>, string][] = [
-  ['nationality', 'Nationality'],
-  ['occupation', 'Occupation'],
-  ['idType', 'ID type'],
-  ['idNumber', 'ID number'],
-  ['contactName', 'Contact person name'],
-  ['contactPhone', 'Contact person phone'],
-  ['landUsage', 'Land usage'],
-];
-
 // 1. KYC completeness checker -- the missing-field list itself is the
 // real deterministic verdict (exactly the fields the contract resolver
 // actually needs, per ContractFieldKey); AI only drafts the one-line
 // summary shown in the KYC modal.
 export function useKycCompletenessSummary(lead: Lead | null) {
-  const missing = lead ? KYC_FIELD_LABELS.filter(([key]) => !lead.kyc?.[key]).map(([, label]) => label) : [];
+  const missing = lead ? missingKycFieldLabels(lead) : [];
   return useQuery({
     queryKey: ['contractKycCompleteness', lead?.id, missing.join(',')],
     enabled: !!lead && missing.length > 0,

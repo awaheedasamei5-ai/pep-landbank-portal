@@ -1,6 +1,25 @@
 import { fmtLongDate, ghs, today } from '../../../shared/lib/format';
 import { computeLeadQuotationTotals, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
-import type { Config, ContractSection, Lead } from '../../../types/domain';
+import type { Config, ContractSection, Lead, LeadKyc } from '../../../types/domain';
+
+// CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 1 / §11 report 3 -- the one
+// real deterministic missing-KYC check, shared by the AI completeness
+// summary and the missing-information report so both name the same real
+// fields rather than each re-deriving their own list.
+const KYC_FIELD_LABELS: [keyof LeadKyc, string][] = [
+  ['nationality', 'Nationality'],
+  ['occupation', 'Occupation'],
+  ['idType', 'ID type'],
+  ['idNumber', 'ID number'],
+  ['contactName', 'Contact person name'],
+  ['contactPhone', 'Contact person phone'],
+  ['landUsage', 'Land usage'],
+];
+
+export function missingKycFieldLabels(lead: Lead | null | undefined): string[] {
+  if (!lead) return KYC_FIELD_LABELS.map(([, label]) => label);
+  return KYC_FIELD_LABELS.filter(([key]) => !lead.kyc?.[key]).map(([, label]) => label);
+}
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §7 -- a real, exhaustive, typed union
 // (not a dynamic string lookup), so an unresolvable token is a
