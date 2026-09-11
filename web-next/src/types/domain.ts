@@ -1626,6 +1626,121 @@ export interface Contract {
   createdAt: string;
 }
 
+// CONTRACT_OF_SALE_BLUEPRINT.md §4 -- the real template-studio entities.
+// Additive alongside ContractRequest/Contract above, which stay exactly
+// as they are (the existing request/fulfil/metadata-only-generation flow
+// keeps working; these new tables are what actually gives that flow a
+// real versioned, token-driven document to generate from).
+export interface ContractTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface NewContractTemplate {
+  name: string;
+  description?: string;
+}
+
+export type ContractSectionKind = 'heading' | 'paragraph' | 'clause' | 'signature_block' | 'image' | 'footer';
+
+export interface ContractSection {
+  id: string;
+  kind: ContractSectionKind;
+  text?: string;
+  clauseId?: string;
+  imageRef?: string;
+}
+
+export type ContractTemplateVersionStatus = 'draft' | 'in_review' | 'published' | 'archived';
+
+export interface ContractTemplateVersion {
+  id: string;
+  templateId: string;
+  versionNumber: number;
+  status: ContractTemplateVersionStatus;
+  content: ContractSection[];
+  publishedAt: string | null;
+  publishedBy: string | null;
+  publishedByName: string | null;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+// The clause library -- a reusable named text block, insertable into any
+// template version (copies inline at insert time, see §6.2's own note on
+// why: the version must stay self-contained even if the library clause
+// is edited afterward).
+export interface ContractClause {
+  id: string;
+  name: string;
+  category: string | null;
+  body: string;
+  isActive: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+}
+
+export interface NewContractClause {
+  name: string;
+  category?: string;
+  body: string;
+}
+
+// The token catalog (§7) -- a field is just a validated camelCase name +
+// scope, matching the real Syncfusion Document Template Studio pattern
+// this was modeled on directly.
+export type ContractFieldScope = 'common' | 'template';
+
+export interface ContractField {
+  id: string;
+  key: string;
+  scope: ContractFieldScope;
+  templateId: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+// The real generation-time snapshot (§8) -- content_snapshot/
+// fieldValuesSnapshot are the fully resolved content actually used, so a
+// later template edit never changes what re-opening this generation
+// shows. templateVersionId is a lineage/audit pointer only, matching
+// Documenso's own "templateId is lineage, not a live dependency"
+// discipline -- never read live to redisplay a past generation.
+export interface ContractGeneration {
+  id: string;
+  contractRequestId: string | null;
+  leadId: string;
+  clientName: string;
+  templateId: string | null;
+  templateVersionId: string | null;
+  versionNumberSnapshot: number | null;
+  contentSnapshot: ContractSection[];
+  fieldValuesSnapshot: Record<string, string>;
+  pdfStoragePath: string | null;
+  generatedBy: string;
+  generatedByName: string;
+  generatedAt: string;
+}
+
+export type ContractApprovalStatus = 'approved' | 'rejected';
+
+export interface ContractApproval {
+  id: string;
+  templateVersionId: string;
+  status: ContractApprovalStatus;
+  reason: string | null;
+  decidedBy: string;
+  decidedByName: string;
+  decidedAt: string;
+}
+
 // Real table `leave_requests` (confirmed live). Unusually open SELECT RLS
 // (`auth.uid() IS NOT NULL`, not agent/manager-scoped) -- any signed-in
 // staff member sees every request company-wide, matching index.html's own

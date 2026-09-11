@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -690,6 +690,89 @@ export function mapContractRow(r: Record<string, unknown>): Contract {
     createdBy: r.created_by as string,
     createdByName: r.created_by_name as string,
     createdAt: r.created_at as string,
+  };
+}
+
+// CONTRACT_OF_SALE_BLUEPRINT.md §4 -- the new template-studio entities.
+export function mapContractTemplateRow(r: Record<string, unknown>): ContractTemplate {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    description: (r.description as string | null) ?? null,
+    isActive: r.is_active as boolean,
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapContractTemplateVersionRow(r: Record<string, unknown>): ContractTemplateVersion {
+  return {
+    id: r.id as string,
+    templateId: r.template_id as string,
+    versionNumber: r.version_number as number,
+    status: r.status as ContractTemplateVersion['status'],
+    content: (r.content as ContractSection[]) ?? [],
+    publishedAt: (r.published_at as string | null) ?? null,
+    publishedBy: (r.published_by as string | null) ?? null,
+    publishedByName: (r.published_by_name as string | null) ?? null,
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapContractClauseRow(r: Record<string, unknown>): ContractClause {
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    category: (r.category as string | null) ?? null,
+    body: r.body as string,
+    isActive: r.is_active as boolean,
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapContractFieldRow(r: Record<string, unknown>): ContractField {
+  return {
+    id: r.id as string,
+    key: r.key as string,
+    scope: r.scope as ContractField['scope'],
+    templateId: (r.template_id as string | null) ?? null,
+    createdBy: r.created_by as string,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapContractGenerationRow(r: Record<string, unknown>): ContractGeneration {
+  return {
+    id: r.id as string,
+    contractRequestId: (r.contract_request_id as string | null) ?? null,
+    leadId: r.lead_id as string,
+    clientName: r.client_name as string,
+    templateId: (r.template_id as string | null) ?? null,
+    templateVersionId: (r.template_version_id as string | null) ?? null,
+    versionNumberSnapshot: (r.version_number_snapshot as number | null) ?? null,
+    contentSnapshot: (r.content_snapshot as ContractSection[]) ?? [],
+    fieldValuesSnapshot: (r.field_values_snapshot as Record<string, string>) ?? {},
+    pdfStoragePath: (r.pdf_storage_path as string | null) ?? null,
+    generatedBy: r.generated_by as string,
+    generatedByName: r.generated_by_name as string,
+    generatedAt: r.generated_at as string,
+  };
+}
+
+export function mapContractApprovalRow(r: Record<string, unknown>): ContractApproval {
+  return {
+    id: r.id as string,
+    templateVersionId: r.template_version_id as string,
+    status: r.status as ContractApproval['status'],
+    reason: (r.reason as string | null) ?? null,
+    decidedBy: r.decided_by as string,
+    decidedByName: r.decided_by_name as string,
+    decidedAt: r.decided_at as string,
   };
 }
 

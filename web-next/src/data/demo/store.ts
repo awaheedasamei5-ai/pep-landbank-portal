@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, AllocationRequest, AttendanceException, AttendanceNote, AttendancePolicy, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractRequest, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, OfficeLocation, Payment, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../../types/domain';
+import type { ActivityLogEntry, AllocationRequest, AttendanceException, AttendanceNote, AttendancePolicy, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractRequest, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, ImportBatch, Lead, LeaveRequest, Memo, MemoRecipient, Note, OfficeLocation, Payment, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../../types/domain';
 import { seedDemo } from './seed';
 
 // localStorage-backed port of index.html's demoLoad()/demoSave() (uses a
@@ -26,6 +26,15 @@ export interface DemoDb {
   complaints: Complaint[];
   contractRequests: ContractRequest[];
   contracts: Contract[];
+  // CONTRACT_OF_SALE_BLUEPRINT.md §4 -- the new template-studio entities,
+  // optional like attendanceExceptions/officeLocations above so a stale
+  // saved demo blob from before this feature existed doesn't crash.
+  contractTemplates?: ContractTemplate[];
+  contractTemplateVersions?: ContractTemplateVersion[];
+  contractClauses?: ContractClause[];
+  contractFields?: ContractField[];
+  contractGenerations?: ContractGeneration[];
+  contractApprovals?: ContractApproval[];
   leaveRequests: LeaveRequest[];
   allocationRequests: AllocationRequest[];
   notes: Note[];

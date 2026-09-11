@@ -251,17 +251,16 @@ Section-kind buttons and drag handles keyboard-operable (drag handle also expose
 
 ## 18. Build order
 
-1. **[DONE 2026-09-11]** KYC capture modal restoration (§6.4) — real production-parity regression, fixed first since the token system (item 5) needs real KYC data to resolve against. New `LeadKycModal.tsx`, `LeadUpdate.kyc` + `buildLeadDbPatch()` wired through (demo mode needed zero changes — its generic spread already handled it). Verified live: filled in a real client's KYC, reloaded the page from scratch, confirmed every field persisted (nationality/ID type/ID number all read back correctly) — a genuine backend round-trip, not just local state. `npx tsc -b` / `oxlint` / `stylelint` all clean, zero console errors. **NEXT UP: item 2, schema migration.**
-2. Schema migration (§4/§16) — templates, versions, clauses, fields, generations, approvals, the publish RPC, the storage bucket.
-3. Template Studio dashboard + shell tab addition (§6.1) — reuses the proven SegmentedTabs pattern.
-4. Page editor canvas + section CRUD (§6.2 center column) — no tokens/clauses yet, just structural editing.
-5. Merge Fields panel + token rendering/insertion (§6.2 right rail, §7) — the genuinely novel piece this blueprint exists for.
+1. **[DONE 2026-09-11]** KYC capture modal restoration (§6.4) — real production-parity regression, fixed first since the token system (item 5) needs real KYC data to resolve against. New `LeadKycModal.tsx`, `LeadUpdate.kyc` + `buildLeadDbPatch()` wired through (demo mode needed zero changes — its generic spread already handled it). Verified live: filled in a real client's KYC, reloaded the page from scratch, confirmed every field persisted (nationality/ID type/ID number all read back correctly) — a genuine backend round-trip, not just local state. `npx tsc -b` / `oxlint` / `stylelint` all clean, zero console errors.
+2. **[DONE 2026-09-11]** Schema migration (§4/§16) — all 6 tables + the atomic publish RPC + the `contract-pdfs` storage bucket, applied and verified (rollback-wrapped SQL test of the archive-others-on-publish mechanic; `get_advisors` clean apart from the same expected SECURITY DEFINER informational note every other RPC this session carries). Domain types, mappers, and both demo + Supabase data-source implementations built alongside it — `npx tsc -b` clean.
+3. **[DONE 2026-09-11]** Template Studio dashboard + shell tab addition (§6.1) — new `ContractsScreen.tsx` shell (Requests | Templates tabs, reusing the proven SegmentedTabs pattern), `TemplateStudioScreen.tsx` (colored thumbnail-card grid, "+ New template" inline-create card). Verified live: created a real template, confirmed it persisted through a fresh reload.
+4. **[DONE 2026-09-11, PARTIAL — see note]** Page editor canvas + section CRUD (§6.2 center column) + the full draft→review→approve/reject→publish state machine (originally items 4 and 7, built together as one real vertical slice rather than shipping a page editor with no way to ever finish a version). New `TemplateDetailScreen.tsx`: version rail, add/edit/remove/reorder sections of every kind, Save draft/Submit for review/Approve/Reject/Duplicate-as-new-draft all wired to the real RPC and mutations. Verified live end-to-end: added a real paragraph section containing genuine `{{clientLegalName}}`/`{{noPlots}}`/`{{unitPrice}}` tokens (typed by hand), saved, reloaded from scratch and confirmed the exact text persisted, submitted for review, approved — watched the version flip through Draft → In review → Published for real, dashboard card updated to match. **What's honestly NOT in this slice**: the Merge Fields insertion panel and Clause Library panel (§6.2's right rail, items 5-6 below) — tokens must be typed by hand for now, which the screen says outright rather than pretending otherwise. The "different manager must approve" rule from §6.2 is also not enforced in the UI yet (any manager/elizabeth can approve their own submission) — RLS still requires manager/elizabeth for the underlying write either way, so this is a UX gap, not a security one.
+5. Merge Fields panel + token rendering/insertion (§6.2 right rail, §7) — the genuinely novel piece this blueprint exists for. **NEXT UP.**
 6. Clause Library panel + insert-copies-inline behavior (§6.2 right rail).
-7. Draft → review → approve/reject → publish state machine + the atomic-publish RPC (§6.2 top bar, §16).
-8. Preview screen (§6.3).
-9. Generation-time snapshot integration into the existing `generateAndRecordContract` (§8) — the real integrity fix.
-10. Staff-facing progress rail (§5).
-11. 4 AI capabilities (§9).
-12. Report system (§11) — scoped as its own item, not blocking.
+7. Preview screen (§6.3).
+8. Generation-time snapshot integration into the existing `generateAndRecordContract` (§8) — the real integrity fix.
+9. Staff-facing progress rail (§5).
+10. 4 AI capabilities (§9).
+11. Report system (§11) — scoped as its own item, not blocking.
 
 Each item gets built, then verified live (DEMO_MODE + direct SQL where relevant), then documented in this file's own status column and `PHASE0_INVENTORY.md`, exactly the discipline already followed for every Attendance slice this session — before moving to the next item.

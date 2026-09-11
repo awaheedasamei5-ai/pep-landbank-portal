@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractRequest, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractRequest, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { demoLoad, demoSave } from './demo/store';
 import type { DemoDb } from './demo/store';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
@@ -26,7 +26,13 @@ import {
   mapChatMessageRow,
   mapComplaintRow,
   mapContractRequestRow,
+  mapContractApprovalRow,
+  mapContractClauseRow,
+  mapContractFieldRow,
+  mapContractGenerationRow,
   mapContractRow,
+  mapContractTemplateRow,
+  mapContractTemplateVersionRow,
   mapDownloadRow,
   mapEnquiryRow,
   mapStaffAchievementRow,
@@ -582,6 +588,55 @@ export interface DataSource {
   contracts: {
     list(): Promise<Contract[]>;
     create(leadId: string, clientName: string, agentKey: string, createdBy: string, createdByName: string): Promise<Contract>;
+  };
+  // CONTRACT_OF_SALE_BLUEPRINT.md §4/§16 -- the real template studio.
+  // RLS on all 6 tables is manager-or-elizabeth (matching the existing
+  // contract_requests_upd / useCanFulfilContracts() gate for this whole
+  // feature area), except contractGenerations.list() which is broader
+  // (also the lead's own agent) and .create(), which stays gated to the
+  // same contracts.generate permission the existing contracts_ins uses.
+  contractTemplates: {
+    list(): Promise<ContractTemplate[]>;
+    create(createdBy: string, createdByName: string, input: NewContractTemplate): Promise<ContractTemplate>;
+    update(id: string, patch: Partial<NewContractTemplate & { isActive: boolean }>): Promise<ContractTemplate>;
+  };
+  contractTemplateVersions: {
+    listForTemplate(templateId: string): Promise<ContractTemplateVersion[]>;
+    create(templateId: string, versionNumber: number, createdBy: string, createdByName: string): Promise<ContractTemplateVersion>;
+    update(id: string, patch: { content?: ContractSection[]; status?: ContractTemplateVersionStatus }): Promise<ContractTemplateVersion>;
+    // Real SECURITY DEFINER RPC (set_contract_template_version_published)
+    // -- atomically publishes this version and archives any other
+    // published version of the same template, mirroring
+    // set_attendance_policy's own one-active-row discipline.
+    publish(id: string): Promise<ContractTemplateVersion>;
+  };
+  contractClauses: {
+    list(): Promise<ContractClause[]>;
+    create(createdBy: string, createdByName: string, input: NewContractClause): Promise<ContractClause>;
+  };
+  contractFields: {
+    list(): Promise<ContractField[]>;
+    create(createdBy: string, key: string, scope: ContractFieldScope, templateId: string | null): Promise<ContractField>;
+  };
+  contractGenerations: {
+    list(): Promise<ContractGeneration[]>;
+    create(input: {
+      contractRequestId: string | null;
+      leadId: string;
+      clientName: string;
+      templateId: string | null;
+      templateVersionId: string | null;
+      versionNumberSnapshot: number | null;
+      contentSnapshot: ContractSection[];
+      fieldValuesSnapshot: Record<string, string>;
+      pdfStoragePath: string | null;
+      generatedBy: string;
+      generatedByName: string;
+    }): Promise<ContractGeneration>;
+  };
+  contractApprovals: {
+    listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
+    decide(templateVersionId: string, status: ContractApprovalStatus, reason: string | null, decidedBy: string, decidedByName: string): Promise<ContractApproval>;
   };
   // Real table `leave_requests` (confirmed live). Unlike contract_requests,
   // SELECT RLS here is genuinely open to any authenticated staff member
@@ -2180,6 +2235,141 @@ function createDemoDataSource(): DataSource {
         db.contracts = [record, ...db.contracts];
         demoSave();
         return record;
+      },
+    },
+    contractTemplates: {
+      async list() {
+        return (demoLoad().contractTemplates ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      },
+      async create(createdBy, createdByName, input) {
+        const template: ContractTemplate = {
+          id: Math.random().toString(36).slice(2, 10),
+          name: input.name,
+          description: input.description ?? null,
+          isActive: true,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.contractTemplates = [template, ...(db.contractTemplates ?? [])];
+        demoSave();
+        return template;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        const list = db.contractTemplates ?? [];
+        const idx = list.findIndex((t) => t.id === id);
+        if (idx === -1) throw new Error('Template not found');
+        const updated: ContractTemplate = { ...list[idx], ...patch };
+        db.contractTemplates = [...list.slice(0, idx), updated, ...list.slice(idx + 1)];
+        demoSave();
+        return updated;
+      },
+    },
+    contractTemplateVersions: {
+      async listForTemplate(templateId) {
+        return (demoLoad().contractTemplateVersions ?? []).filter((v) => v.templateId === templateId).sort((a, b) => b.versionNumber - a.versionNumber);
+      },
+      async create(templateId, versionNumber, createdBy, createdByName) {
+        const version: ContractTemplateVersion = {
+          id: Math.random().toString(36).slice(2, 10),
+          templateId,
+          versionNumber,
+          status: 'draft',
+          content: [],
+          publishedAt: null,
+          publishedBy: null,
+          publishedByName: null,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.contractTemplateVersions = [version, ...(db.contractTemplateVersions ?? [])];
+        demoSave();
+        return version;
+      },
+      async update(id, patch) {
+        const db = demoLoad();
+        const list = db.contractTemplateVersions ?? [];
+        const idx = list.findIndex((v) => v.id === id);
+        if (idx === -1) throw new Error('Template version not found');
+        const updated: ContractTemplateVersion = { ...list[idx], ...patch };
+        db.contractTemplateVersions = [...list.slice(0, idx), updated, ...list.slice(idx + 1)];
+        demoSave();
+        return updated;
+      },
+      async publish(id) {
+        const db = demoLoad();
+        const list = db.contractTemplateVersions ?? [];
+        const target = list.find((v) => v.id === id);
+        if (!target) throw new Error('Template version not found');
+        const now = new Date().toISOString();
+        db.contractTemplateVersions = list.map((v) => {
+          if (v.id === id) return { ...v, status: 'published' as const, publishedAt: now };
+          if (v.templateId === target.templateId && v.status === 'published') return { ...v, status: 'archived' as const };
+          return v;
+        });
+        demoSave();
+        return db.contractTemplateVersions.find((v) => v.id === id)!;
+      },
+    },
+    contractClauses: {
+      async list() {
+        return (demoLoad().contractClauses ?? []).filter((c) => c.isActive).sort((a, b) => a.name.localeCompare(b.name));
+      },
+      async create(createdBy, createdByName, input) {
+        const clause: ContractClause = {
+          id: Math.random().toString(36).slice(2, 10),
+          name: input.name,
+          category: input.category ?? null,
+          body: input.body,
+          isActive: true,
+          createdBy,
+          createdByName,
+          createdAt: new Date().toISOString(),
+        };
+        const db = demoLoad();
+        db.contractClauses = [clause, ...(db.contractClauses ?? [])];
+        demoSave();
+        return clause;
+      },
+    },
+    contractFields: {
+      async list() {
+        return demoLoad().contractFields ?? [];
+      },
+      async create(createdBy, key, scope, templateId) {
+        const field: ContractField = { id: Math.random().toString(36).slice(2, 10), key, scope, templateId, createdBy, createdAt: new Date().toISOString() };
+        const db = demoLoad();
+        db.contractFields = [...(db.contractFields ?? []), field];
+        demoSave();
+        return field;
+      },
+    },
+    contractGenerations: {
+      async list() {
+        return (demoLoad().contractGenerations ?? []).slice().sort((a, b) => (a.generatedAt < b.generatedAt ? 1 : -1));
+      },
+      async create(input) {
+        const generation: ContractGeneration = { id: Math.random().toString(36).slice(2, 10), ...input, generatedAt: new Date().toISOString() };
+        const db = demoLoad();
+        db.contractGenerations = [generation, ...(db.contractGenerations ?? [])];
+        demoSave();
+        return generation;
+      },
+    },
+    contractApprovals: {
+      async listForVersion(templateVersionId) {
+        return (demoLoad().contractApprovals ?? []).filter((a) => a.templateVersionId === templateVersionId);
+      },
+      async decide(templateVersionId, status, reason, decidedBy, decidedByName) {
+        const approval: ContractApproval = { id: Math.random().toString(36).slice(2, 10), templateVersionId, status, reason, decidedBy, decidedByName, decidedAt: new Date().toISOString() };
+        const db = demoLoad();
+        db.contractApprovals = [...(db.contractApprovals ?? []), approval];
+        demoSave();
+        return approval;
       },
     },
     leaveRequests: {
@@ -4567,6 +4757,136 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractRow(data);
+      },
+    },
+    contractTemplates: {
+      async list() {
+        const { data, error } = await requireClient().from('contract_templates').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractTemplateRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('contract_templates')
+          .insert({ name: input.name, description: input.description ?? null, created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractTemplateRow(data);
+      },
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if ('name' in patch) dbPatch.name = patch.name;
+        if ('description' in patch) dbPatch.description = patch.description;
+        if ('isActive' in patch) dbPatch.is_active = patch.isActive;
+        const { data, error } = await requireClient().from('contract_templates').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapContractTemplateRow(data);
+      },
+    },
+    contractTemplateVersions: {
+      async listForTemplate(templateId) {
+        const { data, error } = await requireClient().from('contract_template_versions').select('*').eq('template_id', templateId).order('version_number', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractTemplateVersionRow);
+      },
+      async create(templateId, versionNumber, createdBy, createdByName) {
+        const { data, error } = await requireClient()
+          .from('contract_template_versions')
+          .insert({ template_id: templateId, version_number: versionNumber, status: 'draft', content: [], created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractTemplateVersionRow(data);
+      },
+      async update(id, patch) {
+        const dbPatch: Record<string, unknown> = {};
+        if ('content' in patch) dbPatch.content = patch.content;
+        if ('status' in patch) dbPatch.status = patch.status;
+        const { data, error } = await requireClient().from('contract_template_versions').update(dbPatch).eq('id', id).select().single();
+        if (error) throw error;
+        return mapContractTemplateVersionRow(data);
+      },
+      async publish(id) {
+        const { data, error } = await requireClient().rpc('set_contract_template_version_published', { p_version_id: id });
+        if (error) throw error;
+        return mapContractTemplateVersionRow(data);
+      },
+    },
+    contractClauses: {
+      async list() {
+        const { data, error } = await requireClient().from('contract_clauses').select('*').eq('is_active', true).order('name', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapContractClauseRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('contract_clauses')
+          .insert({ name: input.name, category: input.category ?? null, body: input.body, created_by: createdBy, created_by_name: createdByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractClauseRow(data);
+      },
+    },
+    contractFields: {
+      async list() {
+        const { data, error } = await requireClient().from('contract_fields').select('*');
+        if (error) throw error;
+        return (data ?? []).map(mapContractFieldRow);
+      },
+      async create(createdBy, key, scope, templateId) {
+        const { data, error } = await requireClient()
+          .from('contract_fields')
+          .insert({ key, scope, template_id: templateId, created_by: createdBy })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractFieldRow(data);
+      },
+    },
+    contractGenerations: {
+      async list() {
+        const { data, error } = await requireClient().from('contract_generations').select('*').order('generated_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractGenerationRow);
+      },
+      async create(input) {
+        const { data, error } = await requireClient()
+          .from('contract_generations')
+          .insert({
+            contract_request_id: input.contractRequestId,
+            lead_id: input.leadId,
+            client_name: input.clientName,
+            template_id: input.templateId,
+            template_version_id: input.templateVersionId,
+            version_number_snapshot: input.versionNumberSnapshot,
+            content_snapshot: input.contentSnapshot,
+            field_values_snapshot: input.fieldValuesSnapshot,
+            pdf_storage_path: input.pdfStoragePath,
+            generated_by: input.generatedBy,
+            generated_by_name: input.generatedByName,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractGenerationRow(data);
+      },
+    },
+    contractApprovals: {
+      async listForVersion(templateVersionId) {
+        const { data, error } = await requireClient().from('contract_approvals').select('*').eq('template_version_id', templateVersionId).order('decided_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractApprovalRow);
+      },
+      async decide(templateVersionId, status, reason, decidedBy, decidedByName) {
+        const { data, error } = await requireClient()
+          .from('contract_approvals')
+          .insert({ template_version_id: templateVersionId, status, reason, decided_by: decidedBy, decided_by_name: decidedByName })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractApprovalRow(data);
       },
     },
     leaveRequests: {

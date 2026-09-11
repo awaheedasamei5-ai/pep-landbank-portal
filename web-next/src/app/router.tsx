@@ -52,6 +52,9 @@ import { CommissionScreen } from '../features/manager/screens/CommissionScreen';
 import { MyCommissionScreen } from '../features/commission/screens/MyCommissionScreen';
 import { ContractRequestsScreen } from '../features/contracts/screens/ContractRequestsScreen';
 import { ContractGeneratorScreen } from '../features/contracts/screens/ContractGeneratorScreen';
+import { ContractsScreen } from '../features/contracts/screens/ContractsScreen';
+import { TemplateStudioScreen } from '../features/contracts/screens/TemplateStudioScreen';
+import { TemplateDetailScreen } from '../features/contracts/screens/TemplateDetailScreen';
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
 import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
@@ -367,11 +370,27 @@ export const router = createBrowserRouter([
       // Finer manager/'elias'-only restriction lives in LogPaymentScreen
       // itself (useCanLogPayments), matching real payments_ins RLS.
       { path: 'office/payments', element: <LogPaymentScreen /> },
-      { path: 'office/contracts', element: <ContractRequestsScreen /> },
+      // CONTRACT_OF_SALE_BLUEPRINT.md §6.1 -- Templates added as a real
+      // nested tab under the same single "Contract Requests" sidebar
+      // entry, not a second top-level app. /generate stays its own
+      // top-level route (a drill-down workflow step reached via
+      // navigate(), not a peer tab -- matches its existing behavior).
+      {
+        path: 'office/contracts',
+        element: <ContractsScreen />,
+        children: [
+          { index: true, element: <ContractRequestsScreen /> },
+          { path: 'templates', element: <TemplateStudioScreen /> },
+        ],
+      },
       // Finer manager/'elizabeth'-only restriction lives in
       // ContractGeneratorScreen itself (useCanFulfilContracts), matching
       // real contracts_ins RLS.
       { path: 'office/contracts/generate', element: <ContractGeneratorScreen /> },
+      // A focused editor workspace, not part of the Requests/Templates tab
+      // bar -- same reasoning as /generate above (a drill-down, not a peer
+      // tab).
+      { path: 'office/contracts/templates/:id', element: <TemplateDetailScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
       { path: 'office/quotation/technical', element: <TechnicalQuotationScreen /> },
       // Real user correction 2026-09-11: Leave and Leave Dashboard must
