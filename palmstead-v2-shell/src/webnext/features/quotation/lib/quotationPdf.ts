@@ -2,6 +2,7 @@
 
 import { jsPDF } from 'jspdf';
 import { ghs, today } from '../../../shared/lib/format';
+import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import type { Config } from '../../../types/domain';
 import type { QuotationTotals } from './quotationLogic';
@@ -305,6 +306,7 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   doc.setTextColor(120, 130, 124);
   doc.text(config.quoteFooterAddress || '', pageW / 2, pageH - 11, { align: 'center' });
 
+  pdfGeneratedStamp(doc, preparedByName);
   return doc;
 }
 

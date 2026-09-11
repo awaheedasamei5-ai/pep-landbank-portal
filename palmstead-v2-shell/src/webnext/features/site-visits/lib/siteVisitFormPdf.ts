@@ -3,6 +3,7 @@
 import { jsPDF } from 'jspdf';
 import { sitePdfCheckRow, sitePdfFields, sitePdfHeader, sitePdfLabeledPair, sitePdfSectionBar, SITE_MUTED, SITE_NAVY } from './sitePdfPrimitives';
 import { sanitizePdfText } from '../../../shared/lib/pdfText';
+import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import { dayTimeLabel } from '../../site-visit-auth/lib/siteVisitAuthLogic';
 import type { SiteVisit } from '../../../types/domain';
 
@@ -23,7 +24,7 @@ const PLOT_PRESETS = ['0.5 Plot (70x50)', '1 Plot (70x100)', '2 Plots (70x100)',
 // expected a combined "Day Time" string), so there is now only one.
 const DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 0].map(dayTimeLabel);
 
-export function buildSiteVisitFormPdf(rec: SiteVisit, logoDataUri: string | null): jsPDF {
+export function buildSiteVisitFormPdf(rec: SiteVisit, logoDataUri: string | null, generatedByName?: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   let y = sitePdfHeader(doc, 'SITE VISIT REQUEST FORM', logoDataUri);
@@ -104,6 +105,7 @@ export function buildSiteVisitFormPdf(rec: SiteVisit, logoDataUri: string | null
     ['Logged at', new Date(rec.createdAt).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
   ]);
 
+  pdfGeneratedStamp(doc, generatedByName);
   return doc;
 }
 

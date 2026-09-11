@@ -2,6 +2,7 @@
 
 import { jsPDF } from 'jspdf';
 import { ghs, fmtLongDate } from '../../../shared/lib/format';
+import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import type { AllocationRequest } from '../../../types/domain';
 
 // Master Spec 7.5: "generate a signed-off suggestion/authorization
@@ -30,7 +31,7 @@ function field(doc: jsPDF, x: number, y: number, w: number, label: string, value
   doc.line(x, y + 8.5, x + w, y + 8.5);
 }
 
-export function buildAllocationAuthorizationPdf(request: AllocationRequest, companyName: string | null | undefined): jsPDF {
+export function buildAllocationAuthorizationPdf(request: AllocationRequest, companyName: string | null | undefined, generatedByName?: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const company = companyName || 'PEP Landbank';
@@ -91,6 +92,7 @@ export function buildAllocationAuthorizationPdf(request: AllocationRequest, comp
   doc.text('Management signature', 14, y);
   doc.text('Date', pageW - 14 - 80, y);
 
+  pdfGeneratedStamp(doc, generatedByName);
   return doc;
 }
 

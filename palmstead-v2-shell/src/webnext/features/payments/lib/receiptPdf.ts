@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { ghs } from '../../../shared/lib/format';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
+import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import type { Config, Lead, Payment } from '../../../types/domain';
 
 // Port of index.html's buildReceiptPDF()/pdfReceiptHeaderBand()/
@@ -70,9 +71,10 @@ export interface BuildReceiptParams {
   config: Config;
   paidAsOf?: number;
   issuerSignature?: string | null;
+  issuerName?: string | null;
 }
 
-export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, config, paidAsOf, issuerSignature }: BuildReceiptParams): jsPDF {
+export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, config, paidAsOf, issuerSignature, issuerName }: BuildReceiptParams): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -250,5 +252,6 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setTextColor(...GRAY);
   doc.text(`${companyName} — ${siteName}`, L, pageH - 8);
 
+  pdfGeneratedStamp(doc, issuerName);
   return doc;
 }

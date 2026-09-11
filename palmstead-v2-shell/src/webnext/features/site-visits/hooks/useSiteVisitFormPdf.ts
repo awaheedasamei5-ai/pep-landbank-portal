@@ -2,6 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { buildSiteVisitFormPdf, siteVisitFormFilename } from '../lib/siteVisitFormPdf';
 import type { SiteVisit } from '../../../types/domain';
 
@@ -10,6 +11,7 @@ import type { SiteVisit } from '../../../types/domain';
 // this exact PDF to the staff notify message (index.html:16255-16257) --
 // here it's a plain download the staff member can keep/forward themselves.
 export function useDownloadSiteVisitFormPdf() {
+  const profile = useSessionStore((s) => s.profile);
   return useMutation({
     mutationFn: async (rec: SiteVisit) => {
       let logo: string | null = null;
@@ -18,7 +20,7 @@ export function useDownloadSiteVisitFormPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the form from generating.
       }
-      const doc = buildSiteVisitFormPdf(rec, logo);
+      const doc = buildSiteVisitFormPdf(rec, logo, profile?.name);
       doc.save(siteVisitFormFilename(rec.name));
     },
   });

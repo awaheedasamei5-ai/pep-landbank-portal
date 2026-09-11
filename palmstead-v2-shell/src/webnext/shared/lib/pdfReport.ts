@@ -289,3 +289,21 @@ export function pdfReportFooter(doc: jsPDF, companyName: string | null | undefin
   }
   doc.setTextColor(20, 20, 20);
 }
+
+// Real client request: every PDF the system generates must carry a real
+// timestamp of when it was generated and who generated it -- a small,
+// consistent stamp on just the LAST page (unlike pdfReportFooter above,
+// which repeats company/page-count on every page), placed low enough to
+// clear a signature line if one's already there. Call this right before
+// doc.save(), after pdfReportFooter (if the builder also uses that) so
+// it isn't drawn over.
+export function pdfGeneratedStamp(doc: jsPDF, generatedByName: string | null | undefined) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const stamp = 'Generated ' + new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + (generatedByName ? ' by ' + generatedByName : '');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(150, 155, 168);
+  doc.text(stamp, pageW - 12, pageH - 4, { align: 'right' });
+  doc.setTextColor(20, 20, 20);
+}

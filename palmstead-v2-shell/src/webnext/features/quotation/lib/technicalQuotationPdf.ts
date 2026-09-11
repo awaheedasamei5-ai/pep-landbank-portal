@@ -3,6 +3,7 @@
 import { jsPDF } from 'jspdf';
 import { ghs, today } from '../../../shared/lib/format';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
+import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import { greenBar, greenTable, kv, quoteBg, QGREEN_DARK, QGREEN_LIGHT, QRED, type QuotationClientInfo } from './quotationPdf';
 import type { Config } from '../../../types/domain';
 import type { TechnicalQuotationTotals } from './quotationLogic';
@@ -261,6 +262,7 @@ export function buildTechnicalQuotationPdf(
   doc.setTextColor(120, 130, 124);
   doc.text(config.quoteFooterAddress || '', pageW / 2, pageH - 11, { align: 'center' });
 
+  pdfGeneratedStamp(doc, preparedByName);
   return doc;
 }
 

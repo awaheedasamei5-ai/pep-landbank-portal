@@ -711,12 +711,13 @@ function FixResubmit({ request }: { request: AllocationRequest }) {
 // a real allocation.
 function AuthDocGate({ request, plotsForDoc }: { request: AllocationRequest; plotsForDoc: string }) {
   const { data: config } = useConfig();
+  const profile = useSessionStore((s) => s.profile);
   const upload = useUploadAllocationAuthDoc();
   const analyze = useAnalyzeAllocationAuthDoc();
   const fileRef = useRef<HTMLInputElement>(null);
 
   function generatePdf() {
-    const doc = buildAllocationAuthorizationPdf({ ...request, plotNumber: request.plotNumber ?? plotsForDoc }, config?.quoteCompanyName);
+    const doc = buildAllocationAuthorizationPdf({ ...request, plotNumber: request.plotNumber ?? plotsForDoc }, config?.quoteCompanyName, profile?.name);
     doc.save(allocationAuthFilename(request.clientName));
   }
 

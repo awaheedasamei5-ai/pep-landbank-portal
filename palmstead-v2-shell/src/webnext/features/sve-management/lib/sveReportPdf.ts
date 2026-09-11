@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { sitePdfFields, sitePdfHeader, sitePdfSectionBar, SITE_MUTED, SITE_NAVY } from '../../site-visits/lib/sitePdfPrimitives';
-import { pdfReportFooter } from '../../../shared/lib/pdfReport';
+import { pdfGeneratedStamp, pdfReportFooter } from '../../../shared/lib/pdfReport';
 import { sanitizePdfText } from '../../../shared/lib/pdfText';
 import { reviewDigest } from './sveReviewDigest';
 import type { SveDayReport } from '../../../types/domain';
@@ -23,7 +23,7 @@ function fmtLongDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null): jsPDF {
+export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   let y = sitePdfHeader(doc, 'SITE VISIT EXPERIENCE REPORT', logoDataUri);
@@ -83,6 +83,7 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
   });
 
   pdfReportFooter(doc, 'Trulander JSF Limited');
+  pdfGeneratedStamp(doc, generatedByName);
   return doc;
 }
 

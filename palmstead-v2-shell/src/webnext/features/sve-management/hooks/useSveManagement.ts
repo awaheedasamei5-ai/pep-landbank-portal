@@ -204,7 +204,7 @@ export function useSendSveDayReport() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const doc = buildSveDayReportPdf(report, logo);
+      const doc = buildSveDayReportPdf(report, logo, profile?.name);
       const blob = doc.output('blob');
       const token = await ds.sve.issueDayReportLink(report.id, blob, profile?.key ?? '', profile?.name ?? '');
       const link = `${window.location.origin}/sve-report/${token}`;
@@ -234,6 +234,7 @@ export function useSendSveDayReport() {
 // data (no storage fetch needed) -- used both for a quick look at a
 // still-draft report and for re-downloading an already-sent one.
 export function useDownloadSveDayReportPdf() {
+  const profile = useSessionStore((s) => s.profile);
   return useMutation({
     mutationFn: async (report: SveDayReport) => {
       let logo: string | null = null;
@@ -242,7 +243,7 @@ export function useDownloadSveDayReportPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const doc = buildSveDayReportPdf(report, logo);
+      const doc = buildSveDayReportPdf(report, logo, profile?.name);
       doc.save(sveDayReportFilename(report.visitDate));
     },
   });
