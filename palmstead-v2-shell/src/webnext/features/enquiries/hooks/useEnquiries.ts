@@ -63,3 +63,19 @@ export function useUpdateEnquiry() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['enquiries'] }),
   });
 }
+
+// Real user ask: "customer enquire... apps, we would be able to delete
+// logged data from our apps and it effects at the other ends of the
+// system in real time." A genuine hard delete (enquiries_del RLS already
+// permits it, agent-scoped or manager) -- propagates live to every other
+// open session via useDashboardRealtime's existing enquiries subscription,
+// no extra wiring needed there.
+export function useDeleteEnquiry() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).enquiries.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['enquiries'] }),
+  });
+}

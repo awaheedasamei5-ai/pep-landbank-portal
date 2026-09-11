@@ -126,6 +126,31 @@ export function useSveDayReportsList() {
   return useQuery({ queryKey: ['sveDayReports'], queryFn: () => getDataSource(demoMode).sve.listDayReports() });
 }
 
+// Real user ask: "site visit experience... apps, we would be able to
+// delete logged data from our apps and it effects at the other ends of
+// the system in real time." Deletes the underlying invite/submission
+// (so the client's feedback is genuinely gone, not just hidden from one
+// report -- also clears it from the "Send invite" tab's own list, which
+// reads the same two tables) AND re-saves the day report with that entry
+// filtered out of its `entries` snapshot, since getOrCreateDayReport
+// only derives entries once and never re-syncs afterward.
+export function useDeleteSveEntry() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ reportId, entries, siteVisitId, submissionId }: { reportId: string; entries: SveDayReportEntry[]; siteVisitId: string; submissionId: string | null }) => {
+      const ds = getDataSource(demoMode);
+      await ds.sve.deleteInviteAndSubmission(siteVisitId, submissionId);
+      return ds.sve.saveDayReport(reportId, { entries: entries.filter((e) => e.siteVisitId !== siteVisitId) });
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['sveDayReport', updated.visitDate], updated);
+      queryClient.invalidateQueries({ queryKey: ['sveDayReports'] });
+      queryClient.invalidateQueries({ queryKey: ['sveVisits'] });
+    },
+  });
+}
+
 // Stage 1 of the two-stage AI pass, real user ask: "the ai analyzes all
 // the submission, then build it into client after client feedback
 // section with what each client is saying." One call per client (not one

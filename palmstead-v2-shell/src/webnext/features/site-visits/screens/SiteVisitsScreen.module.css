@@ -116,6 +116,22 @@
 }
 .pdfRowBtn:disabled { opacity: .6; cursor: default; }
 
+.pdfRowBtnDanger {
+  margin-top: 4px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-danger);
+  background: transparent;
+  color: var(--c-danger);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.pdfRowBtnDanger:disabled { opacity: .6; cursor: default; }
+.deleteConfirm { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.deleteConfirmActions { display: flex; gap: 8px; }
+
 .kpiWrap { margin-bottom: 14px; }
 
 .filterRow { display: flex; gap: 10px; margin-bottom: 16px; }

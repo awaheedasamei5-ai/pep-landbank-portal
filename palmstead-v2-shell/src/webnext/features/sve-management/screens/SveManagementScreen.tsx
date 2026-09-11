@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import {
+  useDeleteSveEntry,
   useDownloadSveDayReportPdf,
   useGenerateClientFeedback,
   usePolishManagerNarrative,
@@ -338,6 +339,8 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   const sendReport = useSendSveDayReport();
   const genFeedback = useGenerateClientFeedback();
   const polish = usePolishManagerNarrative();
+  const deleteEntry = useDeleteSveEntry();
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
   const [entries, setEntries] = useState<SveDayReportEntry[]>([]);
   const [siteSummary, setSiteSummary] = useState('');
@@ -493,6 +496,29 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
           <div key={entry.siteVisitId} className={styles.clientCard}>
             <div className={styles.name}>{entry.clientName}</div>
             <div className={styles.meta}>{entry.clientContact}</div>
+
+            {deletingEntryId === entry.siteVisitId ? (
+              <div className={styles.reportActions} style={{ marginTop: 8 }}>
+                <span className={styles.meta}>Remove {entry.clientName} from this report? This deletes their logged feedback too.</span>
+                <button
+                  type="button"
+                  className={styles.reportCancelBtn}
+                  disabled={deleteEntry.isPending}
+                  onClick={() =>
+                    deleteEntry.mutateAsync({ reportId, entries, siteVisitId: entry.siteVisitId, submissionId: entry.submissionId }).then(() => setDeletingEntryId(null))
+                  }
+                >
+                  {deleteEntry.isPending ? 'Removing…' : 'Yes, remove'}
+                </button>
+                <button type="button" className={styles.reportCancelBtn} onClick={() => setDeletingEntryId(null)}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button type="button" className={styles.reportCancelBtn} style={{ marginTop: 8 }} onClick={() => setDeletingEntryId(entry.siteVisitId)}>
+                Remove from report
+              </button>
+            )}
 
             {entry.submissionId ? (
               <>

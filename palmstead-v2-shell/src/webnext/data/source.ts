@@ -510,6 +510,12 @@ export interface DataSource {
     listAll(): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
     update(id: string, patch: EnquiryUpdate): Promise<Enquiry>;
+    // Real user ask: "customer enquire... apps, we would be able to
+    // delete logged data from our apps." A genuine hard delete, not a
+    // soft one -- enquiries_del RLS (confirmed live: agent_key=my_key()
+    // OR manager) already permits it directly, the same real policy this
+    // just calls.
+    delete(id: string): Promise<void>;
   };
   // Agent-scoped via agent_key exactly like enquiries -- but unlike
   // payments, complaints_upd (confirmed live) is ALSO agent-scoped, not
@@ -522,6 +528,10 @@ export interface DataSource {
     listAll(): Promise<Complaint[]>;
     create(agentKey: string, agentName: string, input: NewComplaint): Promise<Complaint>;
     update(id: string, patch: ComplaintUpdate): Promise<Complaint>;
+    // Real user ask: "complains apps, we would be able to delete logged
+    // data from our apps." A genuine hard delete -- complaints_del RLS
+    // (confirmed live: agent_key=my_key() OR manager) already permits it.
+    delete(id: string): Promise<void>;
   };
   // Real table `contract_requests` (confirmed live). RLS SELECT is
   // `requested_by = my_key() OR manager OR elizabeth` -- so an unfiltered
@@ -1109,6 +1119,16 @@ export interface DataSource {
     getOrCreateDayReport(visitDate: string): Promise<SveDayReport>;
     saveDayReport(id: string, patch: SveDayReportPatch): Promise<SveDayReport>;
     listDayReports(): Promise<SveDayReport[]>;
+    // Real user ask: "site visit experience... apps, we would be able to
+    // delete logged data from our apps." Removes the underlying invite
+    // (and its submission, if the client responded) for one site visit --
+    // svei_staff_del/svesub_staff_del RLS added for exactly this. A day
+    // report's own `entries` jsonb is a snapshot taken once
+    // (getOrCreateDayReport only derives it the first time), so this alone
+    // doesn't touch an already-generated report's entries -- the caller
+    // (useDeleteSveEntry) also re-saves the report with that entry
+    // filtered out.
+    deleteInviteAndSubmission(siteVisitId: string, submissionId: string | null): Promise<void>;
     // Same tokenized-share pattern as issueReportLink above, pointed at a
     // day report instead of a single submission (sve_report_links.
     // day_report_id, added alongside the existing nullable submission_id).
@@ -2117,6 +2137,10 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapEnquiryRow(data);
       },
+      async delete(id) {
+        const { error } = await requireClient().from('enquiries').delete().eq('id', id);
+        if (error) throw error;
+      },
     },
     complaints: {
       // Same real fix as demo mode above -- a complaint whose `owner` was
@@ -2163,6 +2187,10 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapComplaintRow(data);
+      },
+      async delete(id) {
+        const { error } = await requireClient().from('complaints').delete().eq('id', id);
+        if (error) throw error;
       },
     },
     contractRequests: {
@@ -3450,6 +3478,15 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('sve_day_reports').select('*').order('visit_date', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSveDayReportRow);
+      },
+      async deleteInviteAndSubmission(siteVisitId, submissionId) {
+        const client = requireClient();
+        if (submissionId) {
+          const { error } = await client.from('site_visit_experience_submissions').delete().eq('id', submissionId);
+          if (error) throw error;
+        }
+        const { error } = await client.from('site_visit_experience_invites').delete().eq('site_visit_id', siteVisitId);
+        if (error) throw error;
       },
       async issueDayReportLink(dayReportId, pdfBlob, createdBy, createdByName) {
         const client = requireClient();

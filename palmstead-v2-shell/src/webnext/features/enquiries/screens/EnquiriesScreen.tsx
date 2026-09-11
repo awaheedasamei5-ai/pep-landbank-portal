@@ -6,7 +6,7 @@ import { Icon } from '../../../shared/ui/Icon';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { Enquiry } from '../../../types/domain';
-import { useEnquiries, useUpdateEnquiry } from '../hooks/useEnquiries';
+import { useDeleteEnquiry, useEnquiries, useUpdateEnquiry } from '../hooks/useEnquiries';
 import styles from './EnquiriesScreen.module.css';
 
 function initials(name: string): string {
@@ -33,6 +33,7 @@ function statusClass(status: string): string {
 export function EnquiriesScreen() {
   const navigate = useNavigate();
   const isManager = useSessionStore((s) => s.profile?.role === 'manager');
+  const myKey = useSessionStore((s) => s.profile?.key ?? '');
   const { data: enquiries, isLoading } = useEnquiries();
   const { data: staff } = useStaffDirectory();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export function EnquiriesScreen() {
               </div>
             )}
 
-            {isOpen && <EnquiryDetail enquiry={e} staff={staff ?? []} />}
+            {isOpen && <EnquiryDetail enquiry={e} staff={staff ?? []} canDelete={isManager || e.agentKey === myKey} />}
           </div>
         );
       })}
@@ -98,12 +99,14 @@ export function EnquiriesScreen() {
   );
 }
 
-function EnquiryDetail({ enquiry, staff }: { enquiry: Enquiry; staff: { key: string; name: string }[] }) {
+function EnquiryDetail({ enquiry, staff, canDelete }: { enquiry: Enquiry; staff: { key: string; name: string }[]; canDelete: boolean }) {
   const update = useUpdateEnquiry();
+  const del = useDeleteEnquiry();
   const [status, setStatus] = useState(enquiry.status);
   const [owner, setOwner] = useState(enquiry.owner ?? '');
   const [follow, setFollow] = useState(enquiry.follow ?? '');
   const [followDate, setFollowDate] = useState(enquiry.followDate ?? '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const dirty = status !== enquiry.status || owner !== (enquiry.owner ?? '') || follow !== (enquiry.follow ?? '') || followDate !== (enquiry.followDate ?? '');
 
@@ -170,6 +173,26 @@ function EnquiryDetail({ enquiry, staff }: { enquiry: Enquiry; staff: { key: str
       >
         {update.isPending ? 'Saving…' : 'Save changes'}
       </button>
+
+      {canDelete && (
+        <div className={styles.deleteZone}>
+          {!confirmingDelete ? (
+            <button type="button" className={styles.deleteBtn} onClick={() => setConfirmingDelete(true)}>
+              Delete enquiry
+            </button>
+          ) : (
+            <div className={styles.deleteConfirm}>
+              <span>Delete this enquiry permanently? This can't be undone.</span>
+              <button type="button" className={styles.deleteBtn} disabled={del.isPending} onClick={() => del.mutate(enquiry.id)}>
+                {del.isPending ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button type="button" className={styles.cancelDeleteBtn} onClick={() => setConfirmingDelete(false)}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { Icon } from '../../../shared/ui/Icon';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { Complaint } from '../../../types/domain';
-import { useComplaints, useUpdateComplaint } from '../hooks/useComplaints';
+import { useComplaints, useDeleteComplaint, useUpdateComplaint } from '../hooks/useComplaints';
 import styles from './ComplaintsScreen.module.css';
 
 function initials(name: string): string {
@@ -35,6 +35,7 @@ function priorityClass(priority: string | null): string {
 export function ComplaintsScreen() {
   const navigate = useNavigate();
   const isManager = useSessionStore((s) => s.profile?.role === 'manager');
+  const myKey = useSessionStore((s) => s.profile?.key ?? '');
   const { data: complaints, isLoading } = useComplaints();
   const { data: staff } = useStaffDirectory();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -82,7 +83,7 @@ export function ComplaintsScreen() {
                 <Icon name="chevronDown" size={15} />
               </span>
             </button>
-            {isOpen && <ComplaintDetail complaint={c} staff={staff ?? []} />}
+            {isOpen && <ComplaintDetail complaint={c} staff={staff ?? []} canDelete={isManager || c.agentKey === myKey} />}
           </div>
         );
       })}
@@ -91,12 +92,14 @@ export function ComplaintsScreen() {
   );
 }
 
-function ComplaintDetail({ complaint, staff }: { complaint: Complaint; staff: { key: string; name: string }[] }) {
+function ComplaintDetail({ complaint, staff, canDelete }: { complaint: Complaint; staff: { key: string; name: string }[]; canDelete: boolean }) {
   const update = useUpdateComplaint();
+  const del = useDeleteComplaint();
   const [status, setStatus] = useState(complaint.status);
   const [priority, setPriority] = useState(complaint.priority ?? '');
   const [owner, setOwner] = useState(complaint.owner ?? '');
   const [resolution, setResolution] = useState(complaint.resolution ?? '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const dirty = status !== complaint.status || priority !== (complaint.priority ?? '') || owner !== (complaint.owner ?? '') || resolution !== (complaint.resolution ?? '');
 
@@ -152,6 +155,26 @@ function ComplaintDetail({ complaint, staff }: { complaint: Complaint; staff: { 
       >
         {update.isPending ? 'Saving…' : 'Save changes'}
       </button>
+
+      {canDelete && (
+        <div className={styles.deleteZone}>
+          {!confirmingDelete ? (
+            <button type="button" className={styles.deleteBtn} onClick={() => setConfirmingDelete(true)}>
+              Delete complaint
+            </button>
+          ) : (
+            <div className={styles.deleteConfirm}>
+              <span>Delete this complaint permanently? This can't be undone.</span>
+              <button type="button" className={styles.deleteBtn} disabled={del.isPending} onClick={() => del.mutate(complaint.id)}>
+                {del.isPending ? 'Deleting…' : 'Yes, delete'}
+              </button>
+              <button type="button" className={styles.cancelDeleteBtn} onClick={() => setConfirmingDelete(false)}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

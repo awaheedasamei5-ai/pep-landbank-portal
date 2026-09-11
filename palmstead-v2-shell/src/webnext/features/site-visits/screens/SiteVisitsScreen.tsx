@@ -7,7 +7,7 @@ import { Icon } from '../../../shared/ui/Icon';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { SiteVisit } from '../../../types/domain';
-import { useAllSiteVisits, useSiteVisits } from '../hooks/useSiteVisits';
+import { useAllSiteVisits, useCancelSiteVisit, useSiteVisits } from '../hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
 import styles from './SiteVisitsScreen.module.css';
 
@@ -52,9 +52,17 @@ export function SiteVisitsScreen() {
   const { data: visits, isLoading } = isManager ? all : mine;
   const { data: staff } = useStaffDirectory();
   const downloadPdf = useDownloadSiteVisitFormPdf();
+  const cancelVisit = useCancelSiteVisit();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [staffFilter, setStaffFilter] = useState('');
   const [query, setQuery] = useState('');
+  // Real user ask: "site visit... apps, we would be able to delete
+  // logged data from our apps and it effects at the other ends of the
+  // system in real time." Reuses the existing soft-cancel mutation
+  // (Master Spec 9.4: never a hard delete) -- it just had no reachable
+  // button anywhere in the app until now.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -171,6 +179,53 @@ export function SiteVisitsScreen() {
                 >
                   {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download request form (PDF)'}
                 </button>
+                {(isManager || v.agentKey === profile?.key) &&
+                  (deletingId === v.id ? (
+                    <div className={styles.deleteConfirm} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        className={styles.search}
+                        placeholder="Why is this being deleted?"
+                        value={deleteReason}
+                        onChange={(e) => setDeleteReason(e.target.value)}
+                      />
+                      <div className={styles.deleteConfirmActions}>
+                        <button
+                          type="button"
+                          className={styles.pdfRowBtnDanger}
+                          disabled={!deleteReason.trim() || cancelVisit.isPending}
+                          onClick={() =>
+                            cancelVisit.mutateAsync({ id: v.id, reason: deleteReason.trim() }).then(() => {
+                              setDeletingId(null);
+                              setDeleteReason('');
+                            })
+                          }
+                        >
+                          {cancelVisit.isPending ? 'Deleting…' : 'Confirm delete'}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.pdfRowBtn}
+                          onClick={() => {
+                            setDeletingId(null);
+                            setDeleteReason('');
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.pdfRowBtnDanger}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingId(v.id);
+                      }}
+                    >
+                      Delete this visit
+                    </button>
+                  ))}
               </div>
             )}
           </div>

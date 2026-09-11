@@ -106,3 +106,27 @@
   cursor: pointer;
 }
 .saveBtn:disabled { opacity: .6; cursor: default; }
+
+.deleteZone { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--c-line); }
+.deleteBtn {
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-danger);
+  background: transparent;
+  color: var(--c-danger);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.deleteBtn:disabled { opacity: .6; cursor: default; }
+.deleteConfirm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--c-muted); }
+.cancelDeleteBtn {
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}

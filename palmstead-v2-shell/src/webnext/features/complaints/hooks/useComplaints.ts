@@ -76,3 +76,18 @@ export function useUpdateComplaint() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['complaints'] }),
   });
 }
+
+// Real user ask: "complains apps, we would be able to delete logged data
+// from our apps and it effects at the other ends of the system in real
+// time." A genuine hard delete (complaints_del RLS already permits it,
+// agent-scoped or manager) -- propagates live to every other open
+// session via useDashboardRealtime's existing complaints subscription.
+export function useDeleteComplaint() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).complaints.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['complaints'] }),
+  });
+}

@@ -131,6 +131,24 @@ export function useDashboardRealtime() {
     const invalidateAttendanceNotes = () => {
       queryClient.invalidateQueries({ queryKey: ['attendanceNotes'] });
     };
+    // Real gap found while building the delete feature (2026-09-11, user
+    // ask: "site visit, site visit experience... apps, we would be able
+    // to delete logged data from our apps and it effects at the other
+    // ends of the system in real time"): site_visits and the SVE tables
+    // were never in this bridge at all -- a visit logged, cancelled, or
+    // an SVE submission/invite created on one device left every other
+    // open session's Site Visits/SVE screens stale until a manual
+    // refresh, unlike every other app here.
+    const invalidateSiteVisits = () => {
+      queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['weekSiteVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead'] });
+    };
+    const invalidateSve = () => {
+      queryClient.invalidateQueries({ queryKey: ['sveVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['sveDayReport'] });
+      queryClient.invalidateQueries({ queryKey: ['sveDayReports'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -163,7 +181,11 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'memos' }, invalidateMemos)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'memo_recipients' }, invalidateMemos)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_log' }, invalidateAttendance)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_notes' }, invalidateAttendanceNotes);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_notes' }, invalidateAttendanceNotes)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits' }, invalidateSiteVisits)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visit_experience_invites' }, invalidateSve)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visit_experience_submissions' }, invalidateSve)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sve_day_reports' }, invalidateSve);
     channel.subscribe();
 
     return () => {
