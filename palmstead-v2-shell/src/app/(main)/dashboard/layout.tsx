@@ -14,6 +14,7 @@ import { AccountSwitcher } from "./_components/header/account-switcher";
 import { LayoutControls } from "./_components/header/layout-controls";
 import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
+import { RealtimeBridge } from "./_components/realtime-bridge";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   const cookieStore = await cookies();
@@ -25,6 +26,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
 
   return (
     <AuthGate>
+      <RealtimeBridge />
       <SidebarProvider
         defaultOpen={defaultOpen}
         style={
