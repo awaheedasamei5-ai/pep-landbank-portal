@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "icon-preview",
+      "runtimeExecutable": "C:\\Users\\USER\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "runtimeArgs": ["-m", "http.server", "8532", "--directory", "C:\\Users\\USER\\Desktop\\smart-lighting-control\\docs\\pdf-build\\icon-preview"],
+      "port": 8532
+    },
+    {
+      "name": "pep-landbank",
+      "runtimeExecutable": "C:\\Users\\USER\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "runtimeArgs": ["-m", "http.server", "8899", "--directory", "C:\\Users\\USER\\Desktop\\pep-landbank-repo\\pep-landbank-repo"],
+      "port": 8899
+    },
+    {
+      "name": "web-next",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web-next", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
+    },
+    {
+      "name": "palmstead-v2-shell",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "palmstead-v2-shell", "run", "dev", "--", "--port", "3000"],
+      "port": 3000
+    }
+  ]
+}

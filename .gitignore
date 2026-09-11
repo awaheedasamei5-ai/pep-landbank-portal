@@ -31,3 +31,12 @@ www/
 
 # web-next rebuild scaffold (React/TS/Vite) -- build output only, source is tracked
 web-next/dist/
+
+# palmstead-v2-shell (Next.js) -- build output/local env only, source is tracked
+palmstead-v2-shell/.next/
+palmstead-v2-shell/out/
+
+# Claude Code tooling artifacts -- session-local, never meant to be committed
+.claude/worktrees/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
