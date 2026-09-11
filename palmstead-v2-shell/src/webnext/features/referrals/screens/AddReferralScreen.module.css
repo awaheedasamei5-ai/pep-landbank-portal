@@ -1,6 +1,29 @@
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
+
+/* Same desktop-widening pattern AddSiteVisitScreen/AddEnquiryScreen use --
+   see AddEnquiryScreen.module.css's own comment for the full reasoning. */
+.grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+.mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
+.sideCol { display: none; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 1100px; padding: 28px 32px 60px; }
+  .grid { grid-template-columns: 1.3fr 1fr; gap: 24px; align-items: start; }
+  .sideCol { display: flex; }
+}
+
+.sideCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.sideTitle { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.sideSub { color: var(--c-muted); font-size: 12px; margin: 0 0 14px; }
+.sideEmpty { color: var(--c-muted); font-size: 12.5px; }
 .field { margin-bottom: 14px; }
 .label { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
 

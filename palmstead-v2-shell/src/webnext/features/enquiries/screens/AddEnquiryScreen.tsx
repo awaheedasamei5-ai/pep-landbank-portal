@@ -4,8 +4,25 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
-import { useCreateEnquiry } from '../hooks/useEnquiries';
+import { useCreateEnquiry, useEnquiries } from '../hooks/useEnquiries';
+import type { Enquiry } from '../../../types/domain';
 import styles from './AddEnquiryScreen.module.css';
+import listStyles from './EnquiriesScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function statusClass(status: string): string {
+  if (status === 'Closed') return listStyles.statusClosed;
+  if (status === 'Escalated') return listStyles.statusEscalated;
+  return listStyles.statusOpen;
+}
 
 // The 5 checkbox options are the real distinct values seen across
 // production's enquiries.types (confirmed live) -- "Other" covers
@@ -29,6 +46,7 @@ type FormValues = z.infer<typeof schema>;
 export function AddEnquiryScreen() {
   const navigate = useNavigate();
   const createEnquiry = useCreateEnquiry();
+  const { data: recentEnquiries } = useEnquiries();
   const {
     register,
     handleSubmit,
@@ -59,7 +77,8 @@ export function AddEnquiryScreen() {
     <div className={styles.wrap}>
       <h1 className={styles.title}>Log a client enquiry</h1>
       <p className={styles.sub}>Saved against your own enquiries.</p>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <div className={styles.grid}>
+      <form className={styles.mainCol} onSubmit={handleSubmit(onSubmit)}>
         <div className={styles.field}>
           <label className={styles.label}>Name *</label>
           <input className={styles.input} placeholder="e.g. Justice Amankwah" {...register('name')} />
@@ -133,6 +152,27 @@ export function AddEnquiryScreen() {
           </button>
         </div>
       </form>
+
+      <div className={styles.sideCol}>
+        <div className={styles.sideCard}>
+          <div className={styles.sideTitle}>Recent enquiries</div>
+          <p className={styles.sideSub}>The last few logged, for context while you fill this one in.</p>
+          {!recentEnquiries?.length && <p className={styles.sideEmpty}>No enquiries logged yet.</p>}
+          {recentEnquiries?.slice(0, 6).map((e: Enquiry) => (
+            <div key={e.id} className={listStyles.card} style={{ marginBottom: 8 }}>
+              <div className={listStyles.top}>
+                <span className={listStyles.avatar}>{initials(e.name ?? '?')}</span>
+                <div className={listStyles.topMain}>
+                  <div className={listStyles.name}>{e.name || 'Unnamed'}</div>
+                  <div className={listStyles.meta}>{e.contact}</div>
+                </div>
+                <span className={`${listStyles.pill} ${statusClass(e.status)}`}>{e.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      </div>
     </div>
   );
 }

@@ -4,8 +4,23 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
-import { useCreateComplaint } from '../hooks/useComplaints';
+import { useCreateComplaint, useComplaints } from '../hooks/useComplaints';
+import type { Complaint } from '../../../types/domain';
 import styles from './AddComplaintScreen.module.css';
+import listStyles from './ComplaintsScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function statusClass(status: string): string {
+  return status === 'Resolved' ? listStyles.statusResolved : listStyles.statusOpen;
+}
 
 // "Land / Plot Issue" and "Service Quality" are the real distinct values
 // seen in production's category column (confirmed live) -- "Other" plus
@@ -27,6 +42,7 @@ type FormValues = z.infer<typeof schema>;
 export function AddComplaintScreen() {
   const navigate = useNavigate();
   const createComplaint = useCreateComplaint();
+  const { data: recentComplaints } = useComplaints();
   const {
     register,
     handleSubmit,
@@ -53,7 +69,8 @@ export function AddComplaintScreen() {
     <div className={styles.wrap}>
       <h1 className={styles.title}>Log a complaint</h1>
       <p className={styles.sub}>Saved against your own complaints.</p>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <div className={styles.grid}>
+      <form className={styles.mainCol} onSubmit={handleSubmit(onSubmit)}>
         <div className={styles.field}>
           <label className={styles.label}>Client name *</label>
           <input className={styles.input} placeholder="e.g. Kwabena Owusu" {...register('name')} />
@@ -108,6 +125,27 @@ export function AddComplaintScreen() {
           </button>
         </div>
       </form>
+
+      <div className={styles.sideCol}>
+        <div className={styles.sideCard}>
+          <div className={styles.sideTitle}>Recent complaints</div>
+          <p className={styles.sideSub}>The last few logged, for context while you fill this one in.</p>
+          {!recentComplaints?.length && <p className={styles.sideEmpty}>No complaints logged yet.</p>}
+          {recentComplaints?.slice(0, 6).map((c: Complaint) => (
+            <div key={c.id} className={listStyles.card} style={{ marginBottom: 8 }}>
+              <div className={listStyles.row} style={{ cursor: 'default' }}>
+                <span className={listStyles.avatar}>{initials(c.name ?? '?')}</span>
+                <div className={listStyles.rowMain}>
+                  <div className={listStyles.name}>{c.name || 'Unnamed'}</div>
+                  <div className={listStyles.meta}>{c.category || 'Uncategorized'}</div>
+                </div>
+                <span className={`${listStyles.pill} ${statusClass(c.status)}`}>{c.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      </div>
     </div>
   );
 }

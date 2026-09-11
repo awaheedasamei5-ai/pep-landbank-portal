@@ -5,8 +5,19 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useLeads } from '../../pipeline/hooks/useLeads';
-import { useCreateReferral } from '../hooks/useReferrals';
+import { useCreateReferral, useReferrals } from '../hooks/useReferrals';
+import type { Referral } from '../../../types/domain';
 import styles from './AddReferralScreen.module.css';
+import listStyles from './ReferralsScreen.module.css';
+
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 // The referrer must be picked from the agent's own existing leads, not
 // typed freely -- this isn't a UI preference, it mirrors a real constraint:
@@ -27,6 +38,7 @@ export function AddReferralScreen() {
   const navigate = useNavigate();
   const { data: leads } = useLeads();
   const createReferral = useCreateReferral();
+  const { data: recentReferrals } = useReferrals();
   const {
     register,
     handleSubmit,
@@ -48,7 +60,8 @@ export function AddReferralScreen() {
     <div className={styles.wrap}>
       <h1 className={styles.title}>Add a referral</h1>
       <p className={styles.sub}>Record that one of your clients referred someone new.</p>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <div className={styles.grid}>
+      <form className={styles.mainCol} onSubmit={handleSubmit(onSubmit)}>
         <div className={styles.field}>
           <label className={styles.label}>Referred by *</label>
           <select className={styles.select} {...register('referrerLeadId')} defaultValue="">
@@ -95,6 +108,27 @@ export function AddReferralScreen() {
           </button>
         </div>
       </form>
+
+      <div className={styles.sideCol}>
+        <div className={styles.sideCard}>
+          <div className={styles.sideTitle}>Recent referrals</div>
+          <p className={styles.sideSub}>The last few logged, for context while you fill this one in.</p>
+          {!recentReferrals?.length && <p className={styles.sideEmpty}>No referrals logged yet.</p>}
+          {recentReferrals?.slice(0, 6).map((r: Referral) => (
+            <div key={r.id} className={listStyles.card}>
+              <div className={listStyles.row} style={{ cursor: 'default' }}>
+                <span className={listStyles.avatar}>{initials(r.referredName)}</span>
+                <div className={listStyles.rowMain}>
+                  <div className={listStyles.name}>{r.referredName}</div>
+                  <div className={listStyles.meta}>referred by {r.referrerName}</div>
+                </div>
+                <span className={`${listStyles.status} ${r.status === 'Cleared' ? listStyles.statusCleared : listStyles.statusPending}`}>{r.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      </div>
     </div>
   );
 }
