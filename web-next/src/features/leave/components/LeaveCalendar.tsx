@@ -41,7 +41,7 @@ export function LeaveCalendar({
       .flatMap((r) => r.dates || []),
   );
   const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
-  const holidays = ghanaHolidayMapForYear(year);
+  const holidays = ghanaHolidayMapForYear(year, config.eidWindows);
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
   const t = today();
 
@@ -83,7 +83,10 @@ export function LeaveCalendar({
           let reason = '';
           if (isTaken) reason = 'Already requested';
           else if (isConflict) reason = "Conflicts with a colleague's leave";
-          else if (isHoliday) reason = holiday?.name ?? '';
+          // Real spec wording (12.3): "System labels dates as 'Eid window --
+          // restricted to selected staff'" -- distinct from a plain public
+          // holiday, since Eid-observing staff can still select this date.
+          else if (isHoliday) reason = holiday?.isEid ? 'Eid window — restricted to selected staff' : (holiday?.name ?? '');
           else if (isWeekend) reason = 'Weekend';
           const cls = [styles.cell, isSel && styles.sel, (isTaken || isConflict) && styles.taken, isHoliday && styles.holiday, isWeekend && styles.weekend, isToday && styles.today].filter(Boolean).join(' ');
           return (
@@ -99,11 +102,11 @@ export function LeaveCalendar({
           Selected
         </span>
         <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: '#F6EBD3' }} />
+          <i className={styles.legendSwatch} style={{ background: 'var(--c-warn)' }} />
           Public holiday
         </span>
         <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--c-danger)', opacity: 0.6 }} />
+          <i className={styles.legendSwatch} style={{ background: 'var(--c-danger)' }} />
           Taken / colleague&apos;s leave
         </span>
       </div>
