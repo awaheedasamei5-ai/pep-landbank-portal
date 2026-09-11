@@ -60,7 +60,11 @@ export function buildAllocationAuthorizationPdf(
   h2 = sitePdfLabeledPair(doc, 108, y, 88, '% of Total Paid', `${request.percentPaid ?? 0}%`);
   y += Math.max(h1, h2) * 5 + 7;
   h1 = sitePdfLabeledPair(doc, 12, y, 88, 'Grand Total', ghs(request.grandTotal ?? 0));
-  h2 = sitePdfLabeledPair(doc, 108, y, 88, 'Request Date', request.createdAt);
+  // Real user-reported bug: request.createdAt is a raw ISO timestamp
+  // ("2026-08-17T11:31:31.081274+00:00") -- printed as-is on the PDF
+  // instead of a clean, human-readable date and time.
+  const requestDateLabel = new Date(request.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  h2 = sitePdfLabeledPair(doc, 108, y, 88, 'Request Date', requestDateLabel);
   y += Math.max(h1, h2) * 5 + 9;
 
   y = sitePdfSectionBar(doc, y, pageW, 'CANDIDATE PLOTS — MANAGEMENT: TICK ONE TO APPROVE');

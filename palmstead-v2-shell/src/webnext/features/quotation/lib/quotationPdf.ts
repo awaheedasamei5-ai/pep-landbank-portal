@@ -135,7 +135,14 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   const dateStr = new Date().toLocaleDateString();
   const siteName = config.quoteSiteName || 'P.O Box CO3644, Tema, Accra-Ghana';
   const companyName = config.quoteCompanyName || 'Trulander JSF Limited';
-  const docType = config.quoteDocTypeText || 'Quotation with Payment Plan Schedule';
+  // Real user ask (2026-09-11): "when we select full payment for a
+  // cleint, the quotation with payment schedule text at the top
+  // shouldnt be there since the person isnt doing installemnt" -- the
+  // "with Payment Plan Schedule" half of the title only makes sense when
+  // there actually IS a schedule (q.planMonths set); an outright payer
+  // gets none of the greenTable rows below, so the title shouldn't
+  // promise one either.
+  const docType = q.planMonths ? config.quoteDocTypeText || 'Quotation with Payment Plan Schedule' : 'Quotation';
   quoteBg(doc, pageW, pageH);
 
   if (logoDataUri) {
@@ -179,12 +186,22 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
     ['Deposit Amount', q.planMonths ? ghs(q.deposit) : '—'],
     ['Deposit %', depositPct != null ? `${depositPct}% (${q.depositIncludesInterest ? 'of net + interest' : 'of net'})` : '—'],
   ];
+  // Real user ask: "the credit period month: should be outright payemnt
+  // since the person isnt making installemnts" -- and: "if we dont add a
+  // discount to any clients quotation, when we generate the pdf, it
+  // shouldnt contain the discount: 0 line ... u only show[] the discount
+  // if a discount was given." Built as a plain array + filter rather
+  // than a fixed tuple list so removing the Discount row (or swapping
+  // the Credit Period one) genuinely closes the gap below it -- kv()'s
+  // own caller loop advances `ry` per rendered row, so a shorter array
+  // is a shorter, correctly-spaced column, not a blank line where the
+  // row used to be.
   const rightRows: [string, string, [number, number, number] | null][] = [
     ['Date:', dateStr, null],
-    ['Credit Period months', q.planMonths ? String(q.planMonths) : '—', QRED],
+    q.planMonths ? ['Credit Period months', String(q.planMonths), QRED] : ['Payment Type', 'Outright payment', QRED],
     ['No of Plots', String(qtyOfType), QRED],
     ['Original Plot Price', ghs(q.listTotal / qtyOfType), null],
-    ['Discount', ghs((q.discountTotal || 0) / qtyOfType), null],
+    ...(q.discountTotal ? ([['Discount', ghs(q.discountTotal / qtyOfType), null]] as [string, string, [number, number, number] | null][]) : []),
     // Was (q.interestTotal || 0) / qtyOfType -- for 1.5+ plots that showed
     // only a single unit's interest (e.g. GHS 3,000) next to a "Cost with
     // Interest" that quietly still divided the REAL, correctly-scaled
@@ -298,13 +315,29 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   doc.text(landLines, 14, y);
   y += landLines.length * 4;
 
+  // Real user-reported bug (screenshot): the land note above and the
+  // "Thank you"/footer-address lines below used to sit on two completely
+  // independent coordinate systems -- this note flows down from `y`
+  // (grows with however many lines quoteLandNoteText wraps to), while the
+  // footer was pinned to fixed offsets from the page bottom (pageH-16/
+  // pageH-11) regardless. Once the note ran long enough to reach that
+  // fixed zone, the two silently overlapped mid-word. Anchoring the
+  // footer to whichever is LOWER -- its usual fixed spot, or a real gap
+  // below wherever the note actually ended -- means it only ever moves
+  // down to make room, never sits on top of real content.
+  let footerY = Math.max(pageH - 16, y + 8);
+  if (footerY > pageH - 8) {
+    doc.addPage();
+    quoteBg(doc, pageW, pageH);
+    footerY = pageH - 16;
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...QGREEN_DARK);
-  doc.text('Thank you for your business!', pageW / 2, pageH - 16, { align: 'center' });
+  doc.text('Thank you for your business!', pageW / 2, footerY, { align: 'center' });
   doc.setFontSize(8);
   doc.setTextColor(120, 130, 124);
-  doc.text(config.quoteFooterAddress || '', pageW / 2, pageH - 11, { align: 'center' });
+  doc.text(config.quoteFooterAddress || '', pageW / 2, footerY + 5, { align: 'center' });
 
   pdfGeneratedStamp(doc, preparedByName);
   return doc;

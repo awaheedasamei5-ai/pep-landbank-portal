@@ -129,9 +129,12 @@ export function buildTechnicalQuotationPdf(
     ['Deposit Amount', q.planMonths ? ghs(q.deposit) : '—'],
     ['Deposit %', depositPct != null ? `${depositPct}% (${q.depositIncludesInterest ? 'of net + interest' : 'of net'})` : '—'],
   ];
+  // Real user ask: "the credit period month: should be outright payemnt
+  // since the person isnt making installemnts... fix this for both
+  // standard and technical quotations" -- same fix as quotationPdf.ts.
   const rightRows: [string, string, [number, number, number] | null][] = [
     ['Date:', dateStr, null],
-    ['Credit Period months', q.planMonths ? String(q.planMonths) : '—', QRED],
+    q.planMonths ? ['Credit Period months', String(q.planMonths), QRED] : ['Payment Type', 'Outright payment', QRED],
     ['Combined Total Area', sqft(q.totalArea), null],
     ['Dynamic Rate', ghsPerSqft(q.rate), null],
     ['Interest', ghs(q.interestTotal || 0), null],
@@ -254,13 +257,23 @@ export function buildTechnicalQuotationPdf(
   doc.text(landLines, 14, y);
   y += landLines.length * 4;
 
+  // Same real collision fix as quotationPdf.ts's own footer -- see its
+  // comment. The footer used to be pinned to fixed offsets from the page
+  // bottom regardless of how many lines the land note wrapped to above
+  // it, so a long note silently overlapped it.
+  let footerY = Math.max(pageH - 16, y + 8);
+  if (footerY > pageH - 8) {
+    doc.addPage();
+    quoteBg(doc, pageW, pageH);
+    footerY = pageH - 16;
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...QGREEN_DARK);
-  doc.text('Thank you for your business!', pageW / 2, pageH - 16, { align: 'center' });
+  doc.text('Thank you for your business!', pageW / 2, footerY, { align: 'center' });
   doc.setFontSize(8);
   doc.setTextColor(120, 130, 124);
-  doc.text(config.quoteFooterAddress || '', pageW / 2, pageH - 11, { align: 'center' });
+  doc.text(config.quoteFooterAddress || '', pageW / 2, footerY + 5, { align: 'center' });
 
   pdfGeneratedStamp(doc, preparedByName);
   return doc;
