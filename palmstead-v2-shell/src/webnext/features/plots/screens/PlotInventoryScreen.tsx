@@ -8,6 +8,8 @@ import { Icon } from '../../../shared/ui/Icon';
 import type { Plot, PlotClassification, PlotStatus } from '../../../types/domain';
 import { usePlots, useCreatePlot } from '../hooks/usePlots';
 import { friendlyError } from '../../../shared/lib/friendlyError';
+import { useAllocationRequests } from '../../allocations/hooks/useAllocationRequests';
+import { lockedPlotNumbers } from '../../allocations/lib/suggestionCombos';
 import styles from './PlotInventoryScreen.module.css';
 
 // All 9: the 4 real values this app's own workflow already produces
@@ -82,6 +84,13 @@ export function PlotInventoryScreen() {
   const profile = useSessionStore((s) => s.profile);
   const hasAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const { data: plots, isLoading } = usePlots();
+  const { data: allocationRequests } = useAllocationRequests();
+  // Real user ask: a plot currently suggested (saved, awaiting Management
+  // sign-off) on someone's allocation request should still show here as
+  // Available -- its real status column never changes -- but carry a
+  // "Suggested" tag so staff browsing inventory know it's provisionally
+  // spoken for. See lockedPlotNumbers's own comment.
+  const locked = useMemo(() => lockedPlotNumbers(allocationRequests ?? []), [allocationRequests]);
   const [addOpen, setAddOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -282,8 +291,8 @@ export function PlotInventoryScreen() {
                 Mobile: compact row list (Premium UI spec's own "mobile:
                 compact list with status chip"). Both feed the same
                 filtered/grouped data. */}
-            <PlotBoard plots={sitePlots} navigate={navigate} />
-            <PlotList plots={sitePlots} navigate={navigate} />
+            <PlotBoard plots={sitePlots} navigate={navigate} locked={locked} />
+            <PlotList plots={sitePlots} navigate={navigate} locked={locked} />
           </div>
         ))}
         {plots && plots.length === 0 && !isLoading && <p className={styles.emptyMsg}>No plots added yet. Add your first one above.</p>}
@@ -486,23 +495,24 @@ function tileVisualStatus(p: Plot, inSplit: boolean): string {
   return p.status.replace(/\s/g, '');
 }
 
-function PlotTile({ p, navigate, inSplit = false }: { p: Plot; navigate: ReturnType<typeof useNavigate>; inSplit?: boolean }) {
+function PlotTile({ p, navigate, inSplit = false, suggestedFor = null }: { p: Plot; navigate: ReturnType<typeof useNavigate>; inSplit?: boolean; suggestedFor?: string | null }) {
   const fraction = tileFractionLabel(p);
   return (
     <button
       type="button"
       className={`${styles.tile} ${styles[`tile_${tileVisualStatus(p, inSplit)}`]}`}
       onClick={() => navigate(`/dashboard/plots/${p.id}`)}
-      title={`${p.plotNumber} · ${p.plotType} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}`}
+      title={`${p.plotNumber} · ${p.plotType} · ${p.status}${p.clientName ? ` · ${p.clientName}` : ''}${suggestedFor ? ` · Suggested for ${suggestedFor}, awaiting Management sign-off` : ''}`}
     >
       {fraction && <span className={styles.tileFraction}>{fraction}</span>}
+      {suggestedFor && <span className={styles.tileSuggestedDot} aria-hidden="true" />}
       <span className={styles.tileNumber}>{p.plotNumber}</span>
       {p.price != null && <span className={styles.tilePrice}>{ghs(p.price)}</span>}
     </button>
   );
 }
 
-function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate> }) {
+function PlotBoard({ plots, navigate, locked }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate>; locked: Map<string, string> }) {
   const bySection = new Map<string, Plot[]>();
   plots.forEach((p) => {
     const key = p.section ?? '—';
@@ -533,7 +543,7 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
                     {entry.units.map((unit) => (
                       <div key={unit.key} className={unit.tiles.length > 1 ? styles.tileGroup : undefined}>
                         {unit.tiles.map((p) => (
-                          <PlotTile key={p.id} p={p} navigate={navigate} inSplit={unit.tiles.length > 1} />
+                          <PlotTile key={p.id} p={p} navigate={navigate} inSplit={unit.tiles.length > 1} suggestedFor={locked.get(p.plotNumber.toLowerCase()) ?? null} />
                         ))}
                       </div>
                     ))}
@@ -547,7 +557,7 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
                   <div className={styles.tilesBox}>
                     <div className={entry.units[0].tiles.length > 1 ? styles.tileGroup : undefined}>
                       {entry.units[0].tiles.map((p) => (
-                        <PlotTile key={p.id} p={p} navigate={navigate} inSplit={entry.units[0].tiles.length > 1} />
+                        <PlotTile key={p.id} p={p} navigate={navigate} inSplit={entry.units[0].tiles.length > 1} suggestedFor={locked.get(p.plotNumber.toLowerCase()) ?? null} />
                       ))}
                     </div>
                   </div>
@@ -561,13 +571,13 @@ function PlotBoard({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<ty
   );
 }
 
-function PlotList({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate> }) {
+function PlotList({ plots, navigate, locked }: { plots: Plot[]; navigate: ReturnType<typeof useNavigate>; locked: Map<string, string> }) {
   return (
     <div className={styles.list}>
       {boardUnits(plots).map((unit) => (
         <div key={unit.key}>
           {unit.tiles.map((p) => (
-            <PlotRow key={p.id} plot={p} isHalf={unit.tiles.length > 1} onOpen={() => navigate(`/dashboard/plots/${p.id}`)} />
+            <PlotRow key={p.id} plot={p} isHalf={unit.tiles.length > 1} suggestedFor={locked.get(p.plotNumber.toLowerCase()) ?? null} onOpen={() => navigate(`/dashboard/plots/${p.id}`)} />
           ))}
         </div>
       ))}
@@ -575,7 +585,7 @@ function PlotList({ plots, navigate }: { plots: Plot[]; navigate: ReturnType<typ
   );
 }
 
-function PlotRow({ plot, isHalf, onOpen }: { plot: Plot; isHalf?: boolean; onOpen: () => void }) {
+function PlotRow({ plot, isHalf, suggestedFor = null, onOpen }: { plot: Plot; isHalf?: boolean; suggestedFor?: string | null; onOpen: () => void }) {
   return (
     <button type="button" className={`${styles.row} ${isHalf ? styles.rowHalf : ''}`} onClick={onOpen}>
       <div>
@@ -588,6 +598,11 @@ function PlotRow({ plot, isHalf, onOpen }: { plot: Plot; isHalf?: boolean; onOpe
       </div>
       <div className={styles.right}>
         {plot.price != null && <div className={styles.price}>{ghs(plot.price)}</div>}
+        {suggestedFor && (
+          <span className={styles.badgeSuggested} title={`Suggested for ${suggestedFor}, awaiting Management sign-off`}>
+            Suggested
+          </span>
+        )}
         <span className={`${styles.badge} ${styles[BADGE_CLASS[plot.status]]}`}>{plot.status}</span>
       </div>
     </button>

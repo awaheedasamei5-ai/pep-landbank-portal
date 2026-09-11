@@ -258,6 +258,22 @@
 }
 .tile_Allocated .tileFraction, .tile_Disputed .tileFraction, .tile_AllocatedSplit .tileFraction, .tile_AllocatedPartial .tileFraction { background: rgb(255 255 255 / 22%); }
 
+/* Corner dot marking a plot as provisionally locked by an unresolved
+   allocation suggestion elsewhere -- top-left, since .tileFraction
+   already owns the top-right corner. Only ever appears on an Available
+   tile (see lockedPlotNumbers's own comment), so no per-status override
+   is needed the way .tileFraction needed one for the dark Allocated fill. */
+.tileSuggestedDot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 0 1.5px rgb(255 255 255 / 60%);
+}
+
 /* Every board unit -- clustered or solo -- is one of these, each with
    the identical fixed-height caption row above its tiles. That's the
    real fix for the alignment bug the user caught live: only clusters
@@ -393,6 +409,11 @@
 .price { font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
 .badge { display: inline-block; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 700; margin-top: 4px; }
 .badgeAvailable { background: var(--c-success-bg); color: var(--c-success); }
+/* Not a real plots.status value -- a plot tagged this way is still
+   genuinely Available, just provisionally spoken for by an unresolved
+   allocation suggestion elsewhere. Sits alongside the real status badge
+   rather than replacing it, so both facts stay visible at once. */
+.badgeSuggested { display: inline-block; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 700; margin-top: 4px; margin-right: 4px; background: var(--c-accent-bg); color: var(--c-accent); }
 .badgeRunningSearch { background: var(--c-warn-bg); color: var(--c-warn); }
 /* Was var(--c-danger-bg)/var(--c-danger) -- literally the same light-red
    chip as Blocked below, so a sold plot and an administratively-blocked

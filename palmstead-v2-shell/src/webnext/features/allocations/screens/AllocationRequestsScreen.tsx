@@ -12,7 +12,7 @@ import { usePayments } from '../../pipeline/hooks/usePayments';
 import { usePlots, useSplitPlot } from '../../plots/hooks/usePlots';
 import { allocationUnitsNeeded, computeDepositStatus } from '../../pipeline/lib/pipelineLogic';
 import { candidatesForUnit, nearbyCandidates, searchCandidates, suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
-import { combosAreComplete, decodeSuggestionCombos, emptyCombos, encodeSuggestionCombos } from '../lib/suggestionCombos';
+import { combosAreComplete, decodeSuggestionCombos, emptyCombos, encodeSuggestionCombos, lockedPlotNumbers } from '../lib/suggestionCombos';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { techBaseAreaSqft, techHalfAreaSqft } from '../../quotation/lib/quotationLogic';
 import {
@@ -250,6 +250,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   const navigate = useNavigate();
   const { data: plots } = usePlots();
   const { data: config } = useConfig();
+  const { data: allRequests } = useAllocationRequests();
   const suggest = useSuggestAllocationPlots();
   const flag = useFlagAllocation();
   const split = useSplitPlot();
@@ -282,6 +283,12 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   const complete = combosAreComplete(combos, slotsPerCombo);
   const filledCount = combos.filter((c) => c.every((v) => v.trim())).length;
 
+  // Real user ask: a plot already suggested (saved, awaiting Management
+  // sign-off) on ANOTHER client's request shouldn't be offered again here
+  // until that request is resolved -- see lockedPlotNumbers's own comment.
+  const locked = lockedPlotNumbers(allRequests ?? [], request.id);
+  const lockedIds = new Set((plots ?? []).filter((p) => locked.has(p.plotNumber.toLowerCase())).map((p) => p.id));
+
   function setSlot(comboIdx: number, slotIdx: number, plotNumber: string) {
     setCombos((prev) => prev.map((combo, ci) => (ci === comboIdx ? combo.map((v, si) => (si === slotIdx ? plotNumber : v)) : combo)));
   }
@@ -310,7 +317,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   const baseAreaSqft = config ? techBaseAreaSqft(config) : 0;
   const halfAreaSqft = config ? techHalfAreaSqft(config) : 0;
   const minAreaForBrowse = browseUnit === 'Half Plot' ? halfAreaSqft : baseAreaSqft;
-  const allAvailablePartials = (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.status === 'Available');
+  const allAvailablePartials = (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.status === 'Available' && !locked.has(p.plotNumber.toLowerCase()));
   const availablePartials = allAvailablePartials.filter((p) => minAreaForBrowse <= 0 || realAreaSqft(p) >= minAreaForBrowse);
   const tooSmallCount = allAvailablePartials.length - availablePartials.length;
 
@@ -339,7 +346,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   function autoSuggestAll() {
     if (!plots) return;
     const sec = section || undefined;
-    const used = new Set<string>();
+    const used = new Set<string>(lockedIds);
     const next: string[][] = [];
     for (let c = 0; c < 3; c++) {
       const combo: string[] = [];
@@ -482,6 +489,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
             combo={combo}
             units={units}
             plots={plots ?? []}
+            locked={locked}
             isOpen={openCombo === comboIdx}
             onToggle={() => setOpenCombo((v) => (v === comboIdx ? -1 : comboIdx))}
             onSetSlot={(slotIdx, pn) => setSlot(comboIdx, slotIdx, pn)}
@@ -515,6 +523,7 @@ function SuggestionComboCard({
   combo,
   units,
   plots,
+  locked,
   isOpen,
   onToggle,
   onSetSlot,
@@ -526,6 +535,7 @@ function SuggestionComboCard({
   combo: string[];
   units: PlotType[];
   plots: Plot[];
+  locked: Map<string, string>;
   isOpen: boolean;
   onToggle: () => void;
   onSetSlot: (slotIdx: number, plotNumber: string) => void;
@@ -556,6 +566,7 @@ function SuggestionComboCard({
               anchorPlotNumber={slotIdx > 0 ? combo[0] : null}
               excludePlotNumbers={combo.filter((_, si) => si !== slotIdx)}
               plots={plots}
+              locked={locked}
               std={std}
               splitting={splitting}
               onChange={(pn) => onSetSlot(slotIdx, pn)}
@@ -580,6 +591,7 @@ function SuggestionSlot({
   anchorPlotNumber,
   excludePlotNumbers,
   plots,
+  locked,
   std,
   splitting,
   onChange,
@@ -595,6 +607,9 @@ function SuggestionSlot({
   // one combo.
   excludePlotNumbers: string[];
   plots: Plot[];
+  // Plot numbers already suggested (saved, awaiting sign-off) elsewhere,
+  // mapped to which client -- see lockedPlotNumbers's own comment.
+  locked: Map<string, string>;
   std: { fullWidthFt: number; fullLengthFt: number; halfWidthFt: number; halfLengthFt: number };
   splitting: boolean;
   onChange: (plotNumber: string) => void;
@@ -612,6 +627,8 @@ function SuggestionSlot({
     if (p.status === 'Allocated') return { color: 'var(--c-danger)', text: `✕ Already allocated${p.clientName ? ` to ${p.clientName}` : ''}` };
     if (p.status === 'Subdivided') return { color: 'var(--c-warn)', text: `Already split — pick ${p.plotNumber}a or ${p.plotNumber}b instead` };
     if (p.status === 'Running Search') return { color: 'var(--c-warn)', text: '⚠ Running search — confirm before offering this one' };
+    const lockedFor = locked.get(p.plotNumber.toLowerCase());
+    if (lockedFor) return { color: 'var(--c-warn)', text: `⚠ Suggested for ${lockedFor} — awaiting Management sign-off` };
     return { color: 'var(--c-success)', text: '✓ Available' };
   }
 
@@ -624,6 +641,12 @@ function SuggestionSlot({
       .map((pn) => plots.find((p) => p.plotNumber.toLowerCase() === pn.trim().toLowerCase())?.id)
       .filter((id): id is string => !!id),
   );
+  // A plot already suggested elsewhere shouldn't be offered as a fresh
+  // candidate here -- see lockedPlotNumbers's own comment. It's excluded
+  // from this picker's results, not from Plot Inventory's own listing,
+  // which still shows it (still genuinely Available) with a "Suggested"
+  // tag instead.
+  for (const p of plots) if (locked.has(p.plotNumber.toLowerCase())) excludeIds.add(p.id);
   const results = mode === 'near' && anchorPlotNumber ? nearbyCandidates(plots, unit, anchorPlotNumber, excludeIds, std) : searchCandidates(plots, unit, query, excludeIds, std);
 
   return (

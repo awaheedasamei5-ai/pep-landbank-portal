@@ -45,3 +45,34 @@ export function emptyCombos(slotsPerCombo: number): string[][] {
 export function combosAreComplete(combos: string[][], slotsPerCombo: number): boolean {
   return combos.length === 3 && combos.every((combo) => combo.length === slotsPerCombo && combo.every((pn) => pn.trim().length > 0));
 }
+
+// Real user ask: "when a plot is suggested for allocation, that plot
+// shouldnt be allowed for another suggestion until the previous
+// suggestions is saved and that plot is still remaining veccant
+// therefore such plots should still be shown as available when
+// suggesting but locked with a suggested tag on it." A plot only counts
+// as locked once its request has actually been SAVED to "Awaiting
+// Authorization" (suggested_plots populated server-side by
+// apiSuggestAllocationPlots's real equivalent) -- an in-progress, still-
+// unsaved combo draft on someone else's screen never locks anything.
+// Returns every locked plot number (lowercased) mapped to the client
+// it's currently suggested for, so callers can both exclude it from
+// fresh candidate searches and show a "Suggested for <name>" tag.
+export function lockedPlotNumbers(requests: { id: string; status: string; clientName: string; suggestedPlots: string | null }[], excludeRequestId?: string): Map<string, string> {
+  const locked = new Map<string, string>();
+  for (const r of requests) {
+    if (r.status !== 'Awaiting Authorization' || r.id === excludeRequestId) continue;
+    // unitsCount only changes how decodeSuggestionCombos GROUPS a legacy
+    // (no ';') row's tokens into combos -- 3 single-plot combos vs 1
+    // multi-plot combo -- never which tokens come out. Since this just
+    // flattens every combo back into one set of plot numbers, the exact
+    // value doesn't matter as long as it's > 1; 2 is as good as any.
+    for (const combo of decodeSuggestionCombos(r.suggestedPlots, 2)) {
+      for (const pn of combo) {
+        const key = pn.trim().toLowerCase();
+        if (key) locked.set(key, r.clientName);
+      }
+    }
+  }
+  return locked;
+}
