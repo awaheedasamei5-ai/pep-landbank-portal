@@ -1,0 +1,60 @@
+name: Build Android app
+
+# Only native-level changes need a new APK -- the app itself loads live from
+# GitHub Pages (see capacitor.config.json server.url), so ordinary index.html
+# updates reach everyone instantly with no reinstall. This workflow exists for
+# the rare case something native changes (icons, permissions, push wiring).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-android.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Sync web assets into the native project
+        run: npm run cap:sync
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Stage the APK under a stable name
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/Palmstead.apk
+
+      - name: Publish as a stable-URL release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create android-latest dist/Palmstead.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Palmstead — Android app" \
+            --notes "Installable Android build. Content always loads live from the site, so this only needs re-downloading when something native changes (icons, permissions, push setup) — not for regular feature updates." \
+            --latest=false
