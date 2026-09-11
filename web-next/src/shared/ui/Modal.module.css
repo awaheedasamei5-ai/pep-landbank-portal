@@ -1,0 +1,63 @@
+/* Same overlay convention as ops-tracker's AddTaskModal/ItemDetailModal --
+   position:fixed inset:0 dim backdrop + centered card, bottom-sheet on
+   narrow viewports. Reused here so the attendance sign-in wizard's steps
+   read as the same "real modal" language as the rest of the app instead
+   of inventing a one-off look. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgb(20 22 50 / 45%);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@media (width >= 640px) {
+  .overlay { align-items: center; padding: 20px; }
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--c-card);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (width >= 640px) {
+  .card { border-radius: var(--r-lg); }
+}
+
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.headTitle { font-size: 16px; font-weight: 800; color: var(--c-text); }
+
+.closeBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.body { display: flex; flex-direction: column; gap: 14px; }

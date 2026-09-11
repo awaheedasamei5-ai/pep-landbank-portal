@@ -44,7 +44,8 @@ export type IconName =
   | 'shield'
   | 'logout'
   | 'chevronRight'
-  | 'bell';
+  | 'bell'
+  | 'camera';
 
 function IconInner({ name }: { name: IconName }) {
   switch (name) {
@@ -287,6 +288,17 @@ function IconInner({ name }: { name: IconName }) {
         <>
           <path d="M6 10.5a6 6 0 0112 0c0 3.4 1 5 2 6.2H4c1-1.2 2-2.8 2-6.2z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" fill="none" />
           <path d="M10 19a2 2 0 004 0" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" fill="none" />
+        </>
+      );
+    // New 2026-09-11 -- the Attendance camera-capture rework (see
+    // ATTENDANCE_BLUEPRINT.md §3/§15) needs a real line icon, not an
+    // emoji stand-in, matching this set's stroke-only visual language.
+    case 'camera':
+      return (
+        <>
+          <path d="M9 6.5l1-2h4l1 2" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <rect x={3} y={6.5} width={18} height={13} rx={2.2} stroke="currentColor" strokeWidth={1.8} fill="none" />
+          <circle cx={12} cy={13.5} r={3.6} stroke="currentColor" strokeWidth={1.8} fill="none" />
         </>
       );
   }

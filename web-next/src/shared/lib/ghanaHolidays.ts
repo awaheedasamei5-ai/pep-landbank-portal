@@ -1,30 +1,23 @@
 import { isoPlusDays } from './format';
+import type { EidWindow } from '../../types/domain';
 
 // Faithful port of index.html's Ghana public-holiday calendar math
-// (index.html:23602-23668) -- fixed-date + Easter-derived + algorithmic-
-// Eid holidays. Management can't edit this list (kept simple on purpose,
-// matching the real app) -- if a specific year's government proclamation
-// shifts a date, that's handled as a one-off leave-conflict override, not
-// a code change.
+// (index.html:23602-23668) for the FIXED-DATE/Easter-derived holidays
+// only. Master Spec 12.3 is explicit that Eid dates must NOT be
+// algorithmically predicted ("Nager.Date's own project documentation says
+// Islamic holidays such as Eid al-Fitr and Eid al-Adha cannot be reliably
+// calculated in advance because local moon sightings can shift dates...
+// allow Management to maintain an annual Eid window") -- an earlier pass
+// here computed Eid via Islamic-calendar math anyway (hijriEidWindowsFor
+// GregorianYear, now removed), which is exactly the approach the spec
+// says is wrong, not just incomplete. Eid dates now come from
+// Config.eidWindows, a real Management-editable list (Settings screen),
+// each expanded to a date range by its own configurable days-before/after
+// buffer -- see eidHolidaysFromWindows below.
 
-function jdnToGregorian(jdn: number): { year: number; month: number; day: number } {
-  const a = jdn + 32044;
-  const b = Math.floor((4 * a + 3) / 146097);
-  const c = a - Math.floor((146097 * b) / 4);
-  const d = Math.floor((4 * c + 3) / 1461);
-  const e = c - Math.floor((1461 * d) / 4);
-  const m = Math.floor((5 * e + 2) / 153);
-  const day = e - Math.floor((153 * m + 2) / 5) + 1;
-  const month = m + 3 - 12 * Math.floor(m / 10);
-  const year = 100 * b + d - 4800 + Math.floor(m / 10);
-  return { year, month, day };
-}
-
-function islamicToJDN(y: number, m: number, d: number): number {
-  return Math.floor((11 * y + 3) / 30) + 354 * y + 30 * m - Math.floor((m - 1) / 2) + d + 1948440 - 385;
-}
-
-// Easter Sunday via the anonymous Gregorian algorithm.
+// Easter Sunday via the anonymous Gregorian algorithm -- kept: this is a
+// real, universally-agreed deterministic calculation (unlike Eid), the
+// same one every Western-calendar Easter-holiday system in the world uses.
 function easterSundayForYear(year: number): string {
   const a = year % 19;
   const b = Math.floor(year / 100);
@@ -43,30 +36,27 @@ function easterSundayForYear(year: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-// Eid al-Fitr = 1 Shawwal (month 10); Eid al-Adha = 10 Dhu al-Hijjah
-// (month 12). A given Gregorian year can only ever contain the tail/head
-// of 1-2 Hijri years, so this probes a small range around the estimate
-// and keeps whichever land in-year. Window: 1 day either side of the
-// computed date, to absorb typical moon-sighting variance.
-function hijriEidWindowsForGregorianYear(gYear: number): { name: string; dates: string[] }[] {
-  const results: { name: string; centerIso: string }[] = [];
-  const estH = Math.floor(((gYear - 622) * 33) / 32);
-  for (let hy = estH - 1; hy <= estH + 1; hy++) {
-    const fitr = jdnToGregorian(islamicToJDN(hy, 10, 1));
-    if (fitr.year === gYear) results.push({ name: 'Eid al-Fitr', centerIso: `${gYear}-${String(fitr.month).padStart(2, '0')}-${String(fitr.day).padStart(2, '0')}` });
-    const adha = jdnToGregorian(islamicToJDN(hy, 12, 10));
-    if (adha.year === gYear) results.push({ name: 'Eid al-Adha', centerIso: `${gYear}-${String(adha.month).padStart(2, '0')}-${String(adha.day).padStart(2, '0')}` });
-  }
-  return results.map((r) => ({ name: r.name, dates: [isoPlusDays(r.centerIso, -1), r.centerIso, isoPlusDays(r.centerIso, 1)] }));
-}
-
 export interface GhanaHoliday {
   date: string;
   name: string;
   isEid?: boolean;
 }
 
-export function ghanaHolidaysForYear(year: number): GhanaHoliday[] {
+// Expands each Management-configured Eid window into its real date range.
+// A window whose center date falls near a year boundary can legitimately
+// contribute dates in two different years -- callers filter by year
+// themselves (see ghanaHolidaysForYear) rather than this function guessing.
+export function eidHolidaysFromWindows(windows: EidWindow[]): GhanaHoliday[] {
+  const list: GhanaHoliday[] = [];
+  windows.forEach((w) => {
+    for (let offset = -Math.max(0, w.daysBefore); offset <= Math.max(0, w.daysAfter); offset++) {
+      list.push({ date: isoPlusDays(w.centerDate, offset), name: `${w.name} — Eid window`, isEid: true });
+    }
+  });
+  return list;
+}
+
+export function ghanaHolidaysForYear(year: number, eidWindows: EidWindow[] = []): GhanaHoliday[] {
   const list: GhanaHoliday[] = [
     { date: `${year}-01-01`, name: "New Year's Day" },
     { date: `${year}-03-06`, name: 'Independence Day' },
@@ -79,19 +69,22 @@ export function ghanaHolidaysForYear(year: number): GhanaHoliday[] {
   const easter = easterSundayForYear(year);
   list.push({ date: isoPlusDays(easter, -2), name: 'Good Friday' });
   list.push({ date: isoPlusDays(easter, 1), name: 'Easter Monday' });
-  hijriEidWindowsForGregorianYear(year).forEach((w) => w.dates.forEach((d) => list.push({ date: d, name: w.name, isEid: true })));
+  eidHolidaysFromWindows(eidWindows)
+    .filter((h) => h.date.startsWith(String(year)))
+    .forEach((h) => list.push(h));
   return list;
 }
 
-const holidayMapCache: Record<number, Map<string, GhanaHoliday>> = {};
-
-export function ghanaHolidayMapForYear(year: number): Map<string, GhanaHoliday> {
-  if (holidayMapCache[year]) return holidayMapCache[year];
+// No module-level cache here on purpose (there was one before) -- Eid
+// windows are now live, Management-editable config, so a cache keyed only
+// by year would keep serving stale Eid dates after an edit until a full
+// reload. Recomputing a dozen date-arithmetic entries per call is cheap
+// enough that a cache buys nothing but a real staleness bug.
+export function ghanaHolidayMapForYear(year: number, eidWindows: EidWindow[] = []): Map<string, GhanaHoliday> {
   const map = new Map<string, GhanaHoliday>();
-  ghanaHolidaysForYear(year).forEach((h) => {
+  ghanaHolidaysForYear(year, eidWindows).forEach((h) => {
     if (!map.has(h.date)) map.set(h.date, h);
   });
-  holidayMapCache[year] = map;
   return map;
 }
 
@@ -99,4 +92,3 @@ export function isWeekendIso(iso: string): boolean {
   const dow = new Date(`${iso}T00:00:00`).getDay();
   return dow === 0 || dow === 6;
 }
-

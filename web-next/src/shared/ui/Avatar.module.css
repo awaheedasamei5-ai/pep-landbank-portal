@@ -1,0 +1,19 @@
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 800;
+  flex-shrink: 0;
+  border: 2px solid var(--c-card);
+}
+.tone_accent { background: var(--c-accent-bg); color: var(--c-accent); }
+.tone_info { background: var(--c-info-bg); color: var(--c-info); }
+.tone_success { background: var(--c-success-bg); color: var(--c-success); }
+.tone_warn { background: var(--c-warn-bg); color: var(--c-warn); }
+.tone_danger { background: var(--c-danger-bg); color: var(--c-danger); }
+.tone_more { background: var(--c-paper); color: var(--c-muted); }
+
+.stack { display: inline-flex; align-items: center; }
+.stackItem { margin-left: -8px; position: relative; }
+.stackItem:first-child { margin-left: 0; }
