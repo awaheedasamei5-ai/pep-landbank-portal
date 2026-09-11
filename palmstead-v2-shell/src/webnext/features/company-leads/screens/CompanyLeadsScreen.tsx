@@ -65,7 +65,7 @@ export function CompanyLeadsScreen() {
   // Database (see PipelineListScreen's own comment) -- the list stays
   // mounted (and, on desktop, visible) behind a lead's own detail drawer
   // instead of a sibling route unmounting it.
-  const hasDetailOpen = /^\/app\/sales\/company-leads\/[^/]+$/.test(location.pathname);
+  const hasDetailOpen = /^\/dashboard\/company-leads\/[^/]+$/.test(location.pathname);
   const { data: leads, isLoading } = useCompanyLeads();
   const downloadCompanyLeads = useDownloadCompanyLeadsPipeline();
   const [query, setQuery] = useState('');

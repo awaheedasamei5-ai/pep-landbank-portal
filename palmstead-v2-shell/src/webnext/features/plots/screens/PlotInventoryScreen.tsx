@@ -87,7 +87,7 @@ export function PlotInventoryScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
 
-  const hasDetailOpen = /^\/app\/sales\/plots\/[^/]+$/.test(location.pathname);
+  const hasDetailOpen = /^\/dashboard\/plots\/[^/]+$/.test(location.pathname);
 
   if (!hasAccess) {
     return (

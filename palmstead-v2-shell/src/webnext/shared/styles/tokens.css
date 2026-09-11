@@ -115,7 +115,7 @@
 .webnext-theme[data-skin="emerald"] { --ink: #064E3B; --ink2: #065F46; --green: #059669; --green2: #10B981; --leaf: #34D399; --gold: #0D9488; --gold2: #2DD4BF; }
 .webnext-theme[data-skin="royal"] { --ink: #3B0764; --ink2: #581C87; --green: #7C2D92; --green2: #9333EA; --leaf: #C084FC; --gold: #B45309; --gold2: #F59E0B; }
 
-*, *::before, *::after { box-sizing: border-box; }
+.webnext-theme, .webnext-theme *, .webnext-theme *::before, .webnext-theme *::after { box-sizing: border-box; }
 
 .webnext-theme {
   margin: 0;
@@ -125,7 +125,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4 {
+.webnext-theme h1, .webnext-theme h2, .webnext-theme h3, .webnext-theme h4 {
   font-family: var(--font-display);
   letter-spacing: -0.01em;
 }

@@ -35,7 +35,7 @@ async function fetchManagerOverview(): Promise<ManagerOverview> {
   const client = requireSupabase();
   const sixMonthsAgo = `${shiftMonth(today().slice(0, 7), -5)}-01`;
   const [leadsRes, complaintsRes, visitsRes, staffRes, paymentsRes] = await Promise.all([
-    client.from("leads").select("agent_key,grand_total,amt_paid,stage"),
+    client.from("leads").select("agent_key,grand_total,amt_paid,stage").is("deleted_at", null),
     client.from("complaints").select("status"),
     client.from("site_visits").select("id"),
     client.from("profiles").select("agent_key,name").eq("active", true),
@@ -61,7 +61,7 @@ async function fetchManagerOverview(): Promise<ManagerOverview> {
   const byAgentMap = new Map<string, { key: string; name: string; leadCount: number; value: number }>();
   for (const l of leads) {
     const match = staff.find((s) => s.agent_key === l.agent_key);
-    const name = match?.name ?? l.agent_key;
+    const name = l.agent_key === "company" ? "Company Leads" : (match?.name ?? l.agent_key);
     const existing = byAgentMap.get(l.agent_key);
     if (existing) {
       existing.leadCount += 1;

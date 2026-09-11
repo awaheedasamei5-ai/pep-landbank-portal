@@ -37,7 +37,7 @@ export function ClientDatabaseScreen() {
   // Same nested-route trick as Pipeline: the drawer's own child route lives
   // under this screen so the list stays mounted (and, on desktop, visible)
   // behind it instead of being unmounted by a sibling route.
-  const hasDetailOpen = /^\/app\/sales\/clients\/[^/]+$/.test(location.pathname);
+  const hasDetailOpen = /^\/dashboard\/clients\/[^/]+$/.test(location.pathname);
 
   const q = query.trim().toLowerCase();
   const qDigits = normContact(query).slice(-9);
