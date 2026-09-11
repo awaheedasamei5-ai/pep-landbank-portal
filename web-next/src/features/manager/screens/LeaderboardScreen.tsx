@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import styles from './LeaderboardScreen.module.css';
@@ -11,13 +12,15 @@ function rank(i: number): string {
   return MEDALS[i] ?? String(i + 1);
 }
 
-// Real leaderboard_rows() RPC + agentPoints() (index.html:19590-19622,
-// 19767-19863), scoped to the highest-value slice for this first cut: the
-// ranked list itself and the leader/runner-up catch-up banner. Out of scope
-// here (index.html's much larger mgrLeaderboard()): per-agent pipeline
-// health/win-rate/avg-monthly enrichment (display-only, not part of
-// points -- a real follow-up, not a gap in the points themselves), CSV
-// export, and the Weights config editor.
+// Server-authoritative score (recompute_leaderboard_scores() SQL fn, ported
+// from index.html's agentPoints(), index.html:19590-19622, 19767-19863),
+// scoped to the highest-value slice for this first cut: the ranked list
+// itself and the leader/runner-up catch-up banner. Weight editing now
+// lives in its own admin workspace (LeaderboardAdminScreen), linked
+// below. Still out of scope here (index.html's much larger
+// mgrLeaderboard()): per-agent pipeline health/win-rate/avg-monthly
+// enrichment (display-only, not part of points -- a real follow-up, not
+// a gap in the points themselves) and CSV export.
 export function LeaderboardScreen() {
   const [year, setYear] = useState(new Date().getFullYear());
   const { data: rows, isLoading } = useLeaderboard(year);
@@ -36,13 +39,18 @@ export function LeaderboardScreen() {
           <h1 className={styles.title}>Ranked by points</h1>
           <p className={styles.sub}>Tap in for the full formula &mdash; money collected counts most, then deals closed, site visits, task/to-do throughput, and attendance.</p>
         </div>
-        <select className={styles.yearSel} value={year} onChange={(e) => setYear(Number(e.target.value))}>
-          {yearOptions.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+        <div className={styles.headActions}>
+          <select className={styles.yearSel} value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <Link to="/app/mgr/leaderboard/admin" className={styles.adminLink}>
+            Manage scoring →
+          </Link>
+        </div>
       </div>
 
       {isLoading && <p style={{ color: 'var(--c-muted)' }}>Loading…</p>}
