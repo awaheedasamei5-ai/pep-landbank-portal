@@ -13,7 +13,10 @@ import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { DAY_DEFAULT_TIME, dayTimeLabel, fmtLongDate, upcomingDatesForDay } from '../../site-visit-auth/lib/siteVisitAuthLogic';
-import type { SiteVisit } from '../../../types/domain';
+import { useCreateLead } from '../../pipeline/hooks/useLeads';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { previewGrandTotal } from '../../pipeline/lib/pipelineLogic';
+import type { SiteVisit, PlotType } from '../../../types/domain';
 import styles from './AddSiteVisitScreen.module.css';
 
 // Real v1 field set/options, ported verbatim (index.html:16213-16240,
@@ -31,6 +34,22 @@ function plotValue(preset: string, custom: string): string {
   if (preset !== PLOT_MORE) return preset;
   const n = Number(custom);
   return n > 0 ? `${n} Plot${n === 1 ? '' : 's'} (custom)` : preset;
+}
+
+// Real client request: booking a site visit for someone new can also
+// create a real pipeline lead in one step, instead of a separate trip to
+// Add Lead afterward. "Interested in buying" is only a loose preset here
+// (not a real plotType/noPlots picker the way Add Lead has), so this is a
+// best-effort read of it -- '0.5 Plot' is the only Half Plot preset, every
+// other preset (including the custom "More" field) is a Full-Plot count.
+function inferPlotTypeAndCount(preset: string, custom: string): { plotType: PlotType; noPlots: number } {
+  if (preset === PLOT_MORE) {
+    const n = Number(custom);
+    return { plotType: 'Full Plot', noPlots: n > 0 ? n : 1 };
+  }
+  if (preset.startsWith('0.5')) return { plotType: 'Half Plot', noPlots: 0.5 };
+  const match = preset.match(/^(\d+(\.\d+)?)/);
+  return { plotType: 'Full Plot', noPlots: match ? Number(match[1]) : 1 };
 }
 
 const schema = z.object({
@@ -77,12 +96,16 @@ export function AddSiteVisitScreen() {
   const prefillName = searchParams.get('name') ?? '';
   const prefillContact = searchParams.get('contact') ?? '';
   const createSiteVisit = useCreateSiteVisit();
+  const createLead = useCreateLead();
+  const { data: config } = useConfig();
   const downloadPdf = useDownloadSiteVisitFormPdf();
   const { data: myVisits } = useSiteVisits();
   const { data: clients } = useClients();
   const [confirmedVisit, setConfirmedVisit] = useState<SiteVisit | null>(null);
+  const [confirmedLeadId, setConfirmedLeadId] = useState<string | undefined>(undefined);
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
   const [interestCustom, setInterestCustom] = useState('');
+  const [addToPipeline, setAddToPipeline] = useState(false);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -156,18 +179,40 @@ export function AddSiteVisitScreen() {
     setSaveError(null);
     if (duplicate && !(isManager && duplicateOverride)) return;
     try {
+      // Real client request: booking a visit for a genuinely new client can
+      // also open a real pipeline lead in the same step. Created first (not
+      // fire-and-forget after) so the visit itself can carry the real
+      // leadId FK, same as a visit logged from Pipeline Detail's own "Log a
+      // visit" link -- one real, linked record instead of two separate,
+      // unconnected ones.
+      let effectiveLeadId = leadId;
+      if (addToPipeline && !leadId && !isKnownClient && config) {
+        const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
+        const pricing = previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
+        const { lead } = await createLead.mutateAsync({
+          name: values.name.trim(),
+          contact: values.contact.trim(),
+          plotType,
+          noPlots,
+          unitPrice: pricing.listPrice,
+          paymentPlan: 'Full Payment',
+          amtPaid: 0,
+        });
+        effectiveLeadId = lead.id;
+      }
       const rec = await createSiteVisit.mutateAsync({
         ...values,
         plot: plotValue(interestPreset, interestCustom),
         people: values.people ? Number(values.people) : undefined,
-        leadId,
+        leadId: effectiveLeadId,
       });
       // Master Spec 9.3: "Show confirmation with date, time, client and
       // logistics" -- stays on this screen with a summary rather than
       // immediately navigating away, so the confirmation is actually seen.
+      setConfirmedLeadId(effectiveLeadId);
       setConfirmedVisit(rec);
     } catch (e) {
-      setSaveError(friendlyError(e, 'Failed to save this visit'));
+      setSaveError(friendlyError(e, addToPipeline ? 'Failed to save this visit or create the pipeline lead' : 'Failed to save this visit'));
     }
   }
 
@@ -183,6 +228,9 @@ export function AddSiteVisitScreen() {
           <p className={styles.confirmNote}>
             Management has been notified, and {confirmedVisit.name.split(' ')[0]} has been texted the pick-up details. You can download the request form, log another visit, or head back to your visits list.
           </p>
+          {addToPipeline && confirmedLeadId && confirmedLeadId !== leadId && (
+            <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was also added to your pipeline as a new lead.</p>
+          )}
           <button type="button" className={styles.pdfBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate(confirmedVisit)}>
             {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download request form (PDF)'}
           </button>
@@ -190,7 +238,7 @@ export function AddSiteVisitScreen() {
             <button type="button" className={styles.cancel} onClick={() => setConfirmedVisit(null)}>
               Log another
             </button>
-            <button type="button" className={styles.save} onClick={() => navigate(leadId ? `/dashboard/pipeline/${leadId}` : '/dashboard/site-visits')}>
+            <button type="button" className={styles.save} onClick={() => navigate(confirmedLeadId ? `/dashboard/pipeline/${confirmedLeadId}` : '/dashboard/site-visits')}>
               Done
             </button>
           </div>
@@ -220,7 +268,13 @@ export function AddSiteVisitScreen() {
               {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
             </div>
             {!isKnownClient && (
-              <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
+              <>
+                <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
+                <label className={styles.dupOverrideRow}>
+                  <input type="checkbox" checked={addToPipeline} onChange={(e) => setAddToPipeline(e.target.checked)} />
+                  Also add {watchedName.trim().split(' ')[0] || 'this client'} to my pipeline as a new lead
+                </label>
+              </>
             )}
             <div className={styles.field}>
               <label className={styles.label}>Pick-up location</label>
