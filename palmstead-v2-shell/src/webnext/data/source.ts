@@ -1269,7 +1269,7 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapLeadRow);
       },
       async listCompany() {
-        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', 'company').order('date_added', { ascending: false });
+        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', 'company').is('deleted_at', null).order('date_added', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
