@@ -312,6 +312,15 @@ export function AddLeadScreen() {
 
   return (
     <div className={styles.wrap}>
+      {/* Real user complaint: every screen that navigates into a new page
+          only had its way back at the very bottom of a long form (the
+          Cancel button below), so landing here gave no visible way back
+          without scrolling through the whole thing or using the browser's
+          own back button. Same returnTo destination Cancel already uses,
+          just also surfaced immediately at the top. */}
+      <button type="button" className={styles.backLink} onClick={() => navigate(returnTo)}>
+        ← Back
+      </button>
       <h1 className={styles.title}>Add to pipeline</h1>
       <p className={styles.sub}>Saved straight into your pipeline.</p>
       <form onSubmit={handleSubmit(onSubmit)}>

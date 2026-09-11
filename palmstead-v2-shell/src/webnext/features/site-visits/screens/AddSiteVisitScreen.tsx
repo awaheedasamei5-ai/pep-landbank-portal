@@ -247,8 +247,16 @@ export function AddSiteVisitScreen() {
     );
   }
 
+  const backTo = leadId ? `/dashboard/pipeline/${leadId}` : '/dashboard/site-visits';
+
   return (
     <div className={styles.wrap}>
+      {/* Real user complaint: no visible way back until the Cancel button
+          at the very bottom of this long form. Same destination Cancel
+          uses, surfaced immediately at the top too. */}
+      <button type="button" className={styles.backLink} onClick={() => navigate(backTo)}>
+        ← Back
+      </button>
       <h1 className={styles.title}>Log a site visit</h1>
       <p className={styles.sub}>Saved against your own visits.</p>
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -417,7 +425,12 @@ export function AddSiteVisitScreen() {
         {saveError && <div className={styles.err}>{saveError}</div>}
 
         <div className={styles.actions}>
-          <button type="button" className={styles.cancel} onClick={() => navigate('/dashboard/site-visits')}>
+          {/* Was hardcoded to /dashboard/site-visits always -- when this
+              screen was opened from a lead's own "Log a visit" link
+              (leadId set), Cancel silently dropped that context instead
+              of returning to the lead, unlike the real submit path a few
+              lines up which already gets this right. */}
+          <button type="button" className={styles.cancel} onClick={() => navigate(backTo)}>
             Cancel
           </button>
           <button type="submit" className={styles.save} disabled={createSiteVisit.isPending || (!!duplicate && !(isManager && duplicateOverride))}>

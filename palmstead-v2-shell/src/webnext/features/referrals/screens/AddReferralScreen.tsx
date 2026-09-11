@@ -58,6 +58,9 @@ export function AddReferralScreen() {
 
   return (
     <div className={styles.wrap}>
+      <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/referrals')}>
+        ← Back
+      </button>
       <h1 className={styles.title}>Add a referral</h1>
       <p className={styles.sub}>Record that one of your clients referred someone new.</p>
       <div className={styles.grid}>

@@ -67,6 +67,9 @@ export function AddComplaintScreen() {
 
   return (
     <div className={styles.wrap}>
+      <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/complaints')}>
+        ← Back
+      </button>
       <h1 className={styles.title}>Log a complaint</h1>
       <p className={styles.sub}>Saved against your own complaints.</p>
       <div className={styles.grid}>

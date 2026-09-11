@@ -75,6 +75,9 @@ export function AddEnquiryScreen() {
 
   return (
     <div className={styles.wrap}>
+      <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/enquiries')}>
+        ← Back
+      </button>
       <h1 className={styles.title}>Log a client enquiry</h1>
       <p className={styles.sub}>Saved against your own enquiries.</p>
       <div className={styles.grid}>
