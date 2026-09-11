@@ -16,6 +16,7 @@ import {
 import { APP_CONFIG } from "@/config/app-config";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
@@ -28,6 +29,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       isSynced: s.isSynced,
     })),
   );
+  // Real user ask (2026-09-11): "the staff version of the pipeline is my
+  // pipeline and not master pipeline, master pipeline is only for
+  // management." Same route for both (see PipelineListScreen's own
+  // comment on the real bug this closes) -- only the sidebar LABEL
+  // itself needs to differ by role, not a second nav item or route.
+  const isManager = useAuthStore((s) => s.profile?.role === "manager");
+  const items = isManager
+    ? sidebarItems
+    : sidebarItems.map((group) =>
+        group.items.some((item) => item.id === "master-pipeline")
+          ? { ...group, items: group.items.map((item) => (item.id === "master-pipeline" ? { ...item, title: "My Pipeline" } : item)) }
+          : group,
+      );
 
   const variant = isSynced ? sidebarVariant : props.variant;
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
@@ -48,7 +62,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={sidebarItems} />
+        <NavMain items={items} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />

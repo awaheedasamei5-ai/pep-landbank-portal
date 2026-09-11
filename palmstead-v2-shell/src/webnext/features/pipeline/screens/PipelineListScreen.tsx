@@ -77,16 +77,28 @@ function exportLeadsCsv(leads: Lead[]) {
 // Master Pipeline is this exact same app, just scoped company-wide with
 // a staff filter added, not a second bespoke screen (the old, much
 // poorer ManagerPipelineScreen this replaced never got KPIs/filters/
-// import/export at all). `isMaster` is route-derived rather than a prop
-// so both entry points (Sidebar/SalesDesk's two links) keep working
-// exactly as before with zero call-site changes.
+// import/export at all).
+//
+// Real bug found live (2026-09-11, user report + screenshot): there is
+// only ONE real route/sidebar entry for this screen (/dashboard/pipeline,
+// labeled "Master Pipeline" in sidebar-items.ts) -- `isMaster` used to be
+// derived from the URL path, which is unconditionally true for every
+// viewer since there's no second path to ever be false against. Every
+// plain agent has been seeing the "Master Pipeline" title, the manager-
+// only staff filter dropdown, "Export/Import Master Pipeline", and the
+// "View archived leads" link -- real RLS still correctly scoped the
+// underlying leads query down to their own rows regardless (confirmed:
+// listAll() enforces agent_key=my_key() OR manager server-side), so this
+// was never a data leak, but it's real wrong UI/behavior: "the staff
+// version of the pipeline is my pipeline and not master pipeline, master
+// pipeline is only for management." Now role-derived instead.
 export function PipelineListScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const profile = useSessionStore((s) => s.profile);
-  const isMaster = location.pathname.startsWith('/dashboard/pipeline');
-  const basePath = isMaster ? '/dashboard/pipeline' : '/dashboard/pipeline';
+  const isMaster = profile?.role === 'manager';
+  const basePath = '/dashboard/pipeline';
   // Real fix, caught live: the detail route is now nested under this
   // one (see router.tsx's own comment) so the list stays mounted while
   // the drawer is open -- necessary for the desktop split view to have

@@ -63,7 +63,14 @@ function fmtLongDate(iso: string): string {
 // every client who visited that day).
 export function SveManagementScreen() {
   const profile = useSessionStore((s) => s.profile);
-  const hasAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel' || profile.key === 'elizabeth');
+  // Real user ask (2026-09-11): "give all staff full access to the site
+  // visit experience app." Was manager + elias/emmanuel/elizabeth only,
+  // a leftover from when this was first built as a small pilot -- the
+  // matching real RLS on all 4 SVE tables was opened the same way
+  // (svei_staff_sel/upd/del, svesub_*, sve_day_reports_*, sve_report_
+  // links_staff_sel), so this UI gate now matches what the database
+  // actually allows.
+  const hasAccess = !!profile;
   useSveRealtime();
   const { data: visits, isLoading } = useSveVisits();
   const sendInvite = useSendSveInvite();

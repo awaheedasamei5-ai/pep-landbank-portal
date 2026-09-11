@@ -48,7 +48,11 @@ export function SiteVisitsScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
   const isManager = profile?.role === 'manager';
-  const hasSveAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel' || profile.key === 'elizabeth');
+  // Real user ask (2026-09-11): "give all staff full access to the site
+  // visit experience app" -- was manager + elias/emmanuel/elizabeth only,
+  // same leftover-pilot scope SveManagementScreen's own gate had, opened
+  // the same way (see that screen's comment for the matching RLS fix).
+  const hasSveAccess = !!profile;
   const mine = useSiteVisits();
   const all = useAllSiteVisits();
   const { data: visits, isLoading } = isManager ? all : mine;

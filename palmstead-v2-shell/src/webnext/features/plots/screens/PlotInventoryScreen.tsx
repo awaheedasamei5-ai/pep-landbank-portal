@@ -82,7 +82,17 @@ export function PlotInventoryScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
-  const hasAccess = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
+  // Real user ask (2026-09-11): "give the rest of the staff who are not
+  // in charge of allocations view only access to the plot inventory they
+  // can see all plots, remaining everything but they cant edit nor
+  // delete anything in the app." Was fully blocked for anyone outside
+  // manager/elias/emmanuel -- now any signed-in staff can view; the real
+  // plots_ins/upd/del RLS (confirmed live, unchanged: manager/elias/
+  // emmanuel only) already enforces the write side server-side, and
+  // canManagePlots below hides the write controls in the UI to match --
+  // see PlotDetailScreen's own use of the same check for Edit/Split/Delete.
+  const hasAccess = !!profile;
+  const canManagePlots = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const { data: plots, isLoading } = usePlots();
   const { data: allocationRequests } = useAllocationRequests();
   // Real user ask: a plot currently suggested (saved, awaiting Management
@@ -140,17 +150,19 @@ export function PlotInventoryScreen() {
             <h1 className={styles.title}>Plot Inventory</h1>
             <p className={styles.sub}>Every plot and its current status</p>
           </div>
-          <div className={styles.headActions}>
-            <button type="button" className={styles.reconBtn} onClick={() => navigate('/dashboard/plots/reconciliation')}>
-              Reconciliation
-            </button>
-            <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
-              {addOpen ? 'Cancel' : '+ Add plot'}
-            </button>
-          </div>
+          {canManagePlots && (
+            <div className={styles.headActions}>
+              <button type="button" className={styles.reconBtn} onClick={() => navigate('/dashboard/plots/reconciliation')}>
+                Reconciliation
+              </button>
+              <button type="button" className={styles.addBtn} onClick={() => setAddOpen((v) => !v)}>
+                {addOpen ? 'Cancel' : '+ Add plot'}
+              </button>
+            </div>
+          )}
         </div>
 
-        {addOpen && <AddPlotForm defaultSite={plots?.[0]?.site ?? DEFAULT_SITE} onDone={() => setAddOpen(false)} />}
+        {canManagePlots && addOpen && <AddPlotForm defaultSite={plots?.[0]?.site ?? DEFAULT_SITE} onDone={() => setAddOpen(false)} />}
 
         <div className={styles.summaryRow}>
           <div className={styles.summaryPill}>

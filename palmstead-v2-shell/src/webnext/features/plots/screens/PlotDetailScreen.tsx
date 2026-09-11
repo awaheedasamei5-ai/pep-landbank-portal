@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import type { PlotStatus } from '../../../types/domain';
 import { usePlots, useDeletePlot, useSplitPlot, useUpdatePlot } from '../hooks/usePlots';
 import styles from './PlotDetailScreen.module.css';
@@ -25,6 +26,15 @@ const PLOT_STATUSES: PlotStatus[] = ['Available', 'Running Search', 'Allocated',
 export function PlotDetailScreen() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const profile = useSessionStore((s) => s.profile);
+  // Real user ask (2026-09-11): staff outside the allocation team get
+  // "view only access to the plot inventory ... they cant edit nor
+  // delete anything." This screen had no access check of its own at all
+  // -- harmless while PlotInventoryScreen fully blocked everyone else
+  // from reaching it, but opening that screen to view-only access would
+  // have exposed Edit/Split/Delete here to everyone too. Matches the
+  // same canManagePlots check as PlotInventoryScreen's own "+ Add plot".
+  const canManagePlots = !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel');
   const { data: plots } = usePlots();
   const update = useUpdatePlot();
   const del = useDeletePlot();
@@ -149,7 +159,7 @@ export function PlotDetailScreen() {
                   </div>
                 </div>
 
-                {!editing ? (
+                {!canManagePlots ? null : !editing ? (
                   <button type="button" className={styles.editBtn} onClick={() => setEditing(true)}>
                     Edit plot details
                   </button>
@@ -194,7 +204,7 @@ export function PlotDetailScreen() {
                   </div>
                 )}
 
-                {canSplit && !editing && (
+                {canManagePlots && canSplit && !editing && (
                   <div className={styles.splitBox}>
                     <div className={styles.splitTitle}>Need to sell this as two Half Plots instead?</div>
                     <p className={styles.helpText}>
@@ -224,6 +234,7 @@ export function PlotDetailScreen() {
               </>
             )}
 
+            {canManagePlots && (
             <div className={styles.dangerRow}>
               {confirming === 'delete' ? (
                 <>
@@ -249,6 +260,7 @@ export function PlotDetailScreen() {
                 </button>
               )}
             </div>
+            )}
 
             <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/plots')}>
               ← Back

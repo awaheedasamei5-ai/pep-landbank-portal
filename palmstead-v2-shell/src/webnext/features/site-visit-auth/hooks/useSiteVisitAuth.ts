@@ -6,12 +6,16 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { weekEndIso } from '../lib/siteVisitAuthLogic';
 import type { WeeklyVisitFormCostPatch } from '../../../types/domain';
 
-// Real UI gate (canViewClientDatabase in index.html) -- manager or elias/
-// emmanuel/elizabeth, matching wvf_staff_sel/ins/upd RLS exactly (confirmed
-// live).
+// Real user ask (2026-09-11): "give all staff ... full access to the
+// site visit authorization app." Was manager + elias/emmanuel/elizabeth
+// only (a leftover pilot scope) -- opened to any signed-in staff member,
+// matching the matching real wvf_staff_sel/upd RLS opened the same way.
+// Finalize & approve stays a separate, genuine manager-only business
+// action (gated directly in SiteVisitAuthScreen's own isManager check),
+// not an access-tier restriction.
 export function useCanViewSiteVisitAuth(): boolean {
   const profile = useSessionStore((s) => s.profile);
-  return !!profile && (profile.role === 'manager' || ['elias', 'emmanuel', 'elizabeth'].includes(profile.key));
+  return !!profile;
 }
 
 export function useWeeklyVisitForm(weekStart: string, visitDate: string) {
