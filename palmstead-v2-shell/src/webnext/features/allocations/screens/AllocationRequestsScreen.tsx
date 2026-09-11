@@ -12,6 +12,7 @@ import { usePlots, useSplitPlot } from '../../plots/hooks/usePlots';
 import { allocationUnitsNeeded, computeDepositStatus } from '../../pipeline/lib/pipelineLogic';
 import { suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { techBaseAreaSqft, techHalfAreaSqft } from '../../quotation/lib/quotationLogic';
 import {
   useAllocationRequests,
   useAnalyzeAllocationAuthDoc,
@@ -28,7 +29,7 @@ import {
   useUploadAllocationAuthDoc,
 } from '../hooks/useAllocationRequests';
 import { allocationAuthFilename, buildAllocationAuthorizationPdf } from '../lib/allocationAuthPdf';
-import type { AllocationRequest, Lead } from '../../../types/domain';
+import type { AllocationRequest, Lead, Plot, PlotType } from '../../../types/domain';
 import styles from './AllocationRequestsScreen.module.css';
 
 function initials(name: string): string {
@@ -257,7 +258,42 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
   // has no fixed full-plot-equivalence, so it can never be auto-suggested
   // by units[]. This is the manual override path: browse real Available
   // Partial Plots directly and drop one into whichever slot is open.
-  const availablePartials = (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.status === 'Available');
+  //
+  // Real user complaint fixed here: this used to show every single
+  // Available Partial Plot regardless of size, so a fragment far smaller
+  // than what the open slot actually needs (e.g. a sliver nowhere near
+  // half a plot) showed up next to genuinely usable ones -- confusing,
+  // not "self-explanatory". Now scoped to whichever slot is actually
+  // open: only partials whose real area (areaSqft, falling back to
+  // widthFt*lengthFt) is AT LEAST that unit's standard area -- a Half
+  // Plot slot only shows partials >= half a plot's area, a Full Plot slot
+  // only shows partials >= a full plot's area. Nothing here caps how much
+  // BIGGER than needed a partial can be -- only excludes ones too small
+  // to plausibly satisfy the slot at all.
+  const openSlotIdx = (() => {
+    const idx = values.findIndex((x, i) => i < slots && !x.trim());
+    return idx === -1 ? slots - 1 : idx;
+  })();
+  const neededUnit: PlotType = multi ? (units[openSlotIdx] ?? 'Full Plot') : (lead?.plotType ?? 'Full Plot');
+  const baseAreaSqft = config ? techBaseAreaSqft(config) : 0;
+  const halfAreaSqft = config ? techHalfAreaSqft(config) : 0;
+  const minAreaForSlot = neededUnit === 'Half Plot' ? halfAreaSqft : baseAreaSqft;
+  function realAreaSqft(p: Plot): number {
+    if (p.areaSqft != null) return p.areaSqft;
+    return p.widthFt != null && p.lengthFt != null ? p.widthFt * p.lengthFt : 0;
+  }
+  const allAvailablePartials = (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.status === 'Available');
+  const availablePartials = allAvailablePartials.filter((p) => minAreaForSlot <= 0 || realAreaSqft(p) >= minAreaForSlot);
+  const tooSmallCount = allAvailablePartials.length - availablePartials.length;
+
+  // Real user scenario: a client who already holds one or more Partial
+  // Plots (bought irregular fragments earlier) needing to know that
+  // before suggesting more -- matched the same way Plot Inventory's own
+  // owner-clustering does (client_name match), purely informational, not
+  // fillable into a slot the way the list above is.
+  const clientPartialHoldings = lead
+    ? (plots ?? []).filter((p) => p.plotType === 'Partial Plot' && p.clientName && p.clientName.trim().toLowerCase() === lead.name.trim().toLowerCase())
+    : [];
 
   function fillSlot(plotNumber: string) {
     setValues((v) => {
@@ -413,22 +449,39 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
           </select>
         </div>
       )}
+      {clientPartialHoldings.length > 0 && (
+        <div className={styles.pickerList} style={{ marginBottom: 10, borderColor: 'var(--c-info)' }}>
+          <p className={styles.noMatch} style={{ color: 'var(--c-info)', fontWeight: 700 }}>
+            {lead?.name} already holds {clientPartialHoldings.length} partial plot{clientPartialHoldings.length === 1 ? '' : 's'} — worth checking before suggesting more:
+          </p>
+          {clientPartialHoldings.map((p) => (
+            <div key={p.id} className={styles.pickerRow} style={{ cursor: 'default' }}>
+              <div className={styles.pickerName}>{p.plotNumber} — Partial Plot</div>
+              <div className={styles.pickerMeta}>{realAreaSqft(p) > 0 ? `${realAreaSqft(p).toLocaleString()} sq ft` : 'area not set'}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className={styles.allocateActions} style={{ marginBottom: 10 }}>
         <button type="button" className={styles.cancelBtn} onClick={autoSuggest}>
           ✨ Auto-suggest from {section ? `Block ${section}` : 'inventory'}
         </button>
         <button type="button" className={styles.cancelBtn} onClick={() => setShowPartials((v) => !v)}>
-          {showPartials ? 'Hide partial plots' : 'Browse partial plots'}
+          {showPartials ? 'Hide partial plots' : `Browse partial plots (≥ ${neededUnit} size)`}
         </button>
       </div>
       {showPartials && (
         <div className={styles.pickerList} style={{ marginTop: 0, marginBottom: 10 }}>
-          {availablePartials.length === 0 && <p className={styles.noMatch}>No Available Partial Plots in inventory right now.</p>}
+          <p className={styles.helpText} style={{ marginTop: 0 }}>
+            Slot {openSlotIdx + 1} needs a {neededUnit} — only showing Available Partial Plots at least that big
+            {tooSmallCount > 0 ? ` (${tooSmallCount} smaller partial${tooSmallCount === 1 ? '' : 's'} hidden).` : '.'}
+          </p>
+          {availablePartials.length === 0 && <p className={styles.noMatch}>No Available Partial Plots big enough for a {neededUnit} right now.</p>}
           {availablePartials.map((p) => (
             <button key={p.id} type="button" className={styles.pickerRow} onClick={() => fillSlot(p.plotNumber)}>
               <div className={styles.pickerName}>{p.plotNumber} — Partial Plot</div>
               <div className={styles.pickerMeta}>
-                {p.widthFt != null && p.lengthFt != null ? `${p.widthFt}×${p.lengthFt}ft · ` : ''}
+                {realAreaSqft(p) > 0 ? `${realAreaSqft(p).toLocaleString()} sq ft · ` : ''}
                 {p.price != null ? ghs(p.price) : 'price not set'}
               </div>
             </button>
