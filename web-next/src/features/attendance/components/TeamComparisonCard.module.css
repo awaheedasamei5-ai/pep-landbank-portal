@@ -1,0 +1,23 @@
+.card {
+  background: var(--c-card);
+  border-radius: var(--r-md);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--c-text); margin: 0 0 2px; }
+.rankLine { font-size: 12px; color: var(--c-muted); margin: 0 0 14px; }
+
+.rows { display: flex; flex-direction: column; gap: 12px; }
+
+.rowMeta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.rowName { font-size: 13px; font-weight: 600; color: var(--c-text); }
+.rowNameYou { font-weight: 800; }
+.rowStats { font-family: var(--font-mono); font-size: 11.5px; color: var(--c-muted); white-space: nowrap; }
+
+.track { height: 7px; border-radius: 6px; background: var(--c-line); overflow: hidden; }
+.fill { height: 100%; border-radius: 6px; background: var(--c-success); }
+.fillYou { background: var(--c-accent); }
+
+.empty { font-size: 12.5px; color: var(--c-muted); margin: 0; }
