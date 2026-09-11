@@ -86,7 +86,7 @@ function splitFallbackCandidatesFor(plots: Plot[], site: string | undefined, sec
     }));
 }
 
-function candidatesForUnit(plots: Plot[], plotType: PlotType, site: string | undefined, section: string | undefined, exclude: Set<string>, std: StandardDimensions): PlotSuggestion[] {
+export function candidatesForUnit(plots: Plot[], plotType: PlotType, site: string | undefined, section: string | undefined, exclude: Set<string>, std: StandardDimensions): PlotSuggestion[] {
   const direct = candidatesFor(plots, plotType, site, section, exclude, std);
   if (direct.length > 0 || plotType !== 'Half Plot') return direct;
   return splitFallbackCandidatesFor(plots, site, section, exclude);
@@ -107,5 +107,59 @@ export function suggestSet(plots: Plot[], units: PlotType[], std: StandardDimens
     const best = candidatesForUnit(plots, unit, site, section, used, std)[0] ?? null;
     if (best) used.add(best.plot.id);
     return best;
+  });
+}
+
+// ---- Real user ask: a live "type a section, see compatible plots" picker,
+// plus a "near this other plot" filter for a multi-unit combo's later
+// units, instead of only the section-wide AI auto-suggest. Both reuse the
+// same real Available-plus-big-enough-Partial-Plot candidate logic --
+// includes/tile filtering, is not a separate rule set. ----
+
+// Best-effort split of a real plot number into its section letter and
+// numeric position -- "K19" -> {section:'K', num:19}, "H2 B" -> {section:
+// 'H', num:2}, "C13 1/2" -> {section:'C', num:13}. A plot number that
+// doesn't parse (num stays null) just sorts last / never matches a
+// proximity search -- never thrown, this only ever narrows a picker list.
+export function parsePlotNumber(plotNumber: string): { section: string; num: number | null } {
+  const m = plotNumber.trim().match(/^([A-Za-z]+)\s*(\d+)/);
+  if (!m) return { section: plotNumber.trim().toUpperCase(), num: null };
+  return { section: m[1].toUpperCase(), num: Number(m[2]) };
+}
+
+// Live section/prefix search -- query can be just a section letter ("K")
+// or a fuller prefix ("K1") to narrow further as the staff keeps typing.
+// Includes the same split-fallback (a splittable Full Plot) a Half Plot
+// unit already gets everywhere else in this engine.
+export function searchCandidates(plots: Plot[], plotType: PlotType, query: string, exclude: Set<string>, std: StandardDimensions, site?: string): PlotSuggestion[] {
+  const q = query.trim().toUpperCase();
+  if (!q) return [];
+  const direct = candidatesFor(plots, plotType, site, undefined, exclude, std).filter((c) => c.plot.plotNumber.toUpperCase().startsWith(q) || (c.plot.section ?? '').toUpperCase() === q);
+  if (direct.length > 0 || plotType !== 'Half Plot') return direct;
+  return splitFallbackCandidatesFor(plots, site, undefined, exclude).filter((c) => c.plot.plotNumber.toUpperCase().startsWith(q) || (c.plot.section ?? '').toUpperCase() === q);
+}
+
+// "Do you want the Half Plot near the Full Plot, or somewhere else?" --
+// this is the "near" branch: same section as the anchor plot, ranked by
+// how numerically close the plot number is (real plots run in sequential
+// numeric blocks within a section -- confirmed live, e.g. one owner's
+// real A1-A6 cluster), closest first.
+export function nearbyCandidates(plots: Plot[], plotType: PlotType, anchorPlotNumber: string, exclude: Set<string>, std: StandardDimensions, site?: string): PlotSuggestion[] {
+  const anchor = parsePlotNumber(anchorPlotNumber);
+  const inSection = candidatesFor(plots, plotType, site, anchor.section, exclude, std);
+  const ranked = anchor.num == null ? inSection : [...inSection].sort((a, b) => {
+    const da = parsePlotNumber(a.plot.plotNumber).num;
+    const db = parsePlotNumber(b.plot.plotNumber).num;
+    const distA = da == null ? Number.POSITIVE_INFINITY : Math.abs(da - anchor.num!);
+    const distB = db == null ? Number.POSITIVE_INFINITY : Math.abs(db - anchor.num!);
+    return distA - distB;
+  });
+  if (ranked.length > 0 || plotType !== 'Half Plot') return ranked;
+  return splitFallbackCandidatesFor(plots, site, anchor.section, exclude).sort((a, b) => {
+    const da = parsePlotNumber(a.plot.plotNumber).num;
+    const db = parsePlotNumber(b.plot.plotNumber).num;
+    const distA = da == null ? Number.POSITIVE_INFINITY : Math.abs(da - anchor.num!);
+    const distB = db == null ? Number.POSITIVE_INFINITY : Math.abs(db - anchor.num!);
+    return distA - distB;
   });
 }

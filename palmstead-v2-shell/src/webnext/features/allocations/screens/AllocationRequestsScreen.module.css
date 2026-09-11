@@ -260,3 +260,97 @@
   cursor: pointer;
   margin-bottom: 8px;
 }
+
+/* Real client request: 3 required alternative suggestions, each its own
+   complete combo of plots (1 per real unit the lead needs). Presented as
+   3 clearly separated, numbered cards rather than one long run-on form --
+   "don't crumple everything together" was the user's own explicit ask --
+   each with its own completion state so it's obvious at a glance which
+   of the 3 still need attention. */
+.comboList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+
+.comboCard {
+  border: 1.5px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-card);
+  overflow: hidden;
+}
+.comboCardComplete { border-color: var(--c-success-soft); }
+
+.comboHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.comboHeadLeft { display: flex; align-items: center; gap: 10px; }
+
+.comboBadge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--c-paper);
+  color: var(--c-muted);
+  border: 1.5px solid var(--c-line);
+  flex-shrink: 0;
+}
+.comboBadgeComplete { background: var(--c-success); color: #fff; border-color: var(--c-success); }
+
+.comboTitle { font-weight: 700; font-size: 13.5px; }
+.comboSummary { color: var(--c-muted); font-size: 11.5px; margin-top: 1px; }
+.comboChevron { color: var(--c-faint); transition: transform .15s ease; flex-shrink: 0; }
+.comboChevronOpen { transform: rotate(180deg); }
+
+.comboBody { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+
+.slotCard {
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--c-paper);
+}
+.slotHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.slotLabel { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
+.slotFindBtn {
+  background: var(--c-accent-bg);
+  color: var(--c-accent);
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.slotFindBtn:disabled { opacity: .6; cursor: default; }
+
+.pickerBox { margin-top: 10px; padding: 10px; border: 1px dashed var(--c-line); border-radius: 10px; background: var(--c-card); }
+
+.modeChipRow { display: flex; gap: 6px; margin-bottom: 8px; }
+.modeChip {
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.modeChipOn { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+
+.comboProgress { font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 10px; }
+.comboProgressDone { color: var(--c-success); }

@@ -1168,7 +1168,14 @@ function createLiveDataSource(): DataSource {
   return {
     leads: {
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey);
+        // Real bug found live: no deleted_at filter here meant a manager
+        // session (leads_sel RLS deliberately lets managers see
+        // soft-deleted rows too, for audit) saw an archived lead as if it
+        // were a real, pickable client everywhere useLeads() is used --
+        // Allocations' own "Request allocation" search caught a
+        // leftover archived test lead this way. Same fix already applied
+        // to listCompany()/manager.overview() earlier this session.
+        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey).is('deleted_at', null);
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
@@ -2565,7 +2572,9 @@ function createLiveDataSource(): DataSource {
       },
     },
     async leadBannerCounts() {
-      const { data, error } = await requireClient().from('leads').select('banner_id').not('banner_id', 'is', null);
+      // Same real deleted_at gap as listForAgent()/listCompany() -- an
+      // archived lead shouldn't still count toward a banner's real totals.
+      const { data, error } = await requireClient().from('leads').select('banner_id').not('banner_id', 'is', null).is('deleted_at', null);
       if (error) return {};
       const counts: Record<string, number> = {};
       (data ?? []).forEach((r: { banner_id: string | null }) => {
