@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   useContractTemplates,
@@ -9,6 +9,8 @@ import {
   useDecideContractApproval,
 } from '../hooks/useContractTemplates';
 import { useCanFulfilContracts } from '../hooks/useContractRequests';
+import { MergeFieldsPanel } from '../components/MergeFieldsPanel';
+import { ClauseLibraryPanel } from '../components/ClauseLibraryPanel';
 import type { ContractSection, ContractSectionKind, ContractTemplateVersion, ContractTemplateVersionStatus } from '../../../types/domain';
 import styles from './TemplateDetailScreen.module.css';
 
@@ -33,15 +35,13 @@ function newId() {
 }
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §6.2 -- the page editor + draft/review/
-// publish state machine. Scope note (honest, not silently claimed
-// complete): this ships the version rail, section CRUD/reorder, and the
-// full status state machine for real -- the Merge Fields panel and
-// Clause Library insertion panel (§6.2's right rail, build-order items
-// 5-6) are NOT built yet, so a section's {{token}} text must still be
-// typed by hand for now rather than inserted from a chip list. Tokens
-// typed by hand already render/resolve correctly (§7's resolver doesn't
-// care how a token got into the text), so this is a real, usable, non-
-// dead-end screen -- just missing its insertion convenience UI.
+// publish state machine + the Merge Fields/Clause Library right rail
+// (build-order items 4-6). Scope note (honest, not silently claimed
+// complete): click-to-insert-at-caret is real and fully functional;
+// drag-and-drop (Syncfusion's other insertion path) is not built. The
+// "a different manager must approve" rule from §6.2 is also not
+// enforced in the UI yet -- RLS still requires manager/elizabeth for the
+// underlying write either way, so this is a UX gap, not a security one.
 export function TemplateDetailScreen() {
   const { id: templateId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -57,6 +57,13 @@ export function TemplateDetailScreen() {
   const [content, setContent] = useState<ContractSection[]>([]);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  // CONTRACT_OF_SALE_BLUEPRINT.md §6.2/§7 -- real click-to-insert-at-caret,
+  // the Syncfusion MergeFieldsPanel pattern this was modeled on. A
+  // section's textarea registers itself here on mount/focus so a field
+  // chip click knows which section + caret position to insert into.
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [rightTab, setRightTab] = useState<'fields' | 'clauses'>('fields');
 
   const template = templates?.find((t) => t.id === templateId);
   const latest = versions?.[0] ?? null;
@@ -96,6 +103,40 @@ export function TemplateDetailScreen() {
       [next[idx], next[target]] = [next[target], next[idx]];
       return next;
     });
+  }
+
+  // Inserts {{key}} at the last-focused section's caret position, or
+  // appends a new paragraph section carrying just the token if no section
+  // is currently focused (never silently does nothing on click).
+  function insertToken(key: string) {
+    const token = `{{${key}}}`;
+    const el = activeSectionId ? textareaRefs.current[activeSectionId] : null;
+    if (activeSectionId && el) {
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? el.value.length;
+      const before = el.value.slice(0, start);
+      const after = el.value.slice(end);
+      const newText = `${before}${token}${after}`;
+      updateSectionText(activeSectionId, newText);
+      requestAnimationFrame(() => {
+        const node = textareaRefs.current[activeSectionId];
+        if (node) {
+          node.focus();
+          const caret = start + token.length;
+          node.setSelectionRange(caret, caret);
+        }
+      });
+    } else {
+      setContent((c) => [...c, { id: newId(), kind: 'paragraph', text: token }]);
+    }
+  }
+
+  // A clause library insertion copies the body inline (real content, not
+  // a live reference) so this version stays self-contained even if the
+  // library clause is edited afterward -- same discipline §8's generation
+  // snapshot uses one level up.
+  function insertClause(clauseId: string, body: string) {
+    setContent((c) => [...c, { id: newId(), kind: 'clause', clauseId, text: body }]);
   }
 
   async function saveDraft() {
@@ -198,6 +239,10 @@ export function TemplateDetailScreen() {
               onRemove={() => removeSection(section.id)}
               onMoveUp={() => moveSection(section.id, -1)}
               onMoveDown={() => moveSection(section.id, 1)}
+              onFocus={() => setActiveSectionId(section.id)}
+              registerRef={(el) => {
+                textareaRefs.current[section.id] = el;
+              }}
             />
           ))}
 
@@ -211,8 +256,22 @@ export function TemplateDetailScreen() {
             </div>
           )}
 
-          <p className={styles.notice}>Field tokens ({'{{'}fieldKey{'}}'}) can be typed directly into any section for now — the Merge Fields insertion panel isn&apos;t built yet.</p>
+          {!isLatestDraft && <p className={styles.notice}>This version is read-only. Duplicate it as a new draft to edit.</p>}
         </div>
+
+        {isLatestDraft && (
+          <div className={styles.rightRail}>
+            <div className={styles.rightTabs}>
+              <button type="button" className={`${styles.rightTab} ${rightTab === 'fields' ? styles.rightTabActive : ''}`} onClick={() => setRightTab('fields')}>
+                Merge Fields
+              </button>
+              <button type="button" className={`${styles.rightTab} ${rightTab === 'clauses' ? styles.rightTabActive : ''}`} onClick={() => setRightTab('clauses')}>
+                Clause Library
+              </button>
+            </div>
+            {rightTab === 'fields' ? <MergeFieldsPanel templateId={templateId} content={content} onInsert={insertToken} /> : <ClauseLibraryPanel onInsert={insertClause} />}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -249,6 +308,8 @@ function SectionCard({
   onRemove,
   onMoveUp,
   onMoveDown,
+  onFocus,
+  registerRef,
 }: {
   section: ContractSection;
   editable: boolean;
@@ -258,6 +319,8 @@ function SectionCard({
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onFocus: () => void;
+  registerRef: (el: HTMLTextAreaElement | null) => void;
 }) {
   return (
     <div className={styles.section}>
@@ -283,7 +346,14 @@ function SectionCard({
       ) : section.kind === 'image' ? (
         <p className={styles.signaturePreview}>{section.imageRef ? `Image: ${section.imageRef}` : 'No image set yet'}</p>
       ) : editable ? (
-        <textarea className={styles.sectionText} value={section.text ?? ''} onChange={(e) => onTextChange(e.target.value)} rows={section.kind === 'heading' ? 1 : 3} />
+        <textarea
+          ref={registerRef}
+          className={styles.sectionText}
+          value={section.text ?? ''}
+          onChange={(e) => onTextChange(e.target.value)}
+          onFocus={onFocus}
+          rows={section.kind === 'heading' ? 1 : 3}
+        />
       ) : (
         <div className={styles.sectionTextReadonly}>{renderWithTokens(section.text ?? '')}</div>
       )}

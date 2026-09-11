@@ -1,0 +1,86 @@
+.wrap { display: flex; flex-direction: column; gap: 10px; }
+
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+
+.card {
+  text-align: left;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.card:hover { border-color: var(--c-accent); }
+
+.cardName { font-size: 12.5px; font-weight: 700; color: var(--c-text); }
+
+.cardCategory {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--c-accent);
+  background: var(--c-accent-bg);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+.cardPreview { font-size: 11px; color: var(--c-muted); margin-top: 3px; }
+
+.empty { font-size: 12px; color: var(--c-muted); margin: 0; }
+
+.addBtn {
+  border: 1px dashed var(--c-line);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 10px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.form { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--c-line); padding-top: 10px; }
+
+.input, .textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+.textarea { resize: vertical; min-height: 64px; }
+
+.error { font-size: 11px; color: var(--c-danger); margin: 0; }
+
+.formActions { display: flex; gap: 8px; }
+
+.confirmBtn {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.confirmBtn:disabled { opacity: .6; cursor: default; }
+.cancelBtn { background: none; border: none; color: var(--c-muted); font-size: 12px; cursor: pointer; }
