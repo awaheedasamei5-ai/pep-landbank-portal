@@ -69,7 +69,12 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
           </header>
           {/* Pages can set data-content-padding="false" to render full-bleed app layouts. */}
           <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-4 has-data-[content-padding=false]:p-0 md:p-6 md:has-data-[content-padding=false]:p-0">
-            {children}
+            {/* Real web-next Sales-desk screens (src/webnext/) render their
+                own CSS Modules against the real Palmstead Design Language
+                tokens -- scoped here (not globally) so this shell's own
+                Home dashboard/sidebar chrome keeps its existing Tailwind
+                look. See app/layout.tsx's tokens.css import. */}
+            <div className="webnext-theme">{children}</div>
           </div>
         </SidebarInset>
       </SidebarProvider>

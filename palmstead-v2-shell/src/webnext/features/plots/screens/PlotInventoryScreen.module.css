@@ -1,0 +1,403 @@
+.wrap { padding: 20px 16px 90px; }
+.title { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+/* Below 1024px, a plot's own detail route fully replaces the list, same
+   as Pipeline/Client Database. At >=1024px the split-view drawer wants
+   the list visible beside it. */
+.wrapHiddenMobile { display: none; }
+@media (width >= 1024px) {
+  .wrapHiddenMobile { display: block; }
+}
+
+@media (width >= 1024px) {
+  /* No max-width here on purpose -- unlike a form/detail screen, a tile
+     board should use the full row width it's given (more tiles per row
+     on a wider window), not sit capped in a narrow column with empty
+     space beside it. That 980px cap (copy-pasted from a form-width
+     screen) was the real cause of the dead space on wide viewports. */
+  .wrap { padding: 28px 32px 40px; }
+  .grid2 { max-width: 480px; }
+  /* Same flex split-view fix as Pipeline/Client Database's own -- the
+     list and the drawer are real flex siblings (.pageRowSplit, this
+     screen's own wrapper) instead of a percentage-width list next to a
+     position:fixed drawer, so there's no gap possible at any viewport
+     width. */
+  .pageRowSplit { display: flex; align-items: stretch; height: 100vh; }
+  .pageRowSplit .wrapWithDrawer { max-width: none; flex: 1 1 auto; min-width: 0; overflow-y: auto; box-sizing: border-box; }
+}
+
+.headRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.headActions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.addBtn {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reconBtn {
+  background: var(--c-card);
+  color: var(--c-muted);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.formCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  font-size: 13.5px;
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-family: inherit;
+}
+
+.submitBtn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.submitBtn:disabled { opacity: .6; cursor: default; }
+.errorMsg { font-size: 12.5px; color: var(--c-danger); margin: 6px 0 0; }
+
+.summaryRow { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.summaryPill {
+  flex: 1 1 100px;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.summaryPillWide { flex: 2 1 200px; }
+.summaryVal { font-family: var(--font-mono); font-weight: 800; font-size: 20px; }
+.summaryLbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--c-muted); font-weight: 700; margin-top: 3px; }
+
+/* Status legend -- Premium UI spec's own "strong status colors, not
+   random decoration": every tile/badge color used anywhere on this
+   screen is named here once. */
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.legendItem { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--c-muted); }
+.legendDot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+.sectionChips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; margin-bottom: 10px; }
+.sectionChip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sectionChipActive { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+
+.searchRow { display: flex; gap: 8px; margin-bottom: 10px; }
+.searchWrap { position: relative; flex: 1; min-width: 0; }
+.searchIcon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--c-faint); pointer-events: none; display: flex; }
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 11px 14px 11px 38px;
+  font-size: 13.5px;
+  color: var(--c-text);
+}
+
+.filterToggle {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--c-line);
+  background: none;
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filterPanel {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.filterGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (width >= 640px) {
+  .filterGrid { grid-template-columns: repeat(4, 1fr); }
+}
+.filterField { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; color: var(--c-muted); }
+.filterField select, .filterField input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.clearFiltersBtn {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.site {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+  font-size: 14px;
+  margin: 20px 0 10px;
+  color: var(--c-text);
+}
+.siteIcon { color: var(--c-accent); display: flex; }
+.siteCount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-muted);
+  background: var(--c-paper);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+/* Desktop board -- a real status-colored tile grid grouped by section,
+   the honest "grid/map-style plot board" (no fabricated geometry, see
+   this file's own top comment). Hidden on mobile, where .list (below)
+   takes over. */
+.board { display: none; }
+
+.boardSection { margin-bottom: 18px; }
+.boardSectionLabel { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.boardGrid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+
+.tileGroup { display: flex; gap: 4px; }
+
+.tile {
+  position: relative;
+  width: 76px;
+  min-height: 58px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 4px;
+  box-sizing: border-box;
+}
+.tileNumber { font-family: var(--font-mono); font-weight: 800; font-size: 12px; }
+.tilePrice { font-family: var(--font-mono); font-size: 9.5px; opacity: .85; }
+
+/* Corner fraction badge -- the one thing a Half/Partial Plot tile needs
+   to not look pixel-identical to a Full Plot tile of the same status at
+   a normal glance (see PlotTile's own comment). Semi-transparent so it
+   reads on every status color, dark or light, without a status-specific
+   override. */
+.tileFraction {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 18%);
+  line-height: 1.4;
+}
+.tile_Allocated .tileFraction, .tile_Disputed .tileFraction, .tile_AllocatedSplit .tileFraction, .tile_AllocatedPartial .tileFraction { background: rgb(255 255 255 / 22%); }
+
+/* Every board unit -- clustered or solo -- is one of these, each with
+   the identical fixed-height caption row above its tiles. That's the
+   real fix for the alignment bug the user caught live: only clusters
+   used to reserve vertical space for a label, so their tiles visibly
+   sat lower than a solo tile's in the same wrapped row. Reserving that
+   same 15px for every unit (empty for solo ones) means every tile,
+   grouped or not, starts at the same Y position. */
+.boardUnitSlot { display: flex; flex-direction: column; gap: 3px; }
+.unitCaption {
+  display: block;
+  height: 12px;
+  line-height: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-success);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Owner-adjacency cluster -- wraps consecutive same-owner tiles (real
+   pattern: 70 owners in the actual data hold 2+ close-numbered plots in
+   one block) in a shared outline, its .unitCaption sibling above
+   carrying the owner's name, so "these tiles are one person's" reads
+   without clicking through each one. Green is deliberately reused from
+   the status legend's own Available color -- safe because a cluster
+   only ever wraps Allocated (dark) tiles, an owner key only exists once
+   a plot is sold, so the two never appear on the same tile.
+
+   .tilesBox is shared with the solo case below on purpose: same
+   padding/border-width box model with the border just toggled
+   transparent, so a solo tile's content sits at the exact same offset
+   as a clustered one's -- the border/padding alone was enough to put
+   clusters 8px lower than solo tiles in the same wrapped row, caught
+   live even after the caption-height fix above.
+
+   .ownerCluster's border-color MUST come after .tilesBox's own `border`
+   shorthand below -- same selector specificity, so source order alone
+   decides the winner. Had this backwards once already: .ownerCluster
+   was declared first, so .tilesBox's later `border: ... transparent`
+   silently overwrote the green color and erased the visible ring the
+   user relies on to see how many plots one person owns. */
+.tilesBox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 6px;
+}
+.ownerCluster { border-color: var(--c-success); }
+
+.tile_Available { background: var(--c-success-bg); border-color: var(--c-success-soft); color: var(--c-success); }
+.tile_Available:hover { border-color: var(--c-success); }
+.tile_RunningSearch { background: var(--c-warn-bg); border-color: #F0B94A; color: var(--c-warn); }
+.tile_RunningSearch:hover { border-color: var(--c-warn); }
+.tile_Allocated { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+.tile_Allocated:hover { opacity: .88; }
+/* Two extra Allocated variants -- a plain Full Plot sale otherwise looks
+   pixel-identical to a real split-half or partial-fraction sale once
+   both are just "Allocated" (flat ink). Blue family, kept distinct from
+   each other: split gets the full blue-to-sky-blue gradient, partial a
+   slightly shifted (more indigo) variant, so the two read as related but
+   different at a glance, same as the corner fraction badge already
+   distinguishes them by percentage. */
+.tile_AllocatedSplit { background: linear-gradient(135deg, #1D4ED8, #38BDF8); border-color: #1D4ED8; color: #fff; }
+.tile_AllocatedSplit:hover { opacity: .88; }
+.tile_AllocatedPartial { background: linear-gradient(135deg, #3B4FA0, #6FA8E0); border-color: #3B4FA0; color: #fff; }
+.tile_AllocatedPartial:hover { opacity: .88; }
+.tile_Subdivided { background: var(--c-paper); border-color: var(--c-line); color: var(--c-muted); }
+.tile_Subdivided:hover { border-color: var(--c-faint); }
+/* The 5 Master Spec 7.2 statuses beyond the 4 this app's workflow already
+   produces -- real colors, not left to render as undefined classes. */
+.tile_Reserved { background: var(--c-info-bg); border-color: var(--c-info); color: var(--c-info); }
+.tile_Reserved:hover { opacity: .88; }
+.tile_HeldforApproval { background: var(--c-accent-bg); border-color: var(--c-accent); color: var(--c-accent); }
+.tile_HeldforApproval:hover { opacity: .88; }
+.tile_Blocked { background: var(--c-danger-bg); border-color: var(--c-danger); color: var(--c-danger); }
+.tile_Blocked:hover { opacity: .88; }
+.tile_Disputed { background: var(--c-danger); border-color: var(--c-danger); color: #fff; }
+.tile_Disputed:hover { opacity: .88; }
+.tile_Archived { background: var(--c-paper); border-color: var(--c-line); color: var(--c-faint); }
+.tile_Archived:hover { border-color: var(--c-faint); }
+
+/* Legend dot -- solid swatches, distinct classes from the .badge* chip
+   styles below so the two visual treatments never depend on selector
+   specificity to not collide. */
+.dotAvailable { background: var(--c-success); }
+.dotRunningSearch { background: var(--c-warn); }
+.dotAllocated { background: var(--c-ink); }
+.dotSubdivided { background: var(--c-faint); }
+.dotReserved { background: var(--c-info); }
+.dotHeldForApproval { background: var(--c-accent); }
+.dotBlocked { background: var(--c-danger); }
+.dotDisputed { background: var(--c-danger); }
+.dotArchived { background: var(--c-faint); }
+.dotAllocatedSplit { background: linear-gradient(135deg, #1D4ED8, #38BDF8); }
+.dotAllocatedPartial { background: linear-gradient(135deg, #3B4FA0, #6FA8E0); }
+
+.list { display: flex; flex-direction: column; gap: 8px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.rowHalf { margin-left: 20px; border-left: 3px solid var(--c-line); }
+.plotNumber { font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
+.right { text-align: right; }
+.price { font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+.badge { display: inline-block; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 700; margin-top: 4px; }
+.badgeAvailable { background: var(--c-success-bg); color: var(--c-success); }
+.badgeRunningSearch { background: var(--c-warn-bg); color: var(--c-warn); }
+.badgeAllocated { background: var(--c-danger-bg); color: var(--c-danger); }
+.badgeSubdivided { background: var(--c-paper); color: var(--c-muted); }
+.badgeReserved { background: var(--c-info-bg); color: var(--c-info); }
+.badgeHeldForApproval { background: var(--c-accent-bg); color: var(--c-accent); }
+.badgeBlocked { background: var(--c-danger-bg); color: var(--c-danger); }
+.badgeDisputed { background: var(--c-danger); color: #fff; }
+.badgeArchived { background: var(--c-paper); color: var(--c-faint); }
+
+/* Board/list toggle, placed after BOTH base rules (.board and .list
+   above) so this media query actually wins the cascade at >=1024px
+   instead of being overridden by source order -- the exact bug already
+   caught once in Pipeline's own table/card toggle (see that file's own
+   comment); same fix, same reasoning. */
+@media (width >= 1024px) {
+  .board { display: block; }
+  .list { display: none; }
+}

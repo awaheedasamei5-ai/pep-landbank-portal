@@ -1,0 +1,197 @@
+.wrap { padding: 20px 16px 90px; }
+.title { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 16px; font-size: 13.5px; }
+
+/* Premium UI spec, Section 6.H: "Use a CRM table on desktop and rich
+   client cards on mobile." Real dense table below (.tableWrap), matching
+   the exact same table language Pipeline's own desktop view already
+   established -- one CRM-table pattern for the app, not a second bespoke
+   one. .cardList stays the mobile view.
+
+   Below 1024px, opening a client's own detail route fully replaces this
+   list (a distinct full-screen navigation) rather than stacking below it
+   -- same real fix Pipeline's own list already earned live: stays mounted
+   (state/scroll preserved), just hidden. At >=1024px the split-view
+   drawer wants the list visible beside it, so this reverts to normal. */
+.wrapHiddenMobile { display: none; }
+@media (width >= 1024px) {
+  .wrapHiddenMobile { display: block; }
+}
+
+@media (width >= 1024px) {
+  /* No max-width here on purpose, matching Pipeline's own list (which
+     never had one) -- a CRM table of many rows should use the full row
+     width it's given, not sit capped in a narrow column with the rest of
+     a wide screen empty beside it. The old 940px cap here was the real
+     cause of that dead space: it applied whenever the drawer was closed
+     (the plain browsing view), which is most of the time -- only the
+     drawer-open case below ever got a real fix. */
+  .wrap { padding: 28px 32px 40px; }
+  /* Real fix, caught live by the user at a wider screen: a percentage-
+     of-.content max-width (calc(100% - 540px)) paired with the drawer's
+     old position:fixed (anchored to the viewport's own right edge) only
+     agreed at one specific viewport width and left a visible gap at any
+     other. .pageRowSplit (this screen's own wrapper) makes the list and
+     drawer real flex siblings instead, so one layout pass divides the
+     space between them exactly -- no gap possible at any width.
+     overflow-y gives this panel its own scrollbar, same reasoning as
+     Pipeline's own list. */
+  .pageRowSplit { display: flex; align-items: stretch; height: 100vh; }
+  .pageRowSplit .wrapWithDrawer { max-width: none; flex: 1 1 auto; min-width: 0; overflow-y: auto; box-sizing: border-box; }
+}
+
+.cardList { display: flex; flex-direction: column; gap: 8px; }
+
+.tableWrap {
+  display: none;
+  overflow-x: auto;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+.table { border-collapse: collapse; width: 100%; min-width: 640px; }
+.th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--c-muted);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--c-line);
+  white-space: nowrap;
+}
+.thRight { text-align: right; }
+.tr { cursor: pointer; }
+.tr:hover { background: var(--c-paper); }
+.td { padding: 11px 14px; border-bottom: 1px solid var(--c-line); font-size: 13px; color: var(--c-text); }
+.tdMono { font-family: var(--font-mono); }
+.tdRight { text-align: right; }
+.tdNameCell { display: flex; align-items: center; gap: 10px; }
+
+@media (width >= 1024px) {
+  .tableWrap { display: block; }
+  .cardList { display: none; }
+}
+
+.searchWrap { position: relative; margin: 16px 0; }
+.searchIcon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--c-faint); pointer-events: none; display: flex; }
+
+/* Premium UI spec 6.H: "Search/filter controls should remain pinned at
+   the top of the content area" -- sticky at desktop, where the list
+   panel scrolls independently (.wrapWithDrawer) and can genuinely run
+   long. Mobile keeps the plain in-flow search it always had. */
+@media (width >= 1024px) {
+  .searchWrap { position: sticky; top: 0; z-index: 5; background: var(--c-paper); padding-top: 2px; margin: 12px 0 16px; }
+}
+
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 11px 14px 11px 38px;
+  font-size: 13.5px;
+  color: var(--c-text);
+}
+.search:focus { outline: 2px solid var(--c-accent); outline-offset: -1px; }
+
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  /* No overflow:hidden -- .row has no opaque background of its own to
+     clip against the rounded corners, and clipping it would also clip
+     the actions menu's dropdown, which needs to render outside the
+     card's own bounds. */
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  cursor: pointer;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--c-info), #1D4ED8);
+}
+
+.rowMain { flex: 1; min-width: 0; }
+.name { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
+.right { text-align: right; flex-shrink: 0; }
+.value { font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+.count { font-size: 11px; color: var(--c-muted); margin-top: 2px; }
+
+/* Premium UI spec 6.H: "Group actions into one overflow menu instead of
+   multiple tiny edit/delete/download icons." One overflow pattern shared
+   by the mobile card and the desktop table row. */
+.menuWrap { position: relative; flex-shrink: 0; padding-right: 10px; }
+.menuBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--c-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.menuBtn:hover { background: var(--c-paper); border-color: var(--c-line); color: var(--c-text); }
+
+/* position/top/left come from RowMenu's own inline style (a portal to
+   document.body, positioned from the trigger button's real screen
+   position) -- see that component's comment for why. */
+.menu {
+  min-width: 200px;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 200;
+}
+.menuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menuItem:hover { background: var(--c-paper); color: var(--c-accent); }

@@ -1,0 +1,221 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDataSource } from '../../../data/source';
+import { useSessionStore } from '../../../auth/useSessionStore';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import type { NewAllocationRequest } from '../../../types/domain';
+
+// Same real gate as Plot Inventory (alloc_sel/alloc_upd RLS, confirmed live).
+export function useCanAllocatePlots(): boolean {
+  const profile = useSessionStore((s) => s.profile);
+  return !!profile && (profile.role === 'manager' || ['elias', 'emmanuel'].includes(profile.key));
+}
+
+export function useAllocationRequests() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const viewerKey = profile?.key ?? '';
+  return useQuery({
+    queryKey: ['allocationRequests', viewerKey],
+    enabled: !!profile,
+    queryFn: () => getDataSource(demoMode).allocationRequests.list(viewerKey, profile?.role ?? 'agent'),
+  });
+}
+
+// Master Spec 7.5: "Management receives in-app notification + SMS that an
+// allocation request is awaiting review." Both are fire-and-forget --
+// never let a failed notify/SMS roll back or block the real request that
+// was just created, same "auditing must never break the calling flow"
+// reasoning as every other sms.send() call site in this app.
+export function useCreateAllocationRequest() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const { data: config } = useConfig();
+  const agentKey = profile?.key ?? '';
+  const agentName = profile?.name ?? '';
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: NewAllocationRequest) => {
+      const ds = getDataSource(demoMode);
+      const request = await ds.allocationRequests.create(agentKey, agentName, input);
+      const managers = await ds.staff.list().catch(() => []);
+      const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
+      const body = `${agentName} requested plot allocation for ${request.clientName}. Review it in Palmstead.`;
+      if (toManagers.length > 0) {
+        ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), `${agentName} requested plot allocation for ${request.clientName} — awaiting your review.`, 'allocation_pending', 'allocation_request', request.id).catch(() => {});
+      }
+      // Real production v1 has no manager-role profile with a phone at
+      // all -- Management's real number lives on app_config.company_phone
+      // instead (confirmed live). Included alongside any manager-role
+      // profile phone, deduped, rather than assuming a profile is the
+      // only place a number can live.
+      const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+      if (config?.companyPhone) phones.add(config.companyPhone);
+      for (const phone of phones) ds.sms.send(phone, body, 'allocation_pending', agentKey).catch(() => {});
+      return request;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+export function useSuggestAllocationPlots() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, plotNumbers }: { id: string; plotNumbers: string[] }) => getDataSource(demoMode).allocationRequests.suggest(id, plotNumbers),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Real SECURITY DEFINER confirm_allocation RPC also syncs the `plots` table
+// -- invalidating both queries here (not just allocationRequests) is what
+// makes a freshly-Allocated plot disappear from Plot Inventory's Available
+// count without a manual refresh.
+//
+// clientName/clientContact are optional, caller-supplied (AwaitingPanel
+// already has both -- request.clientName and the matched lead's own
+// .contact) rather than fetched here, same "component already has it,
+// don't re-fetch" reasoning as useCreatePayment's leadContact. Fires the
+// congratulatory SMS the user explicitly asked for once an allocation is
+// actually confirmed -- fire-and-forget, same pattern as every other
+// sms.send() call site in this app.
+export function useConfirmAllocation() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      plotNumber,
+      note,
+      clientName,
+      clientContact,
+    }: {
+      id: string;
+      plotNumber: string;
+      note?: string;
+      clientName?: string;
+      clientContact?: string;
+    }) => {
+      const ds = getDataSource(demoMode);
+      const result = await ds.allocationRequests.confirm(id, plotNumber, note, profile?.name ?? '');
+      if (clientContact && clientName) {
+        ds.sms
+          .send(
+            clientContact,
+            `Congratulations ${clientName}! Your plot allocation (${plotNumber}) has been confirmed. Welcome to the Trulander family -- thank you for choosing us. - PEP Landbank`,
+            'allocation_confirmed',
+            profile?.key ?? null
+          )
+          .catch(() => {});
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useRevertAllocation() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.revert(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useEditAllocatedPlot() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, newPlotNumber }: { id: string; newPlotNumber: string }) => getDataSource(demoMode).allocationRequests.editPlot(id, newPlotNumber),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useDeleteAllocationRequest() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['plots'] });
+    },
+  });
+}
+
+export function useFlagAllocation() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).allocationRequests.flag(id, reason, profile?.name ?? ''),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+export function useResolveAllocationFlag() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).allocationRequests.resolveFlag(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Master Spec 7.5: Management can send a suggestion set back with a
+// reason instead of confirming one -- reverts to Pending so staff see
+// the same "fix and resubmit" panel already built for the flag-at-
+// suggestion-stage path.
+export function useSendBackAllocation() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).allocationRequests.sendBack(id, reason, profile?.name ?? ''),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Master Spec 7.5's physical sign-off gate: staff photograph Management's
+// signed authorization form and attach it here before confirming can
+// proceed (AwaitingPanel enforces the "must have a photo" part; this just
+// persists it).
+export function useUploadAllocationAuthDoc() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => getDataSource(demoMode).allocationRequests.uploadAuthDoc(id, profile?.key ?? '', file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}
+
+// Soft signal only (explicit user decision): resolves a viewable URL for
+// the attached photo, sends it to the vision model, and persists whatever
+// it comes back with. Never blocks confirm() itself -- an 'unavailable' or
+// 'mismatch' read is shown to Management, not enforced.
+export function useAnalyzeAllocationAuthDoc() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, path, clientName, plotNumber }: { id: string; path: string; clientName: string; plotNumber: string }) => {
+      const ds = getDataSource(demoMode);
+      const url = await ds.allocationRequests.resolveAuthDocUrl(path);
+      if (!url) throw new Error('Could not load the attached document');
+      return ds.allocationRequests.analyzeAuthDoc(id, url, clientName, plotNumber);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['allocationRequests'] }),
+  });
+}

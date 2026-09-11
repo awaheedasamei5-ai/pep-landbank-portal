@@ -1,0 +1,133 @@
+"use client";
+
+import { isoDateOnly, isoPlusDays } from '../../../shared/lib/format';
+import type { WeeklyVisitForm } from '../../../types/domain';
+
+// Ported from index.html's Mon-Fri week helpers (index.html:2896-2917) --
+// the form covers a Monday-Friday work week; ALLOWED_DAYS below governs
+// which days within it (now all 7) are real bookable site-visit days.
+export function mondayOfDate(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+export function currentWeekStartIso(): string {
+  return isoDateOnly(mondayOfDate(new Date()));
+}
+
+// Fixed 2026-09-03 alongside ALLOWED_DAYS above: this used to be
+// weekFridayIso (weekStart+4), matching legacy's own apiLoadSiteVisitsForWeek
+// exactly -- both cut the week's site-visit query off at Friday even though
+// Sunday was already a real bookable day under the OLD schedule, meaning a
+// real Sunday visit's costs could never be reconciled in this form (a real,
+// pre-existing bug in legacy too, not introduced here). Now that Saturday
+// is also a real bookable day, the same bug would have hidden two real
+// days' worth of visits instead of one -- extended to the full week
+// (weekStart+6, Sunday) rather than left to get worse.
+export function weekEndIso(weekStartIso: string): string {
+  return isoPlusDays(weekStartIso, 6);
+}
+
+export function weekRangeLabel(weekStartIso: string): string {
+  const s = new Date(`${weekStartIso}T00:00:00`);
+  const e = new Date(s);
+  // Fixed 2026-09-03 alongside ALLOWED_DAYS/weekEndIso above -- used to
+  // stop at Friday (+4); now the full Monday-Sunday week the schedule
+  // actually covers.
+  e.setDate(e.getDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  return `${fmt(s)} – ${fmt(e)}, ${e.getFullYear()}`;
+}
+
+// Fixed 2026-09-03 (master spec's "Site-visit day logic is outdated" --
+// flagged critical): both this app and legacy's own SVE_ALLOWED_DAYS
+// restricted bookable days to Tue/Wed/Fri/Sun, but the real, current
+// business schedule is every day of the week -- Monday-Saturday 9:00am,
+// Sunday 12:00pm. JS Date.getDay() values, 0=Sun -- all 7 kept here (not
+// deleted) so a future schedule change is a one-line edit again, not a
+// re-derivation. The per-day time distinction (9am vs Sunday's 12pm) isn't
+// separately modeled or enforced anywhere in this app (no existing UI
+// shows a specific visit time at all -- AddSiteVisitScreen's "Visit time"
+// field is free text) -- out of scope for this fix, which corrects which
+// days are bookable, not what time on those days.
+const ALLOWED_DAYS = [0, 1, 2, 3, 4, 5, 6];
+
+export function allowedDayIsos(weekStartIso: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < 7; i++) out.push(isoPlusDays(weekStartIso, i));
+  return out.filter((iso) => ALLOWED_DAYS.includes(new Date(`${iso}T00:00:00`).getDay()));
+}
+
+// Master Spec 9.1's actual weekly schedule, now enforced (not just
+// commented on): Monday-Saturday default to 9:00am, Sunday to 12:00pm.
+// JS Date.getDay() keys, 0=Sunday.
+export const DAY_DEFAULT_TIME: Record<number, string> = { 0: '12:00pm', 1: '9:00am', 2: '9:00am', 3: '9:00am', 4: '9:00am', 5: '9:00am', 6: '9:00am' };
+
+// Real bug fixed 2026-09-06: AddSiteVisitScreen used to store `visitTime`
+// as JUST the clock time (e.g. "12:00pm"), while siteVisitFormPdf.ts's
+// checkbox-matching DAY_OPTIONS list needed the combined "Sunday 12:00pm"
+// string -- a real submission (not stale seed data) came through with a
+// bare time that could never match any checkbox option, so NONE of them
+// ticked regardless of which day was actually picked. This is the single
+// source of truth for that combined label going forward, used by both
+// the form that writes `visitTime` and the PDF that matches against it,
+// so the two can never drift out of sync with each other again.
+export const DAY_NAME: Record<number, string> = { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' };
+export function dayTimeLabel(dow: number): string {
+  return `${DAY_NAME[dow]} ${DAY_DEFAULT_TIME[dow]}`;
+}
+
+// Ported behavior from Master Spec 9.2: "When staff chooses [a day], the
+// calendar must open with only [that day] enabled. The user can select
+// this [day] or a future [day]." Returns the next `count` real calendar
+// dates (today included) that fall on the given day-of-week.
+export function upcomingDatesForDay(dayOfWeek: number, count = 6): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  for (let guard = 0; out.length < count && guard < 400; guard++) {
+    if (d.getDay() === dayOfWeek) out.push(isoDateOnly(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+export function fmtLongDate(iso: string): string {
+  if (!iso) return '';
+  return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export interface CostRow {
+  estKey: keyof WeeklyVisitForm;
+  actKey: keyof WeeklyVisitForm;
+  estLabel: string;
+  actLabel: string;
+}
+
+// Ported verbatim from index.html's SVA_COST_ROWS (index.html:15045-15051).
+export const COST_ROWS: CostRow[] = [
+  { estKey: 'vehicleRentalEst', actKey: 'vehicleRentalAct', estLabel: 'Vehicle Rentals', actLabel: 'Van Hiring' },
+  { estKey: 'driversTipEst', actKey: 'driversTipAct', estLabel: "Driver's Tip", actLabel: "Driver's Tip" },
+  { estKey: 'fuelEst', actKey: 'fuelAct', estLabel: 'Cost of fuel', actLabel: 'Cost of fuel' },
+  { estKey: 'refreshmentEst', actKey: 'refreshmentAct', estLabel: 'Cost of refreshment', actLabel: 'Cost of refreshment' },
+  { estKey: 'tntEst', actKey: 'tntAct', estLabel: 'TNT for staff', actLabel: 'TNT for staff' },
+];
+
+export function costTotal(form: WeeklyVisitForm, suffix: 'Est' | 'Act'): number {
+  return COST_ROWS.reduce((n, r) => n + Number(form[suffix === 'Est' ? r.estKey : r.actKey] ?? 0), 0);
+}
+
+// Ported from index.html's svaAccompaniedText (index.html:15058-15063) -- a
+// visit logged with a headcount but no name should still read that count,
+// not a blank cell that looks like nobody checked.
+export function accompaniedText(people: number | null, accompanied: string | null): string {
+  const n = people ?? 0;
+  const who = (accompanied ?? '').trim();
+  if (!n && !who) return '-';
+  if (n && who) return `${n} (${who})`;
+  return n ? String(n) : who;
+}

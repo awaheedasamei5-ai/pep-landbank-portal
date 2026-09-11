@@ -1,0 +1,158 @@
+.wrap { padding: 20px 16px 90px; max-width: 480px; }
+.title { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.label { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
+
+.input, .select, .textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  font-size: 14px;
+  background: var(--c-card);
+  color: var(--c-text);
+  font-family: inherit;
+}
+.textarea { min-height: 130px; resize: vertical; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.err { color: var(--c-danger); font-size: 11.5px; margin-top: 4px; }
+.hint { color: var(--c-muted); font-size: 11px; margin: 4px 0 0; }
+
+/* Discount-mode toggle (total vs per-plot) and the Referral yes/no
+   toggle share this same small-pill-pair look, matching v1's own
+   discModeToggleHtml chips. */
+.discModeRow { display: flex; gap: 8px; margin-bottom: 8px; }
+.discModeChip {
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.discModeChipOn { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
+
+.changeLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Referral search-result dropdown -- same list/row shape Client
+   Database's own picker uses elsewhere in this app. */
+.pickerList { margin-top: 6px; border: 1px solid var(--c-line); border-radius: 10px; overflow: hidden; }
+.pickerRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-card);
+  cursor: pointer;
+}
+.pickerRow:last-child { border-bottom: none; }
+.pickerRow:hover { background: var(--c-paper); }
+.pickerName { font-weight: 700; font-size: 13px; }
+.pickerMeta { color: var(--c-muted); font-size: 11.5px; margin-top: 2px; }
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.cardTitle { font-weight: 700; font-size: 13px; margin-bottom: 12px; }
+
+/* Grand total promoted from a throwaway gray line to the same dark-
+   gradient hero-card treatment Pipeline Detail's balance card already
+   uses -- one visual language for "the number this screen exists to
+   produce", not a second bespoke style. */
+.totalCard {
+  background: linear-gradient(165deg, var(--c-ink) 0%, var(--c-ink-2) 100%);
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 18px 18px 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.calcRow { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid rgb(255 255 255 / 12%); }
+.calcLabel { font-size: 11.5px; opacity: .8; }
+.calcVal { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
+
+.totalLabel { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .72; margin-top: 4px; }
+.totalValue { font-family: var(--font-mono); font-size: 26px; font-weight: 800; margin-top: 3px; }
+.totalFootRow { display: flex; gap: 22px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / 14%); }
+.totalFootVal { font-family: var(--font-mono); font-weight: 800; font-size: 14px; }
+.totalFootLbl { font-size: 10.5px; opacity: .72; margin-top: 1px; }
+
+.actions { display: flex; gap: 10px; margin-top: 18px; }
+
+.cancel {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.save {
+  flex: 2;
+  padding: 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.save:disabled { opacity: .6; cursor: default; }
+
+/* Premium UI spec, Section 6.D: "Use two-column desktop forms, one-
+   column mobile forms." Below 1024px .grid is a plain stack in the
+   same order fields always had (Client, Plot & pricing, then the total
+   card, Deposit, Notes) -- mobile unchanged. */
+.grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+.mainCol, .sideCol { display: flex; flex-direction: column; min-width: 0; }
+
+@media (width >= 1024px) {
+  .wrap { max-width: 1200px; padding: 28px 32px 100px; }
+  /* Real fix, not the earlier one: forcing a card to grow and fill
+     whatever leftover space grid's default stretch left behind (previous
+     version of this rule) just moves the "empty space" problem inside a
+     card instead of removing it -- a half-empty Notes box reads worse
+     than a shorter column. align-items:start lets each column size to
+     its own real content instead of matching the taller one; the side
+     column now also has a real third card (Details/Priority) between the
+     total and Notes, so in practice the two columns land close in height
+     anyway, without anything having to be artificially stretched to get
+     there. */
+  .grid { grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+  /* Sticky action bar (spec 11's own explicit ask for long forms) --
+     stays reachable without scrolling back down a two-column desktop
+     form, while mobile keeps the plain in-flow buttons it always had. */
+  .actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--c-paper);
+    padding: 14px 0 4px;
+    margin-top: 6px;
+    border-top: 1px solid var(--c-line);
+  }
+  .cancel, .save { flex: 0 0 auto; min-width: 160px; }
+  .actions { justify-content: flex-end; }
+}

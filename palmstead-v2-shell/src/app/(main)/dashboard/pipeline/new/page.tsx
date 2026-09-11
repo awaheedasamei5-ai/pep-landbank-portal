@@ -1,13 +1,16 @@
 import { Suspense } from "react";
 
-import { AddLeadForm } from "../_components/add-lead-form";
+import { AddLeadScreen } from "@/webnext/features/pipeline/screens/AddLeadScreen";
 
+// Sibling of the (list) route group -- NOT wrapped by PipelineListScreen's
+// Outlet (matches web-next's own separate top-level 'sales/pipeline/new'
+// route, not nested under 'sales/pipeline'). Suspense is required here
+// because AddLeadScreen reads useSearchParams() (via the router shim) for
+// the real Client Database "+ New deal"/Company Leads prefill.
 export default function Page() {
   return (
-    <div className="@container/main flex flex-col gap-4 md:gap-6">
-      <Suspense>
-        <AddLeadForm />
-      </Suspense>
-    </div>
+    <Suspense>
+      <AddLeadScreen />
+    </Suspense>
   );
 }

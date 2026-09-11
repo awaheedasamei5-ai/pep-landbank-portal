@@ -12,6 +12,12 @@ import { ThemeBootScript } from "@/scripts/theme-boot";
 import { PreferencesStoreProvider } from "@/stores/preferences/preferences-provider";
 
 import "./globals.css";
+// Real web-next design tokens (Palmstead Design Language, Phase 11) --
+// every copied Sales-desk CSS Module (src/webnext/) was built against
+// these var(--c-*) names. Scoped to .webnext-theme (see dashboard/
+// layout.tsx) rather than :root/body, so it doesn't reskin the rest of
+// this shell's own Tailwind/shadcn chrome (sidebar, Home dashboard).
+import "@/webnext/shared/styles/tokens.css";
 
 export const metadata: Metadata = {
   title: APP_CONFIG.meta.title,
@@ -34,6 +40,15 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       suppressHydrationWarning
     >
       <head>
+        {/* Real web-next webfonts (Bricolage Grotesque/Plus Jakarta Sans/
+            IBM Plex Mono) -- previously only linked in web-next's own
+            index.html <head>, which this shell doesn't have. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        />
         {/* Applies theme and layout preferences on load to avoid flicker and unnecessary server rerenders. */}
         <ThemeBootScript />
       </head>

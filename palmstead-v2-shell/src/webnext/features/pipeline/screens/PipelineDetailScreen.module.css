@@ -1,0 +1,353 @@
+/* Premium UI spec: "Details: Side drawer" on desktop, full page/bottom
+   sheet on mobile. Inert below 1024px (display:contents drops both
+   wrappers from the box model entirely, so mobile renders exactly the
+   plain full-page .wrap it always did).
+
+   Real correction, caught live by the user: the first version of this
+   used a dimming full-screen backdrop (a MODAL takeover) -- the list
+   behind it went dark and unusable, so the space beside the drawer read
+   as dead/wasted instead of useful. Fixed to a real non-modal split
+   view instead (the pattern Gmail's reading pane / Linear's issue list
+   +detail panel both use for "inspect while browsing"): no backdrop,
+   no dimming, no click-catcher at all -- the list stays fully visible
+   AND interactive to the left of the drawer, so a user can click
+   straight into a different lead without closing this one first. The
+   drawer closes via its own explicit button instead of click-outside,
+   since there's no longer an "outside" surface to catch that click. */
+.drawerBackdrop { display: contents; }
+.drawerPanel { display: contents; }
+
+@media (width >= 1024px) {
+  /* Real fix, caught live by the user at a wider screen: this used to be
+     position:fixed, anchored to the viewport's own right edge -- a
+     coordinate system independent of PipelineListScreen's own
+     calc(100% - <n>px) list width, so the two only lined up by
+     coincidence at one specific viewport width and left a visible gap
+     at any other. Now a real flex sibling of the list inside
+     .pageRowSplit (that screen's own module), sized by flex-basis
+     instead of position -- same layout pass places both, so there is no
+     gap possible. position:relative is what the close button's own
+     position:absolute now anchors to, since position:fixed no longer
+     establishes that containing block. */
+  .drawerPanel {
+    display: block;
+    position: relative;
+    flex: 0 0 520px;
+    max-width: 92vw;
+    background: var(--c-paper);
+    border-left: 1px solid var(--c-line);
+    box-shadow: -18px 0 44px rgb(20 22 50 / 14%);
+    overflow-y: auto;
+    animation: slideIn 220ms var(--ease-out);
+  }
+}
+
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerPanel { animation: none; }
+}
+
+.closeDrawerBtn {
+  display: none;
+}
+
+@media (width >= 1024px) {
+  .closeDrawerBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--c-line);
+    background: var(--c-card);
+    color: var(--c-muted);
+    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    right: 16px;
+    font-size: 15px;
+  }
+  .closeDrawerBtn:hover { color: var(--c-danger); border-color: var(--c-danger); }
+}
+
+.wrap { padding: 20px 16px 90px; max-width: 480px; }
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+
+.avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--c-ink), var(--c-accent));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
+.meta { color: var(--c-muted); font-size: 12.5px; margin: 2px 0 0; }
+
+/* Wallet-style balance card, adapted from a fintech-dashboard pattern
+   (hero balance + real progress bar) studied on Dribbble/Figma this
+   session -- replaces a flat 3-pill strip with something that actually
+   tells the collection-progress story at a glance. */
+.balanceCard {
+  background: linear-gradient(165deg, var(--c-ink) 0%, var(--c-ink-2) 100%);
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.balanceTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.balanceLabel { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
+.balanceValue { font-family: var(--font-mono); font-size: 26px; font-weight: 800; margin-top: 3px; }
+.balancePct { font-family: var(--font-mono); font-size: 15px; font-weight: 800; color: var(--c-accent-soft); flex-shrink: 0; }
+
+.balanceTrack { height: 8px; background: rgb(255 255 255 / 16%); border-radius: 100px; overflow: hidden; margin-top: 14px; }
+.balanceFill { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--c-accent-soft), var(--c-accent)); }
+
+.balanceFootRow { display: flex; gap: 22px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgb(255 255 255 / 14%); }
+.balanceFootVal { font-family: var(--font-mono); font-weight: 800; font-size: 14px; }
+.balanceFootLbl { font-size: 10.5px; opacity: .72; margin-top: 1px; }
+
+.section {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.sectionTitle { font-weight: 700; font-size: 13px; margin: 0 0 12px; }
+
+.quickRow { display: flex; gap: 7px; margin-bottom: 14px; }
+
+.quickChip {
+  flex: 1;
+  padding: 9px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.quickChipAmt { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--c-muted); }
+
+.field { margin-bottom: 12px; }
+.label { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
+.input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--c-line); font-size: 14px; }
+
+.btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-ink);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn:disabled { opacity: .6; cursor: default; }
+.hint { font-size: 11.5px; color: var(--c-muted); margin-top: 8px; }
+.emptyMsg { color: var(--c-muted); margin: 0; font-size: 13px; }
+
+.history { display: flex; flex-direction: column; gap: 2px; }
+
+.historyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-line);
+}
+.historyRow:last-child { border-bottom: none; }
+
+.historyMain { display: flex; flex-direction: column; gap: 4px; }
+.historyDate { font-size: 13px; font-weight: 600; color: var(--c-text); }
+
+.statusPill { align-self: flex-start; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+.status_approved { background: var(--c-success-bg); color: var(--c-success); }
+.status_pending { background: var(--c-warn-bg); color: var(--c-warn); }
+.status_declined { background: var(--c-danger-bg); color: var(--c-danger); }
+
+.historyRight { display: flex; align-items: center; gap: 10px; }
+
+.receiptBtn {
+  background: none;
+  border: 1px solid var(--c-line);
+  border-radius: 100px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--c-muted);
+  cursor: pointer;
+}
+.historyAmt { font-weight: 700; font-family: var(--font-mono); font-size: 13.5px; color: var(--c-success); }
+.historyAmtMuted { color: var(--c-muted); }
+
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; }
+
+.sectionHeadRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.sectionHeadRow .sectionTitle { margin: 0; }
+
+.editLink {
+  background: none;
+  border: none;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.readRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--c-line);
+  font-size: 13.5px;
+}
+.readRow:last-child { border-bottom: none; }
+.readLabel { color: var(--c-muted); font-size: 12px; font-weight: 600; }
+.overdueText { color: var(--c-danger); font-weight: 700; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid2 .field { margin-bottom: 12px; }
+
+.calcBox {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--c-paper);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 4px 0 10px;
+}
+.calcLabel { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.calcValue { font-family: var(--font-mono); font-weight: 800; font-size: 15px; margin-top: 2px; }
+
+.errorMsg { font-size: 12.5px; color: var(--c-danger); margin: 4px 0 8px; }
+.warnText { color: var(--c-warn); font-weight: 700; }
+.helpText { font-size: 12.5px; color: var(--c-muted); margin: 4px 0; }
+
+.aiDraftBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-accent);
+  cursor: pointer;
+  margin-top: 10px;
+}
+.aiDraftBtn:hover { background: var(--c-accent-soft); }
+.aiDraftBtn:disabled { opacity: 0.6; cursor: default; }
+
+.aiDraftBox {
+  margin-top: 10px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 12px 13px;
+}
+.aiDraftHead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.aiDraftText { font-size: 13.5px; color: var(--c-text); line-height: 1.5; white-space: pre-wrap; margin: 0 0 10px; }
+.aiDraftActions { display: flex; gap: 8px; }
+.aiDraftCopyBtn {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.aiDraftRetryBtn {
+  padding: 7px 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: none;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actionsRow { display: flex; gap: 8px; margin-top: 12px; }
+
+.cancelBtn {
+  padding: 11px 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: none;
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dangerBtn {
+  padding: 11px 14px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.dangerOptions { display: flex; flex-direction: column; gap: 8px; }
+
+.dangerOptionBtn {
+  text-align: left;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.dangerOptionTitle { font-weight: 700; font-size: 13.5px; }

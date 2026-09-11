@@ -1,0 +1,209 @@
+"use client";
+
+import type { Config, Lead, Payment, PlotType, Stage } from '../../../types/domain';
+import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
+import type { PaymentPlanKey } from '../../quotation/lib/quotationLogic';
+
+// Ports of index.html's stage constants/derivation (index.html:2541,
+// 2846-2854, 17138-17139).
+export const STAGES: Stage[] = ['1', '2A', '2B', '3', '4', 'Lost'];
+
+// noPlots is a full-plot-equivalent count everywhere in the app (0.5 = one
+// Half Plot -- see previewGrandTotal's own comment below for the real
+// production bug this fixed), but a "×N" display next to the plot TYPE
+// needs qty of that actual type (1 for one Half Plot, 2 for two Half
+// Plots, not 0.5/1.0) or it reads backwards to a client/staff member. The
+// eq factor only depends on plotType, not config, so no config lookup is
+// needed to convert.
+export function qtyOfType(plotType: PlotType, noPlots: number): number {
+  const eqPerUnit = plotType === 'Half Plot' ? 0.5 : 1;
+  return (noPlots || eqPerUnit) / eqPerUnit;
+}
+
+// Internal code -> staff-facing display code (reversed numbering, per the
+// deliberate "pipeline stage display flip" business decision already
+// shipped in index.html).
+const DISPLAY_STAGE_CODE: Record<Stage, string> = { '1': '4', '2A': '3', '2B': '2B', '3': '2A', '4': '1', Lost: 'Lost' };
+
+export function displayStageCode(s: Stage): string {
+  return DISPLAY_STAGE_CODE[s] ?? s;
+}
+
+export function deriveStageFromPayment(paid: number, grand: number): Stage {
+  if (!grand || grand <= 0) return '1';
+  const pct = (paid / grand) * 100;
+  if (pct >= 100) return '4';
+  if (pct >= 70) return '3';
+  if (pct >= 30) return '2B';
+  if (pct > 0) return '2A';
+  return '1';
+}
+
+// Naive fallback only -- real pricing (interest by payment plan, real
+// per-plot-type discount) is previewGrandTotal below. Kept for the rare
+// caller that genuinely has nothing but a unit price and a count (e.g. a
+// bulk import row with no plan/discount data at all).
+export function computeGrandTotal(unitPrice: number, noPlots: number): number {
+  return unitPrice * noPlots;
+}
+
+// Ported from index.html's computeLead() (index.html:2860-2864) -- always
+// recomputes fresh from plotType/noPlots/unitPrice/discount/paymentPlan,
+// unlike quotationLogic's computeLeadQuotationTotals (which trusts a
+// lead's stored netTotal/grandTotal when present, the right behavior for
+// the Contract PDF but wrong for a live "what would it become" preview
+// while a form is still being typed into -- both Pipeline Detail's Plot &
+// Pricing edit and Add Lead's own creation form need this same live-typing
+// preview, so it lives here rather than duplicated in each screen).
+// Widened (net/grand were the only fields before) so a form can show the
+// SAME transparent Net/+Interest/Grand breakdown v1's own paintCalc()
+// always showed -- a bare "Grand total" with no visible interest line is
+// exactly what made a correctly-computed number look broken/untrustworthy
+// live (real user feedback: "seeing the interest and price breakdowns not
+// working is scary"). listPrice is the real config default for this
+// plotType, exposed so a form can show/auto-fill it rather than silently
+// relying on the unitPrice||listPrice fallback with nothing visible.
+export function previewGrandTotal(
+  config: Config,
+  plotType: Lead['plotType'],
+  noPlots: number,
+  unitPrice: number,
+  discount: number | null,
+  paymentPlan: PaymentPlanKey
+): { net: number; interest: number; grand: number; disc: number; listPrice: number } {
+  const p = plotType === 'Half Plot' ? { list: config.halfPrice, disc: config.halfDiscount, eq: 0.5 } : { list: config.fullPrice, disc: config.fullDiscount, eq: 1 };
+  // noPlots is a full-plot-equivalent count, not "count of the selected
+  // type's own units" -- 0.5 IS one standard Half Plot, matching how a
+  // half plot is literally half a plot. Real production bug fixed live
+  // 2026-09-05: under the old "count of type" reading, staff who typed
+  // 0.5 for a single half plot (an entirely reasonable reading of a
+  // field called "No. of plots") got silently charged for a QUARTER
+  // plot instead -- 4 real leads were undercharged 50% this way before
+  // the data was corrected. `eq` (used for interest, already a
+  // full-plot-equivalent) is now just noPlots itself; `qty` (how many of
+  // the selected type's own units that is, needed only to scale that
+  // type's own list price/discount) is derived from it, not the reverse.
+  const eq = noPlots || 1;
+  const qty = eq / p.eq;
+  const unit = unitPrice || p.list;
+  const gross = unit * qty;
+  const disc = discount != null ? discount : p.disc * qty;
+  const net = Math.max(gross - disc, 0);
+  const interestTable: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': config.int3, '6 Months': config.int6, '9 Months': config.int9, '12 Months': config.int12 };
+  const interest = (interestTable[paymentPlan] ?? 0) * eq;
+  return { net, interest, grand: net + interest, disc, listPrice: p.list };
+}
+
+// Ported from index.html's allocationUnitsNeeded() (index.html:2660-2675) --
+// breaks a lead's noPlots into the real physical units Allocations needs to
+// hand over, e.g. 1.5 -> ['Full Plot','Half Plot']. noPlots is already a
+// full-plot-equivalent count (see previewGrandTotal's own comment), so it
+// no longer needs a plotType to convert -- kept as a plain noPlots-only
+// function rather than a param neither branch of the old formula used.
+export function allocationUnitsNeeded(noPlots: number): PlotType[] {
+  const eq = noPlots || 1;
+  const wholeCount = Math.floor(eq + 1e-9);
+  const hasHalf = eq - wholeCount >= 0.5 - 1e-9;
+  const units: PlotType[] = [];
+  for (let i = 0; i < wholeCount; i++) units.push('Full Plot');
+  if (hasHalf) units.push('Half Plot');
+  return units.length ? units : ['Full Plot'];
+}
+
+const PLAN_MONTHS: Record<string, number> = { '3 Months': 3, '6 Months': 6, '9 Months': 9, '12 Months': 12 };
+
+export interface DepositStatus {
+  target: number;
+  paid: number;
+  complete: boolean;
+  remaining: number;
+  clearedDate: string | null;
+}
+
+// Ported from index.html's computeDepositStatus() (index.html:2704-2725).
+// Default deposit target is allocationThresholdPct% of NET (list minus
+// discount, interest NOT included) -- confirmed by that function's own
+// original comment against a real test case with non-zero interest (GHS
+// 48,000 list, GHS 3,000 interest, deposit must read GHS 14,400 = 30% of
+// net, not 15,300 = 30% of grand). Only ever falls back to that default
+// when no explicit depositTarget is on file; a real, already-set target
+// is used exactly as stored. This is also Master Spec 7.3's own
+// allocation-eligibility threshold ("30% of grand total, subject to
+// management configuration") -- the same real business concept as the
+// deposit target already computed here, not a second parallel one, so
+// `complete` below doubles as "eligible to request allocation" (see
+// useCreateAllocationRequest's own gate).
+export function computeDepositStatus(config: Config, lead: Lead, paymentsForLead: Payment[]): DepositStatus {
+  const totals = computeLeadQuotationTotals(config, lead);
+  const net = lead.netTotal != null ? lead.netTotal : totals.net;
+  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * (config.allocationThresholdPct / 100));
+  const sorted = [...paymentsForLead].sort((a, b) => a.date.localeCompare(b.date));
+  let cum = 0;
+  let clearedDate: string | null = null;
+  for (const p of sorted) {
+    const before = cum;
+    cum += p.amount;
+    if (before < target && cum >= target) clearedDate = p.date;
+  }
+  const complete = target > 0 && cum >= target;
+  return { target, paid: cum, complete, remaining: Math.max(0, target - cum), clearedDate };
+}
+
+export interface MonthlySchedule {
+  monthlyInstallment: number;
+  planMonths: number;
+  monthsElapsed: number;
+  monthsRemaining: number;
+  expectedThisMonth: number;
+  arrears: number;
+  nextDueDate: string;
+}
+
+function monthsElapsedSince(dateStr: string): number {
+  const start = new Date(dateStr);
+  const now = new Date();
+  if (isNaN(start.getTime())) return 1;
+  return Math.max(1, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1);
+}
+
+// Ported from index.html's computeMonthlySchedule() (index.html:2734-2772).
+// Only ever returns non-null once the deposit is fully cleared -- the
+// monthly plan begins the day the deposit actually clears, not the lead's
+// creation date or first payment. Everything paid beyond the deposit
+// target flows into installment tracking as one running total (no
+// individual payment needs to be tagged "this is the deposit" vs "this is
+// month 3"), and arrears only ever counts unpaid installments from BEFORE
+// this month -- this is what used to silently balloon "expected this
+// month" up to the client's entire remaining balance for anyone behind.
+export function computeMonthlySchedule(config: Config, lead: Lead, paymentsForLead: Payment[]): MonthlySchedule | null {
+  const planMonths = PLAN_MONTHS[lead.paymentPlan];
+  if (!planMonths) return null;
+  const totals = computeLeadQuotationTotals(config, lead);
+  const grand = lead.grandTotal || totals.grand;
+  if (!grand) return null;
+  const dep = computeDepositStatus(config, lead, paymentsForLead);
+  if (!dep.complete || !dep.clearedDate) return null;
+
+  const installmentTotal = Math.max(0, grand - dep.target);
+  const monthlyInstallment = Math.round(installmentTotal / planMonths);
+  const monthsElapsed = Math.min(planMonths, monthsElapsedSince(dep.clearedDate));
+  const cumulativeThrough = (n: number) => Math.min(installmentTotal, monthlyInstallment * Math.max(0, n));
+
+  const thisMonthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+  const totalPaid = paymentsForLead.reduce((s, p) => s + p.amount, 0);
+  const paidBeforeThisMonth = paymentsForLead.filter((p) => p.date < thisMonthStart).reduce((s, p) => s + p.amount, 0);
+  const installmentPaidTotal = Math.max(0, totalPaid - dep.target);
+  const installmentPaidBeforeThisMonth = Math.max(0, paidBeforeThisMonth - dep.target);
+  const installmentPaidThisMonth = installmentPaidTotal - installmentPaidBeforeThisMonth;
+
+  const thisMonthSlot = cumulativeThrough(monthsElapsed) - cumulativeThrough(monthsElapsed - 1);
+  const expectedThisMonth = Math.max(0, Math.round(thisMonthSlot - installmentPaidThisMonth));
+  const arrears = Math.max(0, Math.round(cumulativeThrough(monthsElapsed - 1) - installmentPaidBeforeThisMonth));
+  const monthsRemaining = Math.max(0, planMonths - monthsElapsed + 1);
+
+  const startDate = new Date(dep.clearedDate);
+  if (isNaN(startDate.getTime())) return null;
+  const nextDue = new Date(startDate.getFullYear(), startDate.getMonth() + monthsElapsed, startDate.getDate());
+
+  return { monthlyInstallment, planMonths, monthsElapsed, monthsRemaining, expectedThisMonth, arrears, nextDueDate: nextDue.toISOString().slice(0, 10) };
+}

@@ -1,9 +1,5 @@
-import { AllocationsBoard } from "./_components/allocations-board";
+import { AllocationRequestsScreen } from "@/webnext/features/allocations/screens/AllocationRequestsScreen";
 
 export default function Page() {
-  return (
-    <div className="@container/main flex flex-col gap-4 md:gap-6">
-      <AllocationsBoard />
-    </div>
-  );
+  return <AllocationRequestsScreen />;
 }
