@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useCanFulfilContracts } from '../hooks/useContractRequests';
 import { useContracts, useGenerateContract } from '../hooks/useContracts';
+import { useContractTemplates, usePublishedContractTemplateVersions } from '../hooks/useContractTemplates';
 import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { ghs } from '../../../shared/lib/format';
@@ -87,6 +88,8 @@ function ContractGeneratorInner() {
 function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => void }) {
   const { data: config } = useConfig();
   const generate = useGenerateContract();
+  const { data: templates } = useContractTemplates();
+  const { data: publishedVersions } = usePublishedContractTemplateVersions();
   const totals = config ? computeLeadQuotationTotals(config, lead) : null;
   // CONTRACT_OF_SALE_BLUEPRINT.md §6.4 -- local override so the "has KYC"
   // check reflects a just-saved modal immediately, without waiting on the
@@ -96,6 +99,34 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
   const [kycOpen, setKycOpen] = useState(false);
   const effectiveKyc = kycOverride ?? lead.kyc;
   const hasKyc = !!effectiveKyc && Object.values(effectiveKyc).some((v) => v);
+
+  // CONTRACT_OF_SALE_BLUEPRINT.md §8 -- optional template pick. Empty
+  // string = the original v1-parity hardcoded document (default,
+  // preserves exactly what already worked); anything else is a published
+  // template version's id, taking the new resolve->render->snapshot path.
+  const [templateVersionId, setTemplateVersionId] = useState('');
+  const templateOptions = (publishedVersions ?? []).map((v) => ({
+    version: v,
+    templateName: templates?.find((t) => t.id === v.templateId)?.name ?? 'Untitled template',
+  }));
+  const selected = templateOptions.find((o) => o.version.id === templateVersionId) ?? null;
+
+  function generateNow() {
+    if (selected) {
+      generate.mutate({
+        lead: { ...lead, kyc: effectiveKyc },
+        template: {
+          templateId: selected.version.templateId,
+          templateVersionId: selected.version.id,
+          versionNumber: selected.version.versionNumber,
+          templateName: selected.templateName,
+          content: selected.version.content,
+        },
+      });
+    } else {
+      generate.mutate({ lead: { ...lead, kyc: effectiveKyc } });
+    }
+  }
 
   return (
     <div>
@@ -144,9 +175,25 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
         </button>
       )}
 
-      <button type="button" className={styles.genBtn} disabled={generate.isPending || !config} onClick={() => generate.mutate({ ...lead, kyc: effectiveKyc })}>
+      {templateOptions.length > 0 && (
+        <label className={styles.kycNote} style={{ display: 'block', marginTop: 10 }}>
+          Template
+          <select className={styles.input} style={{ marginTop: 4 }} value={templateVersionId} onChange={(e) => setTemplateVersionId(e.target.value)}>
+            <option value="">Standard (legacy document)</option>
+            {templateOptions.map((o) => (
+              <option key={o.version.id} value={o.version.id}>
+                {o.templateName} · v{o.version.versionNumber}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      <button type="button" className={styles.genBtn} disabled={generate.isPending || !config} onClick={generateNow}>
         {generate.isPending ? 'Generating…' : '📄 Generate & download PDF'}
       </button>
+
+      {generate.isError && <p className={styles.kycNote}>{(generate.error as Error).message}</p>}
 
       {kycOpen && <LeadKycModal lead={{ ...lead, kyc: effectiveKyc }} onClose={() => setKycOpen(false)} onSaved={setKycOverride} allowSkip />}
     </div>

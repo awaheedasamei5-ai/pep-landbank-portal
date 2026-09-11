@@ -602,6 +602,10 @@ export interface DataSource {
   };
   contractTemplateVersions: {
     listForTemplate(templateId: string): Promise<ContractTemplateVersion[]>;
+    // CONTRACT_OF_SALE_BLUEPRINT.md §8 -- every currently-published version
+    // across all templates, for the generator's template picker (a manager
+    // may only ever generate from a published version, never a draft).
+    listPublished(): Promise<ContractTemplateVersion[]>;
     create(templateId: string, versionNumber: number, createdBy: string, createdByName: string): Promise<ContractTemplateVersion>;
     update(id: string, patch: { content?: ContractSection[]; status?: ContractTemplateVersionStatus }): Promise<ContractTemplateVersion>;
     // Real SECURITY DEFINER RPC (set_contract_template_version_published)
@@ -633,6 +637,11 @@ export interface DataSource {
       generatedBy: string;
       generatedByName: string;
     }): Promise<ContractGeneration>;
+    // CONTRACT_OF_SALE_BLUEPRINT.md §8 step 2 -- private contract-pdfs
+    // bucket, folder-per-lead, same shape as payments.uploadProof/
+    // issueReceiptLink. Returns the storage path to record on the
+    // contract_generations row (not a signed URL -- resolved on demand).
+    uploadPdf(path: string, blob: Blob): Promise<string>;
   };
   contractApprovals: {
     listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
@@ -2271,6 +2280,9 @@ function createDemoDataSource(): DataSource {
       async listForTemplate(templateId) {
         return (demoLoad().contractTemplateVersions ?? []).filter((v) => v.templateId === templateId).sort((a, b) => b.versionNumber - a.versionNumber);
       },
+      async listPublished() {
+        return (demoLoad().contractTemplateVersions ?? []).filter((v) => v.status === 'published');
+      },
       async create(templateId, versionNumber, createdBy, createdByName) {
         const version: ContractTemplateVersion = {
           id: Math.random().toString(36).slice(2, 10),
@@ -2358,6 +2370,12 @@ function createDemoDataSource(): DataSource {
         db.contractGenerations = [generation, ...(db.contractGenerations ?? [])];
         demoSave();
         return generation;
+      },
+      async uploadPdf(path) {
+        // Demo mode has no real Storage -- match issueReceiptLink's own
+        // demo fallback (fake a stable-looking path, no bytes actually
+        // persisted anywhere).
+        return path;
       },
     },
     contractApprovals: {
@@ -4790,6 +4808,11 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapContractTemplateVersionRow);
       },
+      async listPublished() {
+        const { data, error } = await requireClient().from('contract_template_versions').select('*').eq('status', 'published');
+        if (error) throw error;
+        return (data ?? []).map(mapContractTemplateVersionRow);
+      },
       async create(templateId, versionNumber, createdBy, createdByName) {
         const { data, error } = await requireClient()
           .from('contract_template_versions')
@@ -4871,6 +4894,12 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractGenerationRow(data);
+      },
+      async uploadPdf(path, blob) {
+        const client = requireClient();
+        const { error: uploadError } = await client.storage.from('contract-pdfs').upload(path, blob, { contentType: 'application/pdf', upsert: true });
+        if (uploadError) throw uploadError;
+        return path;
       },
     },
     contractApprovals: {

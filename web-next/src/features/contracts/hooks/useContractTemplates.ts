@@ -30,6 +30,13 @@ export function useContractTemplateVersions(templateId: string) {
   });
 }
 
+// CONTRACT_OF_SALE_BLUEPRINT.md §8 -- feeds the generator's template
+// picker; a manager may only ever generate from a published version.
+export function usePublishedContractTemplateVersions() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['contractTemplateVersions', 'published'], queryFn: () => getDataSource(demoMode).contractTemplateVersions.listPublished() });
+}
+
 export function useCreateContractTemplateVersion() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
