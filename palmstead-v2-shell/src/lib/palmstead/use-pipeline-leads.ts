@@ -36,6 +36,12 @@ async function fetchPipelineLeads(): Promise<PipelineLead[]> {
       .select(
         "id,agent_key,name,contact,plot_type,no_plots,grand_total,amt_paid,stage,priority,next_action,next_action_date,date_added",
       )
+      // Real gap found live: leads_sel RLS lets a manager session see BOTH
+      // active and archived rows (same fact web-next's own listArchived()
+      // comment documents), so this explicit filter is required here --
+      // without it, an archived lead never actually disappears from
+      // Master Pipeline for a manager.
+      .is("deleted_at", null)
       .order("date_added", { ascending: false }),
     client.from("profiles").select("agent_key,name"),
   ]);

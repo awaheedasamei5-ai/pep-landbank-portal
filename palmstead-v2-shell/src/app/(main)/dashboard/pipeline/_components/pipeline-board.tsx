@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 
-import { AlertTriangle, CircleCheck, Gauge, Search, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { AlertTriangle, CircleCheck, Gauge, Plus, Search, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ghs } from "@/lib/palmstead/format";
@@ -12,11 +15,13 @@ import { computePipelineKpis, isLeadOverdue, STAGE_LABELS, STAGE_ORDER } from "@
 import { type Stage, usePipelineLeads } from "@/lib/palmstead/use-pipeline-leads";
 
 // Master Pipeline, phase 1 -- real company-wide lead list, real KPI
-// strip, real stage-tab + search filtering. Direct port of the core of
-// web-next's PipelineListScreen (same KPI definitions, same stage
-// vocabulary/order). Honestly not yet ported: the 8-dimension filter
-// panel, bulk actions, import/export, and the lead detail drawer -- a
-// real, deliberately scoped first cut, not the full screen.
+// strip, real stage-tab + search filtering, real "+ Add lead" and
+// click-a-row-to-open-the-lead (routes to the real lead detail page,
+// _components/lead-detail.tsx). Direct port of the core of web-next's
+// PipelineListScreen (same KPI definitions, same stage vocabulary/order).
+// Honestly not yet ported: the 8-dimension filter panel, bulk actions,
+// and import/export -- a real, deliberately scoped first cut, not the
+// full screen.
 const STAGE_TONE: Record<Stage, string> = {
   "1": "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
   "2A": "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
@@ -27,6 +32,7 @@ const STAGE_TONE: Record<Stage, string> = {
 };
 
 export function PipelineBoard() {
+  const router = useRouter();
   const { data: leads, isLoading } = usePipelineLeads();
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState<Stage | "">("");
@@ -53,11 +59,16 @@ export function PipelineBoard() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">Master Pipeline</h1>
-        <p className="text-muted-foreground text-sm">
-          {isLoading ? "Loading…" : `${leads?.length ?? 0} lead${(leads?.length ?? 0) === 1 ? "" : "s"} company-wide`}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-semibold text-2xl tracking-tight">Master Pipeline</h1>
+          <p className="text-muted-foreground text-sm">
+            {isLoading ? "Loading…" : `${leads?.length ?? 0} lead${(leads?.length ?? 0) === 1 ? "" : "s"} company-wide`}
+          </p>
+        </div>
+        <Button type="button" onClick={() => router.push("/dashboard/pipeline/new")}>
+          <Plus className="size-4" /> Add lead
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -144,7 +155,11 @@ export function PipelineBoard() {
               {filtered.map((l) => {
                 const overdue = isLeadOverdue(l);
                 return (
-                  <TableRow key={l.id}>
+                  <TableRow
+                    key={l.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/dashboard/pipeline/${l.id}`)}
+                  >
                     <TableCell className="pl-6 font-medium">{l.name}</TableCell>
                     <TableCell className="text-muted-foreground">{l.agentName}</TableCell>
                     <TableCell className="text-muted-foreground">

@@ -14,13 +14,21 @@ export interface AppConfigSubset {
   techFullPlotLengthFt: number;
   techHalfPlotWidthFt: number;
   techHalfPlotLengthFt: number;
+  fullPrice: number;
+  halfPrice: number;
+  fullDiscount: number;
+  halfDiscount: number;
+  int3: number;
+  int6: number;
+  int9: number;
+  int12: number;
 }
 
 async function fetchAppConfig(): Promise<AppConfigSubset> {
   const { data, error } = await requireSupabase()
     .from("app_config")
     .select(
-      "allocation_threshold_pct,tech_full_plot_width_ft,tech_full_plot_length_ft,tech_half_plot_width_ft,tech_half_plot_length_ft",
+      "allocation_threshold_pct,tech_full_plot_width_ft,tech_full_plot_length_ft,tech_half_plot_width_ft,tech_half_plot_length_ft,full_price,half_price,full_discount,half_discount,int_3,int_6,int_9,int_12",
     )
     .eq("id", 1)
     .single();
@@ -31,6 +39,14 @@ async function fetchAppConfig(): Promise<AppConfigSubset> {
     techFullPlotLengthFt: Number(data.tech_full_plot_length_ft ?? 70),
     techHalfPlotWidthFt: Number(data.tech_half_plot_width_ft ?? 70),
     techHalfPlotLengthFt: Number(data.tech_half_plot_length_ft ?? 50),
+    fullPrice: Number(data.full_price ?? 48000),
+    halfPrice: Number(data.half_price ?? 24000),
+    fullDiscount: Number(data.full_discount ?? 0),
+    halfDiscount: Number(data.half_discount ?? 0),
+    int3: Number(data.int_3 ?? 750),
+    int6: Number(data.int_6 ?? 1500),
+    int9: Number(data.int_9 ?? 2250),
+    int12: Number(data.int_12 ?? 3000),
   };
 }
 
