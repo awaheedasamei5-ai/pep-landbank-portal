@@ -15,10 +15,14 @@ import type { Config, Lead } from '../../../types/domain';
 // guards every signature stamp with `if(sig)`, so omitting it here matches
 // an already-valid real state rather than cutting a corner.
 
-const CONTRACT_INK: [number, number, number] = [31, 56, 99];
+export const CONTRACT_INK: [number, number, number] = [31, 56, 99];
 const CONTRACT_MONTH_WORDS: Record<number, string> = { 3: 'Three', 6: 'Six', 9: 'Nine', 12: 'Twelve' };
 
-function contractBorder(doc: jsPDF, pageW: number, pageH: number) {
+// CONTRACT_OF_SALE_BLUEPRINT.md §6.3/§8 -- exported so contractSectionsPdf.ts
+// (the new structured-content renderer for Preview + real generation)
+// reuses these exact primitives rather than re-deriving the page border/
+// pagination/clause-numbering conventions from scratch.
+export function contractBorder(doc: jsPDF, pageW: number, pageH: number) {
   doc.setDrawColor(51, 51, 51);
   doc.setLineWidth(0.5);
   doc.rect(6, 6, pageW - 12, pageH - 12);
@@ -26,7 +30,7 @@ function contractBorder(doc: jsPDF, pageW: number, pageH: number) {
   doc.rect(7.5, 7.5, pageW - 15, pageH - 15);
 }
 
-function contractNewPage(doc: jsPDF, n: number): number {
+export function contractNewPage(doc: jsPDF, n: number): number {
   doc.addPage();
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -95,7 +99,7 @@ function contractCheckRow(doc: jsPDF, x: number, y: number, pageW: number, optio
 const CONTRACT_SPACING_ROOMY = { lineH: 5.2, itemGap: 2.4, headLineH: 6.6, headLead: 3, headGap: 3, subheadGap: 6.5, paraGap: 3.2 };
 const CONTRACT_SPACING_TIGHT = { lineH: 4.4, itemGap: 0.8, headLineH: 5.4, headLead: 1.2, headGap: 1.8, subheadGap: 4.5, paraGap: 1.8 };
 
-function contractBody(doc: jsPDF, y: number, n: number, text: string, dense?: boolean): { y: number; n: number } {
+export function contractBody(doc: jsPDF, y: number, n: number, text: string, dense?: boolean): { y: number; n: number } {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const marginR = pageW - 14;

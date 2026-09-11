@@ -55,6 +55,7 @@ import { ContractGeneratorScreen } from '../features/contracts/screens/ContractG
 import { ContractsScreen } from '../features/contracts/screens/ContractsScreen';
 import { TemplateStudioScreen } from '../features/contracts/screens/TemplateStudioScreen';
 import { TemplateDetailScreen } from '../features/contracts/screens/TemplateDetailScreen';
+import { TemplatePreviewScreen } from '../features/contracts/screens/TemplatePreviewScreen';
 import { CompanyLeadsScreen } from '../features/company-leads/screens/CompanyLeadsScreen';
 import { SettingsScreen } from '../features/manager/screens/SettingsScreen';
 import { TeamRosterScreen } from '../features/manager/screens/TeamRosterScreen';
@@ -391,6 +392,7 @@ export const router = createBrowserRouter([
       // bar -- same reasoning as /generate above (a drill-down, not a peer
       // tab).
       { path: 'office/contracts/templates/:id', element: <TemplateDetailScreen /> },
+      { path: 'office/contracts/templates/:id/preview', element: <TemplatePreviewScreen /> },
       { path: 'office/quotation', element: <QuotationScreen /> },
       { path: 'office/quotation/technical', element: <TechnicalQuotationScreen /> },
       // Real user correction 2026-09-11: Leave and Leave Dashboard must

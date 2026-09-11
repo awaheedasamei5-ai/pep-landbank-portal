@@ -179,6 +179,9 @@ export function TemplateDetailScreen() {
         </div>
         {selectedVersion && isLatestDraft && (
           <div className={styles.actions}>
+            <button type="button" className={styles.ghostBtn} onClick={() => navigate(`/app/office/contracts/templates/${templateId}/preview?version=${selectedVersion.id}`)}>
+              Preview
+            </button>
             <button type="button" className={styles.ghostBtn} disabled={updateVersion.isPending} onClick={saveDraft}>
               {updateVersion.isPending ? 'Saving…' : 'Save draft'}
             </button>
@@ -189,6 +192,9 @@ export function TemplateDetailScreen() {
         )}
         {selectedVersion && selectedVersion.status === 'in_review' && (
           <div className={styles.actions}>
+            <button type="button" className={styles.ghostBtn} onClick={() => navigate(`/app/office/contracts/templates/${templateId}/preview?version=${selectedVersion.id}`)}>
+              Preview
+            </button>
             <button type="button" className={styles.dangerBtn} onClick={() => setRejecting((v) => !v)}>
               Reject
             </button>
@@ -198,9 +204,14 @@ export function TemplateDetailScreen() {
           </div>
         )}
         {selectedVersion && !isLatestDraft && selectedVersion.status !== 'in_review' && (
-          <button type="button" className={styles.ghostBtn} onClick={duplicateAsNewDraft} disabled={createVersion.isPending}>
-            Duplicate as new draft
-          </button>
+          <div className={styles.actions}>
+            <button type="button" className={styles.ghostBtn} onClick={() => navigate(`/app/office/contracts/templates/${templateId}/preview?version=${selectedVersion.id}`)}>
+              Preview
+            </button>
+            <button type="button" className={styles.ghostBtn} onClick={duplicateAsNewDraft} disabled={createVersion.isPending}>
+              Duplicate as new draft
+            </button>
+          </div>
         )}
       </div>
 

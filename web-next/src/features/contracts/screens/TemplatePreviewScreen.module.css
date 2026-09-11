@@ -1,0 +1,47 @@
+.wrap { margin-top: 4px; max-width: 720px; }
+.back { background: none; border: none; color: var(--c-accent); font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 0; margin-bottom: 10px; }
+
+.topBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.name { font-size: 18px; font-weight: 800; color: var(--c-text); }
+
+.sampleBanner {
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.downloadBtn {
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.downloadBtn:disabled { opacity: .6; cursor: default; }
+
+.page {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section { font-size: 13px; color: var(--c-text); line-height: 1.6; }
+.heading { font-weight: 800; font-size: 15px; color: var(--c-text); }
+.signature { font-size: 12px; color: var(--c-muted); font-style: italic; border-top: 1px dashed var(--c-line); padding-top: 12px; }
+.image { font-size: 12px; color: var(--c-muted); font-style: italic; }
+
+.token { background: var(--c-accent-bg); color: var(--c-accent); border-radius: 4px; padding: 1px 4px; font-family: var(--font-mono); font-size: 12px; }
+
+.empty { color: var(--c-muted); font-size: 13px; padding: 20px 0; text-align: center; }
