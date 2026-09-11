@@ -57,9 +57,19 @@ export function AllocationRequestsScreen() {
   const canAllocate = useCanAllocatePlots();
   const [showForm, setShowForm] = useState(false);
 
-  const pending = (requests ?? []).filter((r) => r.status === 'Pending').sort((a, b) => (b.percentPaid ?? 0) - (a.percentPaid ?? 0));
-  const awaiting = (requests ?? []).filter((r) => r.status === 'Awaiting Authorization').sort((a, b) => (b.percentPaid ?? 0) - (a.percentPaid ?? 0));
   const allocated = (requests ?? []).filter((r) => r.status === 'Allocated').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Second layer of the same real bug NewRequestForm's alreadyAllocated
+  // check prevents going forward -- a stray open request for a lead that
+  // ALSO has an Allocated one (found live: Damaris Odai, a leftover row
+  // from before today, unrelated to how it got created) should never
+  // render as if it still needs a suggestion, whatever created it.
+  const allocatedLeadIds = new Set(allocated.map((r) => r.leadId));
+  const pending = (requests ?? [])
+    .filter((r) => r.status === 'Pending' && !allocatedLeadIds.has(r.leadId))
+    .sort((a, b) => (b.percentPaid ?? 0) - (a.percentPaid ?? 0));
+  const awaiting = (requests ?? [])
+    .filter((r) => r.status === 'Awaiting Authorization' && !allocatedLeadIds.has(r.leadId))
+    .sort((a, b) => (b.percentPaid ?? 0) - (a.percentPaid ?? 0));
 
   return (
     <div className={styles.wrap}>
@@ -112,6 +122,7 @@ export function AllocationRequestsScreen() {
 function NewRequestForm({ onDone }: { onDone: () => void }) {
   const { data: leads } = useLeads();
   const { data: config } = useConfig();
+  const { data: allRequests } = useAllocationRequests();
   const create = useCreateAllocationRequest();
   const [query, setQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -121,9 +132,16 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
   const matches = q ? (leads ?? []).filter((l) => l.name.toLowerCase().includes(q) || l.contact.includes(q)).slice(0, 8) : [];
 
   const dep = selectedLead && config ? computeDepositStatus(config, selectedLead, leadPayments ?? []) : null;
+  // Real bug this closes: a lead could end up with a stray open request
+  // sitting alongside one that was already Allocated (found live --
+  // Damaris Odai had a stale Pending row from before her plots were even
+  // assigned), showing the same client as "still needs a suggestion"
+  // forever. Block a second request outright once any request for this
+  // lead is already Allocated.
+  const alreadyAllocated = selectedLead ? (allRequests ?? []).some((r) => r.leadId === selectedLead.id && r.status === 'Allocated') : false;
 
   async function submit() {
-    if (!selectedLead || !dep?.complete) return;
+    if (!selectedLead || !dep?.complete || alreadyAllocated) return;
     await create.mutateAsync({ leadId: selectedLead.id });
     onDone();
   }
@@ -160,7 +178,8 @@ function NewRequestForm({ onDone }: { onDone: () => void }) {
               {ghs(dep.paid)} of {ghs(dep.target)} ({config?.allocationThresholdPct}% target) paid — {ghs(dep.remaining)} more needed before this client is eligible for allocation.
             </p>
           )}
-          <button type="button" className={styles.submitBtn} disabled={!dep?.complete || create.isPending} onClick={submit}>
+          {alreadyAllocated && <p className={styles.noMatch}>{selectedLead.name} already has an allocated plot — check Already allocated below instead of sending a new request.</p>}
+          <button type="button" className={styles.submitBtn} disabled={!dep?.complete || alreadyAllocated || create.isPending} onClick={submit}>
             {create.isPending ? 'Sending…' : 'Send request'}
           </button>
         </>
