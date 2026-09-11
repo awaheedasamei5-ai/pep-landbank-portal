@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useCanFulfilContracts } from '../hooks/useContractRequests';
 import { useContracts, useGenerateContract } from '../hooks/useContracts';
-import { useContractTemplates, usePublishedContractTemplateVersions } from '../hooks/useContractTemplates';
+import { useContractTemplates, usePublishedContractTemplateVersions, useContractGenerations } from '../hooks/useContractTemplates';
 import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { ghs } from '../../../shared/lib/format';
 import { LeadKycModal } from '../components/LeadKycModal';
+import { resolveContractFields, CONTRACT_FIELD_LABELS } from '../lib/contractFieldResolver';
+import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from '../hooks/useContractAi';
 import type { Lead } from '../../../types/domain';
 import styles from './ContractGeneratorScreen.module.css';
 
@@ -111,6 +113,34 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
   }));
   const selected = templateOptions.find((o) => o.version.id === templateVersionId) ?? null;
 
+  // CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 3 -- real deterministic
+  // drift check against this lead's own last real generation (if any):
+  // has anything Management is about to bake into a new document changed
+  // since the last one was actually produced for this client?
+  const { data: generations } = useContractGenerations();
+  const latestGen = (generations ?? []).filter((g) => g.leadId === lead.id)[0] ?? null;
+  const changes: ContractFieldChange[] = [];
+  if (latestGen && config) {
+    const current = resolveContractFields({ ...lead, kyc: effectiveKyc }, config);
+    for (const [key, label] of Object.entries(CONTRACT_FIELD_LABELS)) {
+      if (key === 'generationDate') continue;
+      const oldValue = latestGen.fieldValuesSnapshot[key];
+      const newValue = current[key as keyof typeof current];
+      if (oldValue !== undefined && oldValue !== newValue) changes.push({ label, oldValue, newValue });
+    }
+  }
+  const { data: consistencyNote } = useConsistencyScanSummary(lead.id, changes);
+
+  // CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 4 -- fires once the real
+  // deterministic guard in useGenerateContract blocks generation (the
+  // error carries the real missingKeys list, see useContracts.ts).
+  const checklistDraft = useMissingDataChecklistDraft();
+  useEffect(() => {
+    const missingKeys = generate.error ? (generate.error as { missingKeys?: string[] }).missingKeys : undefined;
+    if (missingKeys && missingKeys.length > 0) checklistDraft.mutate(missingKeys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generate.error]);
+
   function generateNow() {
     if (selected) {
       generate.mutate({
@@ -175,10 +205,17 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
         </button>
       )}
 
+      {consistencyNote && (
+        <div className={styles.aiSummary}>
+          <span className={styles.aiBadge}>AI</span>
+          <span>{consistencyNote}</span>
+        </div>
+      )}
+
       {templateOptions.length > 0 && (
-        <label className={styles.kycNote} style={{ display: 'block', marginTop: 10 }}>
+        <label className={styles.templateLabel}>
           Template
-          <select className={styles.input} style={{ marginTop: 4 }} value={templateVersionId} onChange={(e) => setTemplateVersionId(e.target.value)}>
+          <select className={styles.templateSelect} value={templateVersionId} onChange={(e) => setTemplateVersionId(e.target.value)}>
             <option value="">Standard (legacy document)</option>
             {templateOptions.map((o) => (
               <option key={o.version.id} value={o.version.id}>
@@ -194,6 +231,12 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
       </button>
 
       {generate.isError && <p className={styles.kycNote}>{(generate.error as Error).message}</p>}
+      {generate.isError && checklistDraft.data && (
+        <div className={styles.aiSummary}>
+          <span className={styles.aiBadge}>AI</span>
+          <span>{checklistDraft.data}</span>
+        </div>
+      )}
 
       {kycOpen && <LeadKycModal lead={{ ...lead, kyc: effectiveKyc }} onClose={() => setKycOpen(false)} onSaved={setKycOverride} allowSkip />}
     </div>

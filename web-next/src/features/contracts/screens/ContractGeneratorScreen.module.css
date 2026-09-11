@@ -63,6 +63,47 @@
 
 .kycNote { font-size: 12px; color: var(--c-muted); margin: 12px 0 0; line-height: 1.5; }
 
+.templateLabel { display: block; font-size: 12px; color: var(--c-muted); margin-top: 12px; }
+
+.templateSelect {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  font-size: 13.5px;
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-family: inherit;
+}
+
+.aiSummary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--c-text);
+  line-height: 1.5;
+}
+
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+  margin-top: 1px;
+}
+
 .genBtn {
   width: 100%;
   margin-top: 14px;

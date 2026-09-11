@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useContractTemplates, useContractTemplateVersions } from '../hooks/useContractTemplates';
 import { useCanFulfilContracts } from '../hooks/useContractRequests';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { resolveContractFields, resolveSections } from '../lib/contractFieldResolver';
 import { buildContractFromSections, contractFilename } from '../lib/contractSectionsPdf';
+import { useClauseExplainer } from '../hooks/useContractAi';
 import type { ContractSection, Lead } from '../../../types/domain';
 import styles from './TemplatePreviewScreen.module.css';
 
@@ -119,12 +121,35 @@ export function TemplatePreviewScreen() {
               [Image: {section.imageRef || 'not set'}]
             </div>
           ) : (
-            <div className={styles.section} key={section.id}>
-              {renderWithTokens(section.text ?? '')}
-            </div>
+            <ExplainableSection key={section.id} text={section.text ?? ''} />
           )
         )}
       </div>
+    </div>
+  );
+}
+
+// CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 2 -- "Explain this clause"
+// on any rendered section, output-only (never alters the real text
+// above it). Called against the SAMPLE lead's resolved text, never real
+// client data, so nothing sensitive ever reaches the model here.
+function ExplainableSection({ text }: { text: string }) {
+  const explain = useClauseExplainer();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className={styles.section}>
+      <div>{renderWithTokens(text)}</div>
+      {!open ? (
+        <button type="button" className={styles.explainBtn} disabled={explain.isPending} onClick={() => { setOpen(true); explain.mutate(text); }}>
+          {explain.isPending ? 'Explaining…' : 'Explain this clause'}
+        </button>
+      ) : (
+        <div className={styles.explainBox}>
+          <span className={styles.aiBadge}>AI</span>
+          <span>{explain.isPending ? 'Thinking…' : explain.isError ? "Couldn't explain this clause right now." : explain.data || 'No explanation available.'}</span>
+        </div>
+      )}
     </div>
   );
 }

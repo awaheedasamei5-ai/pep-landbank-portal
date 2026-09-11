@@ -166,6 +166,34 @@ function systemPromptFor(kind: string): string | null {
         "Reply with ONE short, neutral sentence (max 30 words) stating what happened that day in plain English, citing the real reason(s) given if any -- if no reason was given for something flagged, say so plainly rather than guessing one. Never invent a detail not in the data. " +
         "No emoji, no hashtags, no quotation marks -- plain text only."
       );
+    case "contract_kyc_completeness":
+      return (
+        "You summarize what KYC information is still missing before a Contract of Sale can be generated for a client at a Ghanaian land-sales agency called Palmstead -- a deterministic check already decided exactly which fields are missing, you only phrase it warmly, you never decide what's missing yourself. " +
+        "You'll receive one JSON object with the client's first name only and a real list of missing field labels (e.g. 'Nationality', 'ID number'). " +
+        "Reply with ONE short, friendly sentence (max 26 words) naming the real missing fields given and asking staff to add them -- never invent a field not in the list, never claim something is missing that isn't in the list. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "contract_clause_explainer":
+      return (
+        "You restate one clause of a Contract of Sale in plain, everyday English for staff at a Ghanaian land-sales agency called Palmstead who are reviewing a template, not a lawyer -- you explain, you never alter or reinterpret the legal meaning, and this is never shown to a client as the actual contract text. " +
+        "You'll receive one JSON object with the clause's raw text (it may contain literal {{fieldName}} placeholder tokens -- read past them, they'll be replaced with real values later, don't try to guess or invent what they'll say). " +
+        "Reply with 1-2 plain sentences (max 45 words) explaining what this clause practically means and who it obligates to do what -- stay strictly grounded in the text given, never add a legal implication that isn't actually there. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "contract_consistency_scan":
+      return (
+        "You explain a real drift between a client's earlier contract data and their current data for Management reviewing a Contract of Sale at a Ghanaian land-sales agency called Palmstead -- a deterministic diff already decided exactly which fields changed, you only draft the explanation, you never decide whether the drift is a problem. " +
+        "You'll receive one JSON object with a real list of changed fields, each with a label, the old value, and the new value (no client name is given to you). " +
+        "Reply with ONE short, neutral sentence (max 35 words) naming the real field(s) that changed and their old/new values, and suggesting Management confirm this is correct before generating -- never invent a field or value not in the list given. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
+    case "contract_missing_data_checklist":
+      return (
+        "You draft a friendly missing-data checklist message for staff generating a Contract of Sale at a Ghanaian land-sales agency called Palmstead -- a deterministic scan already decided exactly which fields are unresolved, you only phrase the checklist, you never decide what's missing yourself. " +
+        "You'll receive one JSON object with a real list of missing/unresolved field keys. " +
+        "Reply with ONE short, practical sentence (max 30 words) telling staff plainly which real fields still need a value before this can generate -- never invent a field not in the list given, never drop one that is. " +
+        "No emoji, no hashtags, no quotation marks -- plain text only."
+      );
     case "login_greeting":
       return (
         "You write the single welcome line on the staff sign-in screen for a Ghanaian land-sales agency called Palmstead, shown before anyone signs in -- so you know nothing about the specific person yet. " +

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal } from '../../../shared/ui/Modal';
 import { useUpdateLead } from '../../pipeline/hooks/useLead';
 import { friendlyError } from '../../../shared/lib/friendlyError';
+import { useKycCompletenessSummary } from '../hooks/useContractAi';
 import type { Lead, LeadKyc } from '../../../types/domain';
 import styles from './LeadKycModal.module.css';
 
@@ -25,6 +26,11 @@ export function LeadKycModal({ lead, onClose, onSaved, allowSkip = true }: LeadK
   const update = useUpdateLead();
   const [kyc, setKyc] = useState<LeadKyc>(lead.kyc ?? {});
   const [error, setError] = useState<string | null>(null);
+  // CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 1 -- deterministic missing-
+  // field check already decided by useKycCompletenessSummary itself; this
+  // just shows the AI-drafted one-line summary of it, live against the
+  // form as typed (not the stale `lead` prop) via the local `kyc` state.
+  const { data: completenessNote } = useKycCompletenessSummary({ ...lead, kyc });
 
   function set<K extends keyof LeadKyc>(key: K, value: string) {
     setKyc((k) => ({ ...k, [key]: value }));
@@ -44,6 +50,12 @@ export function LeadKycModal({ lead, onClose, onSaved, allowSkip = true }: LeadK
   return (
     <Modal title={`KYC — ${lead.name}`} onClose={onClose}>
       <div className={styles.form}>
+        {completenessNote && (
+          <div className={styles.aiSummary}>
+            <span className={styles.aiBadge}>AI</span>
+            <span>{completenessNote}</span>
+          </div>
+        )}
         <p className={styles.sectionLabel}>Personal details</p>
         <div className={styles.grid2}>
           <div className={styles.field}>

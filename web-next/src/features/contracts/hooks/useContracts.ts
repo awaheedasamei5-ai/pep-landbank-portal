@@ -67,7 +67,12 @@ export function useGenerateContract() {
         const resolvedContent = resolveSections(template.content, fieldValues);
         const missing = findUnresolvedTokens(resolvedContent);
         if (missing.length > 0) {
-          throw new Error(`Can't generate yet -- missing: ${missing.join(', ')}. Fill these in (KYC details or config) and try again.`);
+          // CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 4 -- carries the
+          // real missing-key list on the error itself so the UI can hand
+          // it straight to the AI checklist drafter without re-deriving
+          // it (the deterministic message below is already useful and
+          // shown instantly; the AI phrasing is a progressive add-on).
+          throw Object.assign(new Error(`Can't generate yet -- missing: ${missing.join(', ')}. Fill these in (KYC details or config) and try again.`), { missingKeys: missing });
         }
         const doc = buildContractFromSections(template.templateName, resolvedContent);
         doc.save(contractFilename(lead.name));
