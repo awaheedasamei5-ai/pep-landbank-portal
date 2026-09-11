@@ -14,14 +14,16 @@ import { ghs } from "@/lib/palmstead/format";
 import { computePipelineKpis, isLeadOverdue, STAGE_LABELS, STAGE_ORDER } from "@/lib/palmstead/pipeline-logic";
 import { type Stage, usePipelineLeads } from "@/lib/palmstead/use-pipeline-leads";
 
-// Master Pipeline, phase 1 -- real company-wide lead list, real KPI
+import { PipelineImportExportCard } from "./pipeline-import-export-card";
+
+// Master Pipeline -- real company-wide/own-scoped lead list, real KPI
 // strip, real stage-tab + search filtering, real "+ Add lead" and
 // click-a-row-to-open-the-lead (routes to the real lead detail page,
-// _components/lead-detail.tsx). Direct port of the core of web-next's
-// PipelineListScreen (same KPI definitions, same stage vocabulary/order).
-// Honestly not yet ported: the 8-dimension filter panel, bulk actions,
-// and import/export -- a real, deliberately scoped first cut, not the
-// full screen.
+// _components/lead-detail.tsx), and a real canonical-workbook
+// import/export (_components/pipeline-import-export-card.tsx). Direct
+// port of the core of web-next's PipelineListScreen (same KPI
+// definitions, same stage vocabulary/order). Honestly not yet ported: the
+// 8-dimension filter panel and bulk row actions.
 const STAGE_TONE: Record<Stage, string> = {
   "1": "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
   "2A": "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
@@ -70,6 +72,8 @@ export function PipelineBoard() {
           <Plus className="size-4" /> Add lead
         </Button>
       </div>
+
+      <PipelineImportExportCard />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {kpiCards.map((c) => (

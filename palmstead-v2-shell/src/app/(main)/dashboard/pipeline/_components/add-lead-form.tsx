@@ -13,13 +13,15 @@ import { useAppConfig } from "@/lib/palmstead/use-app-config";
 import { useCreateLead } from "@/lib/palmstead/use-create-lead";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { PartialPlotAdder } from "./partial-plot-adder";
+
 // Real port of web-next's AddLeadScreen -- same real pricing engine
 // (previewGrandTotal, live Net/+Interest/Grand breakdown), same real
 // auto-fill-unit-price-until-overridden behavior, same real amt_paid ->
-// opening-deposit-payment split. Honestly not ported (flagged, not
-// silently dropped): promo pricing windows, the banner/referral source
-// sub-flows, and the partial-plot calculator -- separable enhancements
-// on top of the same core create path, deferred for a first real pass.
+// opening-deposit-payment split, same real partial/irregular-plot
+// calculator. Honestly not ported (flagged, not silently dropped): promo
+// pricing windows and the banner/referral source sub-flows -- separable
+// enhancements on top of the same core create path.
 const PRIORITIES = ["High", "Medium", "Low"] as const;
 const LEAD_SOURCES = [
   "Banner",
@@ -217,6 +219,18 @@ export function AddLeadForm() {
                   }}
                 />
               </div>
+              {config && (
+                <div className="sm:col-span-2">
+                  <PartialPlotAdder
+                    config={config}
+                    plotType={plotType}
+                    onAdd={(eq) => {
+                      setNoPlotsManuallyEdited(true);
+                      setNoPlots(String(Math.round((Number(noPlots || 0) + eq) * 100) / 100));
+                    }}
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <span className={labelClass}>Unit price (GHS) *</span>
                 <input

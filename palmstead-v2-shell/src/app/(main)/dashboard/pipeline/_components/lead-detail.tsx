@@ -35,6 +35,8 @@ import {
 } from "@/lib/palmstead/use-lead";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { PartialPlotAdder } from "./partial-plot-adder";
+
 const inputClass =
   "h-9 w-full rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 const labelClass = "text-xs font-medium text-muted-foreground";
@@ -424,6 +426,13 @@ function PlotPricingSection({
             onChange={(e) => setNoPlots(e.target.value)}
           />
         </div>
+      </div>
+      <PartialPlotAdder
+        config={config}
+        plotType={plotType}
+        onAdd={(eq) => setNoPlots(String(Math.round((Number(noPlots || 0) + eq) * 100) / 100))}
+      />
+      <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <span className={labelClass}>Unit price (GHS)</span>
           <input
