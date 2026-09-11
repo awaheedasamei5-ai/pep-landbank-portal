@@ -73,6 +73,38 @@
 }
 
 .wrap { padding: 20px 16px 90px; max-width: 480px; }
+
+/* Real user ask: a floating scroll helper reachable regardless of scroll
+   position, small enough to never sit on top of readable text. Fixed to
+   the viewport (not the scroll container) -- the drawer already occupies
+   the right side of the screen on desktop, so a viewport-corner anchor
+   lands inside it naturally without needing to track the drawer's own
+   width/position. `.drawerPanel`'s brief mount animation technically
+   establishes its own fixed-positioning containing block for the ~220ms
+   it's actively transforming, so this can render slightly offset for an
+   instant on open -- self-corrects the moment the animation settles,
+   never a lasting issue. */
+.scrollHelper {
+  position: fixed;
+  right: 18px;
+  bottom: 24px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.scrollHelperBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: var(--shadow), 0 4px 14px rgb(20 22 50 / 18%);
+}
+.scrollHelperBtn:hover { border-color: var(--c-accent); }
 .head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 
 .avatar {

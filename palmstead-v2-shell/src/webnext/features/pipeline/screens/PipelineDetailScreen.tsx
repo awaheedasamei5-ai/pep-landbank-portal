@@ -168,12 +168,16 @@ export function PipelineDetailScreen() {
         </div>
       </div>
 
-      <ClientSection lead={lead} />
+      <div id="lead-client-section">
+        <ClientSection lead={lead} />
+      </div>
       <LeadDetailsSection lead={lead} />
       {config && <PlotPricingSection lead={lead} config={config} />}
       {config && <DepositScheduleSection lead={lead} config={config} payments={leadPayments} />}
       {config && <AllocationEligibilitySection lead={lead} config={config} payments={leadPayments} />}
-      <FollowUpSection lead={lead} />
+      <div id="lead-followup-section">
+        <FollowUpSection lead={lead} />
+      </div>
 
       {canLog && (
         <div className={styles.section}>
@@ -249,7 +253,34 @@ export function PipelineDetailScreen() {
             ← Back
           </button>
         </div>
+        <ScrollHelper />
       </div>
+    </div>
+  );
+}
+
+// Real user ask: "put a floating scroll button around the client details
+// and next action area of the my pipeline app so that we can be able to
+// reach it regardless of where we are on the screen without it blocking
+// the words." This is a genuinely long single-scroll page (12+ stacked
+// sections -- Client through Danger Zone) with no in-page navigation at
+// all before this; Client and Follow-up (the real "Next Action" section)
+// are the two the user actually asked for. A small floating pill, not a
+// bar or panel, so it never sits on top of readable text -- and it's
+// shared by both Pipeline and Company Leads for free, since both route
+// through this exact same detail screen (see router.tsx's own comment).
+function ScrollHelper() {
+  function jumpTo(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  return (
+    <div className={styles.scrollHelper}>
+      <button type="button" className={styles.scrollHelperBtn} onClick={() => jumpTo('lead-client-section')} title="Jump to client details">
+        👤
+      </button>
+      <button type="button" className={styles.scrollHelperBtn} onClick={() => jumpTo('lead-followup-section')} title="Jump to next action">
+        📌
+      </button>
     </div>
   );
 }
