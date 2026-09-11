@@ -168,6 +168,60 @@ export function useDeleteAllocationRequest() {
   });
 }
 
+// Real port of web-next's useFlagAllocation/useResolveAllocationFlag --
+// a plain-update side path for "this request has a data problem, fix it
+// before I suggest plots" (distinct from AwaitingPanel's sendBack above,
+// which reverts a SUGGESTED set at the sign-off stage). Both are plain
+// allocation_requests UPDATEs, no RPC.
+export function useFlagAllocation() {
+  const profile = useAuthStore((s) => s.profile);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await requireSupabase()
+        .from("allocation_requests")
+        .update({ flag_reason: reason, flagged_by: profile?.name ?? "", flagged_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["allocationRequests"] }),
+  });
+}
+
+export function useResolveAllocationFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await requireSupabase()
+        .from("allocation_requests")
+        .update({ flag_reason: null, flagged_by: null, flagged_at: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["allocationRequests"] }),
+  });
+}
+
+// Real edit_allocated_plot RPC -- lets Management correct an already-
+// Allocated request's plot number (e.g. a typo caught after confirming)
+// without a full undo/redo round trip through Pending.
+export function useEditAllocatedPlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, plotNumber }: { id: string; plotNumber: string }) => {
+      const { error } = await requireSupabase().rpc("edit_allocated_plot", {
+        p_allocation_id: id,
+        p_new_plot_number: plotNumber,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["allocationRequests"] });
+      void qc.invalidateQueries({ queryKey: ["plots"] });
+    },
+  });
+}
+
 export function useSendBackAllocation() {
   const profile = useAuthStore((s) => s.profile);
   const qc = useQueryClient();

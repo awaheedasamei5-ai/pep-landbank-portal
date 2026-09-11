@@ -16,6 +16,9 @@ import {
   useConfirmAllocation,
   useCreateAllocationRequest,
   useDeleteAllocationRequest,
+  useEditAllocatedPlot,
+  useFlagAllocation,
+  useResolveAllocationFlag,
   useRevertAllocation,
   useSendBackAllocation,
   useSuggestAllocationPlots,
@@ -23,20 +26,22 @@ import {
 import { useAppConfig } from "@/lib/palmstead/use-app-config";
 import { usePipelineLeads } from "@/lib/palmstead/use-pipeline-leads";
 import { type PlotType, usePlots } from "@/lib/palmstead/use-plots";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 // Allocations -- the real 3-stage workflow (Pending -> staff suggest
 // candidates -> Awaiting Authorization -> Management confirms -> Allocated,
 // the only point the real `plots` table gets synced), direct port of
 // web-next's AllocationRequestsScreen against the same real RPCs
 // (confirm_allocation/revert_allocation/delete_allocation, all SECURITY
-// DEFINER). Honestly not yet ported, this is real scope -- flagged, not
-// hidden: the physical-authorization-photo upload + AI verification gate,
-// the flag/fix-resubmit side path, PDF generation, editing an already-
-// allocated plot, and the in-panel plot-split action. Confirm works
-// without a photo attached for now. The deposit-eligibility check below
-// is also a real simplification: it compares paid against grandTotal
-// directly rather than porting the full quotation-net-total engine --
-// close enough for a first real pass, not byte-identical to web-next's
+// DEFINER), plus the flag/fix-resubmit side path at the suggest stage and
+// editing an already-allocated plot's number (edit_allocated_plot RPC).
+// Honestly not yet ported, this is real scope -- flagged, not hidden: the
+// physical-authorization-photo upload + AI verification gate, PDF
+// generation, and the in-panel plot-split action. Confirm works without a
+// photo attached for now. The deposit-eligibility check below is also a
+// real simplification: it compares paid against grandTotal directly
+// rather than porting the full quotation-net-total engine -- close
+// enough for a first real pass, not byte-identical to web-next's
 // computeDepositStatus.
 function initials(name: string): string {
   return name
@@ -227,6 +232,8 @@ function StatusPill({ status, plotNumber }: { status: AllocationRequestRow["stat
 }
 
 function RequestRow({ request, canAllocate }: { request: AllocationRequestRow; canAllocate: boolean }) {
+  const profile = useAuthStore((s) => s.profile);
+  const isOwnAgent = profile?.key === request.agentKey;
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-xl border bg-card p-3.5">
@@ -250,14 +257,32 @@ function RequestRow({ request, canAllocate }: { request: AllocationRequestRow; c
         </div>
       )}
 
-      {open && canAllocate && (
+      {open && (
         <div className="mt-3 border-t pt-3">
-          {request.status === "Pending" && <SuggestPanel request={request} />}
-          {request.status === "Awaiting Authorization" && <AwaitingPanel request={request} />}
-          {request.status === "Allocated" && <AllocatedPanel request={request} />}
+          {request.status === "Pending" && request.flagReason && isOwnAgent && <FixResubmit request={request} />}
+          {request.status === "Pending" && request.flagReason && !isOwnAgent && canAllocate && (
+            <p className="text-muted-foreground text-xs">Waiting on {request.agentName} to fix and resubmit.</p>
+          )}
+          {request.status === "Pending" && !request.flagReason && canAllocate && <SuggestPanel request={request} />}
+          {request.status === "Awaiting Authorization" && canAllocate && <AwaitingPanel request={request} />}
+          {request.status === "Allocated" && canAllocate && <AllocatedPanel request={request} />}
         </div>
       )}
     </div>
+  );
+}
+
+function FixResubmit({ request }: { request: AllocationRequestRow }) {
+  const resolveFlag = useResolveAllocationFlag();
+  return (
+    <button
+      type="button"
+      disabled={resolveFlag.isPending}
+      onClick={() => resolveFlag.mutate(request.id)}
+      className="rounded-full bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm disabled:opacity-50"
+    >
+      {resolveFlag.isPending ? "Notifying…" : "I've fixed this — notify for re-review"}
+    </button>
   );
 }
 
@@ -266,9 +291,12 @@ function SuggestPanel({ request }: { request: AllocationRequestRow }) {
   const { data: config } = useAppConfig();
   const { data: leads } = usePipelineLeads();
   const suggest = useSuggestAllocationPlots();
+  const flag = useFlagAllocation();
   const [values, setValues] = useState<string[]>(["", "", ""]);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [flagging, setFlagging] = useState(false);
+  const [flagReasonText, setFlagReasonText] = useState("");
 
   const lead = (leads ?? []).find((l) => l.id === request.leadId) ?? null;
   const units = allocationUnitsNeeded(lead?.noPlots ?? 1);
@@ -346,6 +374,41 @@ function SuggestPanel({ request }: { request: AllocationRequestRow }) {
     }
   }
 
+  if (flagging) {
+    return (
+      <div className="flex flex-col gap-2">
+        <label htmlFor="allocation-flag-reason" className="font-semibold text-xs">
+          What&apos;s wrong with this request?
+        </label>
+        <textarea
+          id="allocation-flag-reason"
+          className="min-h-16 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          value={flagReasonText}
+          onChange={(e) => setFlagReasonText(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={!flagReasonText.trim() || flag.isPending}
+            onClick={() =>
+              flag.mutateAsync({ id: request.id, reason: flagReasonText.trim() }).then(() => setFlagging(false))
+            }
+            className="rounded-full bg-red-600 px-4 py-2 font-semibold text-sm text-white disabled:opacity-50"
+          >
+            {flag.isPending ? "Sending…" : "Send & flag"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFlagging(false)}
+            className="rounded-full border px-4 py-2 font-semibold text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <p className="text-muted-foreground text-xs">
@@ -385,14 +448,23 @@ function SuggestPanel({ request }: { request: AllocationRequestRow }) {
         );
       })}
       {error && <p className="text-red-600 text-xs dark:text-red-400">{error}</p>}
-      <button
-        type="button"
-        disabled={suggest.isPending}
-        onClick={submit}
-        className="mt-1 rounded-full bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm disabled:opacity-50"
-      >
-        {suggest.isPending ? "Sending…" : "Suggest plots →"}
-      </button>
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          disabled={suggest.isPending}
+          onClick={submit}
+          className="rounded-full bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm disabled:opacity-50"
+        >
+          {suggest.isPending ? "Sending…" : "Suggest plots →"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFlagging(true)}
+          className="rounded-full border px-4 py-2 font-semibold text-sm"
+        >
+          Flag an issue
+        </button>
+      </div>
     </div>
   );
 }
@@ -488,7 +560,49 @@ function AwaitingPanel({ request }: { request: AllocationRequestRow }) {
 function AllocatedPanel({ request }: { request: AllocationRequestRow }) {
   const revert = useRevertAllocation();
   const remove = useDeleteAllocationRequest();
-  const [confirming, setConfirming] = useState<"undo" | "delete" | null>(null);
+  const editPlot = useEditAllocatedPlot();
+  const [confirming, setConfirming] = useState<"undo" | "delete" | "edit" | null>(null);
+  const [newPlotNumber, setNewPlotNumber] = useState(request.plotNumber ?? "");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  if (confirming === "edit") {
+    return (
+      <div className="flex flex-col gap-2">
+        <label htmlFor={`allocation-edit-plot-${request.id}`} className="font-semibold text-xs">
+          Correct the allocated plot number
+        </label>
+        <input
+          id={`allocation-edit-plot-${request.id}`}
+          className="h-9 rounded-md border bg-transparent px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          value={newPlotNumber}
+          onChange={(e) => setNewPlotNumber(e.target.value)}
+        />
+        {editError && <p className="text-red-600 text-xs dark:text-red-400">{editError}</p>}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={!newPlotNumber.trim() || editPlot.isPending}
+            onClick={() =>
+              editPlot.mutateAsync({ id: request.id, plotNumber: newPlotNumber.trim() }).then(
+                () => setConfirming(null),
+                () => setEditError("Failed to update the plot number"),
+              )
+            }
+            className="rounded-full bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm disabled:opacity-50"
+          >
+            {editPlot.isPending ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(null)}
+            className="rounded-full border px-4 py-2 font-semibold text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (confirming === "undo") {
     return (
@@ -545,6 +659,17 @@ function AllocatedPanel({ request }: { request: AllocationRequestRow }) {
   }
   return (
     <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          setNewPlotNumber(request.plotNumber ?? "");
+          setEditError(null);
+          setConfirming("edit");
+        }}
+        className="rounded-full border px-4 py-2 font-semibold text-sm"
+      >
+        Edit plot
+      </button>
       <button
         type="button"
         onClick={() => setConfirming("undo")}
