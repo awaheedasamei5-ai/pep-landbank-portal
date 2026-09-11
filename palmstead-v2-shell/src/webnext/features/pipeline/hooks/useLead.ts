@@ -56,6 +56,10 @@ export function useUpdateLead() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lead'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
+      // Company Leads (2026-09-11 UI-parity rebuild) reuses this same
+      // generic mutation for its own bulk "Tag" action -- a company lead
+      // is still a real row in this same `leads` table.
+      qc.invalidateQueries({ queryKey: ['companyLeads'] });
     },
   });
 }
@@ -71,6 +75,10 @@ export function useAssignLead() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lead'] });
       qc.invalidateQueries({ queryKey: ['leads'] });
+      // Same reasoning as useUpdateLead above -- Company Leads' own bulk
+      // "Assign" (a real ownership transfer, matching Pipeline's bulk
+      // semantics exactly) uses this same mutation.
+      qc.invalidateQueries({ queryKey: ['companyLeads'] });
     },
   });
 }
@@ -97,6 +105,9 @@ export function useDeleteLead() {
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['leadsArchived'] });
       qc.invalidateQueries({ queryKey: ['auditForLead'] });
+      // Same reasoning as useUpdateLead/useAssignLead above -- Company
+      // Leads' own bulk "Archive" uses this same mutation.
+      qc.invalidateQueries({ queryKey: ['companyLeads'] });
     },
   });
 }

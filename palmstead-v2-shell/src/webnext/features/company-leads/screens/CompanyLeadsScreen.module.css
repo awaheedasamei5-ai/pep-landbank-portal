@@ -1,23 +1,13 @@
+/* Byte-identical to PipelineListScreen.module.css's own layout classes
+   (head/search/KPI/stage-tabs/filter-panel/bulk-bar/table/card-list) --
+   the user's explicit correction: "let the view and ui everything should
+   look like the my pipeline app, the only distinction is the app name
+   and also the fact that it only houses company leads." Only the
+   handful of classes below the "Company Leads-specific" marker (the
+   per-lead assign-to-agent / source flow, a real functional difference
+   this screen alone needs) don't exist in Pipeline's own file. */
 .wrap { padding: 20px 16px 90px; }
 
-@media (width >= 1024px) {
-  .wrap { max-width: 100%; padding: 28px 32px 40px; }
-}
-
-/* Same real split-view pattern as My/Master Pipeline and Client Database
-   (see PipelineListScreen.module.css's own comment on why this is
-   duplicated per-screen rather than shared) -- the list and the lead
-   detail drawer become real flex siblings on desktop so one layout pass
-   divides the space between them, and the list hides (not unmounts)
-   below 1024px while a lead's own full-page detail route is active.
-   Real bug caught live: an earlier version of this file gave .pageRow
-   an unconditional `display:flex`, which is NOT what PipelineListScreen
-   itself does (it has no bare .pageRow rule at all, only .pageRowSplit
-   below) -- a flex child's default flex:0 1 auto shrinks to its own
-   content width instead of filling the row, which is exactly what made
-   .wrap look like it had dead space on both sides even though its own
-   max-width was correctly 1200px. .pageRow must stay a plain block
-   outside split mode so .wrap can take its parent's full width. */
 .wrapHiddenMobile { display: none; }
 @media (width >= 1024px) {
   .wrapHiddenMobile { display: block; }
@@ -27,7 +17,17 @@
   .pageRowSplit .wrapWithDrawer { flex: 1 1 auto; min-width: 0; overflow-y: auto; box-sizing: border-box; }
 }
 
-.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.title { font-size: 22px; margin: 0; }
+.sub { color: var(--c-muted); margin: 4px 0 0; font-size: 13.5px; max-width: 60ch; line-height: 1.45; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
+
 .headActions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .iconBtn {
@@ -55,14 +55,9 @@
   white-space: nowrap;
 }
 
-.eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--c-muted); }
-.title { font-size: 22px; margin: 4px 0 0; }
-.sub { color: var(--c-muted); margin: 6px 0 0; font-size: 13px; line-height: 1.45; max-width: 60ch; }
-.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
-
-.searchRow { display: flex; gap: 10px; margin: 16px 0 14px; }
 .search {
-  flex: 1;
+  display: block;
+  width: 100%;
   box-sizing: border-box;
   padding: 11px 14px;
   border-radius: 12px;
@@ -70,56 +65,179 @@
   background: var(--c-card);
   color: var(--c-text);
   font-size: 13.5px;
+  margin-bottom: 14px;
 }
-.csvBtn {
-  flex: 0 0 auto;
-  padding: 0 14px;
-  border-radius: 12px;
-  border: 1px solid var(--c-line);
-  background: var(--c-card);
-  color: var(--c-muted);
-  font-weight: 700;
-  font-size: 12px;
-  cursor: pointer;
-}
+.searchRow { display: flex; gap: 10px; margin-bottom: 14px; }
+.searchRow .search { margin-bottom: 0; flex: 1; }
 
 .kpiWrap { margin-bottom: 16px; }
 
-.list { display: flex; flex-direction: column; gap: 10px; }
+.stageTabsRow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.stageTabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  padding-right: 4px;
+  min-width: 0;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+}
+.stageTabs::-webkit-scrollbar { display: none; }
 
-.card {
+.stageTab {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stageTabOn { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+
+.filterToggle {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  border: 1px dashed var(--c-line);
+  background: none;
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filterPanel {
   background: var(--c-card);
   border: 1px solid var(--c-line);
   border-radius: var(--r-md);
-  padding: 14px 16px;
+  padding: 14px;
+  margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
+.filterGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (width >= 640px) {
+  .filterGrid { grid-template-columns: repeat(4, 1fr); }
+}
+.filterField { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; color: var(--c-muted); }
+.filterField select, .filterField input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.filterCheck { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--c-text); }
+.clearFiltersBtn { display: block; margin-top: 10px; background: none; border: none; color: var(--c-muted); font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
 
-.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; cursor: pointer; }
-.avatarWrap { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.avatar {
+.bulkBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.bulkCount { font-size: 12.5px; font-weight: 700; color: var(--c-text); }
+.bulkActions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.bulkBtn, .bulkBtnDanger, .bulkCancel { padding: 7px 12px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 700; cursor: pointer; border: none; }
+.bulkBtn { background: var(--c-card); color: var(--c-accent); border: 1px solid var(--c-line); }
+.bulkBtnDanger { background: var(--c-danger); color: #fff; }
+.bulkCancel { background: none; color: var(--c-muted); }
+.bulkBtn:disabled, .bulkBtnDanger:disabled { opacity: .6; cursor: default; }
+.bulkInput { flex: 1; min-width: 160px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--c-line); background: var(--c-card); color: var(--c-text); font-size: 12.5px; }
+
+.tableWrap {
+  display: none;
+  overflow-x: auto;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+}
+.table { border-collapse: collapse; width: 100%; min-width: 780px; }
+.th { text-align: left; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--c-muted); padding: 12px 10px; border-bottom: 1px solid var(--c-line); white-space: nowrap; }
+.tr:hover { background: var(--c-paper); }
+.td { padding: 10px; border-bottom: 1px solid var(--c-line); font-size: 12.5px; color: var(--c-text); white-space: nowrap; }
+.tdName { font-weight: 700; cursor: pointer; }
+.tdName:hover { color: var(--c-accent); }
+.tdMono { font-family: var(--font-mono); }
+.tdOverdue { color: var(--c-danger); font-weight: 700; }
+.expandedTd { white-space: normal; background: var(--c-paper); }
+
+.editIconBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  cursor: pointer;
+  font-size: 12px;
+}
+.editIconBtn:hover { background: var(--c-accent-soft); color: var(--c-accent); }
+
+.cardList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+@media (width >= 900px) {
+  .tableWrap { display: block; }
+  .cardList { display: none; }
+}
+
+.row { display: flex; flex-direction: column; gap: 0; background: var(--c-card); border: 1px solid var(--c-line); border-radius: var(--r-md); box-shadow: var(--shadow); overflow: hidden; }
+.rowTop { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
+.rowCheck { flex-shrink: 0; }
+.rowBody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+
+.editIconBtnMobile {
   flex-shrink: 0;
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  background: var(--c-accent-bg);
-  color: var(--c-accent);
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
   font-size: 12.5px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--c-accent-soft), var(--c-accent));
 }
 
-.name { font-weight: 700; font-size: 14px; }
-.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; }
-
+.rowMain { flex: 1; min-width: 0; }
+.name { font-weight: 700; font-size: 14px; color: var(--c-text); }
+.meta { color: var(--c-muted); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .right { text-align: right; flex-shrink: 0; }
-.amt { font-family: var(--font-mono); font-weight: 800; font-size: 15px; }
+.value { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+.stageWrap { margin-top: 4px; }
 
+/* -------- Company Leads-specific: the one real functional difference
+   (assign-to-agent / set-source), the user's own explicit exception. -------- */
 .sourceTag {
   display: inline-block;
-  margin-top: 8px;
+  margin: 8px 16px 0;
   font-size: 10.5px;
   font-weight: 700;
   color: var(--c-muted);
@@ -127,10 +245,20 @@
   padding: 3px 9px;
   border-radius: 100px;
 }
-
-.actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-.assignPanel { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
-
+.assignPanel { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--c-line); background: var(--c-paper); flex-wrap: wrap; }
+.hint { font-size: 12px; color: var(--c-muted); flex: 1 1 100%; margin: 0; }
+.discModeRow { display: flex; gap: 8px; flex-wrap: wrap; flex: 1 1 100%; }
+.discModeChip {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-accent);
+  background: none;
+  color: var(--c-accent);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
 .select, .sourceSelect {
   flex: 1;
   min-width: 0;
@@ -142,17 +270,6 @@
   font-size: 12.5px;
   font-family: inherit;
 }
-
-/* Real bug caught live on a narrow phone (360px): with the source select
-   plus two action buttons all competing for one row, `flex:1;min-width:0`
-   let the select get crushed down to a couple of visible characters
-   ("Fa") instead of ever wrapping -- flex-wrap only forces a new line
-   once an item refuses to shrink further, and min-width:0 removes that
-   floor entirely. Giving the select a flex-basis of 100% makes it claim
-   the whole row by itself, which pushes the two buttons onto their own
-   line below instead of squeezing everyone together. */
-.sourceSelect { flex: 1 1 100%; }
-
 .assignBtn {
   flex-shrink: 0;
   padding: 8px 14px;
@@ -166,7 +283,6 @@
   white-space: nowrap;
 }
 .assignBtn:disabled { opacity: .6; cursor: default; }
-
 .cancelBtn {
   flex-shrink: 0;
   padding: 8px 12px;
