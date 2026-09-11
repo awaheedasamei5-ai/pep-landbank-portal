@@ -1,0 +1,149 @@
+.wrap { max-width: 480px; }
+.sub { color: var(--c-muted); margin: 0 0 16px; font-size: 13.5px; }
+.empty { color: var(--c-muted); font-size: 13.5px; }
+.error { color: var(--c-danger); font-size: 12.5px; margin: 0; }
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+/* Same fix as My Day / Task Board: the compose controls stay a readable,
+   hand-sized width, but the meeting list itself widens into a real grid
+   instead of a single narrow column with dead space beside it.
+   auto-fit, NOT auto-fill: with few real cards, auto-fill still reserves
+   the full column count as empty tracks and only the first track gets a
+   card -- a single meeting rendered as one 341px-wide card with ~700px of
+   genuinely empty space beside it (found live, 2026-09-05). auto-fit
+   collapses the empty tracks so the real card(s) actually expand via 1fr
+   to fill the row instead of sitting stranded on the left. */
+@media (width >= 1024px) {
+  .wrap { max-width: 100%; }
+  .sub, .newBtn, .form { max-width: 460px; }
+  .list { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+  .list .card { margin-bottom: 0; }
+}
+
+.newBtn {
+  width: 100%;
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+
+.form {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.input, .textarea, .select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  font-size: 13.5px;
+  font-family: inherit;
+  background: var(--c-paper);
+  color: var(--c-text);
+}
+.textarea { resize: vertical; }
+.formRow { display: flex; gap: 8px; }
+.formRow > * { flex: 1; min-width: 0; }
+
+.inviteeLabel { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; margin-top: 4px; }
+.inviteeList { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.inviteeChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.checkBtn {
+  background: var(--c-paper);
+  color: var(--c-accent);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 9px;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.checkBtn:disabled { opacity: .6; cursor: default; }
+.conflictWarning { color: var(--c-warn); font-size: 12px; margin: 0; }
+.conflictOk { color: var(--c-success); font-size: 12px; margin: 0; }
+
+.addBtn {
+  background: var(--c-ink);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.addBtn:disabled { opacity: .6; cursor: default; }
+
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow);
+}
+.cardTitle { font-size: 14.5px; font-weight: 700; color: var(--c-text); margin-bottom: 3px; }
+.cardMeta { font-size: 12px; color: var(--c-muted); margin-bottom: 6px; }
+.cardDesc { font-size: 12.5px; color: var(--c-text); margin-bottom: 8px; }
+
+.rsvpRow { display: flex; gap: 8px; margin-top: 4px; }
+
+.acceptBtn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  border: none;
+  background: var(--c-success);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.declineBtn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rsvpStatus { font-size: 11.5px; font-weight: 700; margin-top: 4px; }
+.rsvpAccepted { color: var(--c-success); }
+.rsvpDeclined { color: var(--c-danger); }
+
+.attendeeList { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.attendeePill { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 100px; }
+.attendeeAccepted { background: var(--c-success-bg); color: var(--c-success); }
+.attendeeDeclined { background: var(--c-danger-bg); color: var(--c-danger); }
+.attendeePending { background: var(--c-paper); color: var(--c-muted); border: 1px solid var(--c-line); }

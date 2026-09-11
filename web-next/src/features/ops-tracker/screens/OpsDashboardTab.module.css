@@ -1,0 +1,298 @@
+.wrap { display: flex; flex-direction: column; gap: 16px; }
+.empty { color: var(--c-muted); font-size: 13px; margin: 0; }
+
+.heroRow { display: flex; align-items: center; gap: 12px; }
+.heroGreet { font-size: 12.5px; color: var(--c-muted); font-weight: 600; }
+.heroName { font-size: 16px; color: var(--c-text); font-weight: 800; }
+
+/* Matches the reference mobile "Today's Progress" dark hero card exactly:
+   a dark card with a ring on the left and a stacked count list on the
+   right -- real numbers (today's todos), not the mockup's placeholder 12s. */
+.progressCard {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: var(--c-ink);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+}
+
+.progressStats { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.progressStatRow { display: flex; align-items: center; gap: 8px; }
+
+.progressStatIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.progressStatValue { font-family: var(--font-mono); font-size: 14px; font-weight: 800; color: #fff; }
+.progressStatLabel { font-size: 11.5px; color: rgb(255 255 255 / 70%); }
+
+.briefingCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, var(--c-accent-bg), var(--c-card) 75%);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  padding: 16px;
+}
+
+.briefingIconBadge {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-card);
+  color: var(--c-accent);
+  box-shadow: var(--shadow);
+}
+
+.briefingBody { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.briefingHead { display: flex; align-items: center; gap: 6px; }
+
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 3px 7px;
+  border-radius: 5px;
+}
+
+.liveDot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-success); animation: opsLivePulse 2s ease-in-out infinite; }
+.liveLabel { font-size: 9.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .03em; }
+
+@keyframes opsLivePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .45; transform: scale(0.75); }
+}
+
+.briefingText { font-size: 13.5px; color: var(--c-text); line-height: 1.5; }
+
+.statGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+@media (width >= 640px) {
+  .statGrid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.statTile {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  border-radius: var(--r-md);
+  padding: 14px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  border-left: 4px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.statTile:hover { transform: translateY(-1px); }
+
+/* Same tinted-gradient technique as .briefingCard above -- a soft tone
+   wash instead of a flat card, so the row of stats reads as colorful and
+   alive rather than four identical grey boxes with a thin accent line. */
+.tone_accent { border-left-color: var(--c-accent); background: linear-gradient(165deg, var(--c-accent-bg), var(--c-card) 70%); }
+.tone_danger { border-left-color: var(--c-danger); background: linear-gradient(165deg, var(--c-danger-bg), var(--c-card) 70%); }
+.tone_warn { border-left-color: var(--c-warn); background: linear-gradient(165deg, var(--c-warn-bg), var(--c-card) 70%); }
+.tone_success { border-left-color: var(--c-success); background: linear-gradient(165deg, var(--c-success-bg), var(--c-card) 70%); }
+.tone_info { border-left-color: var(--c-info); background: linear-gradient(165deg, var(--c-info-bg), var(--c-card) 70%); }
+
+.statIconBadge {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+}
+.tone_accent .statIconBadge { color: var(--c-accent); }
+.tone_danger .statIconBadge { color: var(--c-danger); }
+.tone_warn .statIconBadge { color: var(--c-warn); }
+.tone_success .statIconBadge { color: var(--c-success); }
+.tone_info .statIconBadge { color: var(--c-info); }
+
+.statValue { font-family: var(--font-mono); font-size: 22px; font-weight: 800; color: var(--c-text); }
+.statLabel { font-size: 11.5px; font-weight: 700; color: var(--c-text); margin-top: 2px; }
+.statSub { font-size: 10.5px; color: var(--c-muted); }
+
+/* Desktop-only "TaskLab"-style widget row (team/countdown/chart/heatmap/
+   process/timeline) -- hidden on mobile, where the hero+stat-tile layout
+   above already covers the same real numbers in a phone-appropriate form. */
+.desktopWidgetGrid { display: none; }
+
+@media (width >= 1024px) {
+  .desktopWidgetGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+  .widgetCell { min-width: 0; }
+  .widgetCellWide { grid-column: span 2; min-width: 0; }
+}
+
+.mainGrid { display: flex; flex-direction: column; gap: 16px; }
+
+@media (width >= 1024px) {
+  .mainGrid { display: grid; grid-template-columns: 1.4fr 1fr; align-items: start; }
+}
+
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.sectionCard {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.sectionTitle { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: var(--c-text); margin-bottom: 10px; }
+.sectionTitle svg { color: var(--c-accent); flex-shrink: 0; }
+
+.meetingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-line);
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.meetingRow:last-child { border-bottom: none; }
+
+.meetingDateBadge {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--c-warn-bg);
+  color: var(--c-warn);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+}
+.meetingDateMonth { font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+.meetingDateDay { font-size: 14px; font-weight: 800; font-family: var(--font-mono); }
+
+.meetingInfo { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.meetingTitle { font-size: 13px; color: var(--c-text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meetingTime { font-size: 11px; color: var(--c-muted); font-family: var(--font-mono); }
+
+.teamRow { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--c-line); font-size: 12.5px; }
+.teamRow:last-child { border-bottom: none; }
+.teamPerson { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.teamName { font-weight: 700; color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teamStat { color: var(--c-muted); flex-shrink: 0; }
+.teamOverdue { color: var(--c-danger); font-weight: 700; }
+
+.avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+.avatar_accent { background: var(--c-accent-bg); color: var(--c-accent); }
+.avatar_info { background: var(--c-info-bg); color: var(--c-info); }
+.avatar_success { background: var(--c-success-bg); color: var(--c-success); }
+.avatar_warn { background: var(--c-warn-bg); color: var(--c-warn); }
+.avatar_danger { background: var(--c-danger-bg); color: var(--c-danger); }
+
+.quickAddRow { display: flex; gap: 8px; }
+
+.input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 13.5px;
+  font-family: inherit;
+}
+
+.parseBtn {
+  flex-shrink: 0;
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.parseBtn:disabled { opacity: .6; cursor: default; }
+
+.confirmBox { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--c-line); display: flex; flex-direction: column; gap: 8px; }
+.confirmRow { display: flex; gap: 8px; }
+
+.select {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.confirmActions { display: flex; gap: 8px; }
+
+.confirmCancel {
+  flex: 1;
+  padding: 9px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.confirmCreate {
+  flex: 1;
+  padding: 9px;
+  border-radius: 8px;
+  border: none;
+  background: var(--c-ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.confirmCreate:disabled { opacity: .6; cursor: default; }

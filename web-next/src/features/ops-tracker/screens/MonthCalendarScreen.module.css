@@ -1,0 +1,74 @@
+.wrap { display: block; }
+.empty { color: var(--c-muted); font-size: 13.5px; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+
+.navBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-text);
+  font-size: 16px;
+  cursor: pointer;
+}
+.navLabel { font-weight: 700; font-size: 14px; }
+
+.weekdayRow { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+.weekdayLabel { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; }
+
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 20px; }
+
+.cell {
+  min-height: 68px;
+  background: var(--c-card);
+  border: 1.5px solid var(--c-line);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.cellOutside { opacity: .4; }
+.cellToday { border-color: var(--c-accent); }
+.cellSelected { background: var(--c-accent-bg); border-color: var(--c-accent); border-width: 2px; }
+.cellNum { font-size: 10.5px; font-weight: 700; color: var(--c-text); }
+
+.cellChips { display: flex; flex-direction: column; gap: 2px; }
+
+.chip {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: var(--c-accent-bg);
+  color: var(--c-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chipDone { opacity: .5; text-decoration: line-through; }
+.chipMore { font-size: 9px; color: var(--c-faint); }
+
+.selectedPanel {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 16px;
+}
+.selectedHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.selectedTitle { font-size: 14.5px; font-weight: 700; color: var(--c-text); }
+
+.selectedClose {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-size: 11px;
+  cursor: pointer;
+}

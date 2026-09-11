@@ -4,8 +4,10 @@ import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useTodayTodos, useCreateTodo, useUpdateTodoStatus } from '../hooks/useTodayTodos';
 import { useColleagueAvailability } from '../hooks/useColleagueAvailability';
 import { DayClearedCelebration } from '../../streak/components/DayClearedCelebration';
+import { ItemDetailModal } from '../components/ItemDetailModal';
+import { Avatar } from '../../../shared/ui/Avatar';
 import { today } from '../../../shared/lib/format';
-import type { ScheduleItemStatus } from '../../../types/domain';
+import type { ScheduleItem, ScheduleItemStatus } from '../../../types/domain';
 import styles from './MyDayScreen.module.css';
 
 // Real kanban, not a decorative board -- these 4 columns are the actual
@@ -38,6 +40,8 @@ export function MyDayScreen() {
   const [assignTo, setAssignTo] = useState('');
   const [justAssigned, setJustAssigned] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [openItem, setOpenItem] = useState<ScheduleItem | null>(null);
+  const [filter, setFilter] = useState<ScheduleItemStatus>('open');
 
   const colleagues = (staff ?? []).filter((s) => s.key !== profile?.key);
   const selectedColleague = colleagues.find((c) => c.key === assignTo);
@@ -68,9 +72,6 @@ export function MyDayScreen() {
 
   return (
     <div className={styles.wrap}>
-      <h1 className={styles.title}>My Day</h1>
-      <p className={styles.sub}>Today's to-do list</p>
-
       <form className={styles.addRow} onSubmit={addTodo}>
         <input className={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Follow up with Mercy" />
         <button type="submit" className={styles.addBtn} disabled={createTodo.isPending || !title.trim()}>
@@ -120,6 +121,51 @@ export function MyDayScreen() {
       {!isLoading && all.length === 0 && <p className={styles.empty}>Nothing logged for today yet — add your first to-do above.</p>}
 
       {!isLoading && all.length > 0 && (
+        <>
+          {/* Matches the reference mobile "Today's Tasks" section exactly:
+              status pills that actually filter (real ScheduleItemStatus
+              values, not the mockup's made-up To Do/In Progress/In Review
+              labels) above a flat card list -- shown on narrow screens only,
+              where a 4-column kanban board doesn't fit anyway. The kanban
+              board below stays for wider screens where all 4 columns are
+              visible at once. */}
+          <div className={styles.filterPills}>
+            {COLUMNS.map((col) => {
+              const count = all.filter((t) => t.status === col.status).length;
+              return (
+                <button key={col.status} type="button" className={`${styles.filterPill} ${filter === col.status ? styles.filterPillActive : ''}`} onClick={() => setFilter(col.status)}>
+                  {col.label} <span className={styles.filterPillCount}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className={styles.mobileList}>
+            {all
+              .filter((t) => t.status === filter)
+              .map((t) => (
+                <button key={t.id} type="button" className={styles.taskCard} onClick={() => setOpenItem(t)}>
+                  <div className={styles.taskCardTop}>
+                    {t.priority && <span className={`${styles.taskPill} ${t.priority === 'High' ? styles.taskPillHigh : t.priority === 'Low' ? styles.taskPillLow : styles.taskPillMed}`}>{t.priority} Priority</span>}
+                    <span className={styles.taskCardArrow}>↗</span>
+                  </div>
+                  <div className={styles.taskCardTitle}>{t.title}</div>
+                  <div className={styles.taskCardFoot}>
+                    {(t.startTime || t.endTime) && (
+                      <span className={styles.taskCardTime}>
+                        🕐 {t.startTime?.slice(0, 5)}
+                        {t.endTime ? `–${t.endTime.slice(0, 5)}` : ''}
+                      </span>
+                    )}
+                    {t.assignedToName && t.assignedToName !== profile?.name && <Avatar name={t.assignedToName} size={22} />}
+                  </div>
+                </button>
+              ))}
+            {all.filter((t) => t.status === filter).length === 0 && <p className={styles.columnEmpty}>Nothing here</p>}
+          </div>
+        </>
+      )}
+
+      {!isLoading && all.length > 0 && (
         <div className={styles.board}>
           {COLUMNS.map((col) => {
             const items = all.filter((t) => t.status === col.status);
@@ -133,7 +179,15 @@ export function MyDayScreen() {
                 <div className={styles.columnBody}>
                   {items.map((t) => (
                     <div className={styles.card} key={t.id}>
-                      <div className={styles.cardTitle}>{t.title}</div>
+                      <button type="button" className={styles.cardTitleBtn} onClick={() => setOpenItem(t)}>
+                        {t.title}
+                      </button>
+                      {t.startTime && (
+                        <div className={styles.cardTime}>
+                          {t.startTime.slice(0, 5)}
+                          {t.endTime ? `–${t.endTime.slice(0, 5)}` : ''}
+                        </div>
+                      )}
                       <select className={styles.cardMoveSelect} value={t.status} onChange={(e) => changeStatus(t.id, e.target.value as ScheduleItemStatus)} aria-label={`Move "${t.title}"`}>
                         {COLUMNS.map((c) => (
                           <option key={c.status} value={c.status}>
@@ -151,6 +205,7 @@ export function MyDayScreen() {
         </div>
       )}
       {celebrate && <DayClearedCelebration onClose={() => setCelebrate(false)} />}
+      {openItem && <ItemDetailModal item={openItem} onClose={() => setOpenItem(null)} />}
     </div>
   );
 }

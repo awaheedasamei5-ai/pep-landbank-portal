@@ -1,0 +1,202 @@
+/* Same real overlay convention as ItemDetailModal/DayClearedCelebration --
+   position:fixed inset:0 backdrop + centered card, z-index:200. Matches
+   the reference "Add New Task" screen's exact structure: X / title /
+   checkmark header, stacked labeled fields, a black full-width submit. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgb(10 12 26 / 62%);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: aiFadeIn 0.2s ease-out;
+}
+
+@media (width >= 640px) {
+  .overlay { align-items: center; padding: 20px; }
+}
+
+@keyframes aiFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.card {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--c-card);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (width >= 640px) {
+  .card { border-radius: var(--r-lg); }
+}
+
+.head { display: flex; align-items: center; justify-content: space-between; }
+.headTitle { font-size: 16px; font-weight: 800; color: var(--c-text); }
+
+.circleBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.circleBtnConfirm { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+.circleBtnConfirm:disabled { opacity: .5; cursor: default; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.fieldLabel { font-size: 11.5px; font-weight: 800; color: var(--c-muted); text-transform: uppercase; letter-spacing: .03em; }
+
+.input, .textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.textarea { resize: vertical; min-height: 64px; }
+
+.pillRow { display: flex; gap: 10px; }
+
+.pickerPill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-radius: 100px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  min-width: 0;
+}
+.pickerIcon { flex-shrink: 0; color: var(--c-muted); font-size: 14px; }
+
+.pickerInput {
+  border: none;
+  background: none;
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+
+.priorityRow { display: flex; gap: 8px; }
+
+.priorityPill {
+  flex: 1;
+  padding: 10px;
+  border-radius: 100px;
+  border: 1.5px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+.priorityLowActive { background: var(--c-success-bg); border-color: var(--c-success); color: var(--c-success); }
+.priorityMediumActive { background: var(--c-warn-bg); border-color: var(--c-warn); color: var(--c-warn); }
+.priorityHighActive { background: var(--c-danger-bg); border-color: var(--c-danger); color: var(--c-danger); }
+
+.selectPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.selectPill svg { flex-shrink: 0; color: var(--c-accent); }
+
+.tagList { display: flex; flex-wrap: wrap; gap: 7px; }
+
+.tagChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 100px;
+  background: var(--c-accent-bg);
+  color: var(--c-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.tagRemove { background: none; border: none; color: inherit; cursor: pointer; font-size: 12px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.tagRemove:hover { background: rgb(0 0 0 / 8%); }
+
+.tagAddRow { display: flex; align-items: center; gap: 6px; }
+.tagAddInput { border: 1px dashed var(--c-line); border-radius: 100px; padding: 6px 12px; font-size: 12px; background: none; color: var(--c-text); font-family: inherit; width: 120px; }
+.tagAddBtn { border: 1px dashed var(--c-line); border-radius: 100px; padding: 6px 12px; font-size: 12px; font-weight: 700; background: none; color: var(--c-accent); cursor: pointer; }
+
+.moreToggle { align-self: flex-start; background: none; border: none; color: var(--c-accent); font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 2px 0; }
+.moreBlock { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; border-top: 1px dashed var(--c-line); }
+
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.formRow { display: flex; gap: 8px; }
+.formRow > * { flex: 1; min-width: 0; }
+
+.aiDraftBtn {
+  align-self: flex-start;
+  background: var(--c-paper);
+  color: var(--c-accent);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.aiDraftBtn:hover { background: var(--c-accent-soft); }
+.aiDraftBtn:disabled { opacity: .6; cursor: default; }
+
+.createBtn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 100px;
+  border: none;
+  background: var(--c-ink);
+  color: #fff;
+  font-weight: 800;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+.createBtn:disabled { opacity: .6; cursor: default; }

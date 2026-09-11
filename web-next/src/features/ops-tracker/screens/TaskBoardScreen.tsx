@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
-import { useTasks, useCreateTask, useUpdateTaskStatus, useReassignTask } from '../hooks/useTasks';
-import { useTaskDescriptionDraft } from '../hooks/useTaskDescriptionDraft';
+import { useTasks, useUpdateTaskStatus, useReassignTask } from '../hooks/useTasks';
+import { useDownloadTaskAttachment, useRemoveTaskAttachment, useTaskAttachments, useTaskEvents, useUploadTaskAttachment } from '../hooks/useTaskDetail';
+import { AddTaskModal } from '../components/AddTaskModal';
 import type { ScheduleItem, ScheduleItemStatus } from '../../../types/domain';
 import styles from './TaskBoardScreen.module.css';
 
@@ -11,22 +12,21 @@ import styles from './TaskBoardScreen.module.css';
 // visual pattern, different rows: a task is ongoing/assignable work with a
 // category/priority/due date, a todo is a same-day personal checklist item).
 //
-// Scoped down from the full Section 10.2 task model -- built: title,
-// description, category, priority, assignee, due date, status, reassignment
-// (attributed via assigned_by). Deliberately NOT built this pass, and not
-// pretended: dependencies (Blocked by/Blocking -- would need new schema,
-// schedule_items has no such column today), recurrence UI (the DB columns
-// exist, unused here), meetings/RSVP, linked lead/site visit, attachments,
-// and the Week/Month Calendar + Team Schedule + Timeline views from Section
-// 10.1 (Task Board is one of six named views; this is that one view only).
-const PRIORITIES = ['Low', 'Medium', 'High'] as const;
-const CATEGORIES = ['Follow-up', 'Admin', 'Site Visit', 'Documentation', 'Other'] as const;
-
+// Full Section 10.2 task model, closed out 2026-09-06: dependencies
+// (Blocked by/Blocking, real blocked_by_id column + a real stored
+// 'blocked' status), recurrence (recurs_freq/interval/until, a closed
+// recurring task spawns its next instance without duplicating history),
+// linked lead/site visit, attachments (task-attachments Storage bucket),
+// activity history (task_events), and reassignment with a required
+// reason. Meetings/Week/Month Calendar/Team Schedule are their own
+// screens (this is still just the one Task Board view of Section 10.1's
+// six named views).
 const COLUMNS: { status: ScheduleItemStatus; label: string; color: string }[] = [
   { status: 'open', label: 'To Do', color: 'var(--c-info)' },
   { status: 'in_progress', label: 'In Progress', color: 'var(--c-warn)' },
+  { status: 'blocked', label: 'Blocked', color: 'var(--c-danger)' },
   { status: 'closed', label: 'Done', color: 'var(--c-success)' },
-  { status: 'cancelled', label: 'Cancelled', color: 'var(--c-danger)' },
+  { status: 'cancelled', label: 'Cancelled', color: 'var(--c-faint)' },
 ];
 
 export function TaskBoardScreen() {
@@ -34,99 +34,24 @@ export function TaskBoardScreen() {
   const isManager = profile?.role === 'manager';
   const { data: tasks, isLoading } = useTasks();
   const { data: staff } = useStaffDirectory();
-  const createTask = useCreateTask();
   const updateStatus = useUpdateTaskStatus();
   const reassign = useReassignTask();
-  const descriptionDraft = useTaskDescriptionDraft();
 
   const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('');
-  const [priority, setPriority] = useState<(typeof PRIORITIES)[number]>('Medium');
-  const [assignTo, setAssignTo] = useState(profile?.key ?? '');
-  const [dueDate, setDueDate] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const assignableStaff = staff ?? [];
   const all = tasks ?? [];
 
-  async function draftDescription() {
-    if (!title.trim()) return;
-    const drafted = await descriptionDraft.mutateAsync({ title: title.trim(), category: category || undefined, priority }).catch(() => null);
-    if (drafted) setDescription(drafted);
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const t = title.trim();
-    if (!t) return;
-    const target = assignableStaff.find((s) => s.key === assignTo);
-    await createTask.mutateAsync({
-      title: t,
-      description: description.trim() || undefined,
-      category: category || undefined,
-      priority,
-      assignedTo: assignTo || profile?.key || '',
-      assignedToName: target?.name ?? profile?.name ?? '',
-      dueDate: dueDate || undefined,
-    });
-    setTitle('');
-    setDescription('');
-    setCategory('');
-    setPriority('Medium');
-    setDueDate('');
-    setShowForm(false);
-  }
-
   return (
     <div className={styles.wrap}>
-      <h1 className={styles.title}>Task Board</h1>
       <p className={styles.sub}>{isManager ? 'Every task across the team' : 'Your assigned work'}</p>
 
-      <button type="button" className={styles.newBtn} onClick={() => setShowForm((v) => !v)}>
-        {showForm ? 'Cancel' : '+ New task'}
+      <button type="button" className={styles.newBtn} onClick={() => setShowForm(true)}>
+        + New task
       </button>
 
-      {showForm && (
-        <form className={styles.form} onSubmit={submit}>
-          <input className={styles.input} placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-          <textarea className={styles.textarea} placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-          {title.trim() && (
-            <button type="button" className={styles.aiDraftBtn} disabled={descriptionDraft.isPending} onClick={draftDescription}>
-              {descriptionDraft.isPending ? 'Drafting…' : 'AI: Draft a description'}
-            </button>
-          )}
-          <div className={styles.formRow}>
-            <select className={styles.select} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">Category…</option>
-              {CATEGORIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-            <select className={styles.select} value={priority} onChange={(e) => setPriority(e.target.value as (typeof PRIORITIES)[number])}>
-              {PRIORITIES.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.formRow}>
-            <select className={styles.select} value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-              <option value={profile?.key ?? ''}>Myself</option>
-              {assignableStaff
-                .filter((s) => s.key !== profile?.key)
-                .map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.name}
-                  </option>
-                ))}
-            </select>
-            <input className={styles.select} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-          <button type="submit" className={styles.addBtn} disabled={createTask.isPending || !title.trim()}>
-            {createTask.isPending ? 'Creating…' : 'Create task'}
-          </button>
-        </form>
-      )}
+      {showForm && <AddTaskModal onClose={() => setShowForm(false)} />}
 
       {isLoading && <p className={styles.empty}>Loading…</p>}
       {!isLoading && all.length === 0 && <p className={styles.empty}>No tasks yet -- create the first one above.</p>}
@@ -144,7 +69,17 @@ export function TaskBoardScreen() {
                 </div>
                 <div className={styles.columnBody}>
                   {items.map((t) => (
-                    <TaskCard key={t.id} task={t} isManager={isManager} staff={assignableStaff} onStatusChange={(status) => updateStatus.mutate({ id: t.id, status })} onReassign={(toKey, toName) => reassign.mutate({ id: t.id, toKey, toName })} />
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      allTasks={all}
+                      isManager={isManager}
+                      staff={assignableStaff}
+                      expanded={expandedId === t.id}
+                      onToggleExpand={() => setExpandedId((cur) => (cur === t.id ? null : t.id))}
+                      onStatusChange={(status) => updateStatus.mutate({ id: t.id, status })}
+                      onReassign={(toKey, toName, reason) => reassign.mutate({ id: t.id, toKey, toName, reason })}
+                    />
                   ))}
                   {items.length === 0 && <div className={styles.columnEmpty}>Nothing here</div>}
                 </div>
@@ -159,28 +94,71 @@ export function TaskBoardScreen() {
 
 function TaskCard({
   task,
+  allTasks,
   isManager,
   staff,
+  expanded,
+  onToggleExpand,
   onStatusChange,
   onReassign,
 }: {
   task: ScheduleItem;
+  allTasks: ScheduleItem[];
   isManager: boolean;
   staff: { key: string; name: string }[];
+  expanded: boolean;
+  onToggleExpand: () => void;
   onStatusChange: (status: ScheduleItemStatus) => void;
-  onReassign: (toKey: string, toName: string) => void;
+  onReassign: (toKey: string, toName: string, reason: string) => void;
 }) {
+  const [reassignTarget, setReassignTarget] = useState<{ key: string; name: string } | null>(null);
+  const [reason, setReason] = useState('');
+  const events = useTaskEvents(expanded ? task.id : null);
+  const attachments = useTaskAttachments(expanded ? task.id : null);
+  const upload = useUploadTaskAttachment();
+  const remove = useRemoveTaskAttachment();
+  const download = useDownloadTaskAttachment();
+  // Only worth showing as a live warning while it's actually still
+  // blocking (predecessor not yet done) -- a linked-but-already-
+  // completed predecessor isn't holding this task back anymore, so
+  // labeling it "Blocked by" would read as wrong the moment the
+  // predecessor finishes, even though the link itself is still real.
+  const blocker = task.blockedById ? allTasks.find((t) => t.id === task.blockedById) : null;
+  const stillBlocking = !!blocker && blocker.status !== 'closed';
+
+  function confirmReassign() {
+    if (!reassignTarget || !reason.trim()) return;
+    onReassign(reassignTarget.key, reassignTarget.name, reason.trim());
+    setReassignTarget(null);
+    setReason('');
+  }
+
   return (
     <div className={styles.card}>
-      <div className={styles.cardTitle}>{task.title}</div>
+      <div className={styles.cardTitle} onClick={onToggleExpand} role="button" tabIndex={0}>
+        {task.title}
+      </div>
       {task.description && <div className={styles.cardDesc}>{task.description}</div>}
       <div className={styles.cardMeta}>
         {task.priority && <span className={`${styles.pill} ${task.priority === 'High' ? styles.pillHigh : task.priority === 'Low' ? styles.pillLow : styles.pillMed}`}>{task.priority}</span>}
         {task.category && <span className={styles.pillNeutral}>{task.category}</span>}
-        {task.date && <span className={styles.pillNeutral}>Due {task.date}</span>}
+        {task.date && (
+          <span className={styles.pillNeutral}>
+            Due {task.date}
+            {task.startTime && ` ${task.startTime.slice(0, 5)}${task.endTime ? `–${task.endTime.slice(0, 5)}` : ''}`}
+          </span>
+        )}
+        {task.recursFreq && <span className={styles.pillNeutral}>↻ {task.recursFreq}</span>}
       </div>
+      {stillBlocking && <div className={styles.blockedNote}>Blocked by: {blocker.title}</div>}
       {isManager && <div className={styles.cardAssignee}>{task.assignedToName ?? task.assignedTo}</div>}
-      <select className={styles.cardMoveSelect} value={task.status} onChange={(e) => onStatusChange(e.target.value as ScheduleItemStatus)} aria-label={`Move "${task.title}"`}>
+      <select
+        className={styles.cardMoveSelect}
+        value={task.status}
+        disabled={task.status === 'blocked' && stillBlocking}
+        onChange={(e) => onStatusChange(e.target.value as ScheduleItemStatus)}
+        aria-label={`Move "${task.title}"`}
+      >
         {COLUMNS.map((c) => (
           <option key={c.status} value={c.status}>
             {c.label}
@@ -188,13 +166,93 @@ function TaskCard({
         ))}
       </select>
       {isManager && staff.length > 0 && (
-        <select className={styles.cardMoveSelect} value={task.assignedTo} onChange={(e) => { const s = staff.find((x) => x.key === e.target.value); if (s) onReassign(s.key, s.name); }} aria-label={`Reassign "${task.title}"`}>
+        <select
+          className={styles.cardMoveSelect}
+          value={task.assignedTo}
+          onChange={(e) => {
+            const s = staff.find((x) => x.key === e.target.value);
+            if (s && s.key !== task.assignedTo) setReassignTarget(s);
+          }}
+          aria-label={`Reassign "${task.title}"`}
+        >
           {staff.map((s) => (
             <option key={s.key} value={s.key}>
               {s.name}
             </option>
           ))}
         </select>
+      )}
+      {reassignTarget && (
+        <div className={styles.reassignBox}>
+          <div className={styles.reassignLabel}>Why reassign to {reassignTarget.name}?</div>
+          <input className={styles.input} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" autoFocus />
+          <div className={styles.formRow}>
+            <button type="button" className={styles.reassignCancel} onClick={() => setReassignTarget(null)}>
+              Cancel
+            </button>
+            <button type="button" className={styles.reassignConfirm} disabled={!reason.trim()} onClick={confirmReassign}>
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+      <button type="button" className={styles.expandToggle} onClick={onToggleExpand}>
+        {expanded ? 'Hide details' : 'Details & history'}
+      </button>
+      {expanded && (
+        <div className={styles.detailBlock}>
+          {task.notes && (
+            <div className={styles.detailSection}>
+              <div className={styles.detailLabel}>Notes</div>
+              <div className={styles.detailText}>{task.notes}</div>
+            </div>
+          )}
+          <div className={styles.detailSection}>
+            <div className={styles.detailLabel}>Attachments</div>
+            {(attachments.data ?? []).map((a) => (
+              <div key={a.id} className={styles.attachmentRow}>
+                <button type="button" className={styles.attachmentName} onClick={() => download.mutate(a.storagePath)}>
+                  📎 {a.fileName}
+                </button>
+                <button type="button" className={styles.attachmentRemove} onClick={() => remove.mutate({ id: a.id, storagePath: a.storagePath, taskId: task.id })}>
+                  ✕
+                </button>
+              </div>
+            ))}
+            {(attachments.data ?? []).length === 0 && <div className={styles.detailEmpty}>No files attached.</div>}
+            <label className={styles.uploadBtn}>
+              {upload.isPending ? 'Uploading…' : '+ Attach a file'}
+              <input
+                type="file"
+                hidden
+                disabled={upload.isPending}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) upload.mutate({ taskId: task.id, file });
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          <div className={styles.detailSection}>
+            <div className={styles.detailLabel}>Activity</div>
+            {(events.data ?? []).map((ev) => (
+              <div key={ev.id} className={styles.eventRow}>
+                <span className={styles.eventActor}>{ev.actorName ?? 'Someone'}</span>{' '}
+                {ev.type === 'created' && 'created this task'}
+                {ev.type === 'status_changed' && `moved it to ${ev.toKey}`}
+                {ev.type === 'reassigned' && (
+                  <>
+                    reassigned to {ev.toName ?? ev.toKey}
+                    {ev.note && <span className={styles.eventNote}> — {ev.note}</span>}
+                  </>
+                )}
+                <span className={styles.eventTime}>{new Date(ev.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            ))}
+            {(events.data ?? []).length === 0 && <div className={styles.detailEmpty}>No activity logged yet.</div>}
+          </div>
+        </div>
       )}
     </div>
   );

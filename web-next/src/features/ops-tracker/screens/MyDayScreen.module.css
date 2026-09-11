@@ -1,7 +1,8 @@
-.wrap { padding: 20px 16px 90px; max-width: 480px; }
-.title { font-size: 22px; margin: 0 0 4px; }
-.sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }
+/* Own header/padding removed 2026-09-06 -- now embedded as a tab inside
+   OperationsTrackerScreen, which owns the page-level title/padding. */
+.wrap { max-width: 480px; }
 .addRow { display: flex; gap: 8px; margin-bottom: 18px; }
+
 .input { flex: 1; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--c-line); font-size: 14px; }
 
 .addBtn {
@@ -58,6 +59,24 @@
 }
 .cardTitle { font-size: 13px; font-weight: 600; color: var(--c-text); line-height: 1.4; margin-bottom: 8px; }
 
+.cardTime { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; color: var(--c-muted); margin: -4px 0 8px; }
+
+.cardTitleBtn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text);
+  line-height: 1.4;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
 .cardMoveSelect {
   width: 100%;
   font-size: 11px;
@@ -99,3 +118,97 @@
 .availChipWarn { background: var(--c-warn-bg); color: var(--c-warn); }
 .availAi { display: flex; gap: 6px; align-items: flex-start; color: var(--c-ink); }
 .availAiBadge { flex-shrink: 0; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 5px; background: var(--c-accent-soft); color: var(--c-ink); margin-top: 1px; }
+
+/* Real user complaint (2026-09-05): "the my day page has been squeezed to
+   the left side while there are ample space on the right" -- .wrap capped
+   at 480px with no desktop override, inside a 1200px shell. Fix: widen the
+   board itself into a real 4-column grid that fills the shell (same fix
+   already applied to Task Board's board), while the compose/assign
+   controls stay a readable width instead of stretching edge to edge.
+   This block MUST come after .board/.column's own definitions above --
+   same specificity (.board vs .board), so source order decides the tie
+   and an earlier media-query rule loses to a later unconditional one. */
+@media (width >= 1024px) {
+  .wrap { max-width: 100%; }
+  .addRow, .assignRow, .availCard { max-width: 460px; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    overflow-x: visible;
+    margin: 0;
+    padding: 0;
+  }
+  .column { width: auto; }
+}
+
+/* Reference mobile "Today's Tasks" section: pills that filter a flat card
+   list, real data (actual ScheduleItemStatus/counts), shown only below the
+   width where a 4-column kanban board stops being usable at a glance. */
+.filterPills { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; }
+
+.filterPill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+  color: var(--c-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.filterPillActive { background: var(--c-ink); border-color: var(--c-ink); color: #fff; }
+.filterPillCount { font-family: var(--font-mono); font-size: 10.5px; opacity: .75; }
+
+.mobileList { display: flex; flex-direction: column; gap: 10px; }
+
+.taskCard {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 13px 14px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: inherit;
+}
+.taskCardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+
+.taskPill { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 100px; }
+.taskPillHigh { background: var(--c-danger-bg); color: var(--c-danger); }
+.taskPillMed { background: var(--c-warn-bg); color: var(--c-warn); }
+.taskPillLow { background: var(--c-success-bg); color: var(--c-success); }
+
+.taskCardArrow {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.taskCardTitle { font-size: 13.5px; font-weight: 700; color: var(--c-text); line-height: 1.4; margin-bottom: 10px; }
+.taskCardFoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.taskCardTime { font-size: 11.5px; color: var(--c-muted); font-family: var(--font-mono); }
+
+/* Same tie-break note as the desktop block above -- this must stay the
+   LAST rule touching .board/.filterPills/.mobileList in the file so it
+   always wins the cascade at each width. */
+@media (width < 768px) {
+  .board { display: none; }
+}
+
+@media (width >= 768px) {
+  .filterPills, .mobileList { display: none; }
+}

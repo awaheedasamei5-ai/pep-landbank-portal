@@ -57,22 +57,29 @@ export function useCreateTask() {
 }
 
 export function useUpdateTaskStatus() {
+  const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const invalidate = useInvalidateTasks();
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ScheduleItemStatus }) => getDataSource(demoMode).scheduleItems.updateStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: ScheduleItemStatus }) => getDataSource(demoMode).scheduleItems.updateStatus(id, status, profile?.key ?? '', profile?.name ?? ''),
     onSuccess: invalidate,
   });
 }
 
+// Real gap closed 2026-09-06: reassignment now requires and logs a
+// reason (Master Spec 10.2: "Task reassignment records who reassigned
+// and why") -- to task_events, not a new column on schedule_items
+// itself, since it's a point-in-time record of one decision, not a
+// persistent field of the task.
 export function useReassignTask() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const invalidate = useInvalidateTasks();
 
   return useMutation({
-    mutationFn: ({ id, toKey, toName }: { id: string; toKey: string; toName: string }) => getDataSource(demoMode).scheduleItems.reassignTask(id, toKey, toName, profile?.key ?? '', profile?.name ?? ''),
+    mutationFn: ({ id, toKey, toName, reason }: { id: string; toKey: string; toName: string; reason: string }) =>
+      getDataSource(demoMode).scheduleItems.reassignTask(id, toKey, toName, profile?.key ?? '', profile?.name ?? '', reason),
     onSuccess: invalidate,
   });
 }

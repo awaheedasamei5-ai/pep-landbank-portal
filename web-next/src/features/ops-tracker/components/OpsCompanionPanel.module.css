@@ -1,0 +1,77 @@
+.card {
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.title { font-size: 14px; font-weight: 700; color: var(--c-text); }
+
+.aiBadge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.answers { display: flex; flex-direction: column; gap: 8px; }
+
+.askBtn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-accent);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.askBtn:hover { background: var(--c-accent-soft); transform: translateX(1px); }
+.askEmoji { flex-shrink: 0; font-size: 15px; }
+
+.answerRow {
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  animation: opsCompanionFadeIn 0.3s ease-out;
+}
+
+@keyframes opsCompanionFadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.answerQ { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 5px; }
+.answerEmoji { font-size: 13px; }
+.answerText { font-size: 13.5px; color: var(--c-text); line-height: 1.5; }
+.answerLoading { font-size: 13px; color: var(--c-muted); font-style: italic; }
+
+.thinking { display: flex; gap: 4px; padding: 4px 0; }
+
+.thinkingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent-soft);
+  animation: opsThinkingBounce 1.1s ease-in-out infinite;
+}
+.thinkingDot:nth-child(2) { animation-delay: .15s; }
+.thinkingDot:nth-child(3) { animation-delay: .3s; }
+
+@keyframes opsThinkingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}

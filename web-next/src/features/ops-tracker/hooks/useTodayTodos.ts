@@ -45,7 +45,7 @@ export function useUpdateTodoStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: ScheduleItemStatus }) => getDataSource(demoMode).scheduleItems.updateStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: ScheduleItemStatus }) => getDataSource(demoMode).scheduleItems.updateStatus(id, status, agentKey, profile?.name ?? ''),
     onSuccess: () => invalidateAll(queryClient, agentKey),
   });
 }
