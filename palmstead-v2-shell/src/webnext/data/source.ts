@@ -148,6 +148,11 @@ export interface DataSource {
     // Same gate as Plot Inventory (canViewClientDatabase() in index.html).
     listCompany(): Promise<Lead[]>;
     assign(id: string, agentKey: string): Promise<Lead>;
+    // This shell only (not real web-next) -- hands a Company Lead to a
+    // staff member for follow-up WITHOUT the real ownership transfer
+    // assign() above does: agent_key stays 'company', so the lead never
+    // enters that staff's personal pipeline. null clears the assignment.
+    assignHandler(id: string, agentKey: string | null): Promise<Lead>;
     setSource(id: string, source: string): Promise<Lead>;
     // Phase 2 punch-list item 4: single-statement equivalents of
     // create()+update() / assign()+update(), used by the pipeline import
@@ -1270,6 +1275,11 @@ function createLiveDataSource(): DataSource {
       },
       async assign(id, agentKey) {
         const { data, error } = await requireClient().from('leads').update({ agent_key: agentKey }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapLeadRow(data);
+      },
+      async assignHandler(id, agentKey) {
+        const { data, error } = await requireClient().from('leads').update({ assigned_agent_key: agentKey }).eq('id', id).select().single();
         if (error) throw error;
         return mapLeadRow(data);
       },

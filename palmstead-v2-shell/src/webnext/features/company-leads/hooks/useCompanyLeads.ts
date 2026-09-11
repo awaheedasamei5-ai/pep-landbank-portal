@@ -46,6 +46,19 @@ export function useAssignCompanyLead() {
   });
 }
 
+// Hands a Company Lead to a staff member for follow-up without the real
+// ownership transfer useAssignCompanyLead does -- agent_key stays
+// 'company' (see assignHandler's own comment in data/source.ts), so only
+// this screen's own query needs invalidating, not leads/leadsAll too.
+export function useAssignCompanyLeadHandler() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, agentKey }: { id: string; agentKey: string | null }) => getDataSource(demoMode).leads.assignHandler(id, agentKey),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['companyLeads'] }),
+  });
+}
+
 export function useSetLeadSource() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const queryClient = useQueryClient();

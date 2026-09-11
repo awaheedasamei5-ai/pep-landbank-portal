@@ -11,7 +11,7 @@ import { useDownloadCompanyLeadsPipeline } from '../../manager/hooks/usePipeline
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadLeadQuotationPdf } from '../../quotation/hooks/useQuotationPdf';
 import { friendlyError } from '../../../shared/lib/friendlyError';
-import { useAgentRoster, useAssignCompanyLead, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
+import { useAgentRoster, useAssignCompanyLead, useAssignCompanyLeadHandler, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
 import type { Lead } from '../../../types/domain';
 import styles from './CompanyLeadsScreen.module.css';
 
@@ -139,15 +139,25 @@ export function CompanyLeadsScreen() {
   );
 }
 
+// Which of the two real "assign" actions is showing: 'choose' asks Move
+// vs Assign-only first (the user's own explicit two-option request --
+// Move is a real ownership transfer into the staff's personal pipeline,
+// Assign-only hands it to them for follow-up but leaves it here in
+// Company Leads), 'move'/'handle' then show the agent picker for
+// whichever was chosen.
+type AssignStep = 'closed' | 'choose' | 'move' | 'handle';
+
 function LeadCard({ lead }: { lead: Lead }) {
   const navigate = useNavigate();
   const { data: agents } = useAgentRoster();
   const assign = useAssignCompanyLead();
+  const assignHandler = useAssignCompanyLeadHandler();
   const setSource = useSetLeadSource();
   const { data: config } = useConfig();
   const downloadQuotation = useDownloadLeadQuotationPdf();
-  const [assigning, setAssigning] = useState(false);
+  const [assignStep, setAssignStep] = useState<AssignStep>('closed');
   const bal = Math.max(lead.grandTotal - lead.amtPaid, 0);
+  const handlerName = lead.assignedAgentKey ? (agents?.find((a) => a.key === lead.assignedAgentKey)?.name ?? lead.assignedAgentKey) : null;
 
   return (
     <div className={styles.card}>
@@ -172,10 +182,50 @@ function LeadCard({ lead }: { lead: Lead }) {
       </div>
 
       {lead.leadSource && <span className={styles.sourceTag}>{lead.leadSource}</span>}
+      {handlerName && (
+        <span className={styles.sourceTag} title="Handling this lead in Company Leads -- not their personal pipeline">
+          Assigned to {handlerName}
+          <button
+            type="button"
+            style={{ marginLeft: 6, border: 'none', background: 'none', cursor: 'pointer', color: 'inherit' }}
+            disabled={assignHandler.isPending}
+            onClick={() => assignHandler.mutate({ id: lead.id, agentKey: null })}
+            title="Unassign"
+          >
+            ×
+          </button>
+        </span>
+      )}
 
-      {assigning ? (
+      {assignStep === 'choose' && (
         <div className={styles.assignPanel}>
-          <select className={styles.select} defaultValue="" onChange={(e) => e.target.value && assign.mutate({ id: lead.id, agentKey: e.target.value }, { onSuccess: () => setAssigning(false) })}>
+          <p className={styles.hint} style={{ margin: 0 }}>
+            Move transfers ownership into their own pipeline. Assign just hands it to them for follow-up -- it stays here in Company Leads.
+          </p>
+          <div className={styles.discModeRow}>
+            <button type="button" className={styles.discModeChip} onClick={() => setAssignStep('move')}>
+              Move to their pipeline
+            </button>
+            <button type="button" className={styles.discModeChip} onClick={() => setAssignStep('handle')}>
+              Assign, keep in Company Leads
+            </button>
+          </div>
+          <button type="button" className={styles.cancelBtn} onClick={() => setAssignStep('closed')}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {(assignStep === 'move' || assignStep === 'handle') && (
+        <div className={styles.assignPanel}>
+          <select
+            className={styles.select}
+            defaultValue=""
+            onChange={(e) => {
+              if (!e.target.value) return;
+              if (assignStep === 'move') assign.mutate({ id: lead.id, agentKey: e.target.value }, { onSuccess: () => setAssignStep('closed') });
+              else assignHandler.mutate({ id: lead.id, agentKey: e.target.value }, { onSuccess: () => setAssignStep('closed') });
+            }}
+          >
             {/* Not `disabled` -- a disabled first option lets the browser
                 auto-select the next enabled one instead (observed live:
                 the dropdown opened already showing "Elias Torgbuivi" as
@@ -188,11 +238,12 @@ function LeadCard({ lead }: { lead: Lead }) {
               </option>
             ))}
           </select>
-          <button type="button" className={styles.cancelBtn} onClick={() => setAssigning(false)}>
-            Cancel
+          <button type="button" className={styles.cancelBtn} onClick={() => setAssignStep('choose')}>
+            Back
           </button>
         </div>
-      ) : (
+      )}
+      {assignStep === 'closed' && (
         <div className={styles.actions}>
           <select
             className={styles.sourceSelect}
@@ -215,7 +266,7 @@ function LeadCard({ lead }: { lead: Lead }) {
           >
             🧾 Quotation
           </button>
-          <button type="button" className={styles.assignBtn} disabled={assign.isPending} onClick={() => setAssigning(true)}>
+          <button type="button" className={styles.assignBtn} disabled={assign.isPending || assignHandler.isPending} onClick={() => setAssignStep('choose')}>
             Assign to agent →
           </button>
         </div>

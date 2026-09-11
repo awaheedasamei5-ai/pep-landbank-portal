@@ -66,6 +66,13 @@ export interface Lead {
   // yet), same treatment Complaints gave its unused source/sentiment.
   leadSource?: string | null;
   bannerId?: string | null;
+  // Real column `assigned_agent_key` (added 2026-09-11, this shell only --
+  // NOT a web-next real column). Staff handling a Company Lead without
+  // owning it: agent_key stays 'company' (still in Company Leads, never
+  // enters that staff's personal pipeline), this field just says who it
+  // was handed to. Distinct from the real "Assign to agent" action, which
+  // changes agent_key itself and is a genuine ownership transfer.
+  assignedAgentKey?: string | null;
   // Real columns address/discount/net_total/deposit_target/kyc (all
   // confirmed live) -- manager-settable overrides on top of the standard
   // pricing (see computeLeadQuotationTotals in features/contracts/lib/

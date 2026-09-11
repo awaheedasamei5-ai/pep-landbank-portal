@@ -27,6 +27,7 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     notes: (r.notes as string) ?? undefined,
     leadSource: (r.lead_source as string) ?? null,
     bannerId: (r.banner_id as string) ?? null,
+    assignedAgentKey: (r.assigned_agent_key as string) ?? null,
     address: (r.address as string) ?? null,
     discount: r.discount != null ? Number(r.discount) : null,
     netTotal: r.net_total != null ? Number(r.net_total) : null,
