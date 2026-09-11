@@ -251,7 +251,7 @@ Section-kind buttons and drag handles keyboard-operable (drag handle also expose
 
 ## 18. Build order
 
-1. **KYC capture modal restoration (§6.4) — real production-parity regression, fixed first** since the token system (item 5) needs real KYC data to resolve against.
+1. **[DONE 2026-09-11]** KYC capture modal restoration (§6.4) — real production-parity regression, fixed first since the token system (item 5) needs real KYC data to resolve against. New `LeadKycModal.tsx`, `LeadUpdate.kyc` + `buildLeadDbPatch()` wired through (demo mode needed zero changes — its generic spread already handled it). Verified live: filled in a real client's KYC, reloaded the page from scratch, confirmed every field persisted (nationality/ID type/ID number all read back correctly) — a genuine backend round-trip, not just local state. `npx tsc -b` / `oxlint` / `stylelint` all clean, zero console errors. **NEXT UP: item 2, schema migration.**
 2. Schema migration (§4/§16) — templates, versions, clauses, fields, generations, approvals, the publish RPC, the storage bucket.
 3. Template Studio dashboard + shell tab addition (§6.1) — reuses the proven SegmentedTabs pattern.
 4. Page editor canvas + section CRUD (§6.2 center column) — no tokens/clauses yet, just structural editing.

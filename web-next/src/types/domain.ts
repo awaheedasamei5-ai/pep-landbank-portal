@@ -159,6 +159,12 @@ export interface LeadUpdate {
   // the app before this -- 4 separate PDF generators (Quotation, Technical
   // Quotation, Receipt, Contract of Sale) read it and always got blank.
   address?: string;
+  // CONTRACT_OF_SALE_BLUEPRINT.md §6.4 -- real column `kyc` (jsonb,
+  // confirmed live) also had NO write path anywhere in web-next despite
+  // v1's own promptForLeadKyc() genuinely capturing it -- every screen
+  // could only ever read/display lead.kyc, never save to it. Restoring
+  // this closes a real production-parity regression, not new V3 scope.
+  kyc?: LeadKyc;
   // Master Rebuild Spec Section 3.4's own worked example: "This client has
   // already been updated by another user. Refresh and review the latest
   // version before saving." Optional and opt-in -- a caller that loaded a

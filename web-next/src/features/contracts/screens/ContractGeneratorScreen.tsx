@@ -5,6 +5,7 @@ import { useContracts, useGenerateContract } from '../hooks/useContracts';
 import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { ghs } from '../../../shared/lib/format';
+import { LeadKycModal } from '../components/LeadKycModal';
 import type { Lead } from '../../../types/domain';
 import styles from './ContractGeneratorScreen.module.css';
 
@@ -87,7 +88,14 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
   const { data: config } = useConfig();
   const generate = useGenerateContract();
   const totals = config ? computeLeadQuotationTotals(config, lead) : null;
-  const hasKyc = !!lead.kyc && Object.values(lead.kyc).some((v) => v);
+  // CONTRACT_OF_SALE_BLUEPRINT.md §6.4 -- local override so the "has KYC"
+  // check reflects a just-saved modal immediately, without waiting on the
+  // background refetch useUpdateLead() triggers (the parent's `lead` prop
+  // is a snapshot from when it was selected, not a live subscription).
+  const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(undefined);
+  const [kycOpen, setKycOpen] = useState(false);
+  const effectiveKyc = kycOverride ?? lead.kyc;
+  const hasKyc = !!effectiveKyc && Object.values(effectiveKyc).some((v) => v);
 
   return (
     <div>
@@ -122,11 +130,25 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
         </>
       )}
 
-      {!hasKyc && <p className={styles.kycNote}>No KYC details captured for this client yet -- those fields will render blank on the PDF, ready to be filled in by hand.</p>}
+      {!hasKyc && (
+        <>
+          <p className={styles.kycNote}>No KYC details captured for this client yet -- those fields will render blank on the PDF.</p>
+          <button type="button" className={styles.changeBtn} onClick={() => setKycOpen(true)}>
+            Add KYC details
+          </button>
+        </>
+      )}
+      {hasKyc && (
+        <button type="button" className={styles.changeBtn} onClick={() => setKycOpen(true)}>
+          Edit KYC details
+        </button>
+      )}
 
-      <button type="button" className={styles.genBtn} disabled={generate.isPending || !config} onClick={() => generate.mutate(lead)}>
+      <button type="button" className={styles.genBtn} disabled={generate.isPending || !config} onClick={() => generate.mutate({ ...lead, kyc: effectiveKyc })}>
         {generate.isPending ? 'Generating…' : '📄 Generate & download PDF'}
       </button>
+
+      {kycOpen && <LeadKycModal lead={{ ...lead, kyc: effectiveKyc }} onClose={() => setKycOpen(false)} onSaved={setKycOverride} allowSkip />}
     </div>
   );
 }
