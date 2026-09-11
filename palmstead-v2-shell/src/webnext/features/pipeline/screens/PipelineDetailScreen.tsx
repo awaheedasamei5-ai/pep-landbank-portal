@@ -21,6 +21,13 @@ import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import styles from './PipelineDetailScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
+// Same canonical v1 LEAD_SOURCES list as AddLeadScreen (index.html:6282) --
+// this edit form only lacked a dropdown because it was gap-filled ad hoc
+// (see the section comment below); the Banner area/banner sub-picker
+// AddLeadScreen shows for source==='Banner' is intentionally not
+// duplicated here yet since bannerId isn't in LeadUpdate/writable on an
+// existing lead -- wire that once Banner Tracking is ported in.
+const LEAD_SOURCES = ['Banner', 'Referral', 'Facebook', 'Instagram', 'TikTok', 'Google', 'Website', 'Radio', 'TV', 'Other'] as const;
 
 const DOC_STAGES = [
   { key: 'allocation', label: 'Allocation' },
@@ -389,7 +396,14 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
       <h2 className={styles.sectionTitle}>Lead details</h2>
       <div className={styles.field}>
         <label className={styles.label}>Source</label>
-        <input className={styles.input} placeholder="e.g. Referral, Walk-in, Facebook" value={source} onChange={(e) => setSource(e.target.value)} />
+        <select className={styles.input} value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Where did they hear about us?</option>
+          {LEAD_SOURCES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       </div>
       <div className={styles.field}>
         <label className={styles.label}>Priority</label>

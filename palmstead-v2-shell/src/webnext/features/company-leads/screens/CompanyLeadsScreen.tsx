@@ -15,7 +15,7 @@ import { useAgentRoster, useAssignCompanyLead, useCompanyLeads, useSetLeadSource
 import type { Lead } from '../../../types/domain';
 import styles from './CompanyLeadsScreen.module.css';
 
-const LEAD_SOURCES = ['Referral', 'Facebook', 'Instagram', 'TikTok', 'Google', 'Website', 'Radio', 'TV', 'Other'] as const;
+const LEAD_SOURCES = ['Banner', 'Referral', 'Facebook', 'Instagram', 'TikTok', 'Google', 'Website', 'Radio', 'TV', 'Other'] as const;
 
 function initials(name: string): string {
   return name
