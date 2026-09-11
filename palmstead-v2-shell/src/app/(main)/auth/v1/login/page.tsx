@@ -1,4 +1,5 @@
 import { LoginForm } from "../../_components/login-form";
+import { LoginVideoPanel } from "./login-video-panel";
 
 // Palmstead's real sign-in screen. No self-registration and no OAuth --
 // staff accounts are provisioned by Management (real `profiles` row per
@@ -9,15 +10,16 @@ import { LoginForm } from "../../_components/login-form";
 // v1's own real source has no such video anywhere (confirmed via an
 // exhaustive grep across both its main and redesign branches) -- this
 // is new work built from the two video files the user attached directly
-// in chat, not a port. autoPlay+muted+loop+playsInline is the standard
-// combination every browser actually allows to autoplay without a user
-// gesture; a dark gradient overlay keeps the logo legible over whatever
-// the footage looks like at any given frame.
+// in chat, not a port. See login-video-panel.tsx for why there are two
+// and how the choice between them is made. autoPlay+muted+loop+
+// playsInline is the standard combination every browser actually allows
+// to autoplay without a user gesture; a dark gradient overlay keeps the
+// logo legible over whatever the footage looks like at any given frame.
 export default function LoginV1() {
   return (
     <div className="flex h-dvh">
       <div className="relative hidden overflow-hidden bg-primary lg:block lg:w-1/3">
-        <video className="absolute inset-0 size-full object-cover" src="/login-bg.mp4" autoPlay muted loop playsInline />
+        <LoginVideoPanel />
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
         <div className="relative flex h-full flex-col items-center justify-center p-12 text-center">
           <div className="space-y-6">
