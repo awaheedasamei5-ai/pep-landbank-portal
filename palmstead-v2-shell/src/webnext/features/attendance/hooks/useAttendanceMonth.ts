@@ -110,6 +110,11 @@ export function useAttendanceMonth(monthOffset = 0) {
     const leaveDaysCount = past.filter((c) => c.isOnLeave).length;
     const attendanceRate = workdaysPast.length ? Math.round((attended.length / workdaysPast.length) * 100) : 100;
     const onTimeRate = attended.length ? Math.round((onTime.length / attended.length) * 100) : 100;
+    // V1's real rule (Plan Part 1) -- a strict pass/fail, not a sliding
+    // scale: on-time rate >= 90% AND at most 1 absence this month is
+    // "on track", anything short of that is "at risk". No amber middle
+    // state -- deliberately binary, matching V1 exactly.
+    const onTrack = onTimeRate >= 90 && absences.length <= 1;
     return {
       workdaysSoFar: workdaysPast.length,
       daysAttended: attended.length,
@@ -119,6 +124,7 @@ export function useAttendanceMonth(monthOffset = 0) {
       leaveDaysCount,
       attendanceRate,
       onTimeRate,
+      onTrack,
     };
   }, [cells]);
 

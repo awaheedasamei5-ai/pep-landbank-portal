@@ -11,7 +11,7 @@ export function AttendanceMonthCard({
   stats,
 }: {
   monthLabel: string;
-  stats: { workdaysSoFar: number; daysAttended: number; onTimeDays: number; lateDays: number; absences: number; leaveDaysCount: number; attendanceRate: number; onTimeRate: number };
+  stats: { workdaysSoFar: number; daysAttended: number; onTimeDays: number; lateDays: number; absences: number; leaveDaysCount: number; attendanceRate: number; onTimeRate: number; onTrack: boolean };
 }) {
   return (
     <div className={styles.card}>
@@ -24,6 +24,9 @@ export function AttendanceMonthCard({
           </div>
         </div>
         <div className={styles.monthLabel}>{monthLabel}</div>
+        <span className={`${styles.trackBadge} ${stats.onTrack ? styles.onTrack : styles.atRisk}`}>
+          {stats.onTrack ? 'On track' : 'At risk'}
+        </span>
       </div>
       <div className={styles.statGrid}>
         <div className={styles.stat}>

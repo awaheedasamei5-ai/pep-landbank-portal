@@ -1,0 +1,22 @@
+.wrap { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; }
+
+.ringBox { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
+.svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.track { fill: none; stroke: var(--c-line); }
+.fill { fill: none; stroke: var(--c-accent); stroke-linecap: round; transition: stroke-dashoffset .4s var(--ease-out); }
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.value { font-size: 24px; font-weight: 800; font-family: var(--font-mono); color: var(--c-text); line-height: 1; }
+.unit { font-size: 9.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+.stats { display: flex; flex-direction: column; gap: 8px; }
+.statRow { display: flex; align-items: baseline; gap: 6px; }
+.statVal { font-size: 15px; font-weight: 800; font-family: var(--font-mono); color: var(--c-text); }
+.statLabel { font-size: 11.5px; color: var(--c-muted); font-weight: 600; }

@@ -113,7 +113,7 @@ export const sidebarItems: NavGroup[] = [
       { id: "log-payment", title: "Log Payment", url: NOT_BUILT_YET, icon: Wallet },
       { id: "contract-of-sale", title: "Contract of Sale", url: NOT_BUILT_YET, icon: FileSignature },
       { id: "quotation", title: "Quotation", url: "/dashboard/quotation", icon: ReceiptText },
-      { id: "leave", title: "Leave", url: NOT_BUILT_YET, icon: CalendarClock },
+      { id: "leave", title: "Leave", url: "/dashboard/leave", icon: CalendarClock },
       { id: "notes", title: "Notes", url: NOT_BUILT_YET, icon: StickyNote },
       { id: "banner-tracking", title: "Banner Tracking", url: "/dashboard/banners", icon: Megaphone },
       { id: "expenses", title: "Expenses", url: NOT_BUILT_YET, icon: Banknote },
