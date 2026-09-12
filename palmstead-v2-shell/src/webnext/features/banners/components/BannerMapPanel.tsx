@@ -1,28 +1,34 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { areaDirectionsUrl, BANNER_STATUS, directionsUrl, ensureLeafletLoaded, type LeafletMapInstance } from '../lib/bannerLogic';
-import type { Banner } from '../../../types/domain';
+import { BANNER_STATUS, BANNER_STATUS_ORDER, bannerAreaColor, bannerRouteLinks, directionsUrl, ensureLeafletLoaded, type LeafletMapInstance } from '../lib/bannerLogic';
+import type { Banner, BannerStatus } from '../../../types/domain';
 import styles from './BannerMapPanel.module.css';
 
-// Real user ask (2026-09-11): literal port of v1's real bannerMapHtml/
-// bindBannerMapCtrls (index.html:18539-18583) -- a real Leaflet map
-// (loaded from the same CDN v1 itself uses, ensureLeafletLoaded, not an
-// npm dependency -- see bannerLogic.ts's own comment) with one marker
-// per banner that has coordinates, plus a directions picker above it:
-// route straight to one named banner, or through every mapped banner in
-// an area in order (both open a real Google Maps directions link, same
-// as v1's own window.open calls).
+// Real user ask (2026-09-12): "duplicate the version we are currently
+// using in production at the office." Literal port of that real app's
+// bannerMapHtml/bindBannerMapCtrls -- a Colour-by toggle (Status, the
+// original palette, or Area, a stable per-area colour so picking one
+// area shows just that colour and "All areas" shows every colour with a
+// legend), an independent status filter that narrows the pin set AND
+// its own route (combinable with the area filter, not exclusive to it),
+// and routing generalized to the full filtered set -- chunked into
+// multiple Google Maps links past the real 10-stop waypoint cap instead
+// of silently dropping banners past #10.
 export function BannerMapPanel({ banners }: { banners: Banner[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMapInstance | null>(null);
+  const [colorMode, setColorMode] = useState<'status' | 'area'>('status');
+  const [areaFilter, setAreaFilter] = useState('All areas');
   const [pickBanner, setPickBanner] = useState('');
-  const [pickArea, setPickArea] = useState('All areas');
+  const [statusFilter, setStatusFilter] = useState<BannerStatus | ''>('');
   const [mapError, setMapError] = useState<string | null>(null);
+  const [routeLinks, setRouteLinks] = useState<{ label: string; url: string }[]>([]);
 
   const withCoords = banners.filter((b) => b.lat != null && b.lng != null);
   const noCoords = banners.length - withCoords.length;
   const areas = Array.from(new Set(banners.map((b) => b.area).filter(Boolean))).sort();
+  const shown = withCoords.filter((b) => (areaFilter === 'All areas' || b.area === areaFilter) && (!statusFilter || b.status === statusFilter));
 
   useEffect(() => {
     let cancelled = false;
@@ -33,17 +39,18 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
           mapRef.current.remove();
           mapRef.current = null;
         }
-        const center: [number, number] = withCoords.length ? [withCoords[0].lat!, withCoords[0].lng!] : [5.6037, -0.187];
-        const map = window.L.map(containerRef.current).setView(center, withCoords.length ? 12 : 11);
+        const center: [number, number] = shown.length ? [shown[0].lat!, shown[0].lng!] : [5.6037, -0.187];
+        const map = window.L.map(containerRef.current).setView(center, shown.length ? 12 : 11);
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
-        withCoords.forEach((b) => {
+        shown.forEach((b) => {
           const st = BANNER_STATUS[b.status] || BANNER_STATUS.placed;
-          const marker = window.L!.circleMarker([b.lat!, b.lng!], { radius: 8, color: '#fff', weight: 2, fillColor: st.color, fillOpacity: 0.9 }).addTo(map);
+          const fillColor = colorMode === 'area' ? bannerAreaColor(b.area, banners) : st.color;
+          const marker = window.L!.circleMarker([b.lat!, b.lng!], { radius: 8, color: '#fff', weight: 2, fillColor, fillOpacity: 0.9 }).addTo(map);
           marker.bindPopup(`<b>${escapeHtml(b.name)}</b><br>${escapeHtml(b.area)}<br>${escapeHtml(st.label)}<br><a href="${directionsUrl(b.lat!, b.lng!)}" target="_blank" rel="noopener">Directions →</a>`);
         });
-        if (withCoords.length > 1) {
+        if (shown.length > 1) {
           map.fitBounds(
-            window.L.latLngBounds(withCoords.map((b) => [b.lat!, b.lng!] as [number, number])),
+            window.L.latLngBounds(shown.map((b) => [b.lat!, b.lng!] as [number, number])),
             { padding: [30, 30] },
           );
         }
@@ -57,24 +64,50 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
         mapRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-runs only when the banner list itself changes, not on every render
-  }, [banners]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-runs on banner list, colour mode, or filter changes, not on every render
+  }, [banners, colorMode, areaFilter, statusFilter]);
 
   function getDirections() {
     if (pickBanner) {
       const b = withCoords.find((x) => `${x.name} — ${x.area}` === pickBanner);
       if (!b || b.lat == null) return;
       window.open(directionsUrl(b.lat, b.lng!), '_blank', 'noopener');
+      setRouteLinks([]);
       return;
     }
-    const url = areaDirectionsUrl(banners, pickArea as 'All areas');
-    if (!url) return;
-    window.open(url, '_blank', 'noopener');
+    const links = bannerRouteLinks(shown);
+    if (!links.length) return;
+    if (links.length === 1) {
+      window.open(links[0].url, '_blank', 'noopener');
+      setRouteLinks([]);
+    } else {
+      setRouteLinks(links);
+    }
   }
+
+  const legendAreas = colorMode === 'area' && areaFilter === 'All areas' ? Array.from(new Set(shown.map((b) => b.area).filter(Boolean))).sort() : [];
 
   return (
     <>
       <div className={styles.card}>
+        <div className={styles.grid2}>
+          <div className={styles.field}>
+            <label className={styles.label}>Colour by</label>
+            <select className={styles.input} value={colorMode === 'area' ? 'Area' : 'Status'} onChange={(e) => setColorMode(e.target.value === 'Area' ? 'area' : 'status')}>
+              <option>Status</option>
+              <option>Area</option>
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Area</label>
+            <select className={styles.input} value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}>
+              <option>All areas</option>
+              {areas.map((a) => (
+                <option key={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className={styles.grid2}>
           <div className={styles.field}>
             <label className={styles.label}>Find by name</label>
@@ -88,11 +121,13 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
             </select>
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Or by area</label>
-            <select className={styles.input} value={pickArea} onChange={(e) => setPickArea(e.target.value)}>
-              <option>All areas</option>
-              {areas.map((a) => (
-                <option key={a}>{a}</option>
+            <label className={styles.label}>Status filter</label>
+            <select className={styles.input} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as BannerStatus | '')}>
+              <option value="">All statuses</option>
+              {BANNER_STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {BANNER_STATUS[s].label}
+                </option>
               ))}
             </select>
           </div>
@@ -100,9 +135,35 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
         <button type="button" className={styles.directionsBtn} onClick={getDirections}>
           🧭 Get directions (opens Google Maps)
         </button>
-        <p className={styles.hint}>Picking a single banner routes straight there. Picking an area routes through every mapped banner in it, in order.</p>
+        <p className={styles.hint}>Picking a single banner routes straight there. Otherwise the route covers every mapped banner matching your Area + Status filter, in stops of up to 10 (Google Maps&apos; own limit) -- more than 10 opens as multiple route links.</p>
+        {routeLinks.length > 0 && (
+          <div className={styles.routeLinks}>
+            {routeLinks.map((l) => (
+              <a key={l.url} className={styles.routeLink} href={l.url} target="_blank" rel="noopener noreferrer">
+                {l.label}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
       <div ref={containerRef} className={styles.mapContainer} />
+      {(legendAreas.length > 0 || colorMode === 'status') && (
+        <div className={styles.legend}>
+          {colorMode === 'status'
+            ? BANNER_STATUS_ORDER.map((s) => (
+                <span key={s} className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: BANNER_STATUS[s].color }} />
+                  {BANNER_STATUS[s].label}
+                </span>
+              ))
+            : legendAreas.map((a) => (
+                <span key={a} className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: bannerAreaColor(a, banners) }} />
+                  {a}
+                </span>
+              ))}
+        </div>
+      )}
       {mapError && <p className={styles.errorMsg}>{mapError}</p>}
       {noCoords > 0 && (
         <p className={styles.hint} style={{ marginTop: 10 }}>

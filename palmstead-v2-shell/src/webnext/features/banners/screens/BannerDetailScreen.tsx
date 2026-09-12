@@ -4,7 +4,8 @@ import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
 import { BANNER_STATUS, BANNER_STATUS_ORDER, directionsUrl } from '../lib/bannerLogic';
-import { useBannerStatusLog, useBanners, useLogBannerStatusUpdate } from '../hooks/useBanners';
+import { useBannerStatusLog, useBanners, useDeleteBanner, useLogBannerStatusUpdate, useUpdateBannerArea } from '../hooks/useBanners';
+import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { BannerStatus } from '../../../types/domain';
 import styles from './BannerDetailScreen.module.css';
 
@@ -20,13 +21,18 @@ export function BannerDetailScreen() {
   const { data: banners } = useBanners();
   const { data: log, isLoading: logLoading } = useBannerStatusLog(id ?? '');
   const logUpdate = useLogBannerStatusUpdate();
+  const updateArea = useUpdateBannerArea();
+  const deleteBanner = useDeleteBanner();
 
   const banner = (banners ?? []).find((b) => b.id === id) ?? null;
 
   const [status, setStatus] = useState<BannerStatus | null>(null);
+  const [areaDraft, setAreaDraft] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const captureRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +49,7 @@ export function BannerDetailScreen() {
 
   const st = BANNER_STATUS[banner.status] || BANNER_STATUS.placed;
   const currentStatus = status ?? banner.status;
+  const currentArea = areaDraft ?? banner.area ?? '';
 
   async function handlePhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -58,9 +65,19 @@ export function BannerDetailScreen() {
 
   async function save() {
     setError(null);
+    if (!currentArea.trim()) {
+      setError('Area is required');
+      return;
+    }
     try {
+      // Area is a plain field on the banner itself, not part of the
+      // append-only status-log history (unlike status/photos/note) --
+      // real production fix: saved separately, alongside (not instead
+      // of) the status-log write, since the two are independent.
+      if (currentArea.trim() !== (banner!.area ?? '')) await updateArea.mutateAsync({ id: banner!.id, area: currentArea.trim() });
       await logUpdate.mutateAsync({ bannerId: banner!.id, status: currentStatus, note: note.trim(), images });
       setStatus(null);
+      setAreaDraft(null);
       setNote('');
       setImages([]);
     } catch (e) {
@@ -98,6 +115,10 @@ export function BannerDetailScreen() {
 
       <div className={styles.sectitle}>Log a status update</div>
       <div className={styles.card}>
+        <div className={styles.field}>
+          <label className={styles.label}>Area</label>
+          <input className={styles.input} placeholder="e.g. Spintex" value={currentArea} onChange={(e) => setAreaDraft(e.target.value)} />
+        </div>
         <div className={styles.field}>
           <label className={styles.label}>New status</label>
           <select className={styles.input} value={currentStatus} onChange={(e) => setStatus(e.target.value as BannerStatus)}>
@@ -171,6 +192,41 @@ export function BannerDetailScreen() {
           );
         })}
       </div>
+
+      {!confirmingDelete ? (
+        <button type="button" className={styles.deleteBtn} onClick={() => setConfirmingDelete(true)}>
+          Delete this banner
+        </button>
+      ) : (
+        <div className={styles.card}>
+          <p className={styles.hint}>
+            Delete &quot;{banner.name}&quot;? This removes the banner and its whole status history — this can&apos;t be undone.
+          </p>
+          <div className={styles.confirmRow}>
+            <button type="button" className={styles.ghostBtn} onClick={() => setConfirmingDelete(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.deleteBtn}
+              style={{ flex: 1 }}
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  await deleteBanner.mutateAsync(banner!.id);
+                  navigate('/dashboard/banners');
+                } catch (e) {
+                  setError(friendlyError(e, 'Failed to delete this banner'));
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

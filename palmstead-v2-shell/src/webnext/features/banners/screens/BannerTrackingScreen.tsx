@@ -3,12 +3,46 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Banner, BannerStatus } from '../../../types/domain';
-import { BANNER_STATUS, BANNER_STATUS_ORDER } from '../lib/bannerLogic';
+import { BANNER_STATUS, BANNER_STATUS_ORDER, last6MonthKeys, monthShortLabel, REPORT_PERIODS, reportPeriodRange, type ReportPeriod } from '../lib/bannerLogic';
 import { useBanners, useLeadBannerCounts } from '../hooks/useBanners';
 import { useDownloadBannerReportPdf } from '../hooks/useBannerReportPdf';
 import { BannerAddModal } from '../components/BannerAddModal';
 import { BannerMapPanel } from '../components/BannerMapPanel';
+import { DonutRing, LineChart } from '../components/BannerCharts';
 import styles from './BannerTrackingScreen.module.css';
+
+// Small inline icon set matching the real app's kpiIc (check/alert/flag/pin/trophy).
+const KpiIcon = {
+  check: (
+    <svg viewBox="0 0 24 24" fill="none" width={16} height={16}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth={1.8} />
+      <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  alert: (
+    <svg viewBox="0 0 24 24" fill="none" width={16} height={16}>
+      <path d="M12 9v4m0 4h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  flag: (
+    <svg viewBox="0 0 24 24" fill="none" width={16} height={16}>
+      <path d="M5 21V4m0 1h12l-3 4 3 4H5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  pin: (
+    <svg viewBox="0 0 24 24" fill="none" width={16} height={16}>
+      <path d="M12 21s-7-5.3-7-11a7 7 0 0114 0c0 5.7-7 11-7 11z" stroke="currentColor" strokeWidth={1.8} />
+      <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth={1.8} />
+    </svg>
+  ),
+  trophy: (
+    <svg viewBox="0 0 24 24" fill="none" width={16} height={16}>
+      <path d="M8 4h8v4a4 4 0 01-8 0V4z" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" />
+      <path d="M8 5H5a3 3 0 003 3M16 5h3a3 3 0 01-3 3" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+      <path d="M9 19h6M12 15v4" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" />
+    </svg>
+  ),
+};
 
 type BannerTab = 'dashboard' | 'list' | 'map' | 'reports';
 
@@ -91,7 +125,7 @@ export function BannerTrackingScreen() {
 
       {tab === 'map' && !isLoading && <BannerMapPanel banners={all} />}
 
-      {tab === 'reports' && !isLoading && <ReportsTab all={all} onDownload={() => downloadPdf.mutate(all)} downloading={downloadPdf.isPending} />}
+      {tab === 'reports' && !isLoading && <ReportsTab all={all} onDownload={(filtered) => downloadPdf.mutate(filtered)} downloading={downloadPdf.isPending} />}
 
       {showAdd && <BannerAddModal areas={areas} onDone={() => setShowAdd(false)} onClose={() => setShowAdd(false)} />}
     </div>
@@ -133,9 +167,20 @@ function BannerRow({ banner, leadCount, onOpen }: { banner: Banner; leadCount: n
   );
 }
 
+// Exact port of the real bannerDashboardHtml() -- a "Banner Health" hero
+// panel (donut gauge + areas/leads sub-stats), a 6-card KPI grid with
+// icons, and a dark trend panel (6-month placements line chart + 3
+// status "offer cards"), above the same Recent-activity list this
+// screen already had. Every number here is real (BANNER_STATUS counts,
+// leadCounts, createdAt dates) -- no invented figures.
 function DashboardTab({ all, totalLeadsFromBanners, onAdd, onOpen }: { all: Banner[]; totalLeadsFromBanners: number; onAdd: () => void; onOpen: (id: string) => void }) {
   const c = kpiCounts(all);
   const areas = new Set(all.map((b) => b.area).filter(Boolean));
+  const trackedTotal = c.placed + c.maint + c.replacing;
+  const healthPct = trackedTotal ? Math.round((c.placed / trackedTotal) * 100) : 0;
+  const months = last6MonthKeys();
+  const monthVals = months.map((mk) => all.filter((b) => (b.createdAt || '').slice(0, 7) === mk).length);
+  const monthLbls = months.map(monthShortLabel);
   const recent = all
     .slice()
     .sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''))
@@ -143,36 +188,78 @@ function DashboardTab({ all, totalLeadsFromBanners, onAdd, onOpen }: { all: Bann
 
   return (
     <>
-      <div className={styles.kpiGrid}>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{c.placed + c.maint}</div>
-          <div className={styles.kpiLbl}>Total banners</div>
+      <div className={styles.healthPanel}>
+        <div className={styles.healthTop}>
+          <div>
+            <div className={styles.healthTitle}>Banner Health</div>
+            <div className={styles.healthBig}>{healthPct}%</div>
+            <div className={styles.healthCaption}>
+              {c.placed} of {trackedTotal} placed banner{trackedTotal === 1 ? '' : 's'} in perfect condition
+            </div>
+          </div>
+          <div className={styles.healthRingWrap}>
+            <DonutRing pct={healthPct} />
+            <div className={styles.healthRingLabel}>{healthPct}%</div>
+          </div>
         </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{c.placed}</div>
-          <div className={styles.kpiLbl}>Perfect condition</div>
-        </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{c.maint}</div>
-          <div className={styles.kpiLbl}>Needs maintenance</div>
-        </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{c.replacing}</div>
-          <div className={styles.kpiLbl}>Being replaced</div>
-        </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{c.newLoc}</div>
-          <div className={styles.kpiLbl}>New locations</div>
-        </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{areas.size}</div>
-          <div className={styles.kpiLbl}>Total areas</div>
-        </div>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiVal}>{totalLeadsFromBanners}</div>
-          <div className={styles.kpiLbl}>Leads from banners</div>
+        <div className={styles.healthStats}>
+          <div className={styles.healthStat}>
+            <div className={styles.healthStatVal}>{areas.size}</div>
+            <div className={styles.healthStatLbl}>Areas covered</div>
+          </div>
+          <div className={styles.healthStat}>
+            <div className={styles.healthStatVal}>{totalLeadsFromBanners}</div>
+            <div className={styles.healthStatLbl}>Leads generated</div>
+          </div>
         </div>
       </div>
+
+      <div className={styles.statGrid2}>
+        <StatCard icon={KpiIcon.check} color="#65A30D" bg="#ECFCCB" value={c.placed} label="Perfect condition" />
+        <StatCard icon={KpiIcon.alert} color="#7C3AED" bg="#EDE9FE" value={c.maint} label="Needs maintenance" />
+        <StatCard icon={KpiIcon.flag} color="#DC2626" bg="#FEE2E2" value={c.replacing} label="Being replaced" />
+        <StatCard icon={KpiIcon.pin} color="#2563EB" bg="#DBEAFE" value={c.newLoc} label="New locations" />
+        <StatCard icon={KpiIcon.pin} color="#2563EB" bg="#DBEAFE" value={areas.size} label="Total areas" />
+        <StatCard icon={KpiIcon.trophy} color="#65A30D" bg="#ECFCCB" value={totalLeadsFromBanners} label="Leads from banners" />
+      </div>
+
+      <div className={styles.darkPanel}>
+        <div className={styles.darkPanelHead}>
+          <div>
+            <div className={styles.darkPanelTitle}>Placements over time</div>
+            <div className={styles.darkPanelSub}>Last 6 months</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div className={styles.darkPanelTitle}>By status</div>
+            <div className={styles.darkPanelSub}>{trackedTotal} tracked</div>
+          </div>
+        </div>
+        <LineChart values={monthVals} labels={monthLbls} />
+        <div className={styles.offerCards}>
+          <div className={`${styles.offerCard} ${styles.offerLemon}`}>
+            <div>
+              <div className={styles.offerName}>Perfect condition</div>
+              <div className={styles.offerVal}>{c.placed}</div>
+            </div>
+            {KpiIcon.check}
+          </div>
+          <div className={`${styles.offerCard} ${styles.offerBlue}`}>
+            <div>
+              <div className={styles.offerName}>Scouted locations</div>
+              <div className={styles.offerVal}>{c.newLoc}</div>
+            </div>
+            {KpiIcon.pin}
+          </div>
+          <div className={`${styles.offerCard} ${styles.offerRed}`}>
+            <div>
+              <div className={styles.offerName}>Being replaced</div>
+              <div className={styles.offerVal}>{c.replacing}</div>
+            </div>
+            {KpiIcon.flag}
+          </div>
+        </div>
+      </div>
+
       <button type="button" className={styles.addBtn} onClick={onAdd}>
         + Add banner / location
       </button>
@@ -187,6 +274,18 @@ function DashboardTab({ all, totalLeadsFromBanners, onAdd, onOpen }: { all: Bann
         ))}
       </div>
     </>
+  );
+}
+
+function StatCard({ icon, color, bg, value, label }: { icon: React.ReactNode; color: string; bg: string; value: number; label: string }) {
+  return (
+    <div className={styles.statCard2}>
+      <span className={styles.statCard2Icon} style={{ background: bg, color }}>
+        {icon}
+      </span>
+      <div className={styles.statCard2Val}>{value}</div>
+      <div className={styles.statCard2Lbl}>{label}</div>
+    </div>
   );
 }
 
@@ -267,20 +366,80 @@ function ListTab({
   );
 }
 
-function ReportsTab({ all, onDownload, downloading }: { all: Banner[]; onDownload: () => void; downloading: boolean }) {
-  const sorted = all.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+// Exact port of the real bannerReportsHtml() -- period chips (All time/
+// This week/This month/Last month/This year/Last year/Custom range)
+// alongside the existing area/status filters, all combinable, driving
+// both the on-screen list and the PDF export.
+function ReportsTab({ all, onDownload, downloading }: { all: Banner[]; onDownload: (filtered: Banner[]) => void; downloading: boolean }) {
+  const [period, setPeriod] = useState<ReportPeriod>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [area, setArea] = useState('');
+  const [status, setStatus] = useState<BannerStatus | ''>('');
+  const areas = Array.from(new Set(all.map((b) => b.area).filter(Boolean))).sort();
+
+  const range = reportPeriodRange(period, customFrom, customTo);
+  const filtered = all
+    .filter((b) => !area || b.area === area)
+    .filter((b) => !status || b.status === status)
+    .filter((b) => {
+      if (!range) return true;
+      const d = (b.createdAt || '').slice(0, 10);
+      return !!d && d >= range.from && d <= range.to;
+    })
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
   return (
     <>
+      <div className={styles.sectitle} style={{ marginTop: 0 }}>
+        Filters
+      </div>
+      <div className={styles.filterCard}>
+        <div className={styles.chipRow}>
+          {REPORT_PERIODS.map((p) => (
+            <button key={p.key} type="button" className={`${styles.chip} ${period === p.key ? styles.chipOn : ''}`} onClick={() => setPeriod(p.key)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {period === 'custom' && (
+          <div className={styles.grid2} style={{ marginTop: 10 }}>
+            <input className={styles.input} type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <input className={styles.input} type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </div>
+        )}
+        <div className={styles.grid2} style={{ marginTop: 10 }}>
+          <select className={styles.input} value={area} onChange={(e) => setArea(e.target.value)}>
+            <option value="">All areas</option>
+            {areas.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+          <select className={styles.input} value={status} onChange={(e) => setStatus(e.target.value as BannerStatus | '')}>
+            <option value="">All statuses</option>
+            {BANNER_STATUS_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {BANNER_STATUS[s].label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className={styles.sectitle}>
         Activity report
-        <span className={styles.cnt}>{sorted.length} total entries</span>
+        <span className={styles.cnt}>
+          {filtered.length} of {all.length} banner{all.length === 1 ? '' : 's'}
+        </span>
       </div>
-      <button type="button" className={styles.addBtn} disabled={downloading} onClick={onDownload}>
+      <button type="button" className={styles.addBtn} disabled={downloading} onClick={() => onDownload(filtered)}>
         {downloading ? 'Preparing…' : '⬇ Download full report (PDF)'}
       </button>
-      {sorted.length === 0 && <p className={styles.emptyMsg}>Nothing to report yet</p>}
+      {filtered.length === 0 && <p className={styles.emptyMsg}>Nothing matches these filters</p>}
       <div className={styles.list}>
-        {sorted.map((b) => (
+        {filtered.map((b) => (
           <div key={b.id} className={styles.reportRow}>
             <div className={styles.rowName}>{b.name}</div>
             <div className={styles.rowMeta}>

@@ -42,6 +42,28 @@ export function useUpdateBannerStatus() {
   });
 }
 
+// Real production fix: area was editable on create only -- this closes
+// the same gap on the detail screen's "Log a status update" form.
+export function useUpdateBannerArea() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, area }: { id: string; area: string }) => getDataSource(demoMode).banners.updateArea(id, area),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['banners'] }),
+  });
+}
+
+// Real production capability (viewBannerDetail's "Delete this banner") --
+// a hard delete, gated by the real banners_del RLS (creator or manager).
+export function useDeleteBanner() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => getDataSource(demoMode).banners.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['banners'] }),
+  });
+}
+
 // Real v1 audit trail (apiLoadBannerStatusLog) -- every status change
 // logged against one banner, newest first.
 export function useBannerStatusLog(bannerId: string) {

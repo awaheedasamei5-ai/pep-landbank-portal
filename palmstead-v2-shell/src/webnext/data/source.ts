@@ -702,8 +702,20 @@ export interface DataSource {
     list(): Promise<Banner[]>;
     create(createdBy: string, createdByName: string, input: NewBanner): Promise<Banner>;
     updateStatus(id: string, status: BannerStatus): Promise<Banner>;
+    // Real production fix (bindBannerDetailCtrls comment there): area was
+    // a plain field on the banner itself, editable on create only --
+    // this closes the same gap for the detail screen's own "Log a status
+    // update" form (area is a direct field update, independent of the
+    // append-only status_log history).
+    updateArea(id: string, area: string): Promise<Banner>;
     logStatusUpdate(bannerId: string, changedBy: string, changedByName: string, patch: { status: BannerStatus; note: string; images: string[] }): Promise<BannerStatusLogEntry>;
     statusLog(bannerId: string): Promise<BannerStatusLogEntry[]>;
+    // Real production capability (viewBannerDetail's "Delete this
+    // banner"): a hard delete, unlike site_visits' soft-cancel pattern --
+    // real banners_del RLS already allows it, and there's no separate
+    // audit requirement for a scouted-location entry the way there is
+    // for a client's own site visit record.
+    remove(id: string): Promise<void>;
   };
   // Real table `pricing_history` (confirmed live) -- port of v1's
   // apiLogPricingChange/apiLoadPricingHistory. log() is called once per
@@ -2560,6 +2572,15 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('banners').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapBannerRow(data);
+      },
+      async updateArea(id, area) {
+        const { data, error } = await requireClient().from('banners').update({ area, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        if (error) throw error;
+        return mapBannerRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('banners').delete().eq('id', id);
+        if (error) throw error;
       },
       async logStatusUpdate(bannerId, changedBy, changedByName, patch) {
         const client = requireClient();
