@@ -2,7 +2,12 @@
 
 import { useState } from 'react';
 import { useAttendance } from '../hooks/useAttendance';
+import { useAttendanceMonth } from '../hooks/useAttendanceMonth';
+import { useAttendanceComparison } from '../hooks/useAttendanceComparison';
 import { AttendanceCheckInScreen } from './AttendanceCheckInScreen';
+import { AttendanceMonthCard } from '../components/AttendanceMonthCard';
+import { AttendanceCalendar } from '../components/AttendanceCalendar';
+import { AttendanceComparison } from '../components/AttendanceComparison';
 import styles from './AttendanceScreen.module.css';
 
 function hoursWorkedStr(signInAt: string | null, signOutAt: string | null): string {
@@ -13,14 +18,15 @@ function hoursWorkedStr(signInAt: string | null, signOutAt: string | null): stri
 
 // Real user ask (2026-09-12): "these apps are complete, start afresh
 // new builds" -- this dashboard (today's status + entry point into the
-// real camera-first check-in flow) is new composition around the
-// approved repo's own components, not a redesign of V1's or web-next's
-// screen. Month KPIs, the calendar heatmap, and the team comparison
-// (plan Part 4, Phase B) follow in continued work -- this covers the
-// centerpiece (the actual sign-in/out flow) end to end, verified live,
-// rather than a shallow pass across every planned piece at once.
+// real camera-first check-in flow, plus the month KPI/on-time ring,
+// leave-aware calendar heatmap, and you-vs-team comparison) is new
+// composition around the approved repo's own components, not a
+// redesign of V1's or web-next's screen.
 export function AttendanceScreen() {
   const { today, isLoadingToday, reconcileMessage, dismissReconcileMessage } = useAttendance();
+  const { monthStart, monthKey, cells, stats } = useAttendanceMonth();
+  const { you, rank, teamCount, teamAvgOnTime, teamAvgAttended } = useAttendanceComparison(monthKey);
+  const monthLabel = monthStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   const [checkingIn, setCheckingIn] = useState(false);
 
   if (checkingIn) return <AttendanceCheckInScreen onFinish={() => setCheckingIn(false)} />;
@@ -64,6 +70,10 @@ export function AttendanceScreen() {
           )}
         </div>
       )}
+
+      <AttendanceMonthCard monthLabel={monthLabel} stats={stats} />
+      <AttendanceCalendar cells={cells} />
+      <AttendanceComparison you={you} rank={rank} teamCount={teamCount} teamAvgOnTime={teamAvgOnTime} teamAvgAttended={teamAvgAttended} />
     </div>
   );
 }
