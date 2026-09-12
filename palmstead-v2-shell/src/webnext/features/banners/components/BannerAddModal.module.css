@@ -1,0 +1,90 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(10 12 20 / 55%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+@media (width >= 640px) {
+  .overlay { align-items: center; }
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--c-card);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 18px 24px;
+  box-shadow: var(--shadow-lg);
+}
+@media (width >= 640px) {
+  .modal { border-radius: var(--r-lg); margin-bottom: 20px; }
+}
+
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.title { font-weight: 800; font-size: 16px; }
+.closeBtn { background: none; border: none; color: var(--c-muted); cursor: pointer; width: 26px; height: 26px; font-size: 16px; }
+
+.field { margin-bottom: 12px; }
+.label { display: block; font-size: 12px; font-weight: 700; color: var(--c-muted); margin-bottom: 6px; }
+.hint { font-size: 11px; color: var(--c-muted); margin: 4px 0 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  font-size: 13.5px;
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-family: inherit;
+}
+
+.photoRow { display: flex; gap: 8px; }
+.ghostBtn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ghostBtnFull {
+  width: 100%;
+  padding: 10px;
+  margin: -2px 0 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-text);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ghostBtnFull:disabled { opacity: .6; cursor: default; }
+
+.photoPreview { max-width: 140px; border-radius: 10px; margin-top: 8px; display: block; }
+
+.errorMsg { font-size: 12.5px; color: var(--c-danger); margin: 0 0 10px; }
+
+.saveBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--r-pill);
+  border: none;
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.saveBtn:disabled { opacity: .6; cursor: default; }

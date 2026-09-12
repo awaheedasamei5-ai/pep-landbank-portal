@@ -1971,6 +1971,28 @@ export interface NewBanner {
   area: string;
   status: BannerStatus;
   notes?: string;
+  lat?: number | null;
+  lng?: number | null;
+  image?: string | null;
+}
+
+// Real table `banner_status_log` (confirmed live) -- v1's own real
+// per-status-change audit trail (apiLogBannerStatusUpdate/
+// apiLoadBannerStatusLog), one row per logged update, each carrying its
+// own photos (jsonb array of data URIs) and free-text note. `imgScratch`
+// (real column `img_scratch`) is a legacy scratch field from v1's own
+// schema with no current write path -- read-mapped for completeness,
+// never written by this app.
+export interface BannerStatusLogEntry {
+  id: string;
+  bannerId: string;
+  status: BannerStatus;
+  note: string | null;
+  images: string[];
+  changedBy: string;
+  changedByName: string;
+  createdAt: string;
+  imgScratch: string | null;
 }
 
 // Real table `fund_requests` -- the request/approval half of Office Desk's

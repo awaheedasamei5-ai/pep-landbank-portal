@@ -41,3 +41,32 @@ export function useUpdateBannerStatus() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['banners'] }),
   });
 }
+
+// Real v1 audit trail (apiLoadBannerStatusLog) -- every status change
+// logged against one banner, newest first.
+export function useBannerStatusLog(bannerId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({
+    queryKey: ['bannerStatusLog', bannerId],
+    queryFn: () => getDataSource(demoMode).banners.statusLog(bannerId),
+    enabled: !!bannerId,
+  });
+}
+
+// Real v1 behavior (apiLogBannerStatusUpdate, called both from the "Add
+// banner" modal's initial entry and the detail screen's own "Log a
+// status update" form) -- writes a banner_status_log row AND keeps the
+// banner's own current status/image/updated_at in sync with it.
+export function useLogBannerStatusUpdate() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bannerId, status, note, images }: { bannerId: string; status: BannerStatus; note: string; images: string[] }) =>
+      getDataSource(demoMode).banners.logStatusUpdate(bannerId, profile?.key ?? '', profile?.name ?? '', { status, note, images }),
+    onSuccess: (_entry, { bannerId }) => {
+      qc.invalidateQueries({ queryKey: ['banners'] });
+      qc.invalidateQueries({ queryKey: ['bannerStatusLog', bannerId] });
+    },
+  });
+}

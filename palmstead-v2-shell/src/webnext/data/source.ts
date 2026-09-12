@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
@@ -15,6 +15,7 @@ import {
   mapAuditEventRow,
   mapBackupRow,
   mapBannerRow,
+  mapBannerStatusLogRow,
   mapPricingHistoryRow,
   mapPricingPromotionRow,
   mapPermissionDefRow,
@@ -679,18 +680,21 @@ export interface DataSource {
     confirmUsed(id: string): Promise<LeaveRequest>;
   };
   // Real table `banners` (confirmed live) -- physical banner/scouted-
-  // location tracking. Unlike Plot Inventory, banners_sel/ins/upd RLS is
-  // open to any authenticated staff member (banners_del is owner-or-
-  // manager only, not exposed here -- this pass is create/list/update
-  // only, matching the Dashboard+List scope actually built). Map & Routes
-  // (Leaflet) and Reports tabs, plus the separate banner_status_log audit
-  // trail, are deliberately out of scope -- a real, much larger geo/
-  // reporting feature, same scoping discipline as Allocations' deferred
-  // PDF/chat-send.
+  // location tracking, literal port of v1's real Banner Tracking app
+  // (2026-09-11 user ask: "copy (duplicate) the SAME app in v1
+  // production version ... exactly as it is dont change any detail").
+  // banners_sel/ins/upd RLS is open to any authenticated staff member;
+  // banners_del is owner-or-manager only, not exposed here since v1's
+  // own real UI never offers deleting a banner either (only status
+  // changes via the log). logStatusUpdate/statusLog are the real
+  // banner_status_log audit trail (bsl_ins/bsl_sel RLS, also open to any
+  // staff) -- v1's own apiLogBannerStatusUpdate/apiLoadBannerStatusLog.
   banners: {
     list(): Promise<Banner[]>;
     create(createdBy: string, createdByName: string, input: NewBanner): Promise<Banner>;
     updateStatus(id: string, status: BannerStatus): Promise<Banner>;
+    logStatusUpdate(bannerId: string, changedBy: string, changedByName: string, patch: { status: BannerStatus; note: string; images: string[] }): Promise<BannerStatusLogEntry>;
+    statusLog(bannerId: string): Promise<BannerStatusLogEntry[]>;
   };
   // Real table `pricing_history` (confirmed live) -- port of v1's
   // apiLogPricingChange/apiLoadPricingHistory. log() is called once per
@@ -2506,7 +2510,17 @@ function createLiveDataSource(): DataSource {
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
           .from('banners')
-          .insert({ name: input.name, area: input.area, status: input.status, notes: input.notes ?? null, created_by: createdBy, created_by_name: createdByName })
+          .insert({
+            name: input.name,
+            area: input.area,
+            status: input.status,
+            notes: input.notes ?? null,
+            lat: input.lat ?? null,
+            lng: input.lng ?? null,
+            image: input.image ?? null,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2516,6 +2530,28 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('banners').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapBannerRow(data);
+      },
+      async logStatusUpdate(bannerId, changedBy, changedByName, patch) {
+        const client = requireClient();
+        const { data, error } = await client
+          .from('banner_status_log')
+          .insert({ banner_id: bannerId, status: patch.status, note: patch.note || null, images: patch.images, changed_by: changedBy, changed_by_name: changedByName })
+          .select()
+          .single();
+        if (error) throw error;
+        // Real v1 behavior (index.html's bdSaveBtn handler): the banner's
+        // own current status/image/updated_at are kept in sync with its
+        // latest logged update, not left stale until some separate save.
+        const bannerPatch: Record<string, unknown> = { status: patch.status, updated_at: new Date().toISOString() };
+        if (patch.images.length) bannerPatch.image = patch.images[0];
+        const { error: updError } = await client.from('banners').update(bannerPatch).eq('id', bannerId);
+        if (updError) throw updError;
+        return mapBannerStatusLogRow(data);
+      },
+      async statusLog(bannerId) {
+        const { data, error } = await requireClient().from('banner_status_log').select('*').eq('banner_id', bannerId).order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapBannerStatusLogRow);
       },
     },
     pricingHistory: {
