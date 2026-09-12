@@ -9,14 +9,18 @@ import { NpsScale } from './NpsScale';
 import { StarRating } from './StarRating';
 import styles from './SveFeedbackScreen.module.css';
 
-const JOURNEY_OPTIONS = ['Excellent', 'Good', 'Average', 'Poor'];
+// Real user ask (2026-09-12): "this zip file contains screenshots that
+// contains the questions we need in the form" -- the real Jotform
+// (Trulander JSF Ltd's own live "Site Visit Experience Review", 15
+// questions) this client-facing form has to match exactly, both wording
+// and options. Supersedes the older index.html copy this screen was
+// built from -- that source's field SET matched, but its actual
+// question wording/options didn't, and the NPS scale there is 0-10
+// where the real Jotform is 1-10.
+const JOURNEY_OPTIONS = ['Excellent — smooth and comfortable', 'Good', 'Average', 'Poor — had issues'];
 const SITE_DESC_OPTIONS = ['Exceeded expectations', 'Met expectations', 'Below expectations'];
-// Real v1 values verbatim (index.html:25652, formClientSiteVisit's own
-// radioGroup) -- these read straight into the AI-report/PDF pipeline
-// downstream, so they need to already be properly-cased prose, not
-// internal slugs like 'ready'/'need more time' this screen used before.
-const PURCHASE_INTENT_OPTIONS = ['Ready to purchase', 'Need more time to decide', 'Not at this time', 'Undecided'];
-const SITE_OPTIONS = ['Royal Palm Enclave, Tsopoli', 'Other'];
+const PURCHASE_INTENT_OPTIONS = ["Yes, I'm ready to proceed", 'Yes, but I need more time/information', 'Not at this time', 'Undecided'];
+const SITE_OPTIONS = ['Royal Palm Enclave (Tsopoli)', 'Other'];
 
 type Screen = 'loading' | 'not_found' | 'already_submitted' | 'form' | 'review' | 'thanks' | 'unavailable';
 
@@ -97,16 +101,18 @@ export function SveFeedbackScreen() {
                 ? 'review'
                 : 'form';
 
-  // Real v1 required set (index.html:25682) -- name, phone, visit date,
-  // journey rating, overall rating, NPS score, improvement suggestions and
-  // purchase intent are all mandatory there; this screen previously only
-  // ever checked name/phone, letting a submission through with none of
-  // the ratings Management's report actually depends on.
+  // Real required set, matching the real Jotform's own red asterisks
+  // exactly (2026-09-12 screenshots): name, phone, visit date, journey
+  // rating, relationship/interaction rating, overall rating, NPS score,
+  // improvement suggestions, and purchase intent are all mandatory
+  // there. relationshipRating was missing from this check before --
+  // required on the real form (a 5-star question), not optional.
   function firstMissingField(): string | null {
     if (!fullName.trim()) return 'your name';
     if (!phone.trim()) return 'your phone number';
     if (!visitDate.trim()) return 'the date of your visit';
     if (!journeyRating) return 'how your journey went';
+    if (!relationshipRating) return 'your rating of our site manager/agent';
     if (!overallRating) return 'your overall rating';
     if (npsScore == null) return 'your recommendation score';
     if (!improvementSuggestions.trim()) return 'what we could improve';
@@ -181,9 +187,8 @@ export function SveFeedbackScreen() {
             separate colored hero band. */}
         {/* eslint-disable-next-line @next/next/no-img-element -- a small fixed-size mark on a static public page, not worth next/image's config */}
         <img src="/trulander-logo.png" alt="Trulander JSF Ltd" className={styles.logo} />
-        <div className={styles.heroTitle}>Site Visit Experience Review</div>
-        <div className={styles.heroSub}>Trulander JSF Ltd</div>
-        <p className={styles.intro}>Thank you for honoring our invitation for a site visit. We&apos;d love to hear how it went — it only takes a couple of minutes.</p>
+        <div className={styles.heroTitle}>Trulander JSF Ltd — Site Visit Experience Review</div>
+        <p className={styles.intro}>Please take a moment to share your feedback so we can improve future site visits.</p>
         {screen === 'loading' && (
           <div className={styles.centerState}>
             <p className={styles.centerSub}>Loading…</p>
@@ -237,12 +242,12 @@ export function SveFeedbackScreen() {
             <div className={styles.card}>
               <div className={styles.sectionTitle}>Your details</div>
               <div className={styles.field}>
-                <label className={styles.label}>Full name *</label>
+                <label className={styles.label}>Full Name *</label>
                 <input className={styles.input} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Ama Owusu" />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Phone number *</label>
-                <input className={styles.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0244…" />
+                <label className={styles.label}>Phone Number *</label>
+                <input className={styles.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(000) 000-0000" />
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Which site did you visit?</label>
@@ -266,7 +271,7 @@ export function SveFeedbackScreen() {
             <div className={styles.card}>
               <div className={styles.sectionTitle}>Your journey</div>
               <div className={styles.field}>
-                <label className={styles.label}>How was your overall journey to the site? *</label>
+                <label className={styles.label}>How was your journey to the site? *</label>
                 <div className={styles.pillGroup}>
                   {JOURNEY_OPTIONS.map((opt) => (
                     <button key={opt} type="button" className={`${styles.pillOption} ${journeyRating === opt ? styles.pillOptionActive : ''}`} onClick={() => setJourneyRating(opt)}>
@@ -276,15 +281,15 @@ export function SveFeedbackScreen() {
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Who from our team looked after you?</label>
+                <label className={styles.label}>What was the name of the site manager or agent who attended you?</label>
                 <input className={styles.input} value={siteManagerName} onChange={(e) => setSiteManagerName(e.target.value)} placeholder="Agent or site manager's name" />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>How would you rate how they handled your visit?</label>
+                <label className={styles.label}>How would you rate your relationship/interaction with our site manager/agent? *</label>
                 <StarRating value={relationshipRating} onChange={setRelationshipRating} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Anything you liked or didn't like about how you were handled?</label>
+                <label className={styles.label}>What did you like or dislike about how our site manager or agent handled your visit?</label>
                 <textarea className={styles.textarea} value={handlingFeedback} onChange={(e) => setHandlingFeedback(e.target.value)} />
               </div>
             </div>
@@ -292,7 +297,7 @@ export function SveFeedbackScreen() {
             <div className={styles.card}>
               <div className={styles.sectionTitle}>The site itself</div>
               <div className={styles.field}>
-                <label className={styles.label}>Did the site match what you expected?</label>
+                <label className={styles.label}>How would you describe the land or site itself (location, environment, accessibility)?</label>
                 <div className={styles.pillGroup}>
                   {SITE_DESC_OPTIONS.map((opt) => (
                     <button
@@ -308,7 +313,7 @@ export function SveFeedbackScreen() {
               </div>
               {siteDescriptionRating === 'Below expectations' && (
                 <div className={styles.field}>
-                  <label className={styles.label}>What fell short?</label>
+                  <label className={styles.label}>If our site was below expectation kindly let us know why?</label>
                   <textarea className={styles.textarea} value={belowExpectationReason} onChange={(e) => setBelowExpectationReason(e.target.value)} />
                 </div>
               )}
@@ -317,19 +322,23 @@ export function SveFeedbackScreen() {
             <div className={styles.card}>
               <div className={styles.sectionTitle}>Overall</div>
               <div className={styles.field}>
-                <label className={styles.label}>Overall, how was your experience? *</label>
+                <label className={styles.label}>Overall, how would you rate your site visit experience? *</label>
                 <StarRating value={overallRating} onChange={setOverallRating} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>How likely are you to recommend Palmstead to a friend? *</label>
+                <label className={styles.label}>How likely are you to recommend Trulander JSF Ltd to a friend or family member? *</label>
                 <NpsScale value={npsScore} onChange={setNpsScore} />
                 <div className={styles.npsLabels}>
-                  <span>Not likely</span>
-                  <span>Very likely</span>
+                  <span>Not likely at all</span>
+                  <span>Extremely likely</span>
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Where are you at right now? *</label>
+                <label className={styles.label}>What could we improve to better serve you and future clients? *</label>
+                <textarea className={styles.textarea} value={improvementSuggestions} onChange={(e) => setImprovementSuggestions(e.target.value)} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Are you interested in proceeding with a purchase after this visit? *</label>
                 <div className={styles.pillGroup}>
                   {PURCHASE_INTENT_OPTIONS.map((opt) => (
                     <button key={opt} type="button" className={`${styles.pillOption} ${purchaseIntent === opt ? styles.pillOptionActive : ''}`} onClick={() => setPurchaseIntent(opt)}>
@@ -339,11 +348,7 @@ export function SveFeedbackScreen() {
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>What could we improve? *</label>
-                <textarea className={styles.textarea} value={improvementSuggestions} onChange={(e) => setImprovementSuggestions(e.target.value)} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Anything else you'd like us to know?</label>
+                <label className={styles.label}>Any additional comments or suggestions?</label>
                 <textarea className={styles.textarea} value={additionalComments} onChange={(e) => setAdditionalComments(e.target.value)} />
               </div>
             </div>

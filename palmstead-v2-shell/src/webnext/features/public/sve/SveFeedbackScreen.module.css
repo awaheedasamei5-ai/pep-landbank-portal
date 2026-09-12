@@ -81,7 +81,7 @@
 .star { background: none; border: none; font-size: 26px; line-height: 1; cursor: pointer; color: #e6d2bb; padding: 0; }
 .starActive { color: #e8a23a; }
 
-.npsRow { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; }
+.npsRow { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
 
 .npsBtn {
   min-height: 32px;
