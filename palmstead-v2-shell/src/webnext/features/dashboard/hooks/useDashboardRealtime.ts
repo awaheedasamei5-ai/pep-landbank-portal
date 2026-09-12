@@ -149,6 +149,34 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['sveDayReport'] });
       queryClient.invalidateQueries({ queryKey: ['sveDayReports'] });
     };
+    // Real gap found 2026-09-12 during the Banner Tracking v1 rebuild:
+    // banners/banner_status_log/weekly_visit_forms were never in this
+    // bridge -- a banner added or a status logged from the field on one
+    // device left the Dashboard/Map/Reports tabs open on another device
+    // (or the lead-count badges in Add Lead) stale, and a manager
+    // finalizing a day's Site Visit Authorization form didn't push to a
+    // staff member's own already-open copy of that same day.
+    const invalidateBanners = () => {
+      queryClient.invalidateQueries({ queryKey: ['banners'] });
+      queryClient.invalidateQueries({ queryKey: ['leadBannerCounts'] });
+      queryClient.invalidateQueries({ queryKey: ['bannerStatusLog'] });
+    };
+    const invalidateWeeklyVisitForm = () => {
+      queryClient.invalidateQueries({ queryKey: ['weeklyVisitForm'] });
+    };
+    // Real gap found 2026-09-12: Template/Pricing Quotation Settings
+    // (built this session) write to app_config/pricing_history/
+    // pricing_promotions, none of which were ever in this bridge -- a
+    // logo, accent color, or promo window Management saves on one device
+    // left every other open Quotation Calculator/Settings screen showing
+    // the old values until a manual refresh.
+    const invalidateConfig = () => {
+      queryClient.invalidateQueries({ queryKey: ['config'] });
+    };
+    const invalidatePricing = () => {
+      queryClient.invalidateQueries({ queryKey: ['pricingHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['pricingPromotions'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -185,7 +213,13 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits' }, invalidateSiteVisits)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visit_experience_invites' }, invalidateSve)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visit_experience_submissions' }, invalidateSve)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sve_day_reports' }, invalidateSve);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sve_day_reports' }, invalidateSve)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banners' }, invalidateBanners)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'banner_status_log' }, invalidateBanners)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_visit_forms' }, invalidateWeeklyVisitForm)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, invalidateConfig)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_history' }, invalidatePricing)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_promotions' }, invalidatePricing);
     channel.subscribe();
 
     return () => {
