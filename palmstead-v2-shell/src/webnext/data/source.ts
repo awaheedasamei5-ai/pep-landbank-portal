@@ -479,6 +479,15 @@ export interface DataSource {
     // delete, but that would destroy the cost/history record the spec
     // explicitly says must survive.
     cancel(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<SiteVisit>;
+    // Real user ask (2026-09-12): the Site Visit Authorization list's
+    // delete icon should offer "Remove completely" (the existing cancel()
+    // above) OR "Reschedule" -- moving the same visit to a new date/time
+    // instead of cancelling it. Sets status to 'Rescheduled' so it's
+    // visibly tagged wherever this row is read (the staff member's own
+    // Site Visits list, and Pipeline/Company Leads/Client Database's
+    // per-lead Site Visits section, both keyed off the same real
+    // site_visits.lead_id FK -- no separate propagation write needed).
+    reschedule(id: string, newDate: string, newTime: string | null, rescheduledBy: string, rescheduledByName: string): Promise<SiteVisit>;
   };
   // Master Spec Section 4's "combined activity timeline" lead-record
   // section. Real activity_log.lead_id FK (added this session, see
@@ -2069,6 +2078,27 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient()
           .from('site_visits')
           .update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy, deleted_by_name: deletedByName, cancellation_reason: reason })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapSiteVisitRow(data);
+      },
+      async reschedule(id, newDate, newTime, rescheduledBy, rescheduledByName) {
+        const client = requireClient();
+        const { data: existing, error: readErr } = await client.from('site_visits').select('visit_date').eq('id', id).single();
+        if (readErr) throw readErr;
+        const { data, error } = await client
+          .from('site_visits')
+          .update({
+            visit_date: newDate,
+            visit_time: newTime,
+            status: 'Rescheduled',
+            previous_visit_date: existing?.visit_date ?? null,
+            rescheduled_at: new Date().toISOString(),
+            rescheduled_by: rescheduledBy,
+            rescheduled_by_name: rescheduledByName,
+          })
           .eq('id', id)
           .select()
           .single();

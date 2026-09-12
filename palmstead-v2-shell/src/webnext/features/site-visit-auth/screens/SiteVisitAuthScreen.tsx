@@ -5,7 +5,7 @@ import { ghs } from '../../../shared/lib/format';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
 import { useCanViewSiteVisitAuth, useFinalizeWeeklyVisitForm, useSaveWeeklyVisitCosts, useWeeklyVisitForm, useWeekSiteVisits } from '../hooks/useSiteVisitAuth';
-import { useCancelSiteVisit } from '../../site-visits/hooks/useSiteVisits';
+import { useCancelSiteVisit, useRescheduleSiteVisit } from '../../site-visits/hooks/useSiteVisits';
 import { useDownloadSiteVisitAuthPdf } from '../hooks/useSiteVisitAuthPdf';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -249,11 +249,30 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
 // Gated by the same costsEditable a day's cost inputs already respect --
 // once a day's form is Finalized, its visit list is part of the approved
 // record and shouldn't change underneath it.
+type VisitCardMode = 'none' | 'menu' | 'cancel' | 'reschedule';
+
+// Real user ask (2026-09-12): clicking the delete icon on a lead in the
+// weekly authorization list should offer a choice -- "Remove from list
+// completely" (the existing reason-required soft cancel) or
+// "Reschedule" (pick a new date, the visit moves there and is tagged
+// Rescheduled). Both close over the same visit; reschedule additionally
+// surfaces the previous date so a reviewer can see what changed.
 function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean }) {
   const cancelVisit = useCancelSiteVisit();
-  const [cancelling, setCancelling] = useState(false);
+  const rescheduleVisit = useRescheduleSiteVisit();
+  const [mode, setMode] = useState<VisitCardMode>('none');
   const [reason, setReason] = useState('');
+  const [newDate, setNewDate] = useState(visit.visitDate);
+  const [newTime, setNewTime] = useState(visit.visitTime ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setMode('none');
+    setReason('');
+    setNewDate(visit.visitDate);
+    setNewTime(visit.visitTime ?? '');
+    setError(null);
+  }
 
   async function confirmCancel() {
     setError(null);
@@ -268,12 +287,26 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
     }
   }
 
+  async function confirmReschedule() {
+    setError(null);
+    if (!newDate) {
+      setError('Pick the new date.');
+      return;
+    }
+    try {
+      await rescheduleVisit.mutateAsync({ id: visit.id, newDate, newTime: newTime.trim() || null });
+      reset();
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to reschedule this visit'));
+    }
+  }
+
   return (
     <div className={styles.visitCard}>
       <div className={styles.visitTop}>
         <div className={styles.visitName}>{visit.name}</div>
-        {canCancel && !cancelling && (
-          <button type="button" className={styles.visitCancelIcon} title="Cancel this visit" aria-label={`Cancel visit for ${visit.name}`} onClick={() => setCancelling(true)}>
+        {canCancel && mode === 'none' && (
+          <button type="button" className={styles.visitCancelIcon} title="Remove or reschedule this visit" aria-label={`Remove or reschedule visit for ${visit.name}`} onClick={() => setMode('menu')}>
             ✕
           </button>
         )}
@@ -286,26 +319,57 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
       {visit.transport && <div className={styles.visitField}>Transport: {visit.transport}</div>}
       {visit.feedbackAfter && <div className={styles.visitField}>Feedback: {visit.feedbackAfter}</div>}
       <div className={styles.visitField}>Staff: {visit.agentName}</div>
+      {visit.status === 'Rescheduled' && visit.previousVisitDate && (
+        <span className={styles.rescheduleTag}>Rescheduled from {visit.previousVisitDate}</span>
+      )}
 
-      {cancelling && (
+      {mode === 'menu' && (
+        <div className={styles.cancelBox}>
+          <div className={styles.menuBox}>
+            <button type="button" className={styles.menuOption} onClick={() => setMode('reschedule')}>
+              📅 Reschedule to another day
+            </button>
+            <button type="button" className={`${styles.menuOption} ${styles.menuOptionDanger}`} onClick={() => setMode('cancel')}>
+              ✕ Remove from list completely
+            </button>
+            <button type="button" className={styles.cancelBtn} onClick={reset}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'cancel' && (
         <div className={styles.cancelBox}>
           <label className={styles.fieldHint}>Reason for cancelling (required)</label>
-          <input className={styles.input} placeholder="e.g. Client rescheduled" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input className={styles.input} placeholder="e.g. Client no longer coming" value={reason} onChange={(e) => setReason(e.target.value)} />
           {error && <p className={styles.errorMsg}>{error}</p>}
           <div className={styles.confirmRow}>
-            <button
-              type="button"
-              className={styles.cancelBtn}
-              onClick={() => {
-                setCancelling(false);
-                setReason('');
-                setError(null);
-              }}
-            >
+            <button type="button" className={styles.cancelBtn} onClick={reset}>
               Back
             </button>
             <button type="button" className={styles.visitCancelConfirmBtn} disabled={cancelVisit.isPending} onClick={confirmCancel}>
               {cancelVisit.isPending ? 'Cancelling…' : 'Yes, cancel visit'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'reschedule' && (
+        <div className={styles.cancelBox}>
+          <label className={styles.fieldHint}>New date</label>
+          <input className={styles.input} type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+          <label className={styles.fieldHint} style={{ marginTop: 8, display: 'block' }}>
+            New time (optional)
+          </label>
+          <input className={styles.input} type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
+          {error && <p className={styles.errorMsg}>{error}</p>}
+          <div className={styles.confirmRow}>
+            <button type="button" className={styles.cancelBtn} onClick={reset}>
+              Back
+            </button>
+            <button type="button" className={styles.finalizeBtn} style={{ flex: 1 }} disabled={rescheduleVisit.isPending} onClick={confirmReschedule}>
+              {rescheduleVisit.isPending ? 'Rescheduling…' : 'Move this visit'}
             </button>
           </div>
         </div>

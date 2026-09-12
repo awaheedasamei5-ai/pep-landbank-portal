@@ -996,6 +996,14 @@ export interface SiteVisit {
   // server-side function ever sets these.
   advanceReminderSentAt: string | null;
   finalReminderSentAt: string | null;
+  // Real columns added 2026-09-12 (user ask: delete icon offers "Remove
+  // completely" or "Reschedule" -- moving the visit to a new date/time
+  // instead of cancelling it, tagged with who moved it and what date it
+  // was moved from).
+  rescheduledAt: string | null;
+  rescheduledBy: string | null;
+  rescheduledByName: string | null;
+  previousVisitDate: string | null;
 }
 
 export interface NewSiteVisit {

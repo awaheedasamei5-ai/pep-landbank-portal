@@ -135,3 +135,43 @@ export function useCancelSiteVisit() {
     },
   });
 }
+
+// Real user ask (2026-09-12): Site Visit Authorization's delete icon
+// should offer "Remove completely" (cancel, above) or "Reschedule" --
+// moving the same visit to a new date/time instead of cancelling it.
+// Notifies whoever logged it (same pattern as cancel above) so a
+// staff member finds out their client's visit moved, not just that it
+// vanished from today's list. site_visits.lead_id already ties this
+// row to Pipeline/Company Leads/Client Database's own per-lead Site
+// Visits section (SiteVisitsSection in PipelineDetailScreen.tsx), so
+// the "Rescheduled" tag + new date show up there automatically once
+// the row itself is updated -- no separate write needed.
+export function useRescheduleSiteVisit() {
+  const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, newDate, newTime }: { id: string; newDate: string; newTime: string | null }) => {
+      const ds = getDataSource(demoMode);
+      const updated = await ds.siteVisits.reschedule(id, newDate, newTime, profile?.key ?? '', profile?.name ?? '');
+      if (updated.agentKey && updated.agentKey !== profile?.key) {
+        const body = `${profile?.name || 'A manager'} rescheduled the site visit for ${updated.name} to ${fmtLongDate(updated.visitDate)}${updated.visitTime ? ' (' + updated.visitTime + ')' : ''}.`;
+        ds.notifications.notify(profile?.key ?? '', profile?.name ?? '', [updated.agentKey], body, 'site_visit_rescheduled', 'site_visit', updated.id).catch(() => {});
+        ds.staff
+          .list()
+          .then((staff) => {
+            const phone = staff.find((s) => s.key === updated.agentKey)?.phone;
+            if (phone) ds.sms.send(phone, body, 'site_visit_rescheduled', profile?.key ?? null).catch(() => {});
+          })
+          .catch(() => {});
+      }
+      return updated;
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['weekSiteVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead'] });
+      if (updated.leadId) queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead', updated.leadId] });
+    },
+  });
+}

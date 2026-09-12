@@ -327,6 +327,10 @@ export function mapSiteVisitRow(r: Record<string, unknown>): SiteVisit {
     cancellationReason: (r.cancellation_reason as string) ?? null,
     advanceReminderSentAt: (r.advance_reminder_sent_at as string) ?? null,
     finalReminderSentAt: (r.final_reminder_sent_at as string) ?? null,
+    rescheduledAt: (r.rescheduled_at as string) ?? null,
+    rescheduledBy: (r.rescheduled_by as string) ?? null,
+    rescheduledByName: (r.rescheduled_by_name as string) ?? null,
+    previousVisitDate: (r.previous_visit_date as string) ?? null,
   };
 }
 
