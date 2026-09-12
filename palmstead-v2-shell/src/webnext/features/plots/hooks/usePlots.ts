@@ -11,10 +11,15 @@ export function usePlots() {
 
   return useQuery({
     queryKey: ['plots'],
-    // Real RLS restricts this to manager + elias/emmanuel -- gate the
-    // query itself, not just the UI, so an ungated agent never even fires
-    // a request that RLS would silently empty-out anyway.
-    enabled: !!profile && (profile.role === 'manager' || profile.key === 'elias' || profile.key === 'emmanuel'),
+    // Real user ask (2026-09-11): "give the rest of the staff who are not
+    // in charge of allocations view only access to the plot inventory."
+    // This gate used to match plots_sel's old manager/elias/emmanuel-only
+    // RLS -- left unchanged when that RLS was widened, it silently zeroed
+    // out every KPI and tile for every other staff member (query never
+    // even fired) even though the screen itself already treats everyone
+    // as having view access. Real plots_sel now matches: any signed-in
+    // staff member; plots_ins/upd/del stay manager/elias/emmanuel-only.
+    enabled: !!profile,
     queryFn: () => getDataSource(demoMode).plots.list(),
   });
 }
