@@ -9,9 +9,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
@@ -48,23 +45,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props} variant={variant} collapsible={collapsible}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="h-auto py-2">
-              <Link prefetch={false} href="/dashboard/default">
-                {/* Real user ask (2026-09-11): replace the logo + app-name
-                    text with the user's own black wordmark PNG (palmstead
-                    logos.pdf, extracted losslessly, not a redesign),
-                    centered at the top of the sidebar -- the wordmark
-                    already carries the name, so the separate <span> text
-                    is dropped rather than duplicated. */}
-                {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
-                <img src="/logo-black.png" alt={APP_CONFIG.name} className="mx-auto h-6 w-auto object-contain dark:invert" />
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarHeader className="p-3">
+        {/* Real user ask (2026-09-11 & 2026-09-12): replace the logo +
+            app-name text with the user's own black wordmark PNG
+            (palmstead logos.pdf, extracted losslessly, not a redesign),
+            filling the header width nicely instead of a tiny mark lost
+            in a lot of dead space -- the wordmark already carries the
+            name, so the separate app-name text is dropped. A plain
+            Link, not a SidebarMenuButton, since this isn't a nav item
+            with an icon+label row -- that component's own sizing is
+            what was squeezing the logo down to a sliver in the middle. */}
+        <Link prefetch={false} href="/dashboard/default" className="flex items-center justify-center rounded-md px-2 py-2 hover:bg-sidebar-accent">
+          {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
+          <img src="/logo-black.png" alt={APP_CONFIG.name} className="h-auto w-full max-w-[168px] object-contain dark:invert" />
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={items} />
