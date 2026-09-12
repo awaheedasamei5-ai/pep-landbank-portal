@@ -61,6 +61,14 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['paymentsNeedsCorrection'] });
       queryClient.invalidateQueries({ queryKey: ['activityForLead'] });
       queryClient.invalidateQueries({ queryKey: ['auditForLead'] });
+      // Real user ask (2026-09-12): "i hope the banner app is in sync
+      // with pipelines and other apps in real time end to end." A new
+      // lead saved against a banner (leads.banner_id) previously left
+      // Banner Tracking's own "leads from banners" dashboard figure and
+      // per-banner lead-count badges stale on any other open session
+      // until a manual refresh, even though the lead itself synced live
+      // everywhere else.
+      queryClient.invalidateQueries({ queryKey: ['leadBannerCounts'] });
     };
     const invalidateLeave = () => {
       queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });

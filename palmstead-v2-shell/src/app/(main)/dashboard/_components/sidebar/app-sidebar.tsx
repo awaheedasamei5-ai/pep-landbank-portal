@@ -9,6 +9,9 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
@@ -45,20 +48,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props} variant={variant} collapsible={collapsible}>
-      <SidebarHeader className="p-3">
-        {/* Real user ask (2026-09-11 & 2026-09-12): replace the logo +
-            app-name text with the user's own black wordmark PNG
-            (palmstead logos.pdf, extracted losslessly, not a redesign),
-            filling the header width nicely instead of a tiny mark lost
-            in a lot of dead space -- the wordmark already carries the
-            name, so the separate app-name text is dropped. A plain
-            Link, not a SidebarMenuButton, since this isn't a nav item
-            with an icon+label row -- that component's own sizing is
-            what was squeezing the logo down to a sliver in the middle. */}
-        <Link prefetch={false} href="/dashboard/default" className="flex items-center justify-center rounded-md px-2 py-2 hover:bg-sidebar-accent">
-          {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
-          <img src="/logo-black.png" alt={APP_CONFIG.name} className="h-auto w-full max-w-[168px] object-contain dark:invert" />
-        </Link>
+      <SidebarHeader>
+        {/* Real user ask (2026-09-12): "revert it to the first logo with
+            text (circular orange palm logo with the palmstead text).
+            change only that one" -- the sign-in screen's white wordmark
+            and the favicon/app-icon stay as redesigned; only this
+            sidebar mark goes back to the original trulander-logo.png +
+            app-name text. */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link prefetch={false} href="/dashboard/default">
+                {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
+                <img src="/trulander-logo.png" alt="" width={20} height={20} className="rounded-sm object-contain" />
+                <span className="font-semibold text-base">{APP_CONFIG.name}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={items} />

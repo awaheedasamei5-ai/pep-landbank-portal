@@ -1,4 +1,8 @@
-.wrap { padding: 20px 16px 90px; max-width: 560px; }
+/* Real user ask (2026-09-12): a fixed max-width left dead space on the
+   right on any wide viewport -- this page holds a table, not a narrow
+   form, so it's uncapped (like Plot Inventory's own .wrap) rather than
+   centered at a fixed width. */
+.wrap { padding: 20px 16px 90px; }
 .backBtn { background: none; border: none; color: var(--c-muted); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; margin-bottom: 12px; }
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }

@@ -1,4 +1,6 @@
-.wrap { padding: 20px 16px 90px; max-width: 480px; }
+/* Real user ask (2026-09-12): centered, so a fixed max-width doesn't
+   pin the form to the left edge with dead space on the right. */
+.wrap { padding: 20px 16px 90px; max-width: 480px; margin: 0 auto; }
 .backLink { display: inline-block; font-size: 12.5px; color: var(--c-muted); margin-bottom: 10px; text-decoration: none; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 20px; font-size: 13.5px; }

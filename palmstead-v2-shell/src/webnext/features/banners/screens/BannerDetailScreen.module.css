@@ -1,7 +1,10 @@
+/* Real user ask (2026-09-12): a fixed max-width left dead space on the
+   right whenever the sidebar was collapsed (or on any wide monitor) --
+   no cap at all, matching Plot Inventory's own .wrap. */
 .wrap { padding: 20px 16px 90px; }
 
 @media (width >= 1024px) {
-  .wrap { max-width: 640px; padding: 28px 32px 40px; }
+  .wrap { padding: 28px 32px 40px; }
 }
 
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 0 0 14px; font-size: 13px; }
