@@ -109,7 +109,7 @@ export const sidebarItems: NavGroup[] = [
     items: [
       { id: "operations-tracker", title: "Operations Tracker", url: NOT_BUILT_YET, icon: ListChecks },
       { id: "memorandum", title: "Memorandum", url: NOT_BUILT_YET, icon: FileText },
-      { id: "attendance", title: "Attendance", url: NOT_BUILT_YET, icon: Fingerprint },
+      { id: "attendance", title: "Attendance", url: "/dashboard/attendance", icon: Fingerprint },
       { id: "log-payment", title: "Log Payment", url: NOT_BUILT_YET, icon: Wallet },
       { id: "contract-of-sale", title: "Contract of Sale", url: NOT_BUILT_YET, icon: FileSignature },
       { id: "quotation", title: "Quotation", url: "/dashboard/quotation", icon: ReceiptText },

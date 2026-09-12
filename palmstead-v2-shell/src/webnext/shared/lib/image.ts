@@ -53,3 +53,41 @@ export function resizeImageToDataUri(file: File, maxW: number, maxH: number, qua
     reader.readAsDataURL(file);
   });
 }
+
+// Real production pattern (mimnets/OpenHRApp's attendance.service.ts,
+// approved OSS foundation for the Attendance app) -- a camera capture
+// gets compressed to WebP client-side before it's ever uploaded, not
+// stored full-resolution. WebP at this quality is meaningfully smaller
+// than the equivalent JPEG for a phone selfie, and unlike
+// resizeImageToDataUri above (which returns a data URI for inline
+// storage), this returns a real Blob for a Storage upload.
+export function resizeImageToWebpBlob(dataUri: string, maxDim: number, quality = 0.65): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('not a valid image'));
+    img.onload = () => {
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h *= maxDim / w;
+          w = maxDim;
+        } else {
+          w *= maxDim / h;
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('canvas not supported'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('WebP encoding failed'))), 'image/webp', quality);
+    };
+    img.src = dataUri;
+  });
+}
