@@ -9,13 +9,13 @@ export function StarRating({ value, onChange, max = 5 }: { value: number; onChan
         <button
           key={n}
           type="button"
-          className={styles.star}
+          className={`${styles.star} ${n <= value ? styles.starActive : ''}`}
           aria-label={`${n} star${n > 1 ? 's' : ''}`}
           aria-checked={value === n}
           role="radio"
           onClick={() => onChange(n)}
         >
-          {n <= value ? '★' : '☆'}
+          ★
         </button>
       ))}
     </div>

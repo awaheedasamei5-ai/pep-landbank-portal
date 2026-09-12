@@ -171,11 +171,19 @@ export function SveFeedbackScreen() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.hero}>
-        <div className={styles.heroTitle}>Palmstead Site Visit Experience</div>
-        <div className={styles.heroSub}>Your feedback helps us do better for the next visitor</div>
-      </div>
       <div className={styles.body}>
+        {/* Real user ask (2026-09-12): "that form has an orange
+            appearance (in association with the royal palm colours) ...
+            go back and look at that form, copy and add it to this
+            version." Exact port of the real production form's own
+            logo + title + subtitle + intro block -- sitting directly
+            on the page background above the first card, not inside a
+            separate colored hero band. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- a small fixed-size mark on a static public page, not worth next/image's config */}
+        <img src="/trulander-logo.png" alt="Trulander JSF Ltd" className={styles.logo} />
+        <div className={styles.heroTitle}>Site Visit Experience Review</div>
+        <div className={styles.heroSub}>Trulander JSF Ltd</div>
+        <p className={styles.intro}>Thank you for honoring our invitation for a site visit. We&apos;d love to hear how it went — it only takes a couple of minutes.</p>
         {screen === 'loading' && (
           <div className={styles.centerState}>
             <p className={styles.centerSub}>Loading…</p>
