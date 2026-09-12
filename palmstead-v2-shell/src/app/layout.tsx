@@ -40,12 +40,17 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       suppressHydrationWarning
     >
       <head>
-        {/* Real Palmstead/Trulander favicon (same files web-next serves) --
-            overrides the template's default src/app/favicon.ico, which
-            Next.js otherwise auto-serves at a higher priority than a
-            public/favicon.ico of the same name. */}
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        {/* Real Palmstead favicon -- the user's own designed blue palm
+            mark (from palmstead logos.pdf, extracted losslessly via
+            pdftocairo, not a redesign), overriding the template's default
+            src/app/favicon.ico, which Next.js otherwise auto-serves at a
+            higher priority than a public/favicon.ico of the same name.
+            PNG-only: the old favicon.svg still held the previous orange
+            Trulander mark, and browsers prefer an SVG icon over a PNG
+            one when both are linked, so it's dropped here rather than
+            left to silently win over the real one. */}
         <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+        <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         {/* Real web-next webfonts (Bricolage Grotesque/Plus Jakarta Sans/
             IBM Plex Mono) -- previously only linked in web-next's own

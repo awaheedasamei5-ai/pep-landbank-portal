@@ -51,11 +51,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
+            <SidebarMenuButton asChild className="h-auto py-2">
               <Link prefetch={false} href="/dashboard/default">
+                {/* Real user ask (2026-09-11): replace the logo + app-name
+                    text with the user's own black wordmark PNG (palmstead
+                    logos.pdf, extracted losslessly, not a redesign),
+                    centered at the top of the sidebar -- the wordmark
+                    already carries the name, so the separate <span> text
+                    is dropped rather than duplicated. */}
                 {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size sidebar mark, next/image's optimizer is overkill here */}
-                <img src="/trulander-logo.png" alt="" width={20} height={20} className="rounded-sm object-contain" />
-                <span className="font-semibold text-base">{APP_CONFIG.name}</span>
+                <img src="/logo-black.png" alt={APP_CONFIG.name} className="mx-auto h-6 w-auto object-contain dark:invert" />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

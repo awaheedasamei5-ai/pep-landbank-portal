@@ -22,11 +22,13 @@ export default function LoginV1() {
         <LoginVideoPanel />
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
         <div className="relative flex h-full flex-col items-center justify-center p-12 text-center">
-          <div className="space-y-6">
-            {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size mark on a static page, not worth next/image's config */}
-            <img src="/trulander-logo.png" alt="Trulander JSF Limited" className="mx-auto size-16 rounded-lg bg-white p-1" />
-            <h1 className="font-light text-5xl text-white">Palmstead</h1>
-          </div>
+          {/* Real user ask (2026-09-11): replace the orange circular logo
+              + "Palmstead" text with the user's own white wordmark PNG
+              (palmstead logos.pdf, extracted losslessly, not a redesign),
+              centered. The wordmark already carries the name, so the
+              separate <h1> text is dropped rather than duplicated. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size mark on a static page, not worth next/image's config */}
+          <img src="/logo-white.png" alt="Palmstead" className="mx-auto w-64" />
         </div>
       </div>
 
