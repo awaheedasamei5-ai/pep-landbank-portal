@@ -1,0 +1,46 @@
+.wrap { margin-bottom: 16px; }
+.wrap h3 { font-size: 14.5px; margin: 0 0 4px; }
+.sub { font-size: 12px; color: var(--c-muted); margin: 0 0 12px; }
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+.card {
+  border-radius: var(--r-md);
+  padding: 14px;
+  border: 1px solid var(--c-line);
+  background: var(--c-card);
+}
+.card.warning { border-color: var(--c-warn); background: var(--c-warn-bg); }
+.card.praise { border-color: var(--c-success); background: var(--c-success-bg); }
+
+.cardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.badge { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.card.warning .badge { color: var(--c-warn); }
+.card.praise .badge { color: var(--c-success); }
+.staffName { font-weight: 700; font-size: 13px; }
+
+.textarea {
+  width: 100%;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  background: var(--c-card);
+  color: var(--c-text);
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.actions { display: flex; gap: 8px; justify-content: flex-end; }
+.dismissBtn, .issueBtn {
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dismissBtn { background: transparent; color: var(--c-muted); }
+.issueBtn { background: var(--c-ink); color: #fff; }
+.issueBtn:disabled, .dismissBtn:disabled { opacity: .6; cursor: default; }

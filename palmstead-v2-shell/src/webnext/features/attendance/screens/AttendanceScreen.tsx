@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useAttendance } from '../hooks/useAttendance';
 import { useAttendanceMonth } from '../hooks/useAttendanceMonth';
 import { useAttendanceComparison } from '../hooks/useAttendanceComparison';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { AttendanceCheckInScreen } from './AttendanceCheckInScreen';
+import { AttendanceManagementScreen } from './AttendanceManagementScreen';
 import { AttendanceMonthCard } from '../components/AttendanceMonthCard';
 import { AttendanceCalendar } from '../components/AttendanceCalendar';
 import { AttendanceComparison } from '../components/AttendanceComparison';
@@ -23,6 +25,8 @@ function hoursWorkedStr(signInAt: string | null, signOutAt: string | null): stri
 // composition around the approved repo's own components, not a
 // redesign of V1's or web-next's screen.
 export function AttendanceScreen() {
+  const isManager = useSessionStore((s) => s.profile?.role === 'manager');
+  const [view, setView] = useState<'mine' | 'management'>('mine');
   const { today, isLoadingToday, reconcileMessage, dismissReconcileMessage } = useAttendance();
   const { monthStart, monthKey, cells, stats } = useAttendanceMonth();
   const { you, rank, teamCount, teamAvgOnTime, teamAvgAttended } = useAttendanceComparison(monthKey);
@@ -31,11 +35,31 @@ export function AttendanceScreen() {
 
   if (checkingIn) return <AttendanceCheckInScreen onFinish={() => setCheckingIn(false)} />;
 
+  if (isManager && view === 'management') {
+    return (
+      <div>
+        <div className={styles.viewSwitchOuter}>
+          <div className={styles.viewSwitch}>
+            <button type="button" className={styles.viewBtn} onClick={() => setView('mine')}>My Attendance</button>
+            <button type="button" className={styles.viewBtnActive}>Management</button>
+          </div>
+        </div>
+        <AttendanceManagementScreen />
+      </div>
+    );
+  }
+
   const signedIn = !!today?.signInAt;
   const signedOut = !!today?.signOutAt;
 
   return (
     <div className={styles.wrap}>
+      {isManager && (
+        <div className={styles.viewSwitch}>
+          <button type="button" className={styles.viewBtnActive}>My Attendance</button>
+          <button type="button" className={styles.viewBtn} onClick={() => setView('management')}>Management</button>
+        </div>
+      )}
       <h1 className={styles.title}>Attendance</h1>
       <p className={styles.sub}>Sign in when you arrive, sign out when you leave — your location is captured automatically.</p>
 
