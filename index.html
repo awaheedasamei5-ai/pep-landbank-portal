@@ -26275,14 +26275,65 @@ async function checkMonthlyCommissionReport(){
 // the old banner's position/subtlety meant it was easy to work right past.
 // No auto-reload without a click: force-reloading mid-form-entry could lose
 // someone's half-typed lead, which is worse than a slightly-stale build.
-function showUpdateBanner(){
-  if(document.getElementById('updateBanner')) return;
+function showUpdateBanner(auto){
+  const existing=document.getElementById('updateBanner'); if(existing){ if(auto) existing.querySelector('span').textContent='⬆ Updating to the latest version — finishing up what you\'re doing first.'; return; }
   const b=document.createElement('div'); b.id='updateBanner';
   b.style.cssText='position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));z-index:2000;background:var(--premium,#C9A227);color:#1A1400;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.4);animation:fadeUp .3s ease both,updatePulse 2.2s ease-in-out infinite';
-  b.innerHTML='<span style="flex:1;font-size:12.5px;font-weight:700">⬆ A new version of Palmstead is ready — reload to get the latest fixes.</span><button style="background:var(--ink);color:#fff;border:none;border-radius:100px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Reload now</button>';
+  b.innerHTML='<span style="flex:1;font-size:12.5px;font-weight:700">'+(auto?'⬆ Updating to the latest version — finishing up what you\'re doing first.':'⬆ A new version of Palmstead is ready — reload to get the latest fixes.')+'</span><button style="background:var(--ink);color:#fff;border:none;border-radius:100px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Reload now</button>';
   b.querySelector('button').onclick=()=>window.location.reload();
   document.body.appendChild(b);
 }
+// Root fix 2026-10-07 for "staff need many manual refreshes to see a fix" --
+// the Service Worker's own update detection (below) only ever fires when
+// sw.js's OWN bytes change, which they never do (only index.html changes on
+// a normal deploy), so reg.addEventListener('updatefound',...) essentially
+// never triggers in practice; the dismissible gold banner it drove was
+// therefore not actually showing up for most real deploys, and GitHub
+// Pages' CDN (Fastly) caches index.html itself for up to ~10 minutes
+// regardless, so a plain manual reload during that window re-served the
+// same stale bytes -- explaining "I refreshed 40 times" far better than bad
+// luck. This is a second, independent update-detection path that doesn't
+// depend on the Service Worker at all: re-fetches index.html itself with a
+// cache-busting query string (bypassing both the browser's HTTP cache and
+// Fastly's, same trick sw.js's fetch handler already uses) every 45s and on
+// every tab-focus, compares a cheap checksum of the response against the
+// one captured when this page itself first loaded, and once they differ,
+// applies the update AUTOMATICALLY -- immediately if nobody's mid-keystroke
+// in a text field, otherwise it waits (checking every 2s) until they stop
+// typing or leave that field, then reloads with no click required. The
+// banner still shows the whole time so nothing happens invisibly.
+let APP_SOURCE_SIGNATURE=null, APP_UPDATE_PENDING=false;
+async function fetchAppSignature(){
+  try{
+    const res=await fetch('./index.html?_v='+Date.now(),{cache:'no-store'});
+    if(!res.ok) return null;
+    const text=await res.text();
+    let h=0; for(let i=0;i<text.length;i+=37){ h=(h*31+text.charCodeAt(i))|0; }
+    return text.length+':'+h;
+  }catch(e){ return null; }
+}
+function isUserTypingSomewhere(){
+  const el=document.activeElement;
+  return !!(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable));
+}
+function applyPendingAppUpdate(){
+  if(isUserTypingSomewhere()){ setTimeout(applyPendingAppUpdate,2000); return; }
+  window.location.reload();
+}
+async function checkForAppUpdate(){
+  const sig=await fetchAppSignature(); if(!sig) return;
+  if(APP_SOURCE_SIGNATURE===null){ APP_SOURCE_SIGNATURE=sig; return; }
+  if(sig===APP_SOURCE_SIGNATURE || APP_UPDATE_PENDING) return;
+  APP_UPDATE_PENDING=true;
+  showUpdateBanner(true);
+  applyPendingAppUpdate();
+}
+function ensureAppUpdateWatcher(){
+  checkForAppUpdate();
+  setInterval(checkForAppUpdate,45000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkForAppUpdate(); });
+}
+ensureAppUpdateWatcher();
 if('serviceWorker' in navigator){
   window.addEventListener('load',async()=>{
     try{
