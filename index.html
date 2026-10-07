@@ -11221,9 +11221,15 @@ function renderPlotDetail(p,isManager){
 }
 let openBlocks=new Set();
 function plotBlockOf(plotNumber){ const m=String(plotNumber||'').match(/^([A-Za-z]+)/); return m?m[1].toUpperCase():'Other'; }
-function canManagePlots(){ return PROFILE.role==='manager' || PROFILE.key==='elias' || PROFILE.key==='emmanuel'; }
-function canManagePayments(){ return PROFILE.role==='manager' || PROFILE.key==='elias'; }
-function canViewClientDatabase(){ return PROFILE.role==='manager' || ['elias','emmanuel','elizabeth'].includes(PROFILE.key); }
+// Each optionally takes a profile-like {key,role} to check someone OTHER than
+// the signed-in viewer -- every existing call site passes nothing and keeps
+// checking PROFILE exactly as before; added so Tool Access (see
+// defaultToolAccessLevel) can compute "would this person have this tool
+// anyway" for an arbitrary staff member being displayed in Staff Settings,
+// off the same single source of truth instead of a second hand-kept copy.
+function canManagePlots(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elias' || p.key==='emmanuel'; }
+function canManagePayments(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elias'; }
+function canViewClientDatabase(p){ p=p||PROFILE; return p.role==='manager' || ['elias','emmanuel','elizabeth'].includes(p.key); }
 // Mirrors the referrals_upd_staff RLS policy exactly -- a plain agent's own UPDATE
 // attempt on a referral would be silently rejected by RLS, so the UI has to know
 // this in advance rather than let them click a button that's guaranteed to fail.
@@ -16906,6 +16912,10 @@ function computeTechnicalQuotationTotals(fullCount,halfCount,customLots,period,d
 // openQuotationRequest so all 4 existing call sites (route dispatch, app tile,
 // both hero "Quotation" buttons) get the chooser for free with no changes.
 function openQuotationRequest(){
+  // Quotation is a modal, not a route() screen, so it can't go through
+  // guardToolAccess (which replaces the #view content) -- same "No access"
+  // contract as every other grantable tool, just enforced inline here instead.
+  if(!hasToolAccess('Quotation')){ toast("Management has restricted your access to Quotation."); return; }
   let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
   ov=document.createElement('div'); ov.id='announceOverlay';
   ov.innerHTML=`<div id="announceModal">
@@ -18406,7 +18416,7 @@ async function buildContractOfSalePDF(lead){
    them up next time, after the cache-reset below); the PDF's own pagination
    (pdfContractBody) already keeps every border/line/footer intact no matter how
    long the edited text runs, so nothing here needs to know about layout. */
-function canManageContracts(){ return PROFILE.role==='manager' || PROFILE.key==='elizabeth'; }
+function canManageContracts(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elizabeth'; }
 /* ---- contracts + contract requests -------------------------------------------
    A generated Contract of Sale is recorded here as metadata only -- no PDF blob
    stored. buildContractOfSalePDF() regenerates the exact same document fresh
@@ -20977,18 +20987,47 @@ const ALL_GRANTABLE_TOOLS=(()=>{
   return Array.from(seen.values());
 })();
 // A staff member's tool_access is {[toolKey]:'full'|'view'|'none'}, stored on
-// their profiles row (live) or demoMem.toolAccessOverrides[key] (demo) -- a
-// missing key defaults to 'full' so this is purely additive/non-breaking for
-// everyone until a manager actually restricts someone. Managers are always
-// exempt -- this restricts STAFF, never the person doing the restricting.
+// their profiles row (live) or demoMem.toolAccessOverrides[key] (demo).
+// Managers are always exempt -- this restricts STAFF, never the person doing
+// the restricting.
+//
+// A MISSING key (nobody has ever touched this tool for this person in Staff
+// Settings) does NOT mean "full" -- fixed 2026-10-07, was the actual bug
+// behind Tool Access "not working": every brand-new/untouched staff member
+// showed "Full access to everything" for apps that were simultaneously
+// already hard-restricted elsewhere in the app by role (Log Payment/Expenses
+// to canManagePayments()/canManageExpenses(), Contract of Sale to
+// canManageContracts(), Company Leads/Site Visit Auth to
+// canViewClientDatabase()) -- Staff Settings was lying about what that
+// person could actually do, and Management had to manually re-discover and
+// re-set 18 tools per person by hand instead of the system already knowing.
+// defaultToolAccessLevel() below mirrors those SAME role checks (by calling
+// the real functions with an arbitrary {key,role} instead of the signed-in
+// PROFILE) so a never-touched tool defaults to exactly what that person's
+// role already earns them -- a basic/universal tool with no such gate stays
+// 'full' for everyone, same as it always behaved pre-Tool-Access. Only once
+// Management explicitly saves a selection for that person does an explicit
+// override in their tool_access JSON take over from this default.
+function defaultToolAccessLevel(toolKey,staffProfile){
+  if(!staffProfile||staffProfile.role==='manager') return 'full';
+  const gate={
+    'Log Payment':canManagePayments,'Expenses':canManageExpenses,
+    'Contract of Sale':canManageContracts,
+    'Site Visit Auth':canViewClientDatabase,'Company Leads':canViewClientDatabase,
+    // Both routes already hard-redirect any non-manager regardless of tool_access
+    // (see viewManagementReportsApp/viewStaffReport) -- defaulting to 'none' here
+    // just keeps Staff Settings honest about that instead of claiming 'Full'.
+    'Management Reports':()=>false,'Staff Report':()=>false,
+  }[toolKey];
+  return gate ? (gate(staffProfile)?'full':'none') : 'full';
+}
 function myToolAccess(){ return (PROFILE&&(PROFILE.tool_access||PROFILE.toolAccess))||{}; }
-function toolAccessLevel(toolKey){ if(!PROFILE||PROFILE.role==='manager') return 'full'; return myToolAccess()[toolKey]||'full'; }
+function toolAccessLevel(toolKey){ if(!PROFILE||PROFILE.role==='manager') return 'full'; const v=myToolAccess()[toolKey]; return v!=null?v:defaultToolAccessLevel(toolKey,PROFILE); }
 function hasToolAccess(toolKey){ return toolAccessLevel(toolKey)!=='none'; }
 function isToolViewOnly(toolKey){ return toolAccessLevel(toolKey)==='view'; }
 function blockedToolLabels(){
   if(!PROFILE||PROFILE.role==='manager') return new Set();
-  const access=myToolAccess();
-  return new Set(ALL_GRANTABLE_TOOLS.filter(t=>access[t.key]==='none').map(t=>t.label));
+  return new Set(ALL_GRANTABLE_TOOLS.filter(t=>toolAccessLevel(t.key)==='none').map(t=>t.label));
 }
 // Hard gate for a "No access" tool -- called at the top of every grantable
 // app's view function, in addition to the menus already hiding it
@@ -21300,10 +21339,12 @@ function mgrStaffSettingsHtml(){
 
   ${settingsSectionHead('lock','Tool access','full, view-only, or none — per staff, per tool')}
   <div class="formwrap" style="padding:6px 15px 15px">
-  <p class="mini" style="margin:0 0 12px">Leaving everything on "Full" changes nothing — this only takes effect once you restrict something. "No access" hides that tool from their Sales/Office/More menus and blocks it outright if they try to open it directly. "View only" still shows it but disables every input and save/delete/send action inside it. Takes effect next time they open the app.</p>
+  <p class="mini" style="margin:0 0 12px">Every tool starts on its intelligent default — "Full" for a basic tool everyone gets, or whatever that person's role already earns them for something like Log Payment or Contract of Sale, marked "default" below. Pick a different level to override it for just that person; "No access" hides that tool from their Sales/Office/More menus and blocks it outright if they try to open it directly, "View only" still shows it but disables every input and save/delete/send action inside it. Takes effect next time they open the app.</p>
   ${agentStaff.map(s=>{
     const access=((DB.profiles||[]).find(x=>x.agent_key===s.key)||{}).tool_access||{};
-    const restricted=ALL_GRANTABLE_TOOLS.filter(t=>access[t.key]&&access[t.key]!=='full').length;
+    const staffProfile={key:s.key,role:'agent'};
+    const effectiveLevel=t=>access[t.key]!=null?access[t.key]:defaultToolAccessLevel(t.key,staffProfile);
+    const restricted=ALL_GRANTABLE_TOOLS.filter(t=>effectiveLevel(t)!=='full').length;
     return `<details class="vaultCard" data-toolaccessagent="${esc(s.key)}">
       <summary class="vaultSummary">
         <span class="vaultIcon">🔐</span>
@@ -21311,13 +21352,15 @@ function mgrStaffSettingsHtml(){
         <svg class="vaultChevron" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </summary>
       <div class="vaultFormContents">
-        <div class="toolAccessGrid">${ALL_GRANTABLE_TOOLS.map(t=>`
-          <div class="toolAccessRow"><span class="toolAccessLabel">${esc(t.label)}</span>
+        <div class="toolAccessGrid">${ALL_GRANTABLE_TOOLS.map(t=>{
+          const lvl=effectiveLevel(t), isDefault=access[t.key]==null;
+          return `<div class="toolAccessRow"><span class="toolAccessLabel">${esc(t.label)}${isDefault?'<span class="mini" style="color:var(--muted);font-weight:400"> · default</span>':''}</span>
           <select class="toolAccessSel" data-toolkey="${esc(t.key)}">
-            <option value="full" ${!access[t.key]||access[t.key]==='full'?'selected':''}>Full</option>
-            <option value="view" ${access[t.key]==='view'?'selected':''}>View only</option>
-            <option value="none" ${access[t.key]==='none'?'selected':''}>No access</option>
-          </select></div>`).join('')}
+            <option value="full" ${lvl==='full'?'selected':''}>Full</option>
+            <option value="view" ${lvl==='view'?'selected':''}>View only</option>
+            <option value="none" ${lvl==='none'?'selected':''}>No access</option>
+          </select></div>`;
+        }).join('')}
         </div>
         <div class="formactions" style="margin-top:12px"><button class="btn primary" data-savetoolaccess="${esc(s.key)}">Save access for ${esc((s.name||'').split(' ')[0])}</button></div>
       </div>
@@ -21363,8 +21406,13 @@ function bindStaffSettingsCtrls(){
     b.onclick=async()=>{
       const key=b.dataset.savetoolaccess;
       const container=b.closest('.vaultFormContents');
+      // Saves every selection explicitly, including "Full" -- previously only
+      // non-"full" picks were persisted, so explicitly granting someone "Full"
+      // on a tool whose computed default is 'none' (e.g. giving a non-Elias
+      // agent Log Payment) silently never saved. An explicit choice must always
+      // win over defaultToolAccessLevel()'s guess, in both directions.
       const access={};
-      container.querySelectorAll('.toolAccessSel').forEach(sel=>{ if(sel.value!=='full') access[sel.dataset.toolkey]=sel.value; });
+      container.querySelectorAll('.toolAccessSel').forEach(sel=>{ access[sel.dataset.toolkey]=sel.value; });
       b.disabled=true; b.textContent='Saving…';
       try{
         await apiSaveStaffToolAccess(key,access);
@@ -22585,7 +22633,7 @@ async function smsHandleSend(){
    requests (with Management approval + signature stamping), and daily cash/MoMo/bank
    balance logging. Live-mode only (real money, real receipts -- nothing to protect in
    demo mode), same restriction pattern as canManagePayments(). */
-function canManageExpenses(){ return PROFILE.role==='manager' || PROFILE.key==='elias'; }
+function canManageExpenses(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elias'; }
 let EXP_TAB='log', EXP_LOADED=false, EXPENSES_LIST=[], FUND_REQUESTS_LIST=[], DAILY_BALANCES_LIST=[], EXP_CATEGORIES_LIST=[], RECURRING_EXPENSES_LIST=[];
 function mapExpense(r){ return {id:r.id,category:r.category,amount:num(r.amount),method:r.payment_method,date:r.expense_date,description:r.description,
   receiptData:r.receipt_data,receiptName:r.receipt_name,loggedBy:r.logged_by,loggedByName:r.logged_by_name,status:r.status,
