@@ -4659,9 +4659,16 @@ async function checkPaymentDueReminders(){
 // orphans payment history (ON DELETE SET NULL). Setting deleted_at instead
 // keeps that history intact and RLS (leads_sel/leads_client_sel) already
 // hides deleted_at-set rows from every normal read.
+// Real hard delete -- was a soft `deleted_at` stamp, which relied on every
+// future read remembering to filter it back out. The lead row itself has no
+// RESTRICT-rule dependents (payments/plot_requests/referrals/schedule_items
+// SET NULL on delete; allocation_requests/target_selections/payment_reminders_log/
+// client_notifications CASCADE) and a real `leads_del` RLS policy already
+// allows the owning agent or a manager to delete, so there's nothing a hard
+// delete can fail on that the soft one wasn't already silently risking.
 async function apiDeleteLead(id,agentKey){
   if(DEMO_MODE){ const d=await demoLoad(); d.leads[agentKey]=(d.leads[agentKey]||[]).filter(x=>x.id!==id); await demoSave(); return; }
-  const {error}=await sb.from('leads').update({deleted_at:new Date().toISOString()}).eq('id',id); if(error) throw error;
+  const {error}=await sb.from('leads').delete().eq('id',id); if(error) throw error;
 }
 async function apiDeleteEnquiry(id){ if(DEMO_MODE){ const d=await demoLoad(); d.enquiries=d.enquiries.filter(x=>x.id!==id); await demoSave(); return; }
   const {error}=await sb.from('enquiries').delete().eq('id',id); if(error) throw error; }
@@ -4817,6 +4824,7 @@ let ATTENDANCE_CLOCK_TIMER=null;
 let ATT_CAL_CURSOR=today().slice(0,7); // the calendar heatmap's currently-browsed month
 let ATT_CAL_LOADED_MONTHS=new Set();
 async function viewAttendanceApp(){
+  if(guardToolAccess('Attendance','officedesk')) return;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Attendance</h2><p>Sign in when you arrive, sign out when you leave — your location is captured automatically.</p></div></div>
   <div id="attBody"><div style="padding:40px 0"><div class="skel" style="height:180px;border-radius:24px"></div></div></div>`;
   ATT_CAL_LOADED_MONTHS=new Set();
@@ -5959,7 +5967,7 @@ async function apiLoadCompanyLeads(){
 // this shape.
 const REALTIME_CHANNELS=[];
 function subscribeRealtimeTable(channelName,subscriptions,onReset){
-  const chan=subscriptions.reduce((c,{event,table,handler})=>c.on('postgres_changes',{event,schema:'public',table},handler),sb.channel(channelName));
+  const chan=subscriptions.reduce((c,{event,table,handler,filter})=>c.on('postgres_changes',filter?{event,schema:'public',table,filter}:{event,schema:'public',table},handler),sb.channel(channelName));
   chan.subscribe();
   REALTIME_CHANNELS.push({chan,onReset});
   return chan;
@@ -6115,10 +6123,18 @@ function findKnownLeadVersion(id){
    reopening the screen, and it's already in DB.leads for anything else that
    reads from there too. This is the actual connective tissue between an
    agent's own pipeline and the company-wide client database: they were
-   always the same table, this just keeps the client-side view of it live. */
+   always the same table, this just keeps the client-side view of it live.
+   Fixed 2026-10-07: was gated behind canViewClientDatabase(), so a plain
+   agent's own Pipeline screen never updated live at all -- e.g. Management
+   editing one of their leads, or logging a payment against it, sat stale
+   until that agent manually refreshed. Opened up to every signed-in profile:
+   RLS on leads/payments already scopes what postgres_changes actually
+   delivers to a non-privileged agent's subscription to just their own rows,
+   same as every other query against these tables, so this was only ever a
+   client-side gate -- removing it doesn't expose anything new. */
 let CLIENTDB_CHANNEL=null;
 function ensureClientDbSubscribed(){
-  if(DEMO_MODE || !sb || CLIENTDB_CHANNEL || !canViewClientDatabase()) return;
+  if(DEMO_MODE || !sb || CLIENTDB_CHANNEL) return;
   try{
     const upsertLocal=(l)=>{
       const i1=CLIENTDB_LIST.findIndex(x=>x.id===l.id); if(i1>=0) CLIENTDB_LIST[i1]=l; else CLIENTDB_LIST.push(l);
@@ -6135,6 +6151,7 @@ function ensureClientDbSubscribed(){
       else if(wasCompanyIdx>=0){ COMPANY_LEADS_LIST.splice(wasCompanyIdx,1); }
       const clList=document.getElementById('companyLeadsList');
       if(clList){ clList.innerHTML=companyLeadsListHtml(); bindCompanyLeadsRows(document.getElementById('companyLeadsBody')||document); }
+      if(document.getElementById('ptbody')) paintPipe();
     };
     const removeLeadLocal=oldRow=>{
       const id=oldRow&&oldRow.id; if(!id) return;
@@ -6145,6 +6162,7 @@ function ensureClientDbSubscribed(){
       if(list){ list.innerHTML=clientDatabaseListHtml(); bindClientDbRows(document.getElementById('cdbBody')||document); }
       const clList=document.getElementById('companyLeadsList');
       if(clList){ clList.innerHTML=companyLeadsListHtml(); bindCompanyLeadsRows(document.getElementById('companyLeadsBody')||document); }
+      if(document.getElementById('ptbody')) paintPipe();
     };
     CLIENTDB_CHANNEL=subscribeRealtimeTable('clientdb-live',[
       {event:'INSERT',table:'leads',handler:payload=>upsertLocal(mapLead(payload.new))},
@@ -6583,6 +6601,7 @@ function companyLeadsBodyHtml(){
   <div class="list" id="companyLeadsList">${companyLeadsListHtml()}</div>`;
 }
 async function viewCompanyPipeline(){
+  if(guardToolAccess('Company Leads',PROFILE.role==='manager'?'mgrSalesDesk':'salesdesk')) return;
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgrSalesDesk':'salesdesk')}<div class="pagehead"><div><div class="eyebrow">Company-sourced</div><h2>Company Leads</h2><p>Clients who came to the company directly -- assign each to an agent once you know who's handling them.</p></div></div>
   <div id="companyLeadsBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!COMPANY_LEADS_LOADED){ try{ await withLoadTimeout(apiLoadCompanyLeads(),15000,'Company leads'); }catch(e){ toast('Could not load company leads: '+(friendlyErr(e))); } }
@@ -6656,6 +6675,7 @@ function openAssignCompanyLeadModal(lead){
 }
 async function viewPlotRequests(){
   const homeRoute=PROFILE.role==='manager'?'mgrSalesDesk':'salesdesk';
+  if(guardToolAccess('Plot Requests',homeRoute)) return;
   V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><div class="eyebrow">Additional plot requests</div><h2>Plot Requests</h2><p>Submitted by clients from their dashboard.</p></div></div>
   <div id="prBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   let list=[];
@@ -7410,6 +7430,7 @@ async function enterApp(){
   refreshChatNavBadge();
   ensureChatSubscribed();
   ensureClientDbSubscribed();
+  ensureMyProfileLiveSubscribed();
   ensureScheduleLiveSubscribed();
   ensureLeaveLiveSubscribed();
   ensureAttendanceLiveSubscribed();
@@ -7454,6 +7475,10 @@ function ensureClientLiveSubscribed(){
         if(i>=0) CLIENT_DB.leads[i]=l; else CLIENT_DB.leads.push(l);
         refreshHomeIfOpen();
       }},
+      {event:'DELETE',table:'leads',handler:payload=>{
+        const id=payload.old&&payload.old.id; if(!id||!CLIENT_DB||!CLIENT_DB.leads) return;
+        CLIENT_DB.leads=CLIENT_DB.leads.filter(x=>x.id!==id); refreshHomeIfOpen();
+      }},
       {event:'INSERT',table:'payments',handler:payload=>{
         const p=mapClientPay(payload.new); if(!CLIENT_DB||!CLIENT_DB.payments) return;
         if(!CLIENT_DB.payments.some(x=>x.id===p.id)) CLIENT_DB.payments.unshift(p);
@@ -7463,6 +7488,29 @@ function ensureClientLiveSubscribed(){
         apiClientLoadNotifications().then(refreshClientBellBadge).catch(()=>{});
       }},
     ],()=>{ CLIENT_LIVE_CHANNEL=null; });
+  }catch(e){}
+}
+// New 2026-10-07 -- a staff member's own profile row, filtered server-side to
+// just their id (same postgres_changes contract as everything else here, now
+// with an optional `filter` -- see subscribeRealtimeTable). Exists specifically
+// so Tool Access (Staff Settings -> a per-app Full/View only/No access grant)
+// takes effect the moment Management saves it, not at the restricted person's
+// next sign-in: re-running the route they're currently on is enough, since
+// guardToolAccess()/armViewOnlyObserver() already read PROFILE.tool_access live
+// on every route() call -- this just gives PROFILE a reason to actually change
+// out from under them while they're sitting on a screen.
+let MY_PROFILE_LIVE_CHANNEL=null;
+function ensureMyProfileLiveSubscribed(){
+  if(DEMO_MODE || !sb || MY_PROFILE_LIVE_CHANNEL || !USER || IS_CLIENT) return;
+  try{
+    MY_PROFILE_LIVE_CHANNEL=subscribeRealtimeTable('my-profile-live',[
+      {event:'UPDATE',table:'profiles',filter:'id=eq.'+USER.id,handler:payload=>{
+        const prevAccess=JSON.stringify(myToolAccess());
+        Object.assign(PROFILE,payload.new,{key:payload.new.agent_key});
+        renderSidebarNow();
+        if(JSON.stringify(myToolAccess())!==prevAccess) route(CURRENT_ROUTE_NAME,null,true);
+      }},
+    ],()=>{ MY_PROFILE_LIVE_CHANNEL=null; });
   }catch(e){}
 }
 /* ---- cross-app realtime: Operations Tracker + Leave + Attendance -- same shape
@@ -8284,6 +8332,7 @@ function route(name,arg,skipPush){ window.scrollTo({top:0,behavior:'smooth'});
     clienthome:clientHome,clientvisit:formClientSiteVisit,clientfeedback:formClientFeedback,clientsettings:formClientSettings,clientprofile:formClientProfile,
     clientdb:viewClientDatabase,companyleads:viewCompanyPipeline,logpayment:viewLogPaymentApp,sitevisitauth:viewSiteVisitAuth,contractapp:viewContractApp,mgrSalesDesk:viewMgrSalesDesk,mgrCrmTools:viewMgrSalesDesk,mgrPlotInv:viewMgrSalesDesk,officedesk:viewOfficeDesk,leaveapp:viewLeaveApp,memoapp:viewMemoApp,bannerapp:viewBannerApp,bannerDetail:viewBannerDetail,attendanceapp:viewAttendanceApp,plotrequests:viewPlotRequests,clientmore:viewClientMore,clientcontact:viewClientContact,notes:viewNotesApp,sms:viewSmsApp,expenses:viewExpensesApp,mgmtreports:viewManagementReportsApp,notifications:viewNotifications,
     clientallocation:viewClientAllocation,clientreferrals:viewClientReferrals,clientcontractsale:viewClientContractSale,clientvisitexperience:viewClientSiteVisitExperience,portfolio:viewPortfolioApp,referralsapp:()=>{ mgrTab='Referrals'; managerView(); },importHistory:viewImportHistory,insightsHub:viewInsightsHub,managementHub:viewManagementHub}[name]||(IS_CLIENT?clientHome:agentHome))(arg);
+  armViewOnlyObserver(ROUTE_NAME_TO_TOOLKEY[name]);
   if(!skipPush && !ROUTE_NAV_LOCK && typeof PROFILE!=='undefined' && (PROFILE||IS_CLIENT)){
     try{ history.pushState({routeName:name,routeArg:arg}, '', '#'+name); }catch(e){}
   }
@@ -8883,6 +8932,7 @@ function appGridBadgeHtml(kind,countKey){
 }
 function viewSmartInsights(){
   const homeRoute=PROFILE.role==='manager'?'mgr':'home';
+  if(guardToolAccess('Insights',homeRoute)) return;
   const scope=PROFILE.role==='manager'?allAgentLists().flatMap(a=>a.list):DB.leads;
   V.innerHTML=`${back(homeRoute)}${renderSmartInsights(scope,DB.payments)}`;
   bindSmartInsights();
@@ -8929,6 +8979,10 @@ const MGR_APP_ROUTE_NAMES={'Feedback':'feedback','Duties':'duties','Leave Schedu
   'Banner Tracking':'bannerapp','Insights':'insights','Downloads':'downloads','Plot Requests':'plotrequests',
   'Company Leads':'companyleads','Log Payment':'logpayment','Expenses':'expenses','Management Reports':'mgmtreports',
   'Site Visit Auth':'sitevisitauth','Contract of Sale':'contractapp','Notes':'notes','Attendance':'attendanceapp','SMS':'sms','Staff Report':'staffReport'};
+// Inverse of the map above (route name -> grantable-tool key), used to arm the
+// View-only DOM lock generically from route() instead of hand-wiring every
+// screen -- see armViewOnlyObserver()/lockViewOnly() near Tool Access below.
+const ROUTE_NAME_TO_TOOLKEY=Object.fromEntries(Object.entries(MGR_APP_ROUTE_NAMES).map(([k,v])=>[v,k]));
 function mgrAppRoute(key){
   const rn=MGR_APP_ROUTE_NAMES[key];
   if(rn) route(rn);
@@ -9178,6 +9232,7 @@ function docTypeIconHtml(kind){
 }
 function viewDownloads(){
   const homeRoute=PROFILE.role==='manager'?'mgr':'home';
+  if(guardToolAccess('Downloads',homeRoute)) return;
   const all=(DB.downloads||[]);
   const kinds=[...new Set(all.map(d=>d.kind))];
   const list=downloadsKindFilter?all.filter(d=>d.kind===downloadsKindFilter):all;
@@ -10707,6 +10762,7 @@ function viewPipeline(){
     <span class="cnt" id="pipeCount"></span>
     <button class="pipeExportBtn" id="xlMyPipelineBtn">${ic.download}Export</button>
     <button class="pipeAddBtn" id="pipeAddLeadBtn"><svg viewBox="0 0 24 24" width="13" height="13" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Add lead</button>
+    ${PROFILE.role==='manager'?'':`<button class="pipeExportBtn" id="deletePipelineBtn" style="color:#B91C1C;border-color:#B91C1C">${ic.trash||''}Delete pipeline</button>`}
   </div>
   <div class="pipeFilterChips" id="pipeFilterChips"></div>
   <div class="pipeTableWrap"><table class="pipeTable">
@@ -10731,8 +10787,53 @@ function viewPipeline(){
     document.getElementById('reqBackupBtn').onclick=()=>requestPipelineOp('backup');
     document.getElementById('reqRestoreBtn').onclick=()=>requestPipelineOp('restore');
     document.getElementById('pipeDeleteReqBtn').onclick=openPipelineDeleteRequestModal;
+    document.getElementById('deletePipelineBtn').onclick=deleteFullPipelineConfirm;
   }
   paintPipe();
+}
+// 2026-10-07: an immediate, self-serve version of "delete my whole pipeline" --
+// pipeDeleteReqBtn above stays as-is (a request Management reviews first); this
+// one actually deletes on the spot, same as the single-lead Delete button, and
+// tells Management afterwards by SMS instead of asking them beforehand. Vacates
+// any plot each deleted lead held (same courtesy as deleteLeadConfirm), hard-
+// deletes every one of this agent's own leads in one query, then relies on the
+// same FK cascade/SET NULL rules apiDeleteLead does -- payments stay (money
+// collected is a real audit record; RLS only lets Elias/Management delete those
+// anyway) but lose their lead reference, and pipeline value/collected totals
+// everywhere else in the app are computed live off DB.leads, so they correct
+// themselves the moment the leads are gone -- nothing else to clean up by hand.
+async function deleteFullPipelineConfirm(){
+  const mine=DB.leads.filter(l=>l.agent===PROFILE.key);
+  if(!mine.length){ toast('Your pipeline is already empty'); return; }
+  if(!confirm(`Delete your ENTIRE pipeline? This permanently removes all ${mine.length} of your leads and their records -- this can't be undone. Management will be notified by SMS.`)) return;
+  const btn=document.getElementById('deletePipelineBtn'); if(btn){ btn.disabled=true; btn.textContent='Deleting…'; }
+  try{
+    const toVacate=new Set();
+    mine.forEach(l=>{
+      const allocRec=(DB.allocations||[]).find(a=>a.leadId===l.id && a.status==='Allocated');
+      if(allocRec && allocRec.plotNumber){ const p=DB.plots.find(pl=>pl.plotNumber.toLowerCase()===allocRec.plotNumber.toLowerCase()); if(p) toVacate.add(p.id); }
+      DB.plots.filter(p=>p.status==='Allocated' && p.clientName && p.clientName.trim().toLowerCase()===l.name.trim().toLowerCase()).forEach(p=>toVacate.add(p.id));
+    });
+    if(toVacate.size){
+      if(canManagePlots()){
+        for(const plotId of toVacate){
+          const p=DB.plots.find(x=>x.id===plotId); if(!p) continue;
+          try{ await apiUpdatePlot(p.id,{status:'Available',clientName:'',clientContact:'',agentKey:''}); Object.assign(p,{status:'Available',clientName:'',clientContact:'',agentKey:''}); }catch(e){}
+        }
+      }
+    }
+    await apiDeleteFullPipeline(PROFILE.key);
+    DB.leads=DB.leads.filter(l=>l.agent!==PROFILE.key);
+    CLIENTDB_LIST=CLIENTDB_LIST.filter(x=>x.agent!==PROFILE.key); COMPANY_LEADS_LIST=COMPANY_LEADS_LIST.filter(x=>x.agent!==PROFILE.key);
+    addActivity(PROFILE.name,'Pipeline deleted',`${PROFILE.name} deleted their entire pipeline (${mine.length} leads)`,'','',null);
+    const mgrPhone=phoneForStaffKey('manager');
+    if(mgrPhone) apiSendSms(mgrPhone,`${PROFILE.name} just deleted their entire pipeline on Palmstead -- ${mine.length} lead(s) permanently removed.`,'pipeline_deleted').catch(()=>{});
+    toast('Your pipeline has been deleted'); route('pipeline');
+  }catch(e){ toast('Delete failed: '+(friendlyErr(e))); if(btn){ btn.disabled=false; btn.textContent='Delete pipeline'; } }
+}
+async function apiDeleteFullPipeline(agentKey){
+  if(DEMO_MODE){ const d=await demoLoad(); d.leads[agentKey]=[]; await demoSave(); return; }
+  const {error}=await sb.from('leads').delete().eq('agent_key',agentKey); if(error) throw error;
 }
 // New 2026-09-03: a staff member's own request to have their whole
 // pipeline permanently deleted -- reason required, goes to Management as
@@ -13089,6 +13190,7 @@ async function paintMonthTab(){
   });
 }
 async function viewDuties(){
+  if(guardToolAccess('Duties','officedesk')) return;
   const all=DB.tasks||[];
   const mine=all.filter(t=>t.assignedTo===PROFILE.key);
   const byMe=all.filter(t=>t.assignedBy===PROFILE.key&&t.assignedTo!==PROFILE.key);
@@ -13656,6 +13758,7 @@ const FEEDBACK_CATEGORIES=['Bug','Suggestion','Feature Request','Other'];
 let FEEDBACK_COMMENTS_CACHE={};
 function viewFeedback(){
   const homeRoute='officedesk';
+  if(guardToolAccess('Feedback',homeRoute)) return;
   const all=DB.feedback||[];
   const rowOf=f=>{ const initials=(f.authorName||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
     return `<div class="rowcard">
@@ -14539,69 +14642,36 @@ function openDepositOverpayModal(myDep,payAmount,onDone){
     onDone(choice==='absorb'?Math.round(newTotal):myDep.target);
   });
 }
-function deleteLeadConfirm(id,name){
+// Simplified per Management's request (2026-10-07): one click, one confirm,
+// the lead and its record are gone -- no reason-picking flow first. Any plot
+// this client held is still auto-vacated as a courtesy (so Plot Inventory
+// doesn't silently go stale), it's just no longer gated behind choosing
+// "refund" as the reason.
+async function deleteLeadConfirm(id,name){
   const l=findLeadById(id);
-  let ov=document.getElementById('announceOverlay'); if(ov) ov.remove();
-  ov=document.createElement('div'); ov.id='announceOverlay';
-  ov.innerHTML=`<div id="announceModal">
-    <div style="font-weight:800;font-size:16px;margin-bottom:4px" id="delLeadTitle">Delete ${esc(name)}?</div>
-    <div class="mini" style="margin-bottom:16px">This can't be undone. Tell us why — it decides what else needs to happen.</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="delReasonBtn" data-reason="wrong">
-        <div style="font-weight:700;font-size:13.5px">Data was entered wrong</div>
-        <div class="mini">I'll re-create this lead correctly. No other changes needed.</div>
-      </button>
-      <button class="delReasonBtn" data-reason="refund">
-        <div style="font-weight:700;font-size:13.5px">Client asked for a refund / opted out</div>
-        <div class="mini">Any plot allocated to them will automatically become Available again.</div>
-      </button>
-      <button class="delReasonBtn" data-reason="other">
-        <div style="font-weight:700;font-size:13.5px">Other reason</div>
-        <div class="mini">Just delete the record — no other automatic changes.</div>
-      </button>
-    </div>
-    <button class="btn ghost" id="cancelDel" style="width:100%;margin-top:14px">Cancel</button>
-  </div>`;
-  document.body.appendChild(ov);
-  makeModalAccessible(ov);
-  document.getElementById('announceModal').setAttribute('aria-labelledby','delLeadTitle');
-  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
-  document.getElementById('cancelDel').onclick=()=>ov.remove();
-  ov.querySelectorAll('[data-reason]').forEach(b=>b.onclick=async()=>{
-    const reason=b.dataset.reason;
-    b.disabled=true; b.textContent='Deleting…';
-    try{
-      if(reason==='refund'){
-        // vacate any plot this client was allocated — first via the precise allocation
-        // request record if one exists, then a name-match fallback for anything else
-        const allocRec=(DB.allocations||[]).find(a=>a.leadId===id && a.status==='Allocated');
-        const toVacate=new Set();
-        if(allocRec && allocRec.plotNumber){ const p=DB.plots.find(pl=>pl.plotNumber.toLowerCase()===allocRec.plotNumber.toLowerCase()); if(p) toVacate.add(p.id); }
-        if(l) DB.plots.filter(p=>p.status==='Allocated' && p.clientName && p.clientName.trim().toLowerCase()===l.name.trim().toLowerCase()).forEach(p=>toVacate.add(p.id));
-        if(toVacate.size){
-          if(canManagePlots()){
-            for(const plotId of toVacate){
-              const p=DB.plots.find(x=>x.id===plotId); if(!p) continue;
-              try{ await apiUpdatePlot(p.id,{status:'Available',clientName:'',clientContact:'',agentKey:''}); Object.assign(p,{status:'Available',clientName:'',clientContact:'',agentKey:''}); }catch(e){}
-            }
-            toast(toVacate.size+' plot(s) automatically made Available again');
-          }else{
-            // this agent can't edit plot inventory directly — notify the people who can,
-            // rather than silently failing to vacate the plot
-            const plotNums=[...toVacate].map(pid=>{ const p=DB.plots.find(x=>x.id===pid); return p?p.plotNumber:null; }).filter(Boolean).join(', ');
-            const notifyTo=['elias','emmanuel','manager'];
-            for(const key of notifyTo){ try{ const rec=await apiSendMessage(key,`${PROFILE.name} deleted ${name}'s record (refund/opt-out). Plot ${plotNums||'(see records)'} was allocated to them and needs to be manually marked Available in Plot Inventory.`); DB.messages.push(rec); }catch(e){} }
-            toast('Notified Elias, Emmanuel & Management to vacate the plot');
-          }
+  if(!confirm(`Delete ${name}? This removes the lead and their record from the pipeline -- this can't be undone.`)) return;
+  const btn=document.getElementById('delLead'); if(btn){ btn.disabled=true; btn.textContent='Deleting…'; }
+  try{
+    const allocRec=(DB.allocations||[]).find(a=>a.leadId===id && a.status==='Allocated');
+    const toVacate=new Set();
+    if(allocRec && allocRec.plotNumber){ const p=DB.plots.find(pl=>pl.plotNumber.toLowerCase()===allocRec.plotNumber.toLowerCase()); if(p) toVacate.add(p.id); }
+    if(l) DB.plots.filter(p=>p.status==='Allocated' && p.clientName && p.clientName.trim().toLowerCase()===l.name.trim().toLowerCase()).forEach(p=>toVacate.add(p.id));
+    if(toVacate.size){
+      if(canManagePlots()){
+        for(const plotId of toVacate){
+          const p=DB.plots.find(x=>x.id===plotId); if(!p) continue;
+          try{ await apiUpdatePlot(p.id,{status:'Available',clientName:'',clientContact:'',agentKey:''}); Object.assign(p,{status:'Available',clientName:'',clientContact:'',agentKey:''}); }catch(e){}
         }
+      }else{
+        const plotNums=[...toVacate].map(pid=>{ const p=DB.plots.find(x=>x.id===pid); return p?p.plotNumber:null; }).filter(Boolean).join(', ');
+        for(const key of ['elias','emmanuel','manager']){ try{ const rec=await apiSendMessage(key,`${PROFILE.name} deleted ${name}'s record. Plot ${plotNums||'(see records)'} was allocated to them and needs to be manually marked Available in Plot Inventory.`); DB.messages.push(rec); }catch(e){} }
       }
-      await apiDeleteLead(id,PROFILE.key);
-      DB.leads=DB.leads.filter(x=>x.id!==id); CLIENTDB_LIST=CLIENTDB_LIST.filter(x=>x.id!==id); COMPANY_LEADS_LIST=COMPANY_LEADS_LIST.filter(x=>x.id!==id);
-      const reasonLabel=reason==='wrong'?'data entered wrong':reason==='refund'?'client refund/opt-out':'other reason';
-      addActivity(name,'Lead deleted','Reason: '+reasonLabel+' — deleted by '+PROFILE.name,'','',null);
-      ov.remove(); toast(name+' deleted'); route('pipeline');
-    }catch(e){ toast('Delete failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Retry'; }
-  });
+    }
+    await apiDeleteLead(id,PROFILE.key);
+    DB.leads=DB.leads.filter(x=>x.id!==id); CLIENTDB_LIST=CLIENTDB_LIST.filter(x=>x.id!==id); COMPANY_LEADS_LIST=COMPANY_LEADS_LIST.filter(x=>x.id!==id);
+    addActivity(name,'Lead deleted','Deleted by '+PROFILE.name,'','',null);
+    toast(name+' deleted'); route('pipeline');
+  }catch(e){ toast('Delete failed: '+(friendlyErr(e))); if(btn){ btn.disabled=false; btn.textContent='Delete client'; } }
 }
 // Intercepts the one case that needs a decision before saving: a deposit payment that
 // would overpay the deposit target. Everything else saves straight through.
@@ -14848,6 +14918,7 @@ function openLogMonthPayment(lead,slotKey,expected){
    consistent everywhere, but re-renders in place instead of navigating away. */
 let LOGPAY_SELECTED_LEAD=null, LOGPAY_QUERY='', logPayTab='dashboard';
 async function viewLogPaymentApp(){
+  if(guardToolAccess('Log Payment','officedesk')) return;
   if(!canManagePayments()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Payment entry is restricted to Elias and Management.'); return; }
   LOGPAY_SELECTED_LEAD=null; LOGPAY_QUERY='';
   const isMgr=PROFILE.role==='manager';
@@ -15159,6 +15230,7 @@ function svaCostTotal(form,suffix){ return SVA_COST_ROWS.reduce((n,r)=>n+num(for
 function svaMoney(n){ n=num(n); return n?n.toFixed(2):'-'; }
 let SVA_MAIN_TAB='logistics';
 async function viewSiteVisitAuth(weekStartArg,dayArg){
+  if(guardToolAccess('Site Visit Auth','officedesk')) return;
   if(!canViewClientDatabase()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Restricted','Site Visit Authorization is limited to Management, Elias, Emmanuel and Elizabeth.'); return; }
   SVA_WEEK_START=weekStartArg||currentWeekStartIso();
   SVA_SELECTED_DAY=dayArg||null;
@@ -18521,6 +18593,7 @@ function readImageFileAsDataUri(file,maxW){
 }
 let CONTRACTAPP_QUERY='', contractAppTab='generate', CONTRACT_REQUESTS_LOADED=false;
 async function viewContractApp(){
+  if(guardToolAccess('Contract of Sale','officedesk')) return;
   if(!canManageContracts()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Restricted','Contract of Sale is limited to Elizabeth and Management.'); return; }
   CONTRACTAPP_QUERY='';
   if(!CONTRACT_REQUESTS_LOADED){ try{ DB.contractRequests=await withLoadTimeout(apiLoadContractRequests(),15000,'Contract requests'); CONTRACT_REQUESTS_LOADED=true; }catch(e){} }
@@ -20917,6 +20990,57 @@ function blockedToolLabels(){
   const access=myToolAccess();
   return new Set(ALL_GRANTABLE_TOOLS.filter(t=>access[t.key]==='none').map(t=>t.label));
 }
+// Hard gate for a "No access" tool -- called at the top of every grantable
+// app's view function, in addition to the menus already hiding it
+// (blockedToolLabels/tileGridHtml/vaultGridHtml). Menu-hiding alone can be
+// bypassed by a bookmarked #hash, browser back/forward, or deep link, so this
+// is what actually keeps the app out of a restricted staff member's hands.
+// Returns true (and renders the restricted screen) when the caller should stop.
+function guardToolAccess(toolKey,backRoute){
+  if(hasToolAccess(toolKey)) return false;
+  V.innerHTML=back(backRoute||'more')+emptyState(ic.lock,'Access restricted',`Management has restricted your access to ${esc(toolKey)}. Contact Management if this doesn't look right.`);
+  return true;
+}
+// Disables every form control and mutating button inside a just-rendered
+// view, for staff whose Tool Access on toolKey is "View only" -- they can see
+// and navigate within the screen, but can't log/save/delete/send anything.
+// Heuristic (not role-aware): any <input>/<select>/<textarea> is locked
+// outright. A <button> is the risky part -- a denylist of "mutating verbs"
+// was tried first and missed real primary actions (Attendance's own "Sign
+// In / Tap to clock in" button matched no verb in that list and stayed
+// clickable), so this is an ALLOWLIST instead: a button is locked by default,
+// and stays enabled only when its text is plain navigation/read-only chrome
+// (back, filters, pagination, export, search, refresh, retry, show/hide,
+// expand/collapse, a bare arrow/chevron glyph). Safer to over-lock an
+// occasional harmless button than to under-lock a mutating one. Call this
+// right after a gated view's own innerHTML + bind*() calls finish wiring up
+// their own onclick handlers, so this runs last and wins.
+const VIEW_ONLY_SAFE_BTN_RE=/^(back|cancel|close|retry|refresh|search|filter|sort|export|download|print|view|show|hide|expand|collapse|next|prev|previous|today|all stages|all areas|[‹›«»←→]+|[<>]+|\d+)$/i;
+function lockViewOnly(toolKey,container){
+  if(!isToolViewOnly(toolKey)) return;
+  const root=container||V;
+  root.querySelectorAll('input,select,textarea').forEach(el=>{ el.disabled=true; });
+  root.querySelectorAll('button').forEach(btn=>{
+    const text=(btn.textContent||'').trim().replace(/\s+/g,' ');
+    if(!VIEW_ONLY_SAFE_BTN_RE.test(text)) btn.disabled=true;
+  });
+  if(!root.querySelector('.viewOnlyBanner')){
+    root.insertAdjacentHTML('afterbegin',`<p class="mini viewOnlyBanner" style="color:var(--warn);margin:0 0 10px">View-only access — you can look around here but can't save, send, or delete anything.</p>`);
+  }
+}
+// Called once per route() navigation (see the route() dispatcher) instead of
+// from inside each view function -- a screen's own async loads and internal
+// re-renders (pagination, tab switches, a save that repaints its own list)
+// all happen as DOM mutations inside #view, so one MutationObserver re-locks
+// them automatically instead of needing every such re-render hand-wired.
+let VIEWONLY_OBSERVER=null;
+function armViewOnlyObserver(toolKey){
+  if(VIEWONLY_OBSERVER){ VIEWONLY_OBSERVER.disconnect(); VIEWONLY_OBSERVER=null; }
+  if(!toolKey||!isToolViewOnly(toolKey)) return;
+  lockViewOnly(toolKey,V);
+  VIEWONLY_OBSERVER=new MutationObserver(()=>lockViewOnly(toolKey,V));
+  VIEWONLY_OBSERVER.observe(V,{childList:true,subtree:true});
+}
 function demoToolAccess(key){ return (demoMem&&demoMem.toolAccessOverrides&&demoMem.toolAccessOverrides[key])||{}; }
 async function apiSaveStaffToolAccess(agentKey,toolAccess){
   if(DEMO_MODE){ const d=await demoLoad(); d.toolAccessOverrides=d.toolAccessOverrides||{}; d.toolAccessOverrides[agentKey]=toolAccess; await demoSave(); return; }
@@ -21176,7 +21300,7 @@ function mgrStaffSettingsHtml(){
 
   ${settingsSectionHead('lock','Tool access','full, view-only, or none — per staff, per tool')}
   <div class="formwrap" style="padding:6px 15px 15px">
-  <p class="mini" style="margin:0 0 12px">Leaving everything on "Full" changes nothing — this only takes effect once you restrict something. "No access" hides that tool from their Sales/Office/More menus entirely. "View only" still shows it but disables saving inside it (this is being wired up screen by screen, starting with Log Payment).</p>
+  <p class="mini" style="margin:0 0 12px">Leaving everything on "Full" changes nothing — this only takes effect once you restrict something. "No access" hides that tool from their Sales/Office/More menus and blocks it outright if they try to open it directly. "View only" still shows it but disables every input and save/delete/send action inside it. Takes effect next time they open the app.</p>
   ${agentStaff.map(s=>{
     const access=((DB.profiles||[]).find(x=>x.agent_key===s.key)||{}).tool_access||{};
     const restricted=ALL_GRANTABLE_TOOLS.filter(t=>access[t.key]&&access[t.key]!=='full').length;
@@ -22171,6 +22295,7 @@ async function apiDeleteNote(id){
   const {error}=await sb.from('notes').delete().eq('id',id); if(error) throw error;
 }
 async function viewNotesApp(){
+  if(guardToolAccess('Notes',PROFILE.role==='manager'?'mgr':'more')) return;
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'more')}<div class="pagehead"><div><div class="eyebrow">Personal</div><h2>Notes</h2><p>Quick private notes — jot something down, save it, send it, or download it.</p></div></div>
   <div id="notesBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!NOTES_LOADED){ try{ NOTES_LIST=await withLoadTimeout(apiLoadNotes(),15000,'Notes'); NOTES_LOADED=true; }catch(e){ toast('Could not load notes: '+(friendlyErr(e))); } }
@@ -22277,6 +22402,7 @@ async function apiRecentDuplicateSms(message){
   return data[0].created_at;
 }
 async function viewSmsApp(){
+  if(guardToolAccess('SMS',PROFILE.role==='manager'?'mgr':'more')) return;
   SMS_MODE='staff'; SMS_SEARCH=''; SMS_SELECTED={}; SMS_SENDING=false; SMS_RESULT=null;
   V.innerHTML=`${back(PROFILE.role==='manager'?'mgr':'more')}<div class="pagehead"><div><div class="eyebrow">Broadcast</div><h2>SMS</h2><p>Send a custom text message to staff, clients, or any number.</p></div></div>
   <div id="smsBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
@@ -22623,6 +22749,7 @@ async function apiUpsertDailyBalance(date,cash,momo,bank){
 // against it later), so it's safe to demo -- see paintExpensesApp's tab
 // filtering for the other half of this carve-out.
 async function viewExpensesApp(){
+  if(guardToolAccess('Expenses','officedesk')) return;
   if(!canManageExpenses()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Expenses are restricted to Elias and Management.'); return; }
   EXP_TAB='funds';
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Operations</div><h2>Expenses</h2><p>Log spending, request funds, and track the daily cash/MoMo/bank position.</p></div></div>
@@ -24134,6 +24261,7 @@ function buildLeaveLetterPDF(req){
   return doc;
 }
 async function viewLeaveApp(){
+  if(guardToolAccess('Leave Schedules','officedesk')) return;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Leave Schedules</h2><p>Plan, apply for, and track staff leave</p></div></div>
   <div id="leaveBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!LEAVE_REQUESTS_LOADED){
@@ -24876,6 +25004,7 @@ function buildMemoPDF(m){
   return doc;
 }
 async function viewMemoApp(){
+  if(guardToolAccess('Memorandum','officedesk')) return;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Memorandum</h2><p>Write and receive company memos</p></div></div>
   <div id="memoBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!MEMOS_LOADED){
@@ -25164,6 +25293,7 @@ function ensureLeafletLoaded(){
 }
 let BANNER_LEAD_COUNTS={};
 async function viewBannerApp(){
+  if(guardToolAccess('Banner Tracking','officedesk')) return;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><h2>Banner Tracking</h2><p>Add, track, and route to every banner placement</p></div></div>
   <div id="bannerBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   if(!BANNERS_LOADED){
@@ -25442,6 +25572,7 @@ function viewBannerDetail(bannerId){
   </div>
   <div class="sectitle" style="margin-top:0"><h3>Log a status update</h3></div>
   <div class="formwrap" style="margin-bottom:16px">
+    ${fld('Name',`<input id="bd_name" value="${esc(b.name||'')}" placeholder="e.g. Spintex Road – near GOIL"/>`)}
     ${fld('Area',`<input id="bd_area" list="bdAreaList" value="${esc(b.area||'')}" placeholder="e.g. Spintex"/>`)}
     <datalist id="bdAreaList">${[...new Set((DB.banners||[]).map(x=>x.area).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}"></option>`).join('')}</datalist>
     ${fld('New status',sel('bd_status',Object.keys(BANNER_STATUS).map(k=>BANNER_STATUS[k].label),st.label))}
@@ -25487,20 +25618,24 @@ function bindBannerDetailCtrls(b){
     const labelToKey={}; Object.keys(BANNER_STATUS).forEach(k=>labelToKey[BANNER_STATUS[k].label]=k);
     const status=labelToKey[val('bd_status')]||b.status;
     const note=val('bd_note').trim();
+    const name=val('bd_name').trim();
     const area=val('bd_area').trim();
+    if(!name){ toast('Name is required'); return; }
     if(!area){ toast('Area is required'); return; }
     const btn=document.getElementById('bdSaveBtn'); btn.disabled=true; btn.textContent='Saving…';
     try{
-      // Area is a plain field on the banner itself, not part of the
+      // Name and area are plain fields on the banner itself, not part of the
       // append-only status_log history (unlike status/photos/note) --
       // fixed 2026-09-03: banners.area was already a real, required column
       // but this "update a banner" flow had no way to ever change it after
-      // creation (openBannerModal is create-only). Saved separately via
-      // apiUpdateBanner, alongside (not instead of) the existing status-log
-      // write, since the two are independent concerns.
-      if(area!==(b.area||'')) await apiUpdateBanner(b.id,{area});
+      // creation (openBannerModal is create-only); the same gap existed for
+      // banners.name until this fix. Saved separately via apiUpdateBanner,
+      // alongside (not instead of) the existing status-log write, since the
+      // two are independent concerns.
+      const patch={}; if(name!==(b.name||'')) patch.name=name; if(area!==(b.area||'')) patch.area=area;
+      if(Object.keys(patch).length) await apiUpdateBanner(b.id,patch);
       await apiLogBannerStatusUpdate(b.id,{status,note,images});
-      b.status=status; b.area=area; if(images.length) b.image=images[0]; b.updatedAt=new Date().toISOString();
+      b.status=status; b.name=name; b.area=area; if(images.length) b.image=images[0]; b.updatedAt=new Date().toISOString();
       toast('Status update logged'); viewBannerDetail(b.id);
     }catch(e){ toast('Failed: '+(friendlyErr(e))); btn.disabled=false; btn.textContent='Log update'; }
   };
