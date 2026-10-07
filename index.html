@@ -5965,12 +5965,41 @@ async function apiLoadCompanyLeads(){
 // is referenced directly elsewhere (typing broadcast, presence state), so
 // it keeps its own bespoke setup/teardown rather than being forced into
 // this shape.
+// Root cause fixed 2026-10-07: chan.subscribe() was fire-and-forget -- its
+// result was never checked, so a channel that failed to actually join
+// (CHANNEL_ERROR/TIMED_OUT, e.g. several of these firing in one burst at
+// sign-in can trip Realtime's own join-rate limiting) stayed silently dead
+// for the rest of that session with no error, no retry, nothing -- the exact
+// shape of "new staff / a tool-access change doesn't show up until I sign
+// out and in a few times": each fresh sign-in is really just another chance
+// for the join to succeed, not an actual fix. Every one of this helper's
+// ~14 callers (staff roster, leads/client DB, schedule, leave, attendance,
+// referrals, contracts, site-visit feedback, memos, banners, plots,
+// allocations, a signed-in profile, chat) gets the retry for free from this
+// one place. A channel that errors is removed and fully recreated (per
+// supabase-js's own guidance -- re-subscribing the same instance after an
+// error is not reliable) with capped backoff, forever, until teardown.
 const REALTIME_CHANNELS=[];
 function subscribeRealtimeTable(channelName,subscriptions,onReset){
-  const chan=subscriptions.reduce((c,{event,table,handler,filter})=>c.on('postgres_changes',filter?{event,schema:'public',table,filter}:{event,schema:'public',table},handler),sb.channel(channelName));
-  chan.subscribe();
-  REALTIME_CHANNELS.push({chan,onReset});
-  return chan;
+  let live=true, current=null, attempt=0;
+  const connect=()=>{
+    if(!live) return;
+    const chan=subscriptions.reduce((c,{event,table,handler,filter})=>c.on('postgres_changes',filter?{event,schema:'public',table,filter}:{event,schema:'public',table},handler),sb.channel(channelName+(attempt?'-retry'+attempt:'')));
+    current=chan;
+    chan.subscribe(status=>{
+      if(!live) return;
+      if(status==='SUBSCRIBED'){ attempt=0; return; }
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        try{ sb.removeChannel(chan); }catch(e){}
+        attempt++;
+        setTimeout(connect,Math.min(2000*attempt,15000));
+      }
+    });
+  };
+  connect();
+  const entry={ get chan(){ return current; }, onReset:()=>{ live=false; onReset&&onReset(); } };
+  REALTIME_CHANNELS.push(entry);
+  return entry;
 }
 function teardownAllRealtimeChannels(){
   REALTIME_CHANNELS.forEach(({chan,onReset})=>{ try{ sb.removeChannel(chan); }catch(e){} try{ onReset&&onReset(); }catch(e){} });
@@ -7056,16 +7085,41 @@ async function refreshStaffList(){
     STAFF_LIST=[...base.filter(s=>s.role==='agent'), ...extra, ...base.filter(s=>s.role==='manager')];
     return STAFF_LIST;
   }
+  // A transient error/empty response here used to fall through to
+  // STAFF_LIST=BASE_STAFF.slice() unconditionally -- meaning one flaky
+  // network blip during a background refresh didn't just skip the update, it
+  // actively REPLACED an already-correct, fully-populated STAFF_LIST with the
+  // hardcoded original 4, discarding every staff member added since. That's
+  // the other half of "only shows the original 4 until several sign-outs/
+  // sign-ins" -- each fresh page load was a new coin-flip against this, not
+  // a real fix. Now a failed/empty fetch just keeps whatever STAFF_LIST
+  // already had; BASE_STAFF is only the fallback on the very first call of
+  // a session, before anything real has ever loaded.
   try{
     const {data,error}=await sb.from('staff_directory').select('name,email,role,agent_key,active');
     if(!error && data && data.length){
       const mapped=data.map(p=>({name:p.name,email:p.email,role:p.role,key:p.agent_key}));
       mapped.sort((a,b)=> (a.role===b.role) ? a.name.localeCompare(b.name) : (a.role==='manager'?1:-1));
-      STAFF_LIST=mapped; return STAFF_LIST;
+      STAFF_LIST=mapped; STAFF_LIST_EVER_LOADED=true; return STAFF_LIST;
     }
   }catch(e){}
-  STAFF_LIST=BASE_STAFF.slice();
+  if(!STAFF_LIST_EVER_LOADED) STAFF_LIST=BASE_STAFF.slice();
   return STAFF_LIST;
+}
+let STAFF_LIST_EVER_LOADED=false;
+// Belt-and-suspenders fallback for the staff roster specifically (on top of
+// the realtime retry fix in subscribeRealtimeTable) -- re-pulls the full
+// roster every 60s for as long as a session is open, so even a dropped/
+// never-delivered INSERT event self-heals within a minute instead of needing
+// a manual sign-out/sign-in. Cheap: one small view, no joins.
+let STAFF_LIST_POLL_TIMER=null;
+function ensureStaffListPolling(){
+  if(DEMO_MODE || STAFF_LIST_POLL_TIMER) return;
+  clearInterval(STAFF_LIST_POLL_TIMER);
+  STAFF_LIST_POLL_TIMER=setInterval(async()=>{
+    await refreshStaffList(); buildDropdown();
+    if(document.getElementById('mbody') && mgrTab==='Staff Settings') managerView();
+  },60000);
 }
 function ddRenderResults(query){
   const results=document.getElementById('ddResults'); if(!results) return;
@@ -7444,6 +7498,7 @@ async function enterApp(){
   ensureAllocationsLiveSubscribed();
   ensurePresenceSubscribed();
   ensureOfflineQueueRunning();
+  ensureStaffListPolling();
   if(PROFILE.role!=='manager') evaluateMyAchievements();
   await evaluateMyStreak();
   startInactivityTimer();
@@ -8010,6 +8065,7 @@ document.getElementById('logoutBtn').onclick=async()=>{
   teardownAllRealtimeChannels();
   if(PRESENCE_LIVE_CHANNEL){ try{ await apiTouchLastSeen(); sb.removeChannel(PRESENCE_LIVE_CHANNEL); }catch(e){} PRESENCE_LIVE_CHANNEL=null; PRESENCE_ONLINE_KEYS=new Set(); clearInterval(PRESENCE_HEARTBEAT_TIMER); }
   clearInterval(OFFLINE_DRAIN_TIMER);
+  clearInterval(STAFF_LIST_POLL_TIMER); STAFF_LIST_POLL_TIMER=null;
   const offlineBadge=document.getElementById('offlineSyncBadge'); if(offlineBadge) offlineBadge.remove();
   CLIENTDB_LOADED=false; CLIENTDB_LIST=[];
   CLIENT_NOTIFICATIONS=[];
@@ -20975,6 +21031,25 @@ const SETTINGS_APPS=[
 // does NOT cover the ~5 core day-to-day pipeline actions on AGENT_HUBS.salesdesk
 // (New lead/Update pipeline/Data check/etc.) -- those are basic workflow, not
 // a discretionary "tool" a manager would ever want to fully take away.
+//
+// Fixed 2026-10-07: the raw MGR_APPS+SETTINGS_APPS union includes a long tail
+// of manager/admin-only screens (every SETTINGS_APPS entry, plus
+// MGR_APPS items like Data Check, Leaderboard, Reports/Analytics/Report
+// Archive, Import History, News, the standalone "Settings" item, and the
+// manager-only half of Commission) that a plain staff member can never open
+// no matter what Tool Access says -- managerView()'s own role check
+// (viewManagementHub/viewInsightsHub/the Settings hub) already hard-blocks
+// all of them for non-managers. Listing them here anyway meant Staff
+// Settings showed "Full access" on ~20 backend/admin tools nobody could
+// actually hand a normal staff member, which read as exactly the kind of
+// access a manager would never knowingly grant. Filtered out below so the
+// per-staff list only ever shows tools a staff member could realistically
+// use.
+const MANAGER_ONLY_TOOL_KEYS=new Set([
+  'Data Check','Leaderboard','Reports','Analytics','Report Archive','Import History','News','Settings','Commission',
+  'Quotation Settings','Commission Settings','Pricing & Targets','Staff Settings','Company Settings',
+  'Referral Settings','Achievement Settings','Backup & Restore','System Health','System','Audit Log','Support Diagnostics'
+]);
 const ALL_GRANTABLE_TOOLS=(()=>{
   const extra=[
     {key:'Memorandum',label:'Memorandum'},{key:'Quotation',label:'Quotation'},
@@ -20983,7 +21058,7 @@ const ALL_GRANTABLE_TOOLS=(()=>{
     {key:'Management Reports',label:'Management Reports'}
   ];
   const seen=new Map();
-  [...MGR_APPS,...SETTINGS_APPS,...extra].forEach(t=>{ if(!seen.has(t.key)) seen.set(t.key,{key:t.key,label:t.label}); });
+  [...MGR_APPS,...SETTINGS_APPS,...extra].forEach(t=>{ if(!seen.has(t.key)&&!MANAGER_ONLY_TOOL_KEYS.has(t.key)) seen.set(t.key,{key:t.key,label:t.label}); });
   return Array.from(seen.values());
 })();
 // A staff member's tool_access is {[toolKey]:'full'|'view'|'none'}, stored on
@@ -21013,7 +21088,8 @@ function defaultToolAccessLevel(toolKey,staffProfile){
   const gate={
     'Log Payment':canManagePayments,'Expenses':canManageExpenses,
     'Contract of Sale':canManageContracts,
-    'Site Visit Auth':canViewClientDatabase,'Company Leads':canViewClientDatabase,
+    'Site Visit Auth':canViewClientDatabase,'Company Leads':canViewClientDatabase,'Client Database':canViewClientDatabase,
+    'Allocations':canManagePlots,'Plots':canManagePlots,
     // Both routes already hard-redirect any non-manager regardless of tool_access
     // (see viewManagementReportsApp/viewStaffReport) -- defaulting to 'none' here
     // just keeps Staff Settings honest about that instead of claiming 'Full'.
@@ -25327,18 +25403,35 @@ const BANNER_STATUS={
   location_only:{label:'Scouted location',color:'#2563EB',bg:'#DBEAFE'},
   being_replaced:{label:'Being replaced',color:'#DC2626',bg:'#FEE2E2'}
 };
+// Fixed 2026-10-07: resolved as soon as leaflet.js loaded, without ever
+// waiting on the leaflet.css <link> it appended right alongside it -- a
+// stylesheet load isn't awaited by just appending the tag, and on a first
+// visit (nothing cached yet) the JS can finish fetching well before the CSS
+// does. Leaflet without its own CSS still "renders" (the JS runs, tiles
+// request, markers place) but with none of the positioning/sizing/pane
+// z-index rules that CSS defines, which is exactly a "zoomed-out, misplaced,
+// not what it's supposed to look like" map rather than a visible error --
+// nothing in bindBannerMapCtrls() was ever wrong, it was drawing a real map
+// onto a page with no map styling yet. Now actually waits for both.
 function ensureLeafletLoaded(){
-  if(window.L) return Promise.resolve();
+  if(window.L && LEAFLET_CSS_READY) return Promise.resolve();
   if(LEAFLET_LOADING) return LEAFLET_LOADING;
   LEAFLET_LOADING=new Promise((resolve,reject)=>{
-    const link=document.createElement('link'); link.rel='stylesheet'; link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    document.head.appendChild(link);
-    const script=document.createElement('script'); script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload=()=>resolve(); script.onerror=()=>reject(new Error('Could not load the map library — check your connection.'));
-    document.head.appendChild(script);
+    const cssReady=new Promise((res,rej)=>{
+      const link=document.createElement('link'); link.rel='stylesheet'; link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.onload=()=>res(); link.onerror=()=>rej(new Error('Could not load the map styling — check your connection.'));
+      document.head.appendChild(link);
+    });
+    const jsReady=window.L?Promise.resolve():new Promise((res,rej)=>{
+      const script=document.createElement('script'); script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload=()=>res(); script.onerror=()=>rej(new Error('Could not load the map library — check your connection.'));
+      document.head.appendChild(script);
+    });
+    Promise.all([cssReady,jsReady]).then(()=>{ LEAFLET_CSS_READY=true; resolve(); }).catch(reject);
   });
   return LEAFLET_LOADING;
 }
+let LEAFLET_CSS_READY=false;
 let BANNER_LEAD_COUNTS={};
 async function viewBannerApp(){
   if(guardToolAccess('Banner Tracking','officedesk')) return;
@@ -25795,6 +25888,14 @@ function bindBannerMapCtrls(){
     if(bannerMapInstance){ bannerMapInstance.remove(); bannerMapInstance=null; }
     const center=shown.length?[shown[0].lat,shown[0].lng]:[5.6037,-0.1870];
     bannerMapInstance=L.map(container).setView(center,shown.length?12:11);
+    // The container is real, visible, explicitly height:360px the whole time
+    // (see bannerMapHtml()), but Leaflet still measures it at creation time --
+    // a filter change rebuilds this map inside a layout the browser hasn't
+    // necessarily settled yet (same innerHTML-then-immediately-script pattern
+    // that causes Leaflet's own documented "grey/blank/misdrawn tiles until
+    // you resize" issue). invalidateSize() after a layout tick makes it
+    // re-measure and redraw against the container's real, current size.
+    setTimeout(()=>{ if(bannerMapInstance) bannerMapInstance.invalidateSize(); },0);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(bannerMapInstance);
     shown.forEach(b=>{
       const fillColor=bnMapColorMode==='area'?bannerAreaColor(b.area):(BANNER_STATUS[b.status]||BANNER_STATUS.placed).color;
