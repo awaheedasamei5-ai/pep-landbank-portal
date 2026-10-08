@@ -24,6 +24,14 @@ const nextConfig = {
     root: __dirname,
     resolveAlias: {
       "react-router": "./src/webnext-shim/react-router.tsx",
+      // Operations Tracker (src/openplane/) is a literal duplicate of
+      // makeplane/plane's real pnpm workspace packages (@plane/types,
+      // @plane/constants, ...), copied in with their own internal
+      // "@plane/xxx" imports unedited -- same aliasing approach as
+      // react-router above, pointed at the copied folders instead of a
+      // real separate package.
+      "@plane/types": "./src/openplane/types/index.ts",
+      "@plane/constants": "./src/openplane/constants/index.ts",
     },
   },
   async redirects() {
