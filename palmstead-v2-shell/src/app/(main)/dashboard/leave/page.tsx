@@ -1,5 +1,5 @@
-import { LeaveScreen } from "@/webnext/features/leave/screens/LeaveScreen";
+import LeavePageClient from "./LeavePageClient";
 
 export default function Page() {
-  return <LeaveScreen />;
+  return <LeavePageClient />;
 }

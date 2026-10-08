@@ -1,5 +1,5 @@
-import { AttendanceScreen } from "@/webnext/features/attendance/screens/AttendanceScreen";
+import AttendancePageClient from "./AttendancePageClient";
 
 export default function Page() {
-  return <AttendanceScreen />;
+  return <AttendancePageClient />;
 }

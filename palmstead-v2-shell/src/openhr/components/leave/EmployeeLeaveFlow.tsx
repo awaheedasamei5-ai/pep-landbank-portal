@@ -1,0 +1,279 @@
+"use client";
+
+
+import React, { useState, useEffect } from 'react';
+import { Plus, Calendar, AlertTriangle, Send, RefreshCw, X, AlertCircle, Info } from 'lucide-react';
+import { employeeService } from '../../services/employeeService';
+import { hrService } from '../../services/hrService';
+import HelpButton from '../onboarding/HelpButton';
+import { LeaveBalance, LeaveRequest, Holiday, AppConfig, Shift, CustomLeaveType } from '../../types';
+import { DEFAULT_LEAVE_TYPES } from '../../constants';
+
+interface Props {
+  user: any;
+  balance: LeaveBalance | null;
+  history: LeaveRequest[];
+  onRefresh: () => void;
+  initialOpen?: boolean;
+}
+
+const DAY_NAME_MAP: Record<string, string> = {
+  MON: 'Monday', TUE: 'Tuesday', WED: 'Wednesday', THU: 'Thursday',
+  FRI: 'Friday', SAT: 'Saturday', SUN: 'Sunday',
+};
+
+const normalizeWorkingDays = (days: string[]): string[] =>
+  days.map(d => DAY_NAME_MAP[d.toUpperCase()] || d);
+
+const resolveWorkingDays = (config: AppConfig, employeeShift: Shift | null): string[] => {
+  const raw = employeeShift ? employeeShift.workingDays : (config.workingDays || []);
+  return normalizeWorkingDays(raw);
+};
+
+const EmployeeLeaveFlow: React.FC<Props> = ({ user, balance, history, onRefresh, initialOpen }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ type: 'ANNUAL', start: '', end: '', reason: '' });
+  
+  // Smart Calculation State
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [employeeShift, setEmployeeShift] = useState<Shift | null>(null);
+  const [calculatedDays, setCalculatedDays] = useState(0);
+  const [calculationDetails, setCalculationDetails] = useState<string>('');
+  const [leaveTypes, setLeaveTypes] = useState<CustomLeaveType[]>(DEFAULT_LEAVE_TYPES);
+
+  useEffect(() => {
+    if (initialOpen) {
+      setShowForm(true);
+    }
+    const loadMeta = async () => {
+      const [hols, cfg, lt] = await Promise.all([
+        hrService.getHolidays(),
+        hrService.getConfig(),
+        hrService.getLeaveTypes(),
+      ]);
+      setHolidays(hols);
+      setConfig(cfg);
+      setLeaveTypes(lt);
+      const shift = await hrService.resolveShiftForEmployee(user.id, user.shiftId);
+      setEmployeeShift(shift);
+    };
+    loadMeta();
+  }, [initialOpen]);
+
+  // Real-time calculation effect
+  useEffect(() => {
+    if (formData.start && formData.end && config) {
+      const { days, details } = calculateNetDays(formData.start, formData.end);
+      setCalculatedDays(days);
+      setCalculationDetails(details);
+    } else {
+      setCalculatedDays(0);
+      setCalculationDetails('');
+    }
+  }, [formData.start, formData.end, config, holidays, employeeShift]);
+
+  const calculateNetDays = (startStr: string, endStr: string) => {
+    if (!config) return { days: 0, details: '' };
+    const workingDays = resolveWorkingDays(config, employeeShift);
+
+    let count = 0;
+    let holidaysFound = 0;
+    let weekendsFound = 0;
+    
+    const cur = new Date(startStr);
+    const stop = new Date(endStr);
+    
+    // Safety break for infinite loops if dates are crazy
+    if (cur > stop) return { days: 0, details: 'Invalid Date Range' };
+
+    // Clone to iterate
+    const iterator = new Date(cur);
+
+    while (iterator <= stop) {
+      const dayName = iterator.toLocaleDateString('en-US', { weekday: 'long' });
+      const dateStr = iterator.toISOString().split('T')[0];
+
+      // 1. Check if it is a defined Working Day (per-employee shift > global config)
+      const isWorkDay = workingDays.includes(dayName);
+
+      // 2. Check if it matches a Public Holiday
+      const isPublicHoliday = holidays.some(h => h.date === dateStr);
+
+      if (!isWorkDay) {
+        weekendsFound++;
+      } else if (isPublicHoliday) {
+        holidaysFound++;
+      } else {
+        count++; // Valid deductible day
+      }
+
+      iterator.setDate(iterator.getDate() + 1);
+    }
+
+    let detailStr = '';
+    if (weekendsFound > 0) detailStr += `${weekendsFound} Weekend(s) excluded. `;
+    if (holidaysFound > 0) detailStr += `${holidaysFound} Public Holiday(s) excluded.`;
+
+    return { days: count, details: detailStr.trim() };
+  };
+
+  const getAvailableBalance = (type: string) => {
+    if (!balance) return 0;
+    return (balance[type] as number) || 0;
+  };
+
+  const balanceTypes = leaveTypes.filter(t => t.hasBalance);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProcessing(true);
+    setError(null);
+    
+    if (calculatedDays <= 0) {
+      setError("Net leave duration is 0 days. Check your dates (you might have selected only weekends or holidays).");
+      setIsProcessing(false);
+      return;
+    }
+
+    // STRICT BALANCE CHECK
+    const currentAvailable = getAvailableBalance(formData.type);
+    if (calculatedDays > currentAvailable) {
+      setError(`Insufficient Balance. You requested ${calculatedDays} days, but only have ${currentAvailable} days of ${formData.type.toLowerCase()} leave remaining.`);
+      setIsProcessing(false);
+      return;
+    }
+
+    try {
+      await employeeService.applyForLeave({
+        type: formData.type as any,
+        startDate: formData.start,
+        endDate: formData.end,
+        totalDays: calculatedDays,
+        reason: formData.reason
+      }, user);
+      setShowForm(false);
+      setFormData({ type: leaveTypes[0]?.id || 'ANNUAL', start: '', end: '', reason: '' });
+      onRefresh();
+    } catch (err: any) {
+      setError(err.message || "Submission failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <h3 className="text-xl font-semibold text-slate-900">My Leave Portal</h3>
+          <HelpButton helpPointId="leave.balance" size={16} />
+        </div>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl font-semibold uppercase tracking-widest text-[10px] shadow-xl hover:bg-primary-hover">
+          <Plus size={18} /> New Request
+        </button>
+      </div>
+
+      <div className={`grid grid-cols-1 gap-6 ${['','md:grid-cols-1','md:grid-cols-2','md:grid-cols-3','md:grid-cols-4'][Math.min(balanceTypes.length, 4)] || 'md:grid-cols-4'}`}>
+        {balanceTypes.map(lt => (
+          <div key={lt.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+            <div className="relative p-3 rounded-2xl w-fit mb-4 overflow-hidden">
+              <div className={`absolute inset-0 ${lt.color} opacity-10`} />
+              <Calendar size={24} className="relative" />
+            </div>
+            <p className="text-4xl font-semibold text-slate-900 tabular-nums">{getAvailableBalance(lt.id)} <span className="text-xs text-slate-400">{lt.name.replace(' Leave', '')}</span></p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-100 p-8">
+        <h4 className="font-semibold text-slate-900 mb-6 uppercase tracking-widest text-xs text-slate-400">Application History</h4>
+        <div className="space-y-4">
+          {history.map(req => (
+            <div key={req.id} className="p-6 rounded-[32px] bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-white hover:shadow-lg transition-all">
+              <div>
+                <h4 className="font-semibold text-slate-900 uppercase tracking-tighter">{req.type} LEAVE</h4>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{req.startDate} — {req.endDate}</p>
+              </div>
+              <div className="text-right">
+                 <span className={`px-4 py-1.5 rounded-full text-[9px] font-semibold uppercase ${req.status === 'APPROVED' ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  {req.status.replace('_', ' ')}
+                </span>
+                <p className="text-[9px] font-bold text-slate-300 mt-2">{req.totalDays} Day{req.totalDays !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          ))}
+          {history.length === 0 && (
+             <div className="text-center py-10">
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest">No leave history found.</p>
+             </div>
+          )}
+        </div>
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in">
+            <div className="p-8 bg-primary text-white flex justify-between items-center">
+              <h3 className="text-xl font-semibold uppercase tracking-tight">Submit Leave</h3>
+              <button onClick={() => setShowForm(false)}><X size={28} /></button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-10 space-y-8">
+              {error && <div className="p-4 bg-rose-50 text-rose-700 text-xs font-bold rounded-2xl flex gap-2"><AlertCircle size={16}/>{error}</div>}
+              
+              <div className="space-y-1">
+                 <div className="flex justify-between px-1">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Leave Type</label>
+                    <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
+                        Available: {getAvailableBalance(formData.type)} Days
+                    </span>
+                 </div>
+                 <select className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl font-semibold text-sm outline-none focus:ring-4 focus:ring-primary-light" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
+                    {leaveTypes.filter(t => t.hasBalance).map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1 min-w-0">
+                   <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-1">Start Date</label>
+                   <input type="date" required className="w-full min-w-0 px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl font-bold text-sm outline-none focus:ring-4 focus:ring-primary-light" value={formData.start} onChange={e => setFormData({...formData, start: e.target.value})} />
+                </div>
+                <div className="space-y-1 min-w-0">
+                   <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-1">End Date</label>
+                   <input type="date" required className="w-full min-w-0 px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl font-bold text-sm outline-none focus:ring-4 focus:ring-primary-light" value={formData.end} onChange={e => setFormData({...formData, end: e.target.value})} />
+                </div>
+              </div>
+
+              {/* Dynamic Calculation Feedback */}
+              {formData.start && formData.end && (
+                 <div className={`p-5 border rounded-3xl flex items-start gap-3 transition-colors ${calculatedDays > getAvailableBalance(formData.type) ? 'bg-rose-50 border-rose-100' : 'bg-primary-light border-primary-light'}`}>
+                    {calculatedDays > getAvailableBalance(formData.type) ? <AlertTriangle size={20} className="text-rose-600 mt-0.5" /> : <Info size={20} className="text-primary mt-0.5" />}
+                    <div>
+                       <p className={`font-semibold text-sm ${calculatedDays > getAvailableBalance(formData.type) ? 'text-rose-900' : 'text-primary'}`}>Total Deductible: {calculatedDays} Day{calculatedDays !== 1 ? 's' : ''}</p>
+                       {calculationDetails && <p className={`text-[10px] font-bold mt-1 ${calculatedDays > getAvailableBalance(formData.type) ? 'text-rose-500' : 'text-primary'}`}>{calculationDetails}</p>}
+                       {calculatedDays > getAvailableBalance(formData.type) && <p className="text-[10px] font-semibold text-rose-600 mt-1 uppercase tracking-wider">Exceeds Balance</p>}
+                    </div>
+                 </div>
+              )}
+
+              <div className="space-y-1">
+                 <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-1">Reason</label>
+                 <textarea required placeholder="Reason for absence..." className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl font-bold text-sm min-h-[100px] outline-none focus:ring-4 focus:ring-primary-light" value={formData.reason} onChange={e => setFormData({...formData, reason: e.target.value})} />
+              </div>
+
+              <button type="submit" disabled={isProcessing || calculatedDays > getAvailableBalance(formData.type)} className="w-full py-5 bg-primary text-white rounded-[32px] font-semibold uppercase tracking-widest text-[10px] shadow-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-hover">
+                 {isProcessing ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />} Send Application
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default EmployeeLeaveFlow;
