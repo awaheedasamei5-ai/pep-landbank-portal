@@ -1,7 +1,7 @@
 import { fmtLongDate, today } from '../../../shared/lib/format';
 import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
-import { leaveConflictDatesFromOthers, leaveIsBlocking } from '../lib/leaveLogic';
-import type { Config, LeaveRequest } from '../../../types/domain';
+import { companyClosuresForYear, leaveConflictDatesFromOthers, leaveIsBlocking } from '../lib/leaveLogic';
+import type { Config, LeaveHoliday, LeaveRequest } from '../../../types/domain';
 import styles from './LeaveCalendar.module.css';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -24,6 +24,7 @@ export function LeaveCalendar({
   config,
   selectedDates,
   onToggleDate,
+  companyClosures = [],
 }: {
   year: number;
   month: number;
@@ -33,6 +34,7 @@ export function LeaveCalendar({
   config: Config;
   selectedDates: string[];
   onToggleDate: (iso: string) => void;
+  companyClosures?: LeaveHoliday[];
 }) {
   const nDays = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
@@ -42,7 +44,7 @@ export function LeaveCalendar({
       .flatMap((r) => r.dates || []),
   );
   const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
-  const holidays = ghanaHolidayMapForYear(year, config.eidWindows);
+  const holidays = ghanaHolidayMapForYear(year, config.eidWindows, companyClosuresForYear(companyClosures, year));
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
   const t = today();
 

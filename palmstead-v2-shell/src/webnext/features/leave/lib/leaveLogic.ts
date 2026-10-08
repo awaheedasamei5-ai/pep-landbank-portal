@@ -1,5 +1,12 @@
-import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
-import type { Config, EidWindow, LeaveRequest } from '../../../types/domain';
+import { ghanaHolidayMapForYear, isWeekendIso, type GhanaHoliday } from '../../../shared/lib/ghanaHolidays';
+import type { Config, EidWindow, LeaveHoliday, LeaveRequest } from '../../../types/domain';
+
+// Converts the real `leave_holidays` rows (Management's ad-hoc company
+// closures) into the shape ghanaHolidayMapForYear merges in, scoped to one
+// year -- callers hold the full list and re-derive this per year shown.
+export function companyClosuresForYear(holidays: LeaveHoliday[], year: number): GhanaHoliday[] {
+  return holidays.filter((h) => h.holidayDate.startsWith(String(year))).map((h) => ({ date: h.holidayDate, name: h.name }));
+}
 
 // Faithful port of index.html's leave-quota calendar engine -- V1's real
 // business rules (Attendance/Leave plan Part 1), preserved exactly as
@@ -98,8 +105,8 @@ export function leaveUpcomingForAll(requests: LeaveRequest[], todayIso: string, 
 // could land in between). Emergency leave is the deliberate exception to
 // the colleague-overlap check (Plan Part 1) -- callers skip this check
 // entirely for an emergency request, never call it and ignore the result.
-export function leaveDatesConflictReason(config: Config, requests: LeaveRequest[], dates: string[], agentKey: string, year: number): string | null {
-  const holidays = ghanaHolidayMapForYear(year, config.eidWindows);
+export function leaveDatesConflictReason(config: Config, requests: LeaveRequest[], dates: string[], agentKey: string, year: number, extraHolidays: GhanaHoliday[] = []): string | null {
+  const holidays = ghanaHolidayMapForYear(year, config.eidWindows, extraHolidays);
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
   const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
   for (const d of dates) {
@@ -124,7 +131,7 @@ export interface LeaveDayBreakdown {
   holidaysExcluded: { date: string; name: string }[];
 }
 
-export function classifyLeaveDates(dates: string[], eidWindows: EidWindow[], eidObservingStaff: string[], agentKey: string): LeaveDayBreakdown {
+export function classifyLeaveDates(dates: string[], eidWindows: EidWindow[], eidObservingStaff: string[], agentKey: string, companyClosures: LeaveHoliday[] = []): LeaveDayBreakdown {
   const workingDays: string[] = [];
   let weekendsExcluded = 0;
   const holidaysExcluded: { date: string; name: string }[] = [];
@@ -133,7 +140,7 @@ export function classifyLeaveDates(dates: string[], eidWindows: EidWindow[], eid
 
   for (const iso of [...dates].sort()) {
     const year = Number(iso.slice(0, 4));
-    if (!holidayMaps.has(year)) holidayMaps.set(year, ghanaHolidayMapForYear(year, eidWindows));
+    if (!holidayMaps.has(year)) holidayMaps.set(year, ghanaHolidayMapForYear(year, eidWindows, companyClosuresForYear(companyClosures, year)));
     if (isWeekendIso(iso)) {
       weekendsExcluded++;
       continue;

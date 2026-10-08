@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCreateLeaveRequest, useLeaveRequests } from '../hooks/useLeaveRequests';
+import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
-import { leaveDatesConflictReason } from '../lib/leaveLogic';
+import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
 import { isWeekendIso } from '../../../shared/lib/ghanaHolidays';
 import styles from '../screens/LeaveScreen.module.css';
 
@@ -20,6 +21,7 @@ export function LeaveEmergencyForm() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
   const { data: requests } = useLeaveRequests();
+  const { data: companyClosures } = useLeaveHolidays();
   const [fromDate, setFromDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState('');
@@ -38,7 +40,7 @@ export function LeaveEmergencyForm() {
     }
   }
   const year = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
-  const conflictWarning = config && dates.length > 0 ? leaveDatesConflictReason(config, all, dates, agentKey, year) : null;
+  const conflictWarning = config && dates.length > 0 ? leaveDatesConflictReason(config, all, dates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year)) : null;
 
   async function submit() {
     setError(null);

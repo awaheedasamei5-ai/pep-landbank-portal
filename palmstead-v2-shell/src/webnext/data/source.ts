@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
@@ -42,6 +42,7 @@ import {
   mapLeaderboardScoreRow,
   mapLeadRow,
   mapOfficeLocationRow,
+  mapLeaveHolidayRow,
   mapLeaveRequestRow,
   mapMemoRow,
   mapNoteRow,
@@ -765,6 +766,14 @@ export interface DataSource {
     list(): Promise<OfficeLocation[]>;
     create(createdBy: string, createdByName: string, input: NewOfficeLocation): Promise<OfficeLocation>;
     update(id: string, patch: Partial<NewOfficeLocation & { isActive: boolean }>): Promise<OfficeLocation>;
+    remove(id: string): Promise<void>;
+  };
+  // Real table `leave_holidays` (migration leave_full_app_phase1_schema) --
+  // see LeaveHoliday's own doc comment in types/domain.ts. select() open to
+  // any signed-in staff (RLS: my_key() is not null), write manager-only.
+  leaveHolidays: {
+    list(): Promise<LeaveHoliday[]>;
+    create(createdBy: string, input: NewLeaveHoliday): Promise<LeaveHoliday>;
     remove(id: string): Promise<void>;
   };
   // Real V3 chapter-01 entity (attendance_policy table) -- see
@@ -2708,6 +2717,26 @@ function createLiveDataSource(): DataSource {
       },
       async remove(id) {
         const { error } = await requireClient().from('office_locations').delete().eq('id', id);
+        if (error) throw error;
+      },
+    },
+    leaveHolidays: {
+      async list() {
+        const { data, error } = await requireClient().from('leave_holidays').select('*').order('holiday_date', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapLeaveHolidayRow);
+      },
+      async create(createdBy, input) {
+        const { data, error } = await requireClient()
+          .from('leave_holidays')
+          .insert({ holiday_date: input.holidayDate, name: input.name, is_recurring_eid: input.isRecurringEid, created_by: createdBy })
+          .select('*')
+          .single();
+        if (error) throw error;
+        return mapLeaveHolidayRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('leave_holidays').delete().eq('id', id);
         if (error) throw error;
       },
     },

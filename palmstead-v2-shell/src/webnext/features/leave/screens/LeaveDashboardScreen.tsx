@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
+import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { LeaveBalanceRing } from '../components/LeaveBalanceRing';
 import { LeaveDashboardCalendar } from '../components/LeaveDashboardCalendar';
 import { LeaveStatusCards } from '../components/LeaveStatusCards';
@@ -28,6 +29,7 @@ export function LeaveDashboardScreen() {
   const myKey = profile?.key ?? '';
   const { data: requests, isLoading } = useLeaveRequests();
   const { data: config } = useConfig();
+  const { data: companyClosures } = useLeaveHolidays();
   const now = new Date(today());
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -97,7 +99,7 @@ export function LeaveDashboardScreen() {
       <div className={styles.card}>
         <h2 className={styles.cardTitle}>Calendar</h2>
         {config ? (
-          <LeaveDashboardCalendar year={year} month={month} onNavMonth={navMonth} approvedRequests={myMonthApproved} config={config} />
+          <LeaveDashboardCalendar year={year} month={month} onNavMonth={navMonth} approvedRequests={myMonthApproved} config={config} companyClosures={companyClosures} />
         ) : (
           <p className={styles.hint}>Loading…</p>
         )}

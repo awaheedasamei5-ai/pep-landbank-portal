@@ -692,6 +692,25 @@ export interface NewOfficeLocation {
   radiusMeters: number;
 }
 
+// Real table `leave_holidays` (migration leave_full_app_phase1_schema,
+// 2026-10-08) -- admin-editable public holidays, read by every signed-in
+// staff member (calendar shading on both the staff and management
+// screens), written manager-only. See docs/plans/04-leave-full-app-build-plan.md.
+export interface LeaveHoliday {
+  id: string;
+  holidayDate: string;
+  name: string;
+  isRecurringEid: boolean;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface NewLeaveHoliday {
+  holidayDate: string;
+  name: string;
+  isRecurringEid: boolean;
+}
+
 // Real V3 chapter-01 entity (attendance_policy table, new 2026-09-10) --
 // a versioned shift/grace-period policy, exactly one row is_active=true
 // at a time (enforced by a partial unique index server-side). Written

@@ -5,10 +5,11 @@ import { useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCreateLeaveRequest, useLeaveRequests } from '../hooks/useLeaveRequests';
+import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { LeaveCalendar } from './LeaveCalendar';
 import { LeaveBalanceRing } from './LeaveBalanceRing';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
-import { leaveDatesConflictReason, leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved } from '../lib/leaveLogic';
+import { companyClosuresForYear, leaveDatesConflictReason, leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
 import styles from '../screens/LeaveScreen.module.css';
 
@@ -22,6 +23,7 @@ export function LeaveNewRequestForm() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
   const { data: requests } = useLeaveRequests();
+  const { data: companyClosures } = useLeaveHolidays();
   const [year, setYear] = useState(() => new Date(today()).getFullYear());
   const [month, setMonth] = useState(() => new Date(today()).getMonth());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
@@ -63,7 +65,7 @@ export function LeaveNewRequestForm() {
       setError(`That's ${selectedDates.length} day(s), but you only have ${remaining} left for ${year}.`);
       return;
     }
-    const conflict = leaveDatesConflictReason(config, all, selectedDates, agentKey, year);
+    const conflict = leaveDatesConflictReason(config, all, selectedDates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year));
     if (conflict) {
       setError(`${conflict} Please adjust your selection.`);
       return;
@@ -78,7 +80,7 @@ export function LeaveNewRequestForm() {
     <div className={styles.formCard}>
       {config && <LeaveBalanceRing total={config.leaveTotalDays} reserved={reserved} remaining={remaining ?? 0} confirmedUsed={confirmedUsed} year={year} />}
       {config ? (
-        <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={all} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} />
+        <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={all} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} companyClosures={companyClosures} />
       ) : (
         <p className={styles.hint}>Loading…</p>
       )}

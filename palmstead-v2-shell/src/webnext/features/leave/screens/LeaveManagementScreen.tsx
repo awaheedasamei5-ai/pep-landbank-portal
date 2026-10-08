@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDecideLeaveRequest, useLeaveRequests, useRescheduleLeaveRequest } from '../hooks/useLeaveRequests';
 import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
-import { leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved, leaveUpcomingForAll } from '../lib/leaveLogic';
+import { leaveUpcomingForAll } from '../lib/leaveLogic';
 import { fmtLongDate, today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
 import styles from './LeaveManagementScreen.module.css';
@@ -36,10 +36,8 @@ function useActiveAgentRoster() {
 // and approve/decline/reschedule as one screen, one action -- the real
 // company-wide "who's out this week/month" view V1 never had at all.
 export function LeaveManagementScreen() {
-  const { data: config } = useConfig();
   const { data: roster } = useActiveAgentRoster();
   const { data: requests } = useLeaveRequests();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const year = new Date(today()).getFullYear();
   const all = requests ?? [];
@@ -53,19 +51,21 @@ export function LeaveManagementScreen() {
   );
   const pendingEmergencyCount = emergencies.filter((r) => r.status === 'pending').length;
 
-  function toggle(key: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
   return (
     <div className={styles.wrap}>
       <div className={styles.head}>
         <p className={styles.sub}>Every staff member&apos;s {year} leave plan, at a glance</p>
+        <div className={styles.navRow}>
+          <Link href="/dashboard/leave/management/requests" className={styles.navLink}>
+            Company-wide requests →
+          </Link>
+          <Link href="/dashboard/leave/management/calendar" className={styles.navLink}>
+            Team calendar →
+          </Link>
+          <Link href="/dashboard/leave/management/settings" className={styles.navLink}>
+            Settings →
+          </Link>
+        </div>
       </div>
 
       <div className={styles.summaryRow}>
@@ -135,51 +135,13 @@ export function LeaveManagementScreen() {
         </>
       )}
 
-      <div className={styles.sectitle}>Every staff member</div>
-      {!roster && <p className={styles.hint}>Loading roster…</p>}
-      {roster && roster.length === 0 && <p className={styles.hint}>No active staff on the roster.</p>}
-      <div className={styles.list}>
-        {(roster ?? []).map((s) => {
-          const reserved = config ? leaveDaysReserved(visible, s.key, year) : 0;
-          const confirmedUsed = leaveDaysConfirmedUsed(visible, s.key, year, today());
-          const remaining = config ? leaveDaysRemaining(config, visible, s.key, year) : null;
-          const own = visible.filter((r) => r.agentKey === s.key).sort((a, b) => (a.dates[0] ?? '').localeCompare(b.dates[0] ?? ''));
-          const isOpen = expanded.has(s.key);
-          return (
-            <div className={styles.staffRow} key={s.key}>
-              <button type="button" className={styles.staffHead} onClick={() => toggle(s.key)}>
-                <div className={styles.rowMain}>
-                  <div className={styles.name}>{s.name}</div>
-                  <div className={styles.meta}>
-                    {own.length} request{own.length === 1 ? '' : 's'} in {year}
-                  </div>
-                </div>
-                <span className={styles.remainingBadge}>
-                  {remaining ?? '--'}/{config?.leaveTotalDays ?? '--'} left
-                </span>
-                <span className={styles.chevron}>{isOpen ? '▲' : '▼'}</span>
-              </button>
-              {isOpen && (
-                <div className={styles.staffDates}>
-                  {own.length === 0 && <p className={styles.hint}>No leave requests yet.</p>}
-                  {own.map((r) => (
-                    <div className={styles.dateRow} key={r.id}>
-                      <span>
-                        {dateRangeLabel(r)}
-                        {r.isEmergency ? ' · 🚨' : ''}
-                      </span>
-                      <span className={styles[STATUS_CLASS[r.status]]}>{STATUS_LABEL[r.status]}</span>
-                    </div>
-                  ))}
-                  <div className={styles.usedNote}>
-                    {reserved} reserved &middot; {confirmedUsed} confirmed used of {config?.leaveTotalDays ?? 20} in {year}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className={styles.cardHeadRow}>
+        <div className={styles.sectitle}>Every staff member</div>
+        <Link href="/dashboard/leave/management/requests" className={styles.cardLink}>
+          Open full roster →
+        </Link>
       </div>
+      <p className={styles.hint}>{roster?.length ?? 0} active staff — per-person countdown, request history and filters live on the company-wide requests page.</p>
     </div>
   );
 }

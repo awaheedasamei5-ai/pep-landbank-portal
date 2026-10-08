@@ -77,9 +77,17 @@ export function ghanaHolidaysForYear(year: number, eidWindows: EidWindow[] = [])
 // serving stale Eid dates after an edit until a full reload. Recomputing
 // a dozen date-arithmetic entries per call is cheap enough that a cache
 // buys nothing but a real staleness bug.
-export function ghanaHolidayMapForYear(year: number, eidWindows: EidWindow[] = []): Map<string, GhanaHoliday> {
+// `extra` is Management's own ad-hoc company closures (real table
+// `leave_holidays`, migration leave_full_app_phase1_schema) -- a one-off
+// day off that isn't on the fixed Ghana public-holiday list and isn't an
+// Eid window (e.g. a company anniversary, a declared day of mourning).
+// Merged in, never overriding a real public holiday's own name.
+export function ghanaHolidayMapForYear(year: number, eidWindows: EidWindow[] = [], extra: GhanaHoliday[] = []): Map<string, GhanaHoliday> {
   const map = new Map<string, GhanaHoliday>();
   ghanaHolidaysForYear(year, eidWindows).forEach((h) => {
+    if (!map.has(h.date)) map.set(h.date, h);
+  });
+  extra.forEach((h) => {
     if (!map.has(h.date)) map.set(h.date, h);
   });
   return map;

@@ -237,17 +237,36 @@ carries a real reference number, which it doesn't today.
       verified live with real data — 7 staff, 1 pending emergency decision
       (Adams, 3 days), per-staff countdown list, approve/decline/reschedule
       controls, letter link.
-- [ ] Phase 4: UI — Management requests/calendar as their OWN routes — NOT
-      built yet; currently folded into the single `LeaveManagementScreen`
-      component reached via `/leave/management`.
-- [ ] Phase 4: UI — Management settings (quota/holidays/policy, in-app) —
-      NOT built yet; the orphaned `src/openhr/pages/LeaveSettings.tsx` still
-      needs rebuilding against `app_config.leave_total_days` +
-      `leave_holidays`.
+- [x] Phase 4: UI — Management requests/calendar as their OWN routes: built
+      `/leave/management/requests` (full roster with live countdowns +
+      staff/status/year filters + company-wide flat list) and
+      `/leave/management/calendar` (month grid with per-day staff-initial
+      chips, holiday shading, "out this month" list). Both verified live
+      with real data (Adams' pending emergency request showing correctly
+      on both).
+- [x] Phase 4: UI — Management settings (quota/holidays/policy, in-app):
+      built `/leave/management/settings` against the REAL already-wired
+      mechanisms — `app_config.leave_total_days` (quota) and
+      `app_config.eid_windows` (the actual Eid-window mechanism
+      `leaveLogic.ts` has always read, never exposed in any UI before
+      this). Also wired the new `leave_holidays` table in as ad-hoc
+      "company closures", genuinely merged into the real holiday map
+      (`ghanaHolidayMapForYear`'s new `extra` param) consumed by every
+      calendar/conflict-check call site (`LeaveCalendar`,
+      `LeaveDashboardCalendar`, `leaveDatesConflictReason`,
+      `classifyLeaveDates`) — not a cosmetic add-only list. The orphaned
+      `src/openhr/pages/LeaveSettings.tsx` (multi-type-leave model) is
+      superseded, left in place unreferenced rather than deleted.
+      Verified live: added a real test closure, confirmed it saved and
+      listed, then removed it (no stray test data left in prod).
 - [ ] Phase 5: 5-day reminder SMS (staff + Management) — NOT built yet.
 - [ ] Phase 6: leave letter re-verified + real request_no wired in — NOT
       done yet.
 - [x] Verified live, manager test account (`fapeprah@landbankghana.com`):
-      Dashboard, My requests, New request, Emergency, Management dashboard
-      all load with real data and no app-code console errors. `npx tsc -b`
-      clean. Staff-only (non-manager) account not yet separately verified.
+      Dashboard, My requests, New request, Emergency, Management dashboard,
+      Management requests, Management calendar, Management settings all
+      load with real data and zero app-code console errors (confirmed in a
+      fresh browser tab after the first tab accumulated stale HMR errors
+      from heavy mid-session editing — a tooling artifact, not a real bug).
+      `npx tsc -b` clean throughout. Staff-only (non-manager) account not
+      yet separately verified.

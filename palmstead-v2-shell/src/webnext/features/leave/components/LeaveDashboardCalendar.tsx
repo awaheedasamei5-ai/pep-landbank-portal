@@ -1,8 +1,9 @@
 "use client";
 
 import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
+import { companyClosuresForYear } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
-import type { Config, LeaveRequest } from '../../../types/domain';
+import type { Config, LeaveHoliday, LeaveRequest } from '../../../types/domain';
 import styles from './LeaveCalendar.module.css';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -22,17 +23,19 @@ export function LeaveDashboardCalendar({
   onNavMonth,
   approvedRequests,
   config,
+  companyClosures = [],
 }: {
   year: number;
   month: number;
   onNavMonth: (delta: number) => void;
   approvedRequests: LeaveRequest[];
   config: Config;
+  companyClosures?: LeaveHoliday[];
 }) {
   const nDays = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
   const leaveDays = new Set(approvedRequests.flatMap((r) => r.dates || []));
-  const holidays = ghanaHolidayMapForYear(year, config.eidWindows);
+  const holidays = ghanaHolidayMapForYear(year, config.eidWindows, companyClosuresForYear(companyClosures, year));
   const t = today();
 
   const cells: { iso: string | null; day: number }[] = [];

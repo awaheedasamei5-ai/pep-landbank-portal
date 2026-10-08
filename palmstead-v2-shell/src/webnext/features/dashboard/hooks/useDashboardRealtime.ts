@@ -79,6 +79,9 @@ export function useDashboardRealtime() {
       // on its own.
       queryClient.invalidateQueries({ queryKey: ['colleagueAvailability'] });
     };
+    const invalidateLeaveHolidays = () => {
+      queryClient.invalidateQueries({ queryKey: ['leaveHolidays'] });
+    };
     const invalidateImports = () => {
       queryClient.invalidateQueries({ queryKey: ['importBatches'] });
     };
@@ -198,7 +201,9 @@ export function useDashboardRealtime() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `agent_key=eq.${myKey}` }, invalidatePipeline)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `agent_key=eq.${myKey}` }, invalidatePipeline);
     }
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, invalidateLeave);
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, invalidateLeave)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_holidays' }, invalidateLeaveHolidays);
     if (isManager) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table: 'import_batches' }, invalidateImports);
     }
