@@ -1,0 +1,37 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (width >= 640px) {
+  .grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+.card {
+  display: block;
+  background: var(--c-card);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+}
+
+.accentBar { height: 4px; width: 100%; }
+.accentMuted { background: var(--c-faint); }
+.accentPending { background: var(--c-warn); }
+.accentApproved { background: var(--c-success); }
+.accentDeclined { background: var(--c-danger); }
+
+.cardBody { display: flex; flex-direction: column; gap: 2px; padding: 14px; }
+.count { font-family: var(--font-mono); font-size: 26px; font-weight: 800; color: var(--c-text); }
+.label { font-size: 11px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: none; }
+}

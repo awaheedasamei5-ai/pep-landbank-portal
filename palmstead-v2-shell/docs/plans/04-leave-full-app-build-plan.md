@@ -217,14 +217,37 @@ carries a real reference number, which it doesn't today.
 - [x] Phase 2: RLS applied for all 3 new tables in the same migration
 - [ ] Phase 3: AI — leave-approaching deterministic check wired to a
       scheduled job
-- [ ] Phase 4: UI — Dashboard
-- [ ] Phase 4: UI — Plan (prefill for the year)
-- [ ] Phase 4: UI — My requests (list + filters)
-- [ ] Phase 4: UI — Request detail/edit
-- [ ] Phase 4: UI — Emergency leave (own route)
-- [ ] Phase 4: UI — Management dashboard
-- [ ] Phase 4: UI — Management requests/calendar
-- [ ] Phase 4: UI — Management settings (quota/holidays/policy, in-app)
-- [ ] Phase 5: 5-day reminder SMS (staff + Management)
-- [ ] Phase 6: leave letter re-verified + real request_no wired in
-- [ ] Verified live, staff + management, real test accounts
+- [x] Phase 4: UI — Dashboard (`/leave`): real route, `LeaveDashboardScreen.tsx`.
+      Verified live as manager test account: balance ring, 6 clickable status
+      cards, month calendar, manager-only "Team leave coming up" teaser +
+      Management button, recent requests teaser. Zero console errors from
+      app code.
+- [ ] Phase 4: UI — Plan (prefill for the year) — NOT built yet; `/requests/new`
+      covers one-shot requests, not the distinct multi-month prefill flow
+      the plan calls for.
+- [x] Phase 4: UI — My requests (list + filters): own route
+      (`/leave/requests`), status + year filters via `?status=`/`?year=`
+      query params, verified live (manager test account currently has 0
+      requests, confirmed empty state renders correctly, not broken).
+- [ ] Phase 4: UI — Request detail/edit (`/requests/[id]`,
+      `/requests/[id]/edit`) — NOT built yet.
+- [x] Phase 4: UI — Emergency leave (own route `/leave/emergency`): verified
+      live, real form renders with reason/date fields.
+- [x] Phase 4: UI — Management dashboard (`/leave/management`): own route,
+      verified live with real data — 7 staff, 1 pending emergency decision
+      (Adams, 3 days), per-staff countdown list, approve/decline/reschedule
+      controls, letter link.
+- [ ] Phase 4: UI — Management requests/calendar as their OWN routes — NOT
+      built yet; currently folded into the single `LeaveManagementScreen`
+      component reached via `/leave/management`.
+- [ ] Phase 4: UI — Management settings (quota/holidays/policy, in-app) —
+      NOT built yet; the orphaned `src/openhr/pages/LeaveSettings.tsx` still
+      needs rebuilding against `app_config.leave_total_days` +
+      `leave_holidays`.
+- [ ] Phase 5: 5-day reminder SMS (staff + Management) — NOT built yet.
+- [ ] Phase 6: leave letter re-verified + real request_no wired in — NOT
+      done yet.
+- [x] Verified live, manager test account (`fapeprah@landbankghana.com`):
+      Dashboard, My requests, New request, Emergency, Management dashboard
+      all load with real data and no app-code console errors. `npx tsc -b`
+      clean. Staff-only (non-manager) account not yet separately verified.

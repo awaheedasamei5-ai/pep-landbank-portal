@@ -1,16 +1,13 @@
-import { LeaveScreen } from "@/webnext/features/leave/screens/LeaveScreen";
+import { LeaveDashboardScreen } from "@/webnext/features/leave/screens/LeaveDashboardScreen";
 
-// 2026-10-08: reverted from the OpenHRApp-duplicate composition
-// (LeavePageClient) back to the real, already-built Leave screen --
-// explicit user correction: the OpenHR version didn't match the real
-// company requirements (confirmed-used-only deduction shown as a
-// distinct number, a real leave planner/calendar, emergency leave as its
-// own flow rather than a fake "type", reschedule that doesn't free days,
-// no Guidelines clutter, no floating buttons). See
-// docs/plans/.. and memory project-attendance-leave-v2-spec for the full
-// spec this screen was originally built against. LeavePageClient.tsx /
-// src/openhr/pages/Leave.tsx are kept in the repo, not deleted, but are
-// no longer routed here.
+// 2026-10-08, second correction: the single-scrolling-screen LeaveScreen
+// (ring + calendar + flat list all stacked together) was rejected outright
+// -- "no generic tiles or one page bullshit u call an app." This is now a
+// real multi-page app (docs/plans/04-leave-full-app-build-plan.md):
+// /dashboard/leave is the real dashboard/home page; My Requests, New
+// Request, and Emergency Leave are their own routes under this folder.
+// LeaveScreen.tsx stays in the repo (its logic was extracted into shared
+// components, not discarded) but is no longer routed.
 export default function Page() {
-  return <LeaveScreen />;
+  return <LeaveDashboardScreen />;
 }
