@@ -14,6 +14,7 @@ import { AccountSwitcher } from "./_components/header/account-switcher";
 import { LayoutControls } from "./_components/header/layout-controls";
 import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
+import { PageTransition } from "./_components/page-transition";
 import { RealtimeBridge } from "./_components/realtime-bridge";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
@@ -76,7 +77,9 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
                 tokens -- scoped here (not globally) so this shell's own
                 Home dashboard/sidebar chrome keeps its existing Tailwind
                 look. See app/layout.tsx's tokens.css import. */}
-            <div className="webnext-theme">{children}</div>
+            <div className="webnext-theme">
+              <PageTransition>{children}</PageTransition>
+            </div>
           </div>
         </SidebarInset>
       </SidebarProvider>
