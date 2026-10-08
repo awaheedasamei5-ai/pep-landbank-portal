@@ -2,28 +2,80 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { apiClient, dedupe } from './api.client';
 import { LeaveRequest, LeaveBalance } from '../types';
-import { organizationService } from './organization.service';
 
 let cachedLeaves: LeaveRequest[] | null = null;
 let leaveCacheTimestamp = 0;
 const LEAVE_CACHE_TTL = 2 * 60 * 1000;
 
-const mapLeave = (r: any): LeaveRequest => ({
-  id: r.id,
-  employeeId: r.employee_id ? r.employee_id.toString().trim() : '',
-  employeeName: r.employee_name,
-  lineManagerId: r.line_manager_id ? r.line_manager_id.toString().trim() : undefined,
-  appliedDate: r.applied_date,
-  startDate: r.start_date,
-  endDate: r.end_date,
-  totalDays: r.total_days || 0,
-  type: r.type,
-  reason: r.reason || '',
-  status: (r.status || 'PENDING_MANAGER').toString().trim().toUpperCase() as any,
-  managerRemarks: r.manager_remarks || '',
-  approverRemarks: r.approver_remarks || '',
-  organizationId: r.organization_id,
-});
+// V1's own real default (config.leaveTotalDays || 20, see the deleted
+// webnext leaveLogic.ts) -- used only when app_config.leave_total_days
+// isn't set.
+const DEFAULT_LEAVE_TOTAL_DAYS = 20;
+
+// OpenHRApp's own UI only collects a start/end range; the real schema
+// stores individual dates (dates jsonb), so every (re)write expands the
+// range into an explicit day list, inclusive of both ends.
+function datesBetween(startIso: string, endIso: string): string[] {
+  const out: string[] = [];
+  const start = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return out;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+// Palmstead's real leave_requests (item 1's own build) is structurally
+// different from OpenHRApp's own `leaves` table, not just renamed columns:
+// - single-stage approval (status: planned/pending/approved/declined/
+//   rescheduled), not OpenHRApp's two-stage Manager->HR workflow -- mapped
+//   onto OpenHRApp's PENDING_MANAGER/PENDING_HR/APPROVED/REJECTED vocabulary
+//   by collapsing both pending states into PENDING_MANAGER (no HR hand-off
+//   exists to represent).
+// - no leave-TYPE column at all (no ANNUAL/CASUAL/SICK split) -- real data
+//   is one pooled balance. Mapped to a single synthetic type 'LEAVE' rather
+//   than inventing per-type quotas the real schema doesn't track. Whether
+//   Palmstead wants typed leave balances is a real policy question for the
+//   "twist to fit" pass, not something to guess via an ALTER TABLE here.
+// - `dates` is a jsonb array of individual (possibly non-contiguous) dates,
+//   not a start/end range -- startDate/endDate below are just the array's
+//   bounds for OpenHRApp's UI, which only renders a range.
+// - no reason/remarks columns -- `letter_text` (the real leave-letter body)
+//   is the closest real field and is used for `reason`; manager/approver
+//   remarks have no real column to write back to, a known gap.
+const REAL_TO_OPENHR_STATUS: Record<string, LeaveRequest['status']> = {
+  planned: 'PENDING_MANAGER',
+  pending: 'PENDING_MANAGER',
+  rescheduled: 'PENDING_MANAGER',
+  approved: 'APPROVED',
+  declined: 'REJECTED',
+};
+
+function datesRange(dates: unknown): { start: string; end: string; count: number } {
+  const arr = Array.isArray(dates) ? (dates as string[]).filter(Boolean).sort() : [];
+  return { start: arr[0] || '', end: arr[arr.length - 1] || '', count: arr.length };
+}
+
+const mapLeave = (r: any): LeaveRequest => {
+  const { start, end } = datesRange(r.dates);
+  return {
+    id: r.id,
+    employeeId: r.agent_key ? r.agent_key.toString().trim() : '',
+    employeeName: r.agent_name,
+    lineManagerId: undefined,
+    appliedDate: r.created_at,
+    startDate: start,
+    endDate: end,
+    totalDays: r.days_count || 0,
+    type: 'LEAVE',
+    reason: r.letter_text || r.reschedule_note || '',
+    status: REAL_TO_OPENHR_STATUS[String(r.status || '').toLowerCase()] || 'PENDING_MANAGER',
+    managerRemarks: '',
+    approverRemarks: '',
+    organizationId: undefined,
+  };
+};
 
 export const leaveService = {
   clearCache() {
@@ -33,32 +85,25 @@ export const leaveService = {
 
   async getLeaves(): Promise<LeaveRequest[]> {
     if (cachedLeaves && Date.now() - leaveCacheTimestamp < LEAVE_CACHE_TTL) return cachedLeaves;
-    const orgId = apiClient.getOrganizationId();
-    return dedupe(`leaves:${orgId ?? 'none'}`, async () => {
+    return dedupe('leaves', async () => {
       if (!isSupabaseConfigured()) {
         console.warn('[LeaveService] Supabase not configured');
         return [];
       }
       try {
-        const halfYearAgo = new Date();
-        halfYearAgo.setDate(halfYearAgo.getDate() - 180);
-        const since = halfYearAgo.toISOString().split('T')[0];
+        const yearAgo = new Date();
+        yearAgo.setDate(yearAgo.getDate() - 365);
+        const since = yearAgo.toISOString();
 
-        let query = supabase
-          .from('leaves')
+        // RLS (leave_requests_sel) already scopes rows to own-or-managed --
+        // no org filter needed, single-tenant.
+        const { data, error } = await supabase
+          .from('leave_requests')
           .select('*')
-          .gte('applied_date', since)
-          .order('applied_date', { ascending: false });
-
-        // Always scope to the caller's organization. RLS enforces this too, but
-        // the filter must not depend on role: ADMIN/HR are org-bound like everyone
-        // else. Only SUPER_ADMIN (who has no organization_id) sees across orgs.
-        if (orgId) query = query.eq('organization_id', orgId);
-
-        const { data, error } = await query;
+          .gte('created_at', since)
+          .order('created_at', { ascending: false });
         if (error) throw error;
 
-        console.log(`[LeaveService] Fetched ${data?.length ?? 0} leave records`);
         const result = (data ?? []).map(mapLeave);
         cachedLeaves = result;
         leaveCacheTimestamp = Date.now();
@@ -72,145 +117,81 @@ export const leaveService = {
 
   async saveLeaveRequest(data: Partial<LeaveRequest>) {
     if (!isSupabaseConfigured()) return;
-
-    // Fetch employee's department + line_manager_id for workflow routing
-    let department = 'Unassigned';
-    let lineManagerId: string | null = null;
-    try {
-      if (data.employeeId) {
-        const { data: emp } = await supabase
-          .from('profiles')
-          .select('department, line_manager_id')
-          .eq('id', data.employeeId)
-          .single();
-        department = emp?.department || 'Unassigned';
-        lineManagerId = emp?.line_manager_id || null;
-      }
-    } catch (e) { console.error('Could not fetch employee details for workflow'); }
-
-    // Determine initial status from workflow config
-    let initialStatus = 'PENDING_MANAGER';
-    try {
-      const workflows = await organizationService.getWorkflows();
-      const deptWorkflow = workflows.find(w => w.department === department);
-      if (deptWorkflow && (deptWorkflow.approverRole === 'HR' || deptWorkflow.approverRole === 'ADMIN')) {
-        initialStatus = 'PENDING_HR';
-      }
-      if (!lineManagerId && initialStatus === 'PENDING_MANAGER') {
-        initialStatus = 'PENDING_HR';
-      }
-    } catch (e) { console.warn('Workflow check failed, defaulting to Manager'); }
-
-    const orgId = apiClient.getOrganizationId();
+    const dates = data.startDate && data.endDate ? datesBetween(data.startDate, data.endDate) : [];
     const payload: any = {
-      employee_id: data.employeeId?.trim(),
-      employee_name: data.employeeName,
-      line_manager_id: lineManagerId,
-      type: data.type,
-      start_date: data.startDate || null,
-      end_date: data.endDate || null,
-      total_days: Number(data.totalDays) || 0,
-      reason: data.reason || '',
-      status: initialStatus,
-      applied_date: new Date().toISOString(),
-      organization_id: orgId,
+      agent_key: data.employeeId?.trim(),
+      agent_name: data.employeeName,
+      year: new Date(data.startDate || Date.now()).getFullYear(),
+      dates,
+      days_count: Number(data.totalDays) || dates.length,
+      letter_text: data.reason || '',
+      // No two-stage Manager->HR workflow in the real schema -- every
+      // request lands directly in 'pending', same single queue Management
+      // reviews regardless of OpenHRApp's own role split.
+      status: 'pending',
     };
 
-    const { data: inserted, error } = await supabase.from('leaves').insert(payload).select('id').single();
+    const { error } = await supabase.from('leave_requests').insert(payload);
     if (error) throw new Error(`Failed to create record: ${error.message}`);
     leaveService.clearCache();
     apiClient.notify();
-
-    // Fire-and-forget email notification — don't block the UI on email delivery
-    if (inserted?.id) {
-      supabase.functions.invoke('notify-leave-email', {
-        body: { leaveId: inserted.id, orgId, action: 'SUBMITTED' },
-      }).catch(e => console.warn('[LeaveService] Email notification failed (non-fatal):', e?.message || e));
-    }
   },
 
-  async updateLeaveStatus(id: string, status: string, remarks: string, role: string) {
+  // 4th param (role) kept in the signature, unused -- every caller
+  // (Admin/HR/Manager leave-review components) still passes it; dropping
+  // the param would mean touching every one of those files just to delete
+  // an argument, contrary to leaving the raw-duplicated UI layer alone.
+  async updateLeaveStatus(id: string, status: string, remarks: string, _role?: string) {
     if (!isSupabaseConfigured()) return;
-    const update: any = { status };
-    if (role === 'MANAGER') {
-      update.manager_remarks = remarks;
-      if (status === 'APPROVED') update.status = 'PENDING_HR';
-    } else if (role === 'ADMIN' || role === 'HR') {
-      update.approver_remarks = remarks;
-    } else {
-      update.approver_remarks = remarks;
-    }
+    const realStatus = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'declined' : 'pending';
+    const update: any = {
+      status: realStatus,
+      decided_at: new Date().toISOString(),
+    };
+    if (remarks) update.reschedule_note = remarks;
     // .select() matters here. A write refused by a row-level policy is not an
     // error — PostgREST reports success having changed zero rows. Without
     // asking for the affected rows back, a reviewer acting on a record they
-    // cannot touch sees a success toast and no change, which is precisely what
-    // made the August 2026 rejections so hard to reason about.
+    // cannot touch sees a success toast and no change.
     const { data: updated, error } = await supabase
-      .from('leaves').update(update).eq('id', id.trim()).select('id');
+      .from('leave_requests').update(update).eq('id', id.trim()).select('id');
     if (error) throw new Error('Access Denied');
     if (!updated || updated.length === 0) {
-      throw new Error('This request could not be updated. It may belong to another organization, or it may have already been actioned.');
+      throw new Error('This request could not be updated. It may have already been actioned.');
     }
     leaveService.clearCache();
     apiClient.notify();
-
-    // Determine email notification action
-    let emailAction: string | null = null;
-    if (role === 'MANAGER') {
-      emailAction = status === 'APPROVED' ? 'MANAGER_APPROVED' : 'MANAGER_REJECTED';
-    } else if (role === 'ADMIN' || role === 'HR') {
-      emailAction = status === 'APPROVED' ? 'HR_APPROVED' : 'HR_REJECTED';
-    }
-
-    // Fire-and-forget email notification
-    if (emailAction) {
-      const orgId = apiClient.getOrganizationId();
-      supabase.functions.invoke('notify-leave-email', {
-        body: { leaveId: id.trim(), orgId, action: emailAction },
-      }).catch(e => console.warn('[LeaveService] Email notification failed (non-fatal):', e?.message || e));
-    }
   },
 
+  // `type`/`remarks` accepted for call-site compatibility (AdminLeaveFormModal
+  // passes the full original OpenHRApp shape) but unused -- no leave-type or
+  // approver-remarks column exists in the real schema.
   async adminCreateLeave(data: {
     employeeId: string;
     employeeName: string;
-    type: string;
+    type?: string;
     startDate: string;
     endDate: string;
     totalDays: number;
     reason: string;
     status: string;
-    remarks: string;
+    remarks?: string;
   }) {
     if (!isSupabaseConfigured()) return;
-
-    let lineManagerId: string | null = null;
-    try {
-      const { data: emp } = await supabase
-        .from('profiles')
-        .select('line_manager_id')
-        .eq('id', data.employeeId.trim())
-        .single();
-      lineManagerId = emp?.line_manager_id || null;
-    } catch (e) { /* non-fatal */ }
-
-    const orgId = apiClient.getOrganizationId();
+    const dates = data.startDate && data.endDate ? datesBetween(data.startDate, data.endDate) : [];
+    const realStatus = data.status === 'APPROVED' ? 'approved' : data.status === 'REJECTED' ? 'declined' : 'pending';
     const payload: any = {
-      employee_id: data.employeeId.trim(),
-      employee_name: data.employeeName,
-      line_manager_id: lineManagerId,
-      type: data.type,
-      start_date: data.startDate || null,
-      end_date: data.endDate || null,
-      total_days: Number(data.totalDays) || 0,
-      reason: data.reason || '',
-      status: data.status || 'APPROVED',
-      approver_remarks: data.remarks || '',
-      applied_date: new Date().toISOString(),
-      organization_id: orgId,
+      agent_key: data.employeeId.trim(),
+      agent_name: data.employeeName,
+      year: new Date(data.startDate || Date.now()).getFullYear(),
+      dates,
+      days_count: Number(data.totalDays) || dates.length,
+      letter_text: data.reason || '',
+      status: realStatus,
+      decided_at: realStatus !== 'pending' ? new Date().toISOString() : null,
     };
 
-    const { error } = await supabase.from('leaves').insert(payload);
+    const { error } = await supabase.from('leave_requests').insert(payload);
     if (error) throw new Error('Failed to create leave record');
     leaveService.clearCache();
     apiClient.notify();
@@ -223,25 +204,24 @@ export const leaveService = {
     totalDays?: number;
     reason?: string;
     status?: string;
-    managerRemarks?: string;
     approverRemarks?: string;
   }) {
     if (!isSupabaseConfigured()) return;
     const update: any = {};
-    if (data.type !== undefined)           update.type = data.type;
-    if (data.startDate !== undefined)      update.start_date = data.startDate || null;
-    if (data.endDate !== undefined)        update.end_date = data.endDate || null;
-    if (data.totalDays !== undefined)      update.total_days = Number(data.totalDays);
-    if (data.reason !== undefined)         update.reason = data.reason;
-    if (data.status !== undefined)         update.status = data.status;
-    if (data.managerRemarks !== undefined) update.manager_remarks = data.managerRemarks;
-    if (data.approverRemarks !== undefined) update.approver_remarks = data.approverRemarks;
+    if (data.startDate !== undefined && data.endDate !== undefined) {
+      update.dates = datesBetween(data.startDate, data.endDate);
+    }
+    if (data.totalDays !== undefined) update.days_count = Number(data.totalDays);
+    if (data.reason !== undefined)    update.letter_text = data.reason;
+    if (data.status !== undefined) {
+      update.status = data.status === 'APPROVED' ? 'approved' : data.status === 'REJECTED' ? 'declined' : 'pending';
+    }
 
     const { data: updated, error } = await supabase
-      .from('leaves').update(update).eq('id', id.trim()).select('id');
+      .from('leave_requests').update(update).eq('id', id.trim()).select('id');
     if (error) throw new Error('Failed to update leave record');
     if (!updated || updated.length === 0) {
-      throw new Error('This record could not be updated. It may belong to another organization.');
+      throw new Error('This record could not be updated.');
     }
     leaveService.clearCache();
     apiClient.notify();
@@ -250,39 +230,45 @@ export const leaveService = {
   async adminDeleteLeave(id: string) {
     if (!isSupabaseConfigured()) return;
     const { data: deleted, error } = await supabase
-      .from('leaves').delete().eq('id', id.trim()).select('id');
+      .from('leave_requests').delete().eq('id', id.trim()).select('id');
     if (error) throw new Error('Failed to delete leave record');
     if (!deleted || deleted.length === 0) {
-      throw new Error('This record could not be deleted. It may belong to another organization.');
+      throw new Error('This record could not be deleted.');
     }
     leaveService.clearCache();
     apiClient.notify();
   },
 
+  // Single pooled balance (real leave_requests has no type column -- see
+  // the module comment above). Reserved = any request not yet
+  // declined/rescheduled (planned/pending/approved all hold the days
+  // against the quota), matching V1's own leaveDaysReserved rule exactly
+  // (leaveIsBlocking: planned | pending | approved).
   async getLeaveBalance(employeeId: string): Promise<LeaveBalance> {
-    const policy = await organizationService.getLeavePolicy();
-    const defaults = policy?.defaults ?? { ANNUAL: 15, CASUAL: 10, SICK: 14 };
-    const overrides = policy?.overrides ?? {};
-    const quota = overrides[employeeId] || defaults;
-    const balance: LeaveBalance = { employeeId };
-    for (const [type, amount] of Object.entries(quota)) {
-      balance[type] = amount as number;
-    }
+    const balance: LeaveBalance = { employeeId, LEAVE: DEFAULT_LEAVE_TOTAL_DAYS };
     if (!isSupabaseConfigured()) return balance;
     try {
+      const { data: config } = await supabase
+        .from('app_config')
+        .select('leave_total_days')
+        .maybeSingle();
+      const total = config?.leave_total_days ?? DEFAULT_LEAVE_TOTAL_DAYS;
+
       const { data, error } = await supabase
-        .from('leaves')
-        .select('type, total_days')
-        .eq('employee_id', employeeId.trim())
-        .eq('status', 'APPROVED');
+        .from('leave_requests')
+        .select('status, days_count')
+        .eq('agent_key', employeeId.trim())
+        .eq('year', new Date().getFullYear());
       if (error) throw error;
-      (data ?? []).forEach(r => {
-        const type = r.type as string;
-        if (type in balance && typeof balance[type] === 'number') {
-          (balance as any)[type] = (balance[type] as number) - (r.total_days || 0);
-        }
-      });
+
+      const reserved = (data ?? [])
+        .filter((r) => ['planned', 'pending', 'approved'].includes(String(r.status)))
+        .reduce((sum, r) => sum + (r.days_count || 0), 0);
+
+      balance.LEAVE = Math.max(0, total - reserved);
       return balance;
-    } catch (e) { return balance; }
+    } catch {
+      return balance;
+    }
   },
 };

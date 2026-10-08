@@ -30,35 +30,73 @@
 import { Attendance } from '../../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { apiClient } from '../api.client';
-import { organizationService } from '../organization.service';
-import { shiftService } from '../shift.service';
+import { calculatePunctuality } from '../../utils/attendanceUtils';
 import { ReconcileResult } from './workdaySessionManager.types';
 
 const CLIENT_CLOSE_REMARK = ' [System: Auto-closed — no check-out recorded]';
+// Palmstead's real attendance_policy (see getActivePolicy below) has no
+// per-shift/auto-close-time concept -- item 1's own build is single-policy,
+// not per-shift (confirmed live) -- so this is the one real fallback, not a
+// layered shift > org-config > hardcoded chain OpenHRApp's own multi-tenant
+// model supports and Palmstead's schema doesn't.
 const FALLBACK_CLOSE_TIME = '23:59';
 
-/** Internal mapper — kept local on purpose so this module owns its contract. */
-function mapAttendance(r: any): Attendance {
+function isoToHHMM(val: string | null | undefined): string {
+  if (!val) return '';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/**
+ * Internal mapper against Palmstead's real attendance_log table (not
+ * OpenHRApp's own `attendance` table, which doesn't exist here) -- kept
+ * local on purpose so this module owns its contract. status is DERIVED
+ * (attendance_log stores no status column), via the real attendance_policy
+ * row, same calculatePunctuality logic item 1's own web-next build used.
+ */
+function mapAttendance(r: any, policy: { work_start_time: string; grace_minutes: number } | null): Attendance {
+  const checkIn = isoToHHMM(r.sign_in_at);
+  const checkOut = isoToHHMM(r.sign_out_at);
+  let status: Attendance['status'] = 'PRESENT';
+  if (!r.sign_in_at) status = 'ABSENT';
+  else if (policy) status = calculatePunctuality(checkIn, policy.work_start_time, policy.grace_minutes);
   return {
     id: r.id.toString().trim(),
-    employeeId: r.employee_id ? r.employee_id.toString().trim() : '',
-    employeeName: r.employee_name,
-    date: r.date,
-    checkIn: r.check_in,
-    checkOut: r.check_out || '',
-    status: r.status as any,
+    employeeId: r.staff_key ? r.staff_key.toString().trim() : '',
+    employeeName: r.staff_name,
+    date: r.work_date,
+    checkIn,
+    checkOut,
+    status,
     location: {
-      lat: Number(r.latitude) || 0,
-      lng: Number(r.longitude) || 0,
-      address: r.location || 'Unknown',
+      lat: Number(r.sign_in_lat) || 0,
+      lng: Number(r.sign_in_lng) || 0,
+      address: r.is_off_site_in ? 'Off-site' : 'On-site',
     },
-    // selfie stores the storage path; signed URLs resolved by the caller
-    // (private bucket — same convention as attendance.service.ts).
-    selfie: r.selfie || undefined,
-    remarks: r.remarks || '',
-    dutyType: r.duty_type as any,
-    organizationId: r.organization_id,
+    // attendance_log.sign_in_photo stores a base64 data URL directly
+    // (confirmed live) -- no separate private storage bucket/signed-URL
+    // step needed, unlike OpenHRApp's own `selfies` bucket convention.
+    selfie: r.sign_in_photo || undefined,
+    remarks: r.notes || '',
+    dutyType: 'OFFICE',
+    organizationId: undefined,
   };
+}
+
+async function getActivePolicy(): Promise<{ work_start_time: string; grace_minutes: number } | null> {
+  try {
+    const { data } = await supabase
+      .from('attendance_policy')
+      .select('work_start_time, grace_minutes')
+      .eq('is_active', true)
+      .order('effective_from', { ascending: false })
+      .limit(1)
+      .single();
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function todayYMD(): string {
@@ -66,32 +104,11 @@ function todayYMD(): string {
 }
 
 /**
- * Resolve the auto-close time this employee's session should be stamped with.
- * Priority: employee shift > org app-config > hardcoded fallback.
+ * Resolve the auto-close time this session should be stamped with. Palmstead's
+ * real attendance_policy has one active row, no per-employee/per-shift
+ * variation, so there is nothing to resolve beyond that single fallback.
  */
-async function resolveCloseTime(employeeId: string, date: string): Promise<string> {
-  try {
-    if (isSupabaseConfigured()) {
-      let shiftId: string | undefined;
-      try {
-        const { data: empRow } = await supabase
-          .from('profiles')
-          .select('shift_id')
-          .eq('id', employeeId.trim())
-          .single();
-        shiftId = empRow?.shift_id || undefined;
-      } catch { /* employee record not accessible; fall through */ }
-
-      const shift = await shiftService.resolveShiftForEmployee(employeeId, shiftId, date);
-      if (shift?.autoSessionCloseTime) return shift.autoSessionCloseTime;
-    }
-  } catch { /* shift resolution failed; fall through to org config */ }
-
-  try {
-    const config = await organizationService.getConfig();
-    if (config?.autoSessionCloseTime) return config.autoSessionCloseTime;
-  } catch { /* no config; fall through */ }
-
+async function resolveCloseTime(): Promise<string> {
   return FALLBACK_CLOSE_TIME;
 }
 
@@ -105,14 +122,16 @@ export const workdaySessionManager = {
     if (!isSupabaseConfigured()) return empty;
 
     const today = todayYMD();
+    const policy = await getActivePolicy();
 
     let openRecords: any[];
     try {
       const { data, error } = await supabase
-        .from('attendance')
+        .from('attendance_log')
         .select('*')
-        .eq('employee_id', employeeId.trim())
-        .is('check_out', null)
+        .eq('staff_key', employeeId.trim())
+        .is('sign_out_at', null)
+        .not('sign_in_at', 'is', null)
         .limit(50);
       if (error) throw error;
       openRecords = data ?? [];
@@ -125,10 +144,10 @@ export const workdaySessionManager = {
     const closedPast: Attendance[] = [];
 
     for (const rec of openRecords) {
-      const date = rec.date as string;
+      const date = rec.work_date as string;
       if (date === today) {
         // Today's open session → return as active, never close here.
-        active = mapAttendance(rec);
+        active = mapAttendance(rec, policy);
         continue;
       }
       if (date > today) {
@@ -139,11 +158,9 @@ export const workdaySessionManager = {
 
       // Past-date open session → close it as a client-side fallback.
       try {
-        const closeTime = await resolveCloseTime(employeeId, date);
-        // attendance.check_out is timestamptz — combine the row's date with
+        const closeTime = await resolveCloseTime();
+        // sign_out_at is timestamptz — combine the row's date with
         // HH:mm[:ss] to a full ISO timestamp or Postgres rejects the update.
-        // Postgres `time` columns serialize as "HH:MM:SS"; HH:mm fallback also
-        // supported. Build a Date in local TZ then serialize to UTC ISO.
         const parts = String(closeTime).split(':');
         const h = (parts[0] || '0').padStart(2, '0');
         const m = (parts[1] || '0').padStart(2, '0');
@@ -153,15 +170,15 @@ export const workdaySessionManager = {
           throw new Error(`Invalid close time computed: date=${date} closeTime=${closeTime}`);
         }
         const closeIso = local.toISOString();
-        const existingRemarks = (rec.remarks as string) || '';
+        const existingNotes = (rec.notes as string) || '';
         const { data: updated, error: closeErr } = await supabase
-          .from('attendance')
-          .update({ check_out: closeIso, remarks: existingRemarks + CLIENT_CLOSE_REMARK })
+          .from('attendance_log')
+          .update({ sign_out_at: closeIso, notes: existingNotes + CLIENT_CLOSE_REMARK })
           .eq('id', rec.id)
           .select()
           .single();
         if (closeErr) throw closeErr;
-        closedPast.push(mapAttendance(updated));
+        closedPast.push(mapAttendance(updated, policy));
         console.log(
           `[WorkdaySessionManager] Client-closed past session ${rec.id} (date: ${date}, close: ${closeTime})`
         );
@@ -180,28 +197,8 @@ export const workdaySessionManager = {
       apiClient.notify();
     }
 
-    // Resolve signed URLs for any selfies on the records we are returning.
-    // selfies bucket is private — public URLs would return 403.
-    const toSign: Attendance[] = [];
-    if (active?.selfie) toSign.push(active);
-    for (const r of closedPast) if (r.selfie) toSign.push(r);
-    if (toSign.length > 0) {
-      try {
-        const paths = toSign.map(r => r.selfie as string);
-        const { data: signed } = await supabase.storage
-          .from('selfies')
-          .createSignedUrls(paths, 3600);
-        if (signed) {
-          const urlMap = new Map(signed.map(s => [s.path, s.signedUrl]));
-          toSign.forEach(r => {
-            if (r.selfie) r.selfie = urlMap.get(r.selfie) ?? r.selfie;
-          });
-        }
-      } catch (e: any) {
-        console.warn('[WorkdaySessionManager] Selfie sign failed:', e?.message || e);
-      }
-    }
-
+    // No signed-URL step needed: attendance_log.sign_in_photo already holds
+    // a direct base64 data URL (confirmed live), not a private-bucket path.
     return { active, closedPast };
   },
 };
