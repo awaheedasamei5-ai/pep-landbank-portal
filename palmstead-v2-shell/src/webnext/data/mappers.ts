@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -869,6 +869,18 @@ export function mapLeaveHolidayRow(r: Record<string, unknown>): LeaveHoliday {
     name: r.name as string,
     isRecurringEid: !!r.is_recurring_eid,
     createdBy: (r.created_by as string) ?? null,
+    createdAt: r.created_at as string,
+  };
+}
+
+export function mapLeaveRequestLogRow(r: Record<string, unknown>): LeaveRequestLog {
+  return {
+    id: r.id as string,
+    requestId: r.request_id as string,
+    actorKey: (r.actor_key as string) ?? null,
+    fromStatus: (r.from_status as string) ?? null,
+    toStatus: r.to_status as string,
+    note: (r.note as string) ?? null,
     createdAt: r.created_at as string,
   };
 }

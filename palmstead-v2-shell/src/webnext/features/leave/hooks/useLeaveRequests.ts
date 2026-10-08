@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource, type DataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
 import { fmtLongDate } from '../../../shared/lib/format';
 import type { Config, LeaveRequest, NewLeaveRequest } from '../../../types/domain';
 
@@ -208,6 +209,35 @@ export function useRescheduleLeaveRequest() {
 // staff member actively confirms they took it -- only the requester can
 // confirm their own leave (RLS: leave_requests_upd allows agent_key =
 // my_key()).
+// Real request-detail history (leave_request_logs, never read anywhere
+// until the detail page) -- one row per status change, written by a
+// trigger, not by the client.
+export function useLeaveRequestLogs(requestId: string | null) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({
+    queryKey: ['leaveRequestLogs', requestId],
+    queryFn: () => getDataSource(demoMode).leaveRequests.logs(requestId as string),
+    enabled: !!requestId,
+  });
+}
+
+// Edit a still-'planned' draft's dates -- same scope as delete-planned
+// (useDeletePlannedLeave): only ever offered while status is 'planned',
+// never a request already sent to Management.
+export function useUpdatePlannedLeave() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const { data: config } = useConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dates }: { id: string; dates: string[] }) => {
+      const letterText = profile ? buildLeaveLetterText(profile.name, dates.slice().sort(), new Date(dates[0]).getFullYear(), config?.quoteCompanyName) : null;
+      return getDataSource(demoMode).leaveRequests.updatePlanned(id, { dates, letterText });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
+  });
+}
+
 export function useConfirmLeaveUsed() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);

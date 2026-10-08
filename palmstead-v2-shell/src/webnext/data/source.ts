@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
@@ -43,6 +43,7 @@ import {
   mapLeadRow,
   mapOfficeLocationRow,
   mapLeaveHolidayRow,
+  mapLeaveRequestLogRow,
   mapLeaveRequestRow,
   mapMemoRow,
   mapNoteRow,
@@ -704,6 +705,16 @@ export interface DataSource {
     // this is a separate concept from the entitlement-protecting "reserved"
     // count that leaveDaysUsed() still computes from status alone).
     confirmUsed(id: string): Promise<LeaveRequest>;
+    // Edit the dates on a still-'planned' (not-yet-sent) draft -- same
+    // permission scope as remove() above (only ever offered in the UI
+    // while status is 'planned'; a sent request is never silently
+    // editable, it must go through decline/reschedule instead).
+    updatePlanned(id: string, patch: { dates: string[]; letterText: string | null }): Promise<LeaveRequest>;
+    // Real table `leave_request_logs` (migration leave_full_app_phase1_schema)
+    // -- the full status-change history for one request, written
+    // automatically by a trigger. Built in Phase 1, read for the first
+    // time by the request detail page.
+    logs(requestId: string): Promise<LeaveRequestLog[]>;
   };
   // Real table `banners` (confirmed live) -- physical banner/scouted-
   // location tracking, literal port of v1's real Banner Tracking app
@@ -2581,6 +2592,22 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient().from('leave_requests').update({ used_confirmed_at: new Date().toISOString() }).eq('id', id).select().single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
+      },
+      async updatePlanned(id, patch) {
+        const { data, error } = await requireClient()
+          .from('leave_requests')
+          .update({ dates: patch.dates, days_count: patch.dates.length, year: new Date(patch.dates[0]).getFullYear(), letter_text: patch.letterText })
+          .eq('id', id)
+          .eq('status', 'planned')
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async logs(requestId) {
+        const { data, error } = await requireClient().from('leave_request_logs').select('*').eq('request_id', requestId).order('created_at', { ascending: true });
+        if (error) throw error;
+        return (data ?? []).map(mapLeaveRequestLogRow);
       },
     },
     banners: {

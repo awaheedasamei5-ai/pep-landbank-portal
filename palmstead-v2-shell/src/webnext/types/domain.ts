@@ -711,6 +711,21 @@ export interface NewLeaveHoliday {
   isRecurringEid: boolean;
 }
 
+// Real table `leave_request_logs` (migration leave_full_app_phase1_schema)
+// -- one row per status change, written automatically by the
+// log_leave_request_status_change() trigger on leave_requests. Built this
+// session but never read by any UI until the request detail page. See
+// docs/plans/04-leave-full-app-build-plan.md Phase 1.
+export interface LeaveRequestLog {
+  id: string;
+  requestId: string;
+  actorKey: string | null;
+  fromStatus: string | null;
+  toStatus: string;
+  note: string | null;
+  createdAt: string;
+}
+
 // Real V3 chapter-01 entity (attendance_policy table, new 2026-09-10) --
 // a versioned shift/grace-period policy, exactly one row is_active=true
 // at a time (enforced by a partial unique index server-side). Written

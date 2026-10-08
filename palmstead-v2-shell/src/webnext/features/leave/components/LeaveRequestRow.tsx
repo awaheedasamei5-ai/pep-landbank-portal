@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useSendPlannedLeave, useDeletePlannedLeave } from '../hooks/useLeaveRequests';
 import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
 import type { LeaveRequest } from '../../../types/domain';
@@ -46,6 +47,9 @@ export function PlannedLeaveRow({ request }: { request: LeaveRequest }) {
             {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
           </button>
         )}
+        <Link href={`/dashboard/leave/requests/${request.id}`} className={styles.letterBtn}>
+          View details →
+        </Link>
       </div>
       <div className={styles.decideActions}>
         <button type="button" className={styles.approveBtn} disabled={sendPlanned.isPending} onClick={() => sendPlanned.mutate(request.id)}>
@@ -86,6 +90,9 @@ export function MyLeaveRow({ request }: { request: LeaveRequest }) {
             {request.status === 'approved' && !request.deductQuota ? ' · not counted against quota' : ''}
           </div>
         )}
+        <Link href={`/dashboard/leave/requests/${request.id}`} className={styles.letterBtn}>
+          View details →
+        </Link>
       </div>
       <span className={styles[STATUS_CLASS[request.status]]}>{STATUS_LABEL[request.status]}</span>
     </div>

@@ -229,8 +229,20 @@ carries a real reference number, which it doesn't today.
       (`/leave/requests`), status + year filters via `?status=`/`?year=`
       query params, verified live (manager test account currently has 0
       requests, confirmed empty state renders correctly, not broken).
-- [ ] Phase 4: UI — Request detail/edit (`/requests/[id]`,
-      `/requests/[id]/edit`) — NOT built yet.
+- [x] Phase 4: UI — Request detail/edit (`/requests/[id]`,
+      `/requests/[id]/edit`): detail page shows the full letter download,
+      quota-exemption note, and — genuinely new, filling a real gap —
+      the complete `leave_request_logs` status-change timeline (that
+      table was built in Phase 1 but nothing read it until this page).
+      Edit is scoped to still-`planned` (not-yet-sent) drafts only, same
+      permission boundary as the existing delete-planned action; added a
+      real `leaveRequests.updatePlanned()` data-source method + RLS-backed
+      `.eq('status','planned')` guard. "My requests" and the Dashboard's
+      recent-requests teaser both link to the new detail page. Verified
+      live end to end: created a real draft, opened its detail page
+      (history showed the trigger-written "Created as Planned" row),
+      edited its dates (1 day → 2 days, confirmed on the detail page),
+      then deleted it — no test data left behind.
 - [x] Phase 4: UI — Emergency leave (own route `/leave/emergency`): verified
       live, real form renders with reason/date fields.
 - [x] Phase 4: UI — Management dashboard (`/leave/management`): own route,
