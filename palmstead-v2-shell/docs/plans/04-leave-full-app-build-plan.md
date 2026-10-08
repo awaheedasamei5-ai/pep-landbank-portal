@@ -205,9 +205,16 @@ carries a real reference number, which it doesn't today.
 
 ## Honest status checklist
 
-- [ ] Phase 1: database (leave_request_logs, leave_holidays,
-      leave_doc_counters; drop leave_type_quotas/leave_staff_quota_overrides)
-- [ ] Phase 2: RLS for the 3 new tables
+- [x] Phase 1: database APPLIED (migration `leave_full_app_phase1_schema`).
+      `leave_request_logs` + auto-logging trigger (verified live via a
+      rolled-back transaction: insert → `null→planned` log row, status
+      update → `planned→pending` log row, both written correctly),
+      `leave_holidays`, `leave_doc_counters` + `next_leave_request_no()`
+      (verified: returns `LV-202610-0001`). Dropped
+      `leave_type_quotas`/`leave_staff_quota_overrides` after confirming
+      they held only the 5 seed rows from earlier the same session, zero
+      real overrides.
+- [x] Phase 2: RLS applied for all 3 new tables in the same migration
 - [ ] Phase 3: AI — leave-approaching deterministic check wired to a
       scheduled job
 - [ ] Phase 4: UI — Dashboard
