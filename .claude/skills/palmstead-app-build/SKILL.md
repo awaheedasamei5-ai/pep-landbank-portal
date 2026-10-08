@@ -39,6 +39,27 @@ These came from explicit, sometimes repeated, user corrections. Check memory for
 - **Dashboards use this shell's own real component system** (it was forked from `arhamkhnz/next-shadcn-admin-dashboard` specifically to be the shared UI foundation — see `feedback-oss-foundation-strategy-2026-09-11`), or a previously-approved custom build referencing a real design resource the user provided (e.g. the Dribbble-style attendance kit, closed 2026-09-10). Never ship the generic flat Tailwind card grid that comes for free when duplicating an unrelated open-source app's own UI verbatim — that is importing someone else's design decisions, not Palmstead's.
 - **Animate real content, not just page chrome.** Dashboard numbers, cards, and details should have a real entrance/feedback animation (see the `animate` skill — gate every animation through its frequency/purpose check, don't skip straight to a curve).
 
+## 2.5 Full layered plan — required before any code, every app, no exceptions
+
+Added 2026-10-08 (see memory `feedback-standing-layered-app-build-process-2026-10-08`), after a correctly-logic'd but single-page build was rejected outright: "no generic tiles or one page bullshit u call an app." A single scrolling page is not an acceptable finished app here, even when the business logic is right.
+
+Before writing any code for an app (new or being revised), write a real plan as `docs/plans/NN-<app>-build-plan.md` inside `palmstead-v2-shell`, covering, in this order:
+
+1. **Database** — full schema (tables, columns, relationships) for everything the app needs, designed from the real requirements, not retrofitted after the UI.
+2. **Security** — RLS policies, role/permission model, who can see/do what.
+3. **AI touchpoints** — where (if anywhere) this app's own real AI layer plugs in, what it's allowed to see/do.
+4. **UI — full page/navigation architecture**, not a feature list:
+   - A real dashboard/home page for the app.
+   - Every genuinely separate page/screen it needs, and how a user navigates between them (sidebar sub-items, tabs that route, in-page links to detail views) — "when I click this it opens another page," not an accordion standing in for one.
+   - For an app with both a staff and a management side: their page structures are planned separately, not one shared page with role-conditional sections bolted on.
+   - Which real design resource (an approved repo, or a GitHub search result if none fits) each page's UI is duplicated from, and what gets modified.
+
+**UI bans, absolute**: a uniform flat tile/card grid as the primary layout, decorative emoji used as icons or section markers, any shortcut that reads as "the default thing an AI generates" rather than a real app's own considered design. Use real icon sets and real dashboard component patterns (charts, data tables, stat panels with actual visual hierarchy), matching the quality bar of the premium admin dashboard kits this project's own foundation repo and design skills reference.
+
+**Research first.** Before designing the pages, actually look at how real systems in that category are built (search the web, read a real open-source implementation's actual page structure) — this is a required step, not optional polish.
+
+Only after this plan is written does implementation start, and it proceeds in the order the plan lays out: database, then security, then AI, then UI.
+
 ## 3. How to build
 
 - **Take the time. Build in full phases.** A bulky ask gets broken into phases and each phase gets built completely, not touched shallowly across many apps. Reporting a long list of small completed items does not substitute for the one big thing that was actually asked for.
