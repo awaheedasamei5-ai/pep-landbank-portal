@@ -107,7 +107,18 @@ doesn't build them out into working screens against real data.
       (`src/openplane/i18n/scripts/generate-types.mjs`) and ran it against
       the copied locale JSON since this isn't a separate pnpm package with
       its own build step)
-- [ ] Phase 3: Supabase schema replica designed + applied (needs user sign-off)
+- [x] Phase 3a: Supabase schema replica DESIGNED — see
+      `docs/plans/03-operations-tracker-schema-draft.sql`. 17 tables
+      (workspaces/projects/project_members/states/labels/cycles/modules/
+      module_members/issues + 7 issue-relation tables/activity), grounded in
+      the real copied type shapes, RLS + realtime publication included.
+      Verified against the live `sbydzrlzqxcdbudjaube` schema before writing
+      the final version — caught and fixed a wrong column name
+      (`profiles.key` doesn't exist; the real column is `profiles.agent_key`,
+      confirmed via `my_key()`'s own definition) and confirmed the `op_*`
+      table-name namespace is free. NOT YET APPLIED — needs sign-off (just the
+      seed workspace name is a placeholder; everything else is ready).
+- [ ] Phase 3b: schema applied to production
 - [ ] Phase 4: service layer rebuilt against real schema
 - [ ] Phase 5: editor evaluated/copied if needed
 - [ ] Phase 6: UI surface — workspace shell
