@@ -6,10 +6,11 @@ import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { useLeads } from '../hooks/useLeads';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
-import { useAssignLead, useUpdateLead, useDeleteLead } from '../hooks/useLead';
+import { useAssignLead, useUpdateLead, useDeleteLead, useDeleteFullPipeline } from '../hooks/useLead';
 import { useSiteVisits } from '../../site-visits/hooks/useSiteVisits';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { getDataSource } from '../../../data/source';
 import { StageBadge } from '../components/StageBadge';
 import { StaffPipelineImportCard } from '../components/StaffPipelineImportCard';
 import { PipelineImportCard } from '../../manager/components/PipelineImportCard';
@@ -121,10 +122,12 @@ export function PipelineListScreen() {
   const assignLead = useAssignLead();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
+  const deleteFullPipeline = useDeleteFullPipeline();
   const downloadAgentPipeline = useDownloadAgentPipeline();
   const downloadMasterPipeline = useDownloadMasterPipeline();
   const { data: config } = useConfig();
   const downloadLeadQuotation = useDownloadLeadQuotationPdf();
+  const demoMode = useSessionStore((s) => s.demoMode);
 
   const [query, setQuery] = useState('');
   // Seeded once from Manager Home's own drill-down links
@@ -205,6 +208,36 @@ export function PipelineListScreen() {
     clearBulk();
   }
 
+  // Ported from V1's real deleteFullPipelineConfirm (index.html) -- same
+  // single-confirm UX (no reason picker), same "tell Management after,
+  // not before" SMS. Not available to the master/manager view, same as
+  // V1's own PROFILE.role!=='manager' gate: this deletes the SIGNED-IN
+  // staff member's own pipeline, which a manager doesn't have one of in
+  // this sense. See useDeleteFullPipeline's own comment for why the
+  // underlying delete is soft (archive_lead_and_vacate), not V1's hard
+  // DELETE.
+  async function confirmDeleteFullPipeline() {
+    if (!profile || isMaster) return;
+    const mineCount = (mine.data ?? []).length;
+    if (mineCount === 0) {
+      window.alert('Your pipeline is already empty');
+      return;
+    }
+    const sure = window.confirm(
+      `Delete your ENTIRE pipeline? This permanently removes all ${mineCount} of your leads and their records — this can't be undone. Management will be notified by SMS.`
+    );
+    if (!sure) return;
+    const archived = await deleteFullPipeline.mutateAsync({ agentKey: profile.key, reason: 'Staff deleted their entire pipeline' });
+
+    const ds = getDataSource(demoMode);
+    const managers = await ds.staff.list().catch(() => []);
+    const toManagers = managers.filter((m) => m.role === 'manager');
+    const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+    if (config?.companyPhone) phones.add(config.companyPhone);
+    const body = `${profile.name} just deleted their entire pipeline on Palmstead — ${archived} lead(s) permanently removed.`;
+    for (const phone of phones) ds.sms.send(phone, body, 'pipeline_deleted', profile.key).catch(() => {});
+  }
+
   // Real bug caught live by the user, twice now: a fixed-position drawer
   // (position:fixed, anchored to the viewport's own right edge) combined
   // with the list's width computed as calc(100% - <magic number>px) of a
@@ -257,6 +290,18 @@ export function PipelineListScreen() {
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/new', { state: { returnTo: basePath } })}>
             + Add lead
           </button>
+          {!isMaster && (
+            <button
+              type="button"
+              id="deletePipelineBtn"
+              className={styles.bulkBtnDanger}
+              disabled={deleteFullPipeline.isPending}
+              title="Permanently delete your entire pipeline"
+              onClick={confirmDeleteFullPipeline}
+            >
+              {deleteFullPipeline.isPending ? 'Deleting…' : 'Delete pipeline'}
+            </button>
+          )}
         </div>
       </div>
 

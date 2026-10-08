@@ -112,6 +112,26 @@ export function useDeleteLead() {
   });
 }
 
+// 2026-10-08: "Delete pipeline" -- see removeAllForAgent's own comment in
+// data/source.ts for why this isn't the real V1 hard-DELETE ported as-is.
+export function useDeleteFullPipeline() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agentKey, reason }: { agentKey: string; reason: string }) =>
+      getDataSource(demoMode).leads.removeAllForAgent(agentKey, reason, profile?.key ?? '', profile?.name ?? ''),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lead'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      qc.invalidateQueries({ queryKey: ['leadsArchived'] });
+      qc.invalidateQueries({ queryKey: ['companyLeads'] });
+      qc.invalidateQueries({ queryKey: ['plots'] });
+      qc.invalidateQueries({ queryKey: ['allocationRequests'] });
+    },
+  });
+}
+
 // Manager-only view (real RLS -- see leads_sel's own comment).
 export function useArchivedLeads() {
   const demoMode = useSessionStore((s) => s.demoMode);

@@ -188,6 +188,22 @@ export interface DataSource {
     // previously captured in the UI and silently discarded) so Management
     // can see why a lead was archived, not just that it was.
     remove(id: string, reason: string, deletedBy: string, deletedByName: string): Promise<void>;
+    // 2026-10-08: "Delete pipeline" -- a staff member's own request to
+    // permanently remove their ENTIRE pipeline in one action (ported from
+    // the real V1 feature, index.html's deleteFullPipelineConfirm/
+    // apiDeleteFullPipeline). V1's own version there is a real hard
+    // DELETE; this one is NOT a port of that part -- it loops the same
+    // atomic archive_lead_and_vacate RPC remove() above already calls,
+    // once per lead, because V2's own leads.remove() was deliberately
+    // changed off hard-delete on 2026-09-03 (see that function's comment:
+    // a hard DELETE here cascades through allocation_requests/
+    // target_selections/payment_reminders_log and orphans payments, all
+    // confirmed live on THIS project's real FK constraints). Same real
+    // authorization the RPC itself enforces (manager, the lead's own
+    // agent, or elias/emmanuel/elizabeth) -- a staff member can only ever
+    // run this against their own leads in practice, since every row
+    // belongs to their own agent_key. Returns the count actually archived.
+    removeAllForAgent(agentKey: string, reason: string, deletedBy: string, deletedByName: string): Promise<number>;
     // Manager-only in practice (leads_sel's RLS only lets deleted_at IS NOT
     // NULL rows through for my_role()='manager') -- every archived lead
     // with its deletion reason, newest first.
@@ -1404,6 +1420,21 @@ function createLiveDataSource(): DataSource {
         // so archiving and vacating are one atomic transaction.
         const { error } = await requireClient().rpc('archive_lead_and_vacate', { p_lead_id: id, p_reason: reason, p_deleted_by: deletedBy, p_deleted_by_name: deletedByName });
         if (error) throw error;
+      },
+      async removeAllForAgent(agentKey, reason, deletedBy, deletedByName) {
+        const client = requireClient();
+        const { data: mine, error: listErr } = await client.from('leads').select('id').eq('agent_key', agentKey).is('deleted_at', null);
+        if (listErr) throw listErr;
+        const ids = (mine ?? []).map((r) => r.id as string);
+        let archived = 0;
+        for (const id of ids) {
+          const { error } = await client.rpc('archive_lead_and_vacate', { p_lead_id: id, p_reason: reason, p_deleted_by: deletedBy, p_deleted_by_name: deletedByName });
+          // One lead failing (e.g. a race with a concurrent edit) must not
+          // abort the rest of the pipeline delete -- matches remove()'s
+          // own per-lead atomicity, just not all-or-nothing across leads.
+          if (!error) archived += 1;
+        }
+        return archived;
       },
       async listArchived() {
         // Explicit filter needed here even though RLS already restricts
