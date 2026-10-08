@@ -32,6 +32,7 @@ export function LeaveScreen() {
   const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const [view, setView] = useState<'mine' | 'management'>('mine');
   const { data: requests, isLoading } = useLeaveRequests();
+  const { data: config } = useConfig();
   const profile = useSessionStore((s) => s.profile);
   const myKey = profile?.key ?? '';
   const [showForm, setShowForm] = useState(false);
@@ -43,6 +44,16 @@ export function LeaveScreen() {
   const visible = mine.filter((r) => r.status !== 'planned').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const dueSoon = leavePlannedDueSoon(all, myKey, today());
   const needsUsageConfirmation = leaveNeedingUsageConfirmation(all, myKey, today());
+
+  // Real bug found live 2026-10-08: the only LeaveBalanceRing render was
+  // buried inside the "+Request leave" form, invisible until a staff
+  // member opened it -- "CANT EVEN SEE THE LEAVE COUNT DOWNS." The
+  // countdown is the one thing this screen exists to answer; it must be
+  // visible by default.
+  const thisYear = new Date(today()).getFullYear();
+  const myReserved = leaveDaysReserved(all, myKey, thisYear);
+  const myRemaining = config ? leaveDaysRemaining(config, all, myKey, thisYear) : 0;
+  const myConfirmedUsed = leaveDaysConfirmedUsed(all, myKey, thisYear, today());
 
   if (isManager && view === 'management') {
     return (
@@ -94,6 +105,8 @@ export function LeaveScreen() {
           </button>
         </div>
       </div>
+
+      {config && <LeaveBalanceRing total={config.leaveTotalDays} reserved={myReserved} remaining={myRemaining} confirmedUsed={myConfirmedUsed} year={thisYear} />}
 
       {showEmergencyForm && <EmergencyLeaveForm requests={all} onDone={() => setShowEmergencyForm(false)} />}
       {showForm && <NewLeaveForm requests={all} onDone={() => setShowForm(false)} />}

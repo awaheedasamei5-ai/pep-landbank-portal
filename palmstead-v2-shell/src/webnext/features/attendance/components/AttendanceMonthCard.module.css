@@ -11,6 +11,28 @@
   margin-bottom: 16px;
 }
 
+/* Dashboard content ask (2026-10-08): entrance for the month's numbers as
+   they finish loading -- state-indication tier, occasional view, well
+   under the 300ms UI ceiling even with the stagger. transform+opacity
+   only, the project's own --ease-out token. */
+.ringCol { animation: stat-in 240ms var(--ease-out) backwards; }
+.stat { animation: stat-in 220ms var(--ease-out) backwards; }
+.stat:nth-child(1) { animation-delay: 40ms; }
+.stat:nth-child(2) { animation-delay: 80ms; }
+.stat:nth-child(3) { animation-delay: 120ms; }
+.stat:nth-child(4) { animation-delay: 160ms; }
+.stat:nth-child(5) { animation-delay: 200ms; }
+.stat:nth-child(6) { animation-delay: 240ms; }
+
+@keyframes stat-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ringCol, .stat { animation-duration: 1ms; animation-delay: 0ms !important; }
+}
+
 .ringCol {
   display: flex;
   flex-direction: column;

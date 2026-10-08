@@ -21,6 +21,22 @@
 .summaryCount { font-size: 20px; font-weight: 800; font-family: var(--font-mono); }
 .summaryLabel { font-size: 10.5px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; }
 
+/* Dashboard content ask (2026-10-08) -- same stagger-in as
+   AttendanceMonthCard's own stat tiles. */
+.summaryTile { animation: summary-in 220ms var(--ease-out) backwards; }
+.summaryTile:nth-child(1) { animation-delay: 40ms; }
+.summaryTile:nth-child(2) { animation-delay: 90ms; }
+.summaryTile:nth-child(3) { animation-delay: 140ms; }
+
+@keyframes summary-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summaryTile { animation-duration: 1ms; animation-delay: 0ms !important; }
+}
+
 .sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 20px 0 12px; }
 .sectitle:first-of-type { margin-top: 0; }
 
