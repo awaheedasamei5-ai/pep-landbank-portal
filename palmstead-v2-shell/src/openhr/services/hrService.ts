@@ -49,6 +49,8 @@ export const hrService = {
   setHolidays: organizationService.setHolidays,
   getLeavePolicy: organizationService.getLeavePolicy,
   setLeavePolicy: organizationService.setLeavePolicy,
+  setStaffLeaveQuotaOverride: organizationService.setStaffLeaveQuotaOverride,
+  removeStaffLeaveQuotaOverride: organizationService.removeStaffLeaveQuotaOverride,
   getLeaveTypes: organizationService.getLeaveTypes,
   setLeaveTypes: organizationService.setLeaveTypes,
   getGuideHelpLinks: organizationService.getGuideHelpLinks,

@@ -429,21 +429,68 @@ export const organizationService = {
     apiClient.notify();
   },
 
+  // Real tables (applied 2026-10-08, see
+  // docs/plans in palmstead-v2-shell): leave_type_quotas (one row per
+  // type, management-editable) + leave_staff_quota_overrides (per-staff
+  // exceptions) -- replaces the generic getSetting('leave_policy', ...)
+  // blob, which hit a `settings` table that doesn't exist in this
+  // project. defaults/overrides keep the same LeavePolicy shape the UI
+  // already expects.
   async getLeavePolicy(): Promise<LeavePolicy> {
     if (cachedLeavePolicy && isCacheValid()) return cachedLeavePolicy;
-    const defaultPolicy: LeavePolicy = { defaults: { ANNUAL: 15, CASUAL: 10, SICK: 14 }, overrides: {} };
-    const val = await getSetting('leave_policy', defaultPolicy);
-    const normalized: LeavePolicy = {
-      defaults: val?.defaults ?? defaultPolicy.defaults,
-      overrides: val?.overrides ?? {},
-    };
-    cachedLeavePolicy = normalized;
-    return normalized;
+    const defaultPolicy: LeavePolicy = { defaults: { ANNUAL: 20, CASUAL: 10, SICK: 14, EMERGENCY: 5 }, overrides: {} };
+    try {
+      const [{ data: quotas }, { data: overrideRows }] = await Promise.all([
+        supabase.from('leave_type_quotas').select('leave_type, annual_days'),
+        supabase.from('leave_staff_quota_overrides').select('agent_key, leave_type, annual_days'),
+      ]);
+      const defaults: Record<string, number> = {};
+      (quotas ?? []).forEach((r: any) => { defaults[r.leave_type] = r.annual_days; });
+      const overrides: Record<string, Record<string, number>> = {};
+      (overrideRows ?? []).forEach((r: any) => {
+        overrides[r.agent_key] = overrides[r.agent_key] || {};
+        overrides[r.agent_key][r.leave_type] = r.annual_days;
+      });
+      const normalized: LeavePolicy = {
+        defaults: Object.keys(defaults).length ? defaults : defaultPolicy.defaults,
+        overrides,
+      };
+      cachedLeavePolicy = normalized;
+      return normalized;
+    } catch {
+      return defaultPolicy;
+    }
   },
 
+  // Writes every type's quota; per-staff overrides are managed separately
+  // via setStaffLeaveQuotaOverride below (the UI edits one row at a time).
   async setLeavePolicy(policy: LeavePolicy) {
-    await setSetting('leave_policy', policy);
+    const rows = Object.entries(policy.defaults).map(([leave_type, annual_days]) => ({ leave_type, annual_days }));
+    if (rows.length) {
+      const { error } = await supabase.from('leave_type_quotas').upsert(rows, { onConflict: 'leave_type' });
+      if (error) throw error;
+    }
     cachedLeavePolicy = policy;
+    apiClient.notify();
+  },
+
+  async setStaffLeaveQuotaOverride(agentKey: string, leaveType: string, annualDays: number) {
+    const { error } = await supabase
+      .from('leave_staff_quota_overrides')
+      .upsert({ agent_key: agentKey, leave_type: leaveType, annual_days: annualDays }, { onConflict: 'agent_key,leave_type' });
+    if (error) throw error;
+    cachedLeavePolicy = null;
+    apiClient.notify();
+  },
+
+  async removeStaffLeaveQuotaOverride(agentKey: string, leaveType: string) {
+    const { error } = await supabase
+      .from('leave_staff_quota_overrides')
+      .delete()
+      .eq('agent_key', agentKey)
+      .eq('leave_type', leaveType);
+    if (error) throw error;
+    cachedLeavePolicy = null;
     apiClient.notify();
   },
 
@@ -460,16 +507,37 @@ export const organizationService = {
     apiClient.notify();
   },
 
+  // Real leave_type_quotas rows ARE the types that actually carry a
+  // balance (hasBalance: true) -- the real leave_requests.leave_type check
+  // constraint only allows ANNUAL/CASUAL/SICK/EMERGENCY/OTHER, so no
+  // Maternity/Paternity/Earned/Unpaid row exists to return (those were
+  // OpenHRApp's own template defaults, never real Palmstead categories).
   async getLeaveTypes(): Promise<CustomLeaveType[]> {
     if (cachedLeaveTypes && isCacheValid()) return cachedLeaveTypes;
-    const val = await getSetting('leave_types', DEFAULT_LEAVE_TYPES);
-    const arr = Array.isArray(val) ? val : DEFAULT_LEAVE_TYPES;
-    cachedLeaveTypes = arr;
-    return arr;
+    const COLORS: Record<string, string> = {
+      ANNUAL: 'bg-primary', CASUAL: 'bg-emerald-500', SICK: 'bg-rose-500',
+      EMERGENCY: 'bg-amber-500', OTHER: 'bg-slate-500',
+    };
+    try {
+      const { data, error } = await supabase.from('leave_type_quotas').select('leave_type').order('leave_type');
+      if (error) throw error;
+      const arr: CustomLeaveType[] = (data ?? []).map((r: any) => ({
+        id: r.leave_type,
+        name: r.leave_type.charAt(0) + r.leave_type.slice(1).toLowerCase() + ' Leave',
+        color: COLORS[r.leave_type] || 'bg-slate-500',
+        hasBalance: true,
+      }));
+      cachedLeaveTypes = arr.length ? arr : DEFAULT_LEAVE_TYPES;
+      return cachedLeaveTypes;
+    } catch {
+      return DEFAULT_LEAVE_TYPES;
+    }
   },
 
+  // Adding/removing a type means inserting/deleting a leave_type_quotas
+  // row directly (see the Leave Settings screen) -- this just keeps the
+  // in-memory cache coherent for callers that still call it after a save.
   async setLeaveTypes(types: CustomLeaveType[]) {
-    await setSetting('leave_types', types);
     cachedLeaveTypes = types;
     apiClient.notify();
   },
