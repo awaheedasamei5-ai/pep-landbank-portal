@@ -1,4 +1,8 @@
--- DRAFT, NOT APPLIED. Operations Tracker (plane port) Supabase schema replica.
+-- APPLIED 2026-10-08 to sbydzrlzqxcdbudjaube as migration
+-- `operations_tracker_schema_replica`. Kept here as the historical record of
+-- what was applied (verified after: 17/17 tables, 17/17 RLS policies, 1 seed
+-- workspace row, zero security advisories). Operations Tracker (plane port)
+-- Supabase schema replica.
 -- Target: sbydzrlzqxcdbudjaube (the real production project palmstead-v2-shell
 -- and web-next both run against). This is shared production infrastructure --
 -- surfaced here for sign-off before any `apply_migration` call, same standard

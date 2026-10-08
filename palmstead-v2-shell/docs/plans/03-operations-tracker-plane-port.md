@@ -118,7 +118,11 @@ doesn't build them out into working screens against real data.
       confirmed via `my_key()`'s own definition) and confirmed the `op_*`
       table-name namespace is free. NOT YET APPLIED — needs sign-off (just the
       seed workspace name is a placeholder; everything else is ready).
-- [ ] Phase 3b: schema applied to production
+- [x] Phase 3b: schema APPLIED to production (migration
+      `operations_tracker_schema_replica`). Purely additive -- 17 new `op_*`
+      tables, nothing existing touched. Verified after apply: 17/17 tables
+      present, 17/17 RLS policies created, 1 seed workspace row
+      ("Palmstead"), zero security advisories on any `op_*` table.
 - [ ] Phase 4: service layer rebuilt against real schema
 - [ ] Phase 5: editor evaluated/copied if needed
 - [ ] Phase 6: UI surface — workspace shell
