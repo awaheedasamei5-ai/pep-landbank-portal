@@ -19,6 +19,10 @@ import {
 } from "@/components/ui/command";
 import type { NavMainItem } from "@/navigation/sidebar/sidebar-items";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
+import { useSessionStore } from "@/webnext/auth/useSessionStore";
+import { useLeads } from "@/webnext/features/pipeline/hooks/useLeads";
+import { useAllLeads } from "@/webnext/features/payments/hooks/useLogPayment";
+import { useStaffDirectory } from "@/webnext/features/memos/hooks/useMemos";
 
 type SearchItem = {
   id: string;
@@ -81,6 +85,23 @@ export function SearchDialog() {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const router = useRouter();
+
+  // One-touch/global-search ask (2026-10-08): "Search Abdul / Search
+  // client / Search plot / Search payment... immediately navigate to the
+  // correct record." Scoped to leads for now (the one record type with a
+  // real detail route, /dashboard/pipeline/[id]) -- reuses the exact same
+  // own-vs-company-wide hooks Pipeline's own list screen already uses,
+  // not a new search endpoint.
+  const isManager = useSessionStore((s) => s.profile?.role === "manager");
+  const mine = useLeads();
+  const master = useAllLeads();
+  const leads = (isManager ? master.data : mine.data) ?? [];
+
+  const matchedLeads = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return leads.filter((l) => l.name.toLowerCase().includes(q) || l.contact.toLowerCase().includes(q)).slice(0, 8);
+  }, [leads, query]);
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -145,9 +166,31 @@ export function SearchDialog() {
       </Button>
       <CommandDialog open={open} onOpenChange={handleOpenChange}>
         <Command>
-          <CommandInput placeholder="Search dashboards, users, and more…" value={query} onValueChange={setQuery} />
+          <CommandInput placeholder="Search dashboards, clients, and more…" value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
+            {matchedLeads.length > 0 && (
+              <>
+                <CommandGroup heading="Clients">
+                  {matchedLeads.map((lead) => (
+                    <CommandItem
+                      key={lead.id}
+                      value={`client-${lead.id} ${lead.name} ${lead.contact}`}
+                      onSelect={() => {
+                        handleOpenChange(false);
+                        router.push(`/dashboard/pipeline/${lead.id}`);
+                      }}
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium">{lead.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">{lead.contact}</span>
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
             {query ? renderGroups(searchItems) : renderGroups(recommendations)}
           </CommandList>
         </Command>
