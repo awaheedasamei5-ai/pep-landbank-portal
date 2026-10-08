@@ -5,7 +5,6 @@ import type { Metadata } from "next";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { APP_CONFIG } from "@/config/app-config";
-import { fontVars } from "@/lib/fonts/registry";
 import { QueryProvider } from "@/lib/palmstead/query-provider";
 import { PREFERENCE_DEFAULTS } from "@/lib/preferences/preferences-config";
 import { ThemeBootScript } from "@/scripts/theme-boot";
@@ -61,10 +60,20 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
         />
+        {/* The theme-preset font PICKER's 16 Google Fonts (src/lib/fonts/
+            registry.ts) -- loaded via plain <link>, same as the real
+            Palmstead webfonts above, since next/font/google's Turbopack
+            loader was unreliable in this environment (see that file's own
+            comment for the full story). One combined request, display=swap
+            so nothing blocks first paint. */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Nunito+Sans:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Raleway:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Serif:wght@400;500;600;700&family=Roboto+Slab:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Lora:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap"
+        />
         {/* Applies theme and layout preferences on load to avoid flicker and unnecessary server rerenders. */}
         <ThemeBootScript />
       </head>
-      <body className={`${fontVars} min-h-screen antialiased`}>
+      <body className="min-h-screen antialiased">
         <QueryProvider>
           <TooltipProvider>
             <PreferencesStoreProvider initialValues={PREFERENCE_DEFAULTS}>

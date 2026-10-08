@@ -1,3 +1,8 @@
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
@@ -10,6 +15,13 @@ const nextConfig = {
   // App Router (src/webnext-shim/react-router.tsx) instead of installing
   // react-router itself, which would fight Next's own router.
   turbopack: {
+    // Fixed 2026-10-08: a package-lock.json landed at the monorepo root
+    // (unrelated tooling installed there in a different session) gave
+    // Turbopack two lockfiles to choose a workspace root from -- it picked
+    // the wrong one, which started breaking real module resolution (Google
+    // Fonts, preferences-store imports), not just the cosmetic warning this
+    // was previously filed as. Pinning root explicitly removes the ambiguity.
+    root: __dirname,
     resolveAlias: {
       "react-router": "./src/webnext-shim/react-router.tsx",
     },

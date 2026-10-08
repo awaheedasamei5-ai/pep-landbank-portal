@@ -174,59 +174,65 @@ These serve as the fallback; there is no separate default.css file. */
     box-shadow: var(--shadow-2xl);
   }
 
+  /* Fixed 2026-10-08: these used to reference --font-inter etc, CSS variables
+     next/font/google auto-generated per family. That loader was removed (see
+     src/lib/fonts/registry.ts) since Turbopack's internal Google Fonts
+     fetcher was reliably failing in this environment; each family now loads
+     via a plain <link> in app/layout.tsx and is referenced here by its real
+     font-family name directly -- no intermediate variable to generate. */
   html[data-font="inter"] body {
-    --font-sans: var(--font-inter);
+    --font-sans: "Inter", sans-serif;
   }
   html[data-font="notoSans"] body {
-    --font-sans: var(--font-noto-sans);
+    --font-sans: "Noto Sans", sans-serif;
   }
   html[data-font="nunitoSans"] body {
-    --font-sans: var(--font-nunito-sans);
+    --font-sans: "Nunito Sans", sans-serif;
   }
   html[data-font="figtree"] body {
-    --font-sans: var(--font-figtree);
+    --font-sans: "Figtree", sans-serif;
   }
   html[data-font="roboto"] body {
-    --font-sans: var(--font-roboto);
+    --font-sans: "Roboto", sans-serif;
   }
   html[data-font="geist"] body {
-    --font-sans: var(--font-geist);
+    --font-sans: "Geist", sans-serif;
   }
   html[data-font="raleway"] body {
-    --font-sans: var(--font-raleway);
+    --font-sans: "Raleway", sans-serif;
   }
   html[data-font="dmSans"] body {
-    --font-sans: var(--font-dm-sans);
+    --font-sans: "DM Sans", sans-serif;
   }
   html[data-font="publicSans"] body {
-    --font-sans: var(--font-public-sans);
+    --font-sans: "Public Sans", sans-serif;
   }
   html[data-font="outfit"] body {
-    --font-sans: var(--font-outfit);
+    --font-sans: "Outfit", sans-serif;
   }
   html[data-font="geistMono"] body {
-    --font-sans: var(--font-geist-mono);
+    --font-sans: "Geist Mono", monospace;
   }
   html[data-font="geistPixelSquare"] body {
-    --font-sans: var(--font-geist-pixel-square);
+    --font-sans: "Geist Mono", monospace;
   }
   html[data-font="jetBrainsMono"] body {
-    --font-sans: var(--font-jetbrains-mono);
+    --font-sans: "JetBrains Mono", monospace;
   }
   html[data-font="notoSerif"] body {
-    --font-sans: var(--font-noto-serif);
+    --font-sans: "Noto Serif", serif;
   }
   html[data-font="robotoSlab"] body {
-    --font-sans: var(--font-roboto-slab);
+    --font-sans: "Roboto Slab", serif;
   }
   html[data-font="merriweather"] body {
-    --font-sans: var(--font-merriweather);
+    --font-sans: "Merriweather", serif;
   }
   html[data-font="lora"] body {
-    --font-sans: var(--font-lora);
+    --font-sans: "Lora", serif;
   }
   html[data-font="playfairDisplay"] body {
-    --font-sans: var(--font-playfair-display);
+    --font-sans: "Playfair Display", serif;
   }
 }
 
