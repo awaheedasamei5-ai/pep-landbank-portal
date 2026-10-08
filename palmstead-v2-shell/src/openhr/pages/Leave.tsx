@@ -47,9 +47,14 @@ const Leave: React.FC<LeaveProps> = ({ user, autoOpen, openLeaveId }) => {
     }
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     setIsInitializing(true);
-    refreshData(); 
+    refreshData();
+  }, [user.id]);
+
+  // Cross-device live sync -- see AttendanceLogs.tsx's identical comment.
+  useEffect(() => {
+    return hrService.subscribe(refreshData);
   }, [user.id]);
 
   if (isInitializing) {

@@ -114,6 +114,15 @@ const AttendanceLogs: React.FC<AttendanceLogsProps> = ({ user, viewMode = 'MY', 
     fetchInitialData();
   }, [user.id, viewMode, user.role]);
 
+  // Cross-device live sync: a check-in/correction/absent-mark on another
+  // device calls apiClient.notify() after writing -- the realtime bridge
+  // (src/openhr/services/realtime.ts) also calls it on any remote
+  // attendance_log/attendance_policy change -- refetch so this screen
+  // never needs a manual refresh to see it.
+  useEffect(() => {
+    return hrService.subscribe(fetchInitialData);
+  }, [user.id, viewMode, user.role]);
+
   // Deep link: pre-filter to specific employee when filterEmployeeId is provided
   useEffect(() => {
     if (filterEmployeeId && employees.length > 0) {
