@@ -1,6 +1,6 @@
 
 import { supabase, isSupabaseConfigured, getSupabaseStorageUrl } from './supabase';
-import { apiClient, dedupe, resolveOrgId } from './api.client';
+import { apiClient, dedupe } from './api.client';
 import { Employee } from '../types';
 
 let cachedEmployees: Employee[] | null = null;
@@ -11,29 +11,39 @@ const SUPABASE_FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
   : null;
 
+// Real profiles columns (confirmed live): id, email, name, role, agent_key,
+// active, created_at, avatar, birthday, phone, whatsapp, social_handles,
+// signature_data, position, address, id_number, last_seen_at, widget_token
+// -- no employee_id/line_manager_id/team_id/shift_id/organization_id/
+// department/designation/joining_date/mobile/emergency_contact/salary/
+// status/employment_type/location/work_type/verified at all (OpenHRApp's
+// own multi-tenant Employee fields this project's real HR data doesn't
+// track yet). `id` is agent_key, not the uuid primary key -- matches the
+// identity convention AuthContext.tsx already established (every other
+// service here keys off agent_key, not profiles.id).
 function mapProfileToEmployee(r: any): Employee {
   return {
-    id: r.id,
-    employeeId: r.employee_id || '',
-    lineManagerId: r.line_manager_id || undefined,
-    teamId: r.team_id || undefined,
-    shiftId: r.shift_id || undefined,
-    organizationId: r.organization_id,
+    id: r.agent_key,
+    employeeId: r.agent_key,
+    lineManagerId: undefined,
+    teamId: undefined,
+    shiftId: undefined,
+    organizationId: undefined,
     name: r.name || 'No Name',
-    email: r.email || r.work_email || '',
+    email: r.email || '',
     role: (r.role || 'EMPLOYEE').toUpperCase(),
-    department: r.department || 'Unassigned',
-    designation: r.designation || 'Staff',
+    department: '',
+    designation: r.position || 'Staff',
     avatar: r.avatar ? getSupabaseStorageUrl('avatars', r.avatar) : undefined,
-    joiningDate: r.joining_date || '',
-    mobile: r.mobile || '',
-    emergencyContact: r.emergency_contact || '',
-    salary: r.salary || 0,
-    status: r.status || 'ACTIVE',
-    employmentType: r.employment_type || 'PERMANENT',
-    location: r.location || '',
-    workType: r.work_type || 'OFFICE',
-    verified: !!r.verified,
+    joiningDate: '',
+    mobile: r.phone || r.whatsapp || '',
+    emergencyContact: '',
+    salary: 0,
+    status: r.active === false ? 'INACTIVE' : 'ACTIVE',
+    employmentType: 'PERMANENT',
+    location: r.address || '',
+    workType: 'OFFICE',
+    verified: true,
   } as any;
 }
 
@@ -46,21 +56,16 @@ export const employeeService = {
   async getEmployees(): Promise<Employee[]> {
     if (cachedEmployees && Date.now() - empCacheTimestamp < EMP_CACHE_TTL) return cachedEmployees;
 
-    const orgId = await resolveOrgId();
-    return dedupe(`employees:${orgId ?? 'none'}`, async () => {
+    return dedupe('employees', async () => {
       if (!isSupabaseConfigured()) {
         console.warn('[EmployeeService] Supabase not configured');
         return [];
       }
       try {
-        let query = supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .order('created', { ascending: false });
-
-        if (orgId) query = query.eq('organization_id', orgId);
-
-        const { data, error } = await query;
+          .order('created_at', { ascending: false });
         if (error) throw error;
 
         console.log(`[EmployeeService] Fetched ${data?.length ?? 0} employees`);
