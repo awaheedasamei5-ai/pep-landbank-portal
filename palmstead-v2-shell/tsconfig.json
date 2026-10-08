@@ -22,7 +22,11 @@
       "@/*": ["./src/*"],
       "react-router": ["./src/webnext-shim/react-router.tsx"],
       "@plane/types": ["./src/openplane/types/index.ts"],
-      "@plane/constants": ["./src/openplane/constants/index.ts"]
+      "@plane/constants": ["./src/openplane/constants/index.ts"],
+      "@plane/utils": ["./src/openplane/utils/index.ts"],
+      "@plane/hooks": ["./src/openplane/hooks/index.ts"],
+      "@plane/i18n": ["./src/openplane/i18n/index.ts"],
+      "@plane/shared-state": ["./src/openplane/shared-state/index.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],

@@ -32,6 +32,10 @@ const nextConfig = {
       // real separate package.
       "@plane/types": "./src/openplane/types/index.ts",
       "@plane/constants": "./src/openplane/constants/index.ts",
+      "@plane/utils": "./src/openplane/utils/index.ts",
+      "@plane/hooks": "./src/openplane/hooks/index.ts",
+      "@plane/i18n": "./src/openplane/i18n/index.ts",
+      "@plane/shared-state": "./src/openplane/shared-state/index.ts",
     },
   },
   async redirects() {

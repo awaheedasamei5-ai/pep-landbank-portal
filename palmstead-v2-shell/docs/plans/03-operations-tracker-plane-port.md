@@ -98,7 +98,15 @@ doesn't build them out into working screens against real data.
 ## Honest status checklist (update as phases complete — do not mark done early)
 
 - [x] Phase 1: types + constants copied, aliased, `tsc -b` clean
-- [ ] Phase 2: utils/i18n/hooks/shared-state copied
+- [x] Phase 2: utils/i18n/hooks/shared-state copied, aliased, `tsc -b` clean
+      (new deps installed: clsx, lodash-es, tailwind-merge, uuid, mobx,
+      mobx-utils, chroma-js, hast/mdast + remark/rehype unified toolchain,
+      sanitize-html, i18next + react-i18next, @makeplane/propel; i18n's
+      `keys.generated.ts` is normally produced by a `tsx` build script at
+      package-build time -- ported that script to plain Node
+      (`src/openplane/i18n/scripts/generate-types.mjs`) and ran it against
+      the copied locale JSON since this isn't a separate pnpm package with
+      its own build step)
 - [ ] Phase 3: Supabase schema replica designed + applied (needs user sign-off)
 - [ ] Phase 4: service layer rebuilt against real schema
 - [ ] Phase 5: editor evaluated/copied if needed

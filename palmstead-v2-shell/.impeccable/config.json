@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "files": [
+          "src/app/layout.tsx"
+        ],
+        "createdAt": "2026-10-08T10:56:58.572Z",
+        "reason": "pre-existing: one of 16 selectable fonts in the template's theme-preset picker (src/lib/fonts/registry.ts), not an imposed default -- unrelated to this session's Operations Tracker work"
+      }
+    ]
+  }
+}
