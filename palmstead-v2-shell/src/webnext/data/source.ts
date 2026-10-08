@@ -2527,8 +2527,11 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapLeaveRequestRow);
       },
       async create(agentKey, agentName, input) {
+        const client = requireClient();
         const year = new Date(input.dates[0]).getFullYear();
-        const { data, error } = await requireClient()
+        const { data: requestNo, error: rpcError } = await client.rpc('next_leave_request_no');
+        if (rpcError) throw rpcError;
+        const { data, error } = await client
           .from('leave_requests')
           .insert({
             agent_key: agentKey,
@@ -2540,6 +2543,7 @@ function createLiveDataSource(): DataSource {
             status: input.asDraft ? 'planned' : 'pending',
             is_emergency: input.isEmergency ?? false,
             deduct_quota: true,
+            request_no: requestNo,
           })
           .select()
           .single();

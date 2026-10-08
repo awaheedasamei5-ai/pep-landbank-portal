@@ -68,6 +68,7 @@ export function LeaveRequestDetailScreen() {
           <p className={styles.sub}>
             {fmtLongDate(firstDate)}
             {lastDate !== firstDate ? ` to ${fmtLongDate(lastDate)}` : ''} &middot; {request.year}
+            {request.requestNo ? ` · ${request.requestNo}` : ''}
           </p>
         </div>
         <span className={styles.statusTag}>{STATUS_LABEL[request.status] ?? request.status}</span>

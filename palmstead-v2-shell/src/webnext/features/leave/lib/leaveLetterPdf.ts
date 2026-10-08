@@ -68,6 +68,12 @@ export function buildLeaveLetterPdf(request: LeaveRequest, staffSignature: strin
     if (/^date:/i.test(line)) {
       doc.setFontSize(10.5);
       doc.text(line, marginR, y, { align: 'right' });
+      if (request.requestNo) {
+        y += 5;
+        doc.setFont('times', 'bold');
+        doc.text(`Ref: ${request.requestNo}`, marginR, y, { align: 'right' });
+        doc.setFont('times', 'normal');
+      }
       doc.setFontSize(11);
       y += 7;
       continue;

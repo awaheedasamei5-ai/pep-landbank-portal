@@ -1853,6 +1853,14 @@ export interface LeaveRequest {
   // entitlement before any of them are confirmed used). See
   // leaveIsConfirmedUsed/leaveDaysConfirmedUsed in leaveLogic.ts.
   usedConfirmedAt: string | null;
+  // Real column `request_no` (migration leave_requests_add_request_no,
+  // Phase 6) -- a real formal reference number (e.g. "LV-202610-0007"),
+  // assigned once at create() time via the next_leave_request_no()
+  // SECURITY DEFINER function (built Phase 1, unused until now). Added
+  // to the generated letter as its own line -- V1's own real letter
+  // never had a reference number, so this is a deliberate enhancement,
+  // not a change to the "exact port" wording on buildLeaveLetterText().
+  requestNo: string | null;
 }
 
 export interface NewLeaveRequest {

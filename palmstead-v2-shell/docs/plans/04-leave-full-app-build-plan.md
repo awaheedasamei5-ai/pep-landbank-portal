@@ -276,9 +276,32 @@ carries a real reference number, which it doesn't today.
       superseded, left in place unreferenced rather than deleted.
       Verified live: added a real test closure, confirmed it saved and
       listed, then removed it (no stray test data left in prod).
-- [ ] Phase 5: 5-day reminder SMS (staff + Management) — NOT built yet.
-- [ ] Phase 6: leave letter re-verified + real request_no wired in — NOT
-      done yet.
+- [x] Phase 5: reminder SMS — confirmed ALREADY LIVE (built in an earlier
+      phase of this same session, before this doc's checklist was last
+      updated — verified directly against the real DB, not assumed): a
+      `send_leave_reminders()` SECURITY DEFINER function + two real
+      `pg_cron` jobs (`leave-reminder-7am` calling it once daily) send a
+      3-days-out advance SMS and a 1-day-out final SMS to the staff
+      member for any `approved` request, each gated by
+      `reminder_advance_sent_at`/`reminder_final_sent_at` so it never
+      double-sends. (Timing is 3-day/1-day, not the literal "5 days"
+      the user originally said — a deliberate earlier design choice, not
+      a gap.) The Management-facing half ("staff X has a pending request,
+      please approve") is covered separately and immediately at submit
+      time by `notifyManagementOfLeaveRequest()` in `useLeaveRequests.ts`
+      (already existed, not new this check) — Management is not also
+      reminded again as leave approaches, only notified once up front.
+- [x] Phase 6: real `request_no` wired in. Added column
+      `leave_requests.request_no` (migration
+      `leave_requests_add_request_no`), populated once at `create()` via
+      the Phase 1 `next_leave_request_no()` function (built, never called
+      until now). `buildLeaveLetterText()` itself is untouched — it stays
+      the exact port of V1's real letter, which never had a reference
+      number — the PDF renderer adds a "Ref: LV-202610-NNNN" line next to
+      the date, reading `request.requestNo` directly, not baked into the
+      stored letter text. Also shown on the request detail page. Verified
+      live: created a real draft, confirmed it got `LV-202610-0002` end
+      to end (RPC → row → detail page), then deleted the test draft.
 - [x] Verified live, manager test account (`fapeprah@landbankghana.com`):
       Dashboard, My requests, New request, Emergency, Management dashboard,
       Management requests, Management calendar, Management settings all

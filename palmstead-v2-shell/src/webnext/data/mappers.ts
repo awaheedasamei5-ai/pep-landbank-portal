@@ -587,6 +587,7 @@ export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
     deductQuota: r.deduct_quota !== false,
     rescheduleNote: (r.reschedule_note as string) ?? null,
     usedConfirmedAt: (r.used_confirmed_at as string) ?? null,
+    requestNo: (r.request_no as string) ?? null,
   };
 }
 
