@@ -285,6 +285,17 @@ const EmployeeLeaveModule: React.FC<Props> = ({ user, balance, history, onRefres
 
   const balanceTypes = leaveTypes.filter(t => t.hasBalance);
 
+  // Staff dashboard ask (2026-10-08): "how many leaves left, total leaves,
+  // what leave have been taken, filter for the various types of leaves."
+  // Days-remaining cards already existed; taken-this-year and the type
+  // filter did not.
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('ALL');
+  const currentYear = new Date().getFullYear();
+  const takenThisYear = history
+    .filter(r => r.status === 'APPROVED' && new Date(r.startDate || r.appliedDate).getFullYear() === currentYear)
+    .reduce((sum, r) => sum + (r.totalDays || 0), 0);
+  const filteredHistory = historyTypeFilter === 'ALL' ? history : history.filter(r => r.type === historyTypeFilter);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
@@ -347,10 +358,28 @@ const EmployeeLeaveModule: React.FC<Props> = ({ user, balance, history, onRefres
         ))}
       </div>
 
+      <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Taken this year ({currentYear})</p>
+          <p className="text-3xl font-semibold text-slate-900 mt-1">{takenThisYear} <span className="text-sm font-medium text-slate-400">day{takenThisYear !== 1 ? 's' : ''}</span></p>
+        </div>
+        <p className="text-[10px] font-bold text-slate-300 uppercase text-right">Approved requests only<br />whose dates fall in {currentYear}</p>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-100 p-8">
-        <h4 className="font-semibold text-slate-900 mb-6 uppercase tracking-widest text-xs text-slate-400">My Application History</h4>
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <h4 className="font-semibold text-slate-900 uppercase tracking-widest text-xs text-slate-400">My Application History</h4>
+          <select
+            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold uppercase tracking-widest outline-none"
+            value={historyTypeFilter}
+            onChange={e => setHistoryTypeFilter(e.target.value)}
+          >
+            <option value="ALL">All types</option>
+            {leaveTypes.map(lt => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
+          </select>
+        </div>
         <div className="space-y-3">
-          {history.map(req => (
+          {filteredHistory.map(req => (
             <div key={req.id} id={`leave-req-${req.id}`} className="p-5 rounded-3xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-white hover:shadow-md transition-all group">
               <div className="flex items-center gap-4">
                  <div className={`w-2 h-12 rounded-full flex-shrink-0 ${req.status === 'APPROVED' ? 'bg-emerald-500' : req.status === 'REJECTED' ? 'bg-rose-500' : 'bg-amber-500'}`}></div>
@@ -377,7 +406,7 @@ const EmployeeLeaveModule: React.FC<Props> = ({ user, balance, history, onRefres
               </div>
             </div>
           ))}
-          {history.length === 0 && <p className="text-center text-slate-400 text-xs font-semibold uppercase tracking-widest py-8">No applications found.</p>}
+          {filteredHistory.length === 0 && <p className="text-center text-slate-400 text-xs font-semibold uppercase tracking-widest py-8">No applications found.</p>}
         </div>
       </div>
 
