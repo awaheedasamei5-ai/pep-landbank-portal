@@ -9009,11 +9009,11 @@ function salesDeskGroupsForAgent(){
       {r:'plotrequests',fic:'plotrequest',label:'Plot Requests'}
     ]},
     {title:'Inventory & records',items:[
-      ...(canManagePlots()?[{r:'allocations',fic:'allocation',label:'Allocations'}]:[]),
-      ...(canViewClientDatabase()?[{r:'clientdb',fic:'clientdb',label:'Client Database'}]:[])
+      ...(hasToolAccess('Allocations')?[{r:'allocations',fic:'allocation',label:'Allocations'}]:[]),
+      ...(hasToolAccess('Client Database')?[{r:'clientdb',fic:'clientdb',label:'Client Database'}]:[])
     ]},
     {title:'Leads & referrals',items:[
-      ...(canViewClientDatabase()?[{r:'companyleads',fic:'companyleads',label:'Company Leads'}]:[]),
+      ...(hasToolAccess('Company Leads')?[{r:'companyleads',fic:'companyleads',label:'Company Leads'}]:[]),
       {r:'referralsapp',fic:'gift',label:'Referrals'}
     ]}
   ].filter(g=>g.items.length);
@@ -9110,14 +9110,13 @@ function viewMgrSalesDesk(){
 }
 function officeDeskGroups(){
   const isMgr=PROFILE.role==='manager';
-  const showCompanyLeads=isMgr||canViewClientDatabase();
   return [
     {title:'Documents',items:[
       {key:'Memorandum',fic:'memo',label:'Memorandum',badgeCountKey:'memo'},
       {key:'Quotation',fic:'quote',label:'Quotation'},
-      ...(canManageContracts()?[{key:'Contract of Sale',fic:'contract',label:'Contract of Sale',badgeCountKey:'contractRequest'}]:[]),
+      ...(hasToolAccess('Contract of Sale')?[{key:'Contract of Sale',fic:'contract',label:'Contract of Sale',badgeCountKey:'contractRequest'}]:[]),
       {key:'Leave Schedules',fic:'calendar',label:'Leave Schedules'},
-      ...(showCompanyLeads?[{key:'Site Visit Auth',fic:'sitevisitauth',label:'Site Visit Auth'}]:[]),
+      ...(hasToolAccess('Site Visit Auth')?[{key:'Site Visit Auth',fic:'sitevisitauth',label:'Site Visit Auth'}]:[]),
       {key:'Notes',fic:'notes',label:'Notes'}
     ]},
     {title:'Operations',items:[
@@ -9129,8 +9128,8 @@ function officeDeskGroups(){
       ...(isMgr?[{key:'Staff Report',fic:'reportdoc',label:'Staff Report'}]:[])
     ]},
     {title:'Money',items:[
-      ...(canManagePayments()?[{key:'Log Payment',fic:'payment',label:'Log Payment'}]:[]),
-      ...(canManageExpenses()?[{key:'Expenses',fic:'expense',label:'Expenses',badgeCountKey:PROFILE.role==='manager'?'approvals':null}]:[]),
+      ...(hasToolAccess('Log Payment')?[{key:'Log Payment',fic:'payment',label:'Log Payment'}]:[]),
+      ...(hasToolAccess('Expenses')?[{key:'Expenses',fic:'expense',label:'Expenses',badgeCountKey:PROFILE.role==='manager'?'approvals':null}]:[]),
       ...(isMgr?[{key:'Commission',fic:'commission',label:'Commission'}]:[])
     ]},
     {title:'Insights',items:[
@@ -9300,7 +9299,7 @@ function viewDownloads(){
     </div></div>`;
   const quickAccess=[
     {label:'Quotation',route:()=>openQuotationRequest(),fic:'quote'},
-    ...(canManageContracts()?[{label:'Contract of Sale',route:()=>route('contractapp'),fic:'contract'}]:[]),
+    ...(hasToolAccess('Contract of Sale')?[{label:'Contract of Sale',route:()=>route('contractapp'),fic:'contract'}]:[]),
     ...(PROFILE.role==='manager'?[{label:'Management Reports',route:()=>route('mgmtreports'),fic:'reportdoc'}]:[])
   ];
   V.innerHTML=`${back(homeRoute)}<div class="pagehead"><div><h2>Document Vault</h2><p>${all.length} file${all.length===1?'':'s'} · ${PROFILE.role==='manager'?'every file downloaded by the team':'everything you have downloaded from this account'}</p></div></div>
@@ -14981,7 +14980,6 @@ function openLogMonthPayment(lead,slotKey,expected){
 let LOGPAY_SELECTED_LEAD=null, LOGPAY_QUERY='', logPayTab='dashboard';
 async function viewLogPaymentApp(){
   if(guardToolAccess('Log Payment','officedesk')) return;
-  if(!canManagePayments()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Payment entry is restricted to Elias and Management.'); return; }
   LOGPAY_SELECTED_LEAD=null; LOGPAY_QUERY='';
   const isMgr=PROFILE.role==='manager';
   const pendingCount=(DB.pendingPayments||[]).length;
@@ -15293,7 +15291,6 @@ function svaMoney(n){ n=num(n); return n?n.toFixed(2):'-'; }
 let SVA_MAIN_TAB='logistics';
 async function viewSiteVisitAuth(weekStartArg,dayArg){
   if(guardToolAccess('Site Visit Auth','officedesk')) return;
-  if(!canViewClientDatabase()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Restricted','Site Visit Authorization is limited to Management, Elias, Emmanuel and Elizabeth.'); return; }
   SVA_WEEK_START=weekStartArg||currentWeekStartIso();
   SVA_SELECTED_DAY=dayArg||null;
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Daily logistics</div><h2>Site Visit Authorization</h2><p>Pick a day, estimate and reconcile that day's site-visit costs, then get Management's approval.</p></div></div>
@@ -18660,7 +18657,6 @@ function readImageFileAsDataUri(file,maxW){
 let CONTRACTAPP_QUERY='', contractAppTab='generate', CONTRACT_REQUESTS_LOADED=false;
 async function viewContractApp(){
   if(guardToolAccess('Contract of Sale','officedesk')) return;
-  if(!canManageContracts()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Restricted','Contract of Sale is limited to Elizabeth and Management.'); return; }
   CONTRACTAPP_QUERY='';
   if(!CONTRACT_REQUESTS_LOADED){ try{ DB.contractRequests=await withLoadTimeout(apiLoadContractRequests(),15000,'Contract requests'); CONTRACT_REQUESTS_LOADED=true; }catch(e){} }
   const pendingCount=(DB.contractRequests||[]).filter(r=>r.status==='pending').length;
@@ -22874,7 +22870,6 @@ async function apiUpsertDailyBalance(date,cash,momo,bank){
 // filtering for the other half of this carve-out.
 async function viewExpensesApp(){
   if(guardToolAccess('Expenses','officedesk')) return;
-  if(!canManageExpenses()){ V.innerHTML=back('officedesk')+emptyState(ic.doc,'Elias/Management only','Expenses are restricted to Elias and Management.'); return; }
   EXP_TAB='funds';
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Operations</div><h2>Expenses</h2><p>Log spending, request funds, and track the daily cash/MoMo/bank position.</p></div></div>
   <div class="pipeStatStrip" id="expStatStrip"></div>
