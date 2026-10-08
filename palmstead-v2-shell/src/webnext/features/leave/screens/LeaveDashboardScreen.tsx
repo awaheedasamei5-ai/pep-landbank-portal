@@ -79,6 +79,9 @@ export function LeaveDashboardScreen() {
           <Link href="/dashboard/leave/emergency" className={styles.emergencyBtn}>
             🚨 Emergency Leave
           </Link>
+          <Link href="/dashboard/leave/plan" className={styles.managementBtn}>
+            My leave plan
+          </Link>
           <Link href="/dashboard/leave/requests/new" className={styles.addBtn}>
             + Request leave
           </Link>

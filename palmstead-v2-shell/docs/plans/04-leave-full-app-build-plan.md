@@ -222,9 +222,14 @@ carries a real reference number, which it doesn't today.
       cards, month calendar, manager-only "Team leave coming up" teaser +
       Management button, recent requests teaser. Zero console errors from
       app code.
-- [ ] Phase 4: UI — Plan (prefill for the year) — NOT built yet; `/requests/new`
-      covers one-shot requests, not the distinct multi-month prefill flow
-      the plan calls for.
+- [x] Phase 4: UI — Plan (prefill for the year): built `/dashboard/leave/plan`
+      — distinct from `/requests/new` (a one-shot request): the year's
+      balance ring, a 12-month strip highlighting which months already
+      have a planned block, and the list of still-`planned` drafts
+      (reuses `PlannedLeaveRow` — send/edit/delete), with a prominent
+      "+ Add a leave block" into the existing new-request flow. Linked
+      from the Dashboard header. Verified live: real data, zero app-code
+      console errors.
 - [x] Phase 4: UI — My requests (list + filters): own route
       (`/leave/requests`), status + year filters via `?status=`/`?year=`
       query params, verified live (manager test account currently has 0

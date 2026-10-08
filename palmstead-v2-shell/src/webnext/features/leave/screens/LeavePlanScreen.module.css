@@ -1,0 +1,40 @@
+.wrap { padding: 20px 16px 90px; display: flex; flex-direction: column; gap: 16px; }
+
+@media (width >= 1024px) {
+  .wrap { padding: 28px 32px 40px; max-width: 560px; }
+}
+
+.backLink { font-size: 12px; font-weight: 700; color: var(--c-accent); text-decoration: none; }
+.head { display: flex; flex-direction: column; gap: 2px; }
+.title { font-size: 20px; margin: 4px 0 2px; }
+.sub { color: var(--c-muted); margin: 0; font-size: 13px; line-height: 1.5; }
+
+.monthStrip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.monthChip {
+  text-align: center;
+  padding: 8px 0;
+  border-radius: var(--r-md);
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--c-muted);
+}
+.monthPlanned { background: var(--c-accent-soft); color: var(--c-accent); border-color: var(--c-accent); }
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 18px;
+  border-radius: var(--r-pill);
+  background: var(--c-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.sectitle { font-size: 13px; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; margin: 0; }
+.hint { font-size: 12px; color: var(--c-muted); margin: 0; }
+.list { display: flex; flex-direction: column; gap: 8px; }
