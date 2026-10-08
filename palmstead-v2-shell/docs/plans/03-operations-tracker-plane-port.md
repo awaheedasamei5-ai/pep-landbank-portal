@@ -77,6 +77,14 @@ doesn't build them out into working screens against real data.
    the Phase 3 schema, keeping the same service method signatures/shapes the
    UI layer (`apps/web`) already expects, so the UI code above them stays a
    true raw duplicate.
+   **Scope correction (measured, not estimated):** `apps/web` doesn't call
+   `@plane/services` directly — it goes through its own 78 MobX store files
+   (`apps/web/store/`, e.g. `store/issue/` alone has 6 subdirectories:
+   archived/cycle/helpers/issue-details/module/profile/project/project-views/
+   workspace/workspace-draft). Rewriting `@plane/services` against Supabase
+   is still the right layer to target (keeps the store layer UNTOUCHED,
+   true raw duplicate), but "the data layer" is two layers deep, not one —
+   both need to exist and agree on shape before any screen renders real data.
 
 5. **`@plane/editor`**: plane's issue/page descriptions use a real rich-text
    editor package. Duplicate if the UI needs it for issue descriptions/pages;
