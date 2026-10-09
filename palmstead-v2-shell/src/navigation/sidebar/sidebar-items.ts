@@ -131,6 +131,7 @@ export const sidebarItems: NavGroup[] = [
     id: 4,
     label: "Communication",
     items: [
+      { id: "announcements", title: "Announcements", url: "/dashboard/announcements", icon: Megaphone },
       { id: "notifications", title: "Notifications", url: NOT_BUILT_YET, icon: Bell },
       { id: "chat", title: "Chat", url: NOT_BUILT_YET, icon: MessageSquare },
     ],

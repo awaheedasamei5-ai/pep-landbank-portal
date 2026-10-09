@@ -86,7 +86,13 @@ Built at `/dashboard/directory` (new "Team" sidebar group), `directory-screen.ts
 - No department assigned yet — show "Unassigned" group, not an error.
 - External contact with no email AND no phone — allow it (a name-and-notes-only entry is still useful), just show neither icon on the card.
 
-### B.2 Announcements
+### B.2 Announcements — DONE 2026-10-09
+
+Built at `/dashboard/announcements` (Communication sidebar group) + a real bell/badge in the header (`announcements-bell.tsx`, mounted in `dashboard/layout.tsx`). **Real discovery before building anything**: `announcements` and `announcement_comments` already existed in V2's own schema as a dormant real replica of V1's table (identical columns, real RLS already in place: everyone reads, manager-only insert/update/delete) -- a net-new `announcement_comments` table V1 doesn't even have was already there too, with its own real RLS, unused by any frontend. Migration `announcements_reads_and_category` added only what was genuinely missing: `category`/`expires_at` columns and a real `announcement_reads` table (replacing V1's `pep_dismissed_announce` localStorage-only dismiss, which never synced across devices). Category list fetched from the real source repo's own `lib/announcement-categories.ts` (10 real categories), not invented.
+
+`npx tsc -b` clean. Verified live as manager: real historical V1 announcement data surfaced immediately (including real staff comment threads), marking one read correctly moved it to Archive and dropped the bell count 4→3, publishing a real new announcement correctly appeared as unread and bumped the bell back to 4. Verified in dark mode too.
+
+**Original B.2 spec, for reference:**
 
 **V1 parity**: V1 already has a real company-wide "News & Announcements" feature with a dismiss-per-announcement mechanism (`dismissedAnnouncements()`/`dismissAnnouncement()` in index.html) and a bell-badge unread indicator. This is the ONE module where V1 logic is the primary spec, not the repo.
 
