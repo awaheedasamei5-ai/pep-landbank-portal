@@ -12,14 +12,16 @@ V2 blueprint (the published "Palmstead V2 Blueprint" artifact) and the V3 PDF (`
 
 ## Part A — Foundation (applies to every module below)
 
-### A.1 Role & permission model — do NOT copy the repo's 5-role system
+### A.1 Role & permission model — do NOT copy the repo's 5-role system, AND do not port V1's either
 
-The real repo uses 5 roles (`employee`, `admin`, `director`, `accounts`, `reception`) with a static `roles: string[]` allow-list per nav item (see `sidebar.tsx`). Palmstead has 2 roles (`agent`, `manager`) and the real staff (Elias handles ops/payments, Emmanuel ops, Elizabeth contracts, Adams digital ops) don't map cleanly onto "director/accounts/reception" as fixed roles — V1 already solved this with named-individual permission carve-outs (`canManagePayments()` etc.), and today's V1 session built a genuinely intelligent, per-staff, per-app **Tool Access** system precisely for this shape of problem (Staff Settings → Full / View only / No access, per app, per person, with role-aware defaults).
+**Corrected 2026-10-09, before any item-2 code was written**: the original draft of this section assumed V1's `tool_access` JSONB system needed porting into V2. That was wrong -- V1 and V2 are separate Supabase projects (`lrahgcnftetnyxunaljs` vs `sbydzrlzqxcdbudjaube`, see `webnext-and-v1-are-separate-supabase-projects` memory), and a direct schema audit of V2's own real database (not assumed) found **V2 already has its own real, live, proven permission system**, already wired into existing Sales-desk back-office features:
+- `permissions(key, label, description)` -- the catalog (4 real rows today: `allocations.manage`, `contracts.generate`, `ops.view_all`, `payments.manage`).
+- `role_permissions(role, permission_key)` -- default grants per role (`agent`/`manager`).
+- `staff_permission_overrides(staff_key, permission_key, granted, granted_by, granted_at)` -- per-person override, wins over the role default.
+- `has_permission(p_key text)` -- real `SECURITY DEFINER` SQL function: manager always true, else override if one exists, else role default, else false. Already the real gate other RLS policies check.
+- `set_permission_override(staff_key, permission_key, granted)` / `clear_permission_override(...)` -- manager-only RPCs, already write to the real audit table (next point) on every change.
 
-**Decision: reuse and extend that same Tool Access model in V2, not this repo's role array.** Concretely:
-- Every module in this plan becomes one more entry in a `tool_access` JSONB column on `profiles` (mirroring V1's schema), with a `defaultToolAccessLevel(toolKey, profile)` function computing a sensible default per person (e.g. "IT Portal admin view" defaults full only for Adams, matching his digital-ops role) and an explicit per-person override winning when set.
-- **The V1 lesson, applied from day one, not bolted on after**: V1's Tool Access bug was that the UI layer (which nav tile shows) and the database layer (RLS policies) were never wired together — a grant updated Staff Settings but not the actual data access. In V2, every module's RLS policy is written to check the SAME `tool_access` override as the nav gate, from the first migration, not retrofitted after a gap is discovered live. A `my_tool_access(tool_key text)` SQL helper (same `SECURITY DEFINER` + `search_path` pattern already proven in V1 today) is part of the Core Infrastructure migration (A.4), before any module-specific table.
-- A new Management-only **Staff Settings** screen (`/dashboard/settings/staff`, item 3 in the build order — this plan notes where item 2 and item 3 touch, but item 3 itself is out of scope here) is where these per-app grants get set, exactly like V1's real Staff Settings → Tool Access panel.
+**Decision: every item-2 module gates through `has_permission('module.action')`, not a new `tool_access` JSONB column.** New permission keys get inserted into the existing `permissions` table per module (e.g. `notice_board.delete_others`, `polls.create_restricted`), following the exact same shape as the 4 that already exist. This is MORE correct than the original plan, not a downgrade: it's binary per-action rather than a 3-level "Full/View/No access" blob, which maps cleanly onto "can this person post/moderate/approve X," and it's already proven live (no UI/DB wiring gap to retrofit, since the gap V1 hit doesn't exist here -- `has_permission()` IS the RLS check already). A real admin UI for managing these grants doesn't exist yet (`/dashboard/roles` is still the template's fake demo data -- confirmed by reading it directly) -- that UI is item 3 (Staff Settings)'s own scope, same boundary as the original plan intended, just built on the real existing tables instead of a new one.
 
 ### A.2 Auth hardening — close the flagged gap from item 1's own notes
 
@@ -41,11 +43,13 @@ Every nav item routes through the SAME `hasToolAccess(toolKey)` gate (A.1), not 
 
 ### A.4 Core Infrastructure migration (build this first, before any module screen)
 
-One migration, mirroring the repo's `001_initial_schema.sql` structure but scoped to what's genuinely new for Palmstead (profiles/departments/locations already exist in some form — audit against the live schema before writing this, don't assume the repo's shape 1:1):
-- `my_tool_access(tool_key text)` helper function (A.1).
-- `departments` / `locations` tables IF Palmstead doesn't already have an equivalent (check `app_config`/`office_locations` from today's V1 Attendance work first — `office_locations` already exists and may cover `locations` entirely).
-- `audit_logs` table, matching the repo's real shape (`actor_id`, `action` enum, `entity_table`/`entity_id`, `before_data`/`after_data` JSONB) — this is genuinely valuable infrastructure every module below writes to, and Palmstead doesn't have a generic audit table yet (V1 has scattered activity logs per-feature, not one unified table).
-- `user_approvers` (up to 3 approvers per person, priority-ordered) — useful if Corrections/Complaints need a routed-approval chain; confirm against real Palmstead management structure (is it always "Management," or does Elias/Emmanuel/Elizabeth approve their own team's requests?) before building this generically.
+**Corrected 2026-10-09 after a real schema audit** (`information_schema.tables`/`pg_proc` queried directly against `sbydzrlzqxcdbudjaube`, not assumed):
+- ~~`my_tool_access(tool_key text)` helper~~ -- not needed, `has_permission(p_key)` already exists and is the real gate (A.1).
+- `departments` / `locations` -- `office_locations` already exists and covers locations. No `departments` table exists; per B.1's own note, Palmstead's 7-person headcount doesn't need one yet -- a plain text/select field on `profiles` covers it, revisit only if headcount grows.
+- ~~`audit_logs` table~~ -- **not needed, a real one already exists**: `audit_events` (category/event_type/severity/actor_key/actor_name/entity_type/entity_id/summary/detail/source), written via the real `record_audit_event(category, event_type, severity, entity_type, entity_id, summary, detail)` function, already in active use by the permission-override RPCs above. Every item-2 module writes here, not to a new table.
+- `user_approvers` (up to 3 approvers per person, priority-ordered) -- still genuinely not built anywhere; confirm against real Palmstead management structure before building this generically, only when a module (Corrections/Complaints) actually needs a routed-approval chain rather than "any manager."
+
+**Net effect: Core Infrastructure has no new migration of its own.** Every module below either extends `permissions` with its own keys or creates its own table -- there's no separate "Part A migration" to write first; A.1-A.3/A.5 are conventions every module follows, not a schema to stand up in advance.
 
 ### A.5 Realtime sync — every module, from the start
 
@@ -94,7 +98,7 @@ Per the OSS-foundation master instruction (Section 8) and today's V1 lesson (a r
 
 **Staff experience**: a visual board (sticky-note-style cards, each with its own colour per the `colour` field) — "selling a desk chair," "anyone want to carpool," "team lunch Friday" — lighter-weight than Announcements (no author gravitas implied, no read-tracking, just a shared corkboard). Post one with an optional link (e.g. a poll link, a shared doc), pick from a small colour palette. Posts with an `expires_at` auto-fade/archive.
 
-**Management experience**: same posting UI, no special admin powers beyond what any staff member has (the open-board model is intentional) — EXCEPT a Palmstead-specific addition: since this is real staff data in a small company, add a simple "report" action that notifies Management if a post needs removal for a reason beyond "I'm done with it," rather than giving every staff member unrestricted delete of everyone else's posts by default. This is a deliberate, documented deviation from the repo's `notice_delete_any` openness — a small 7-person team split between an open board (matches the repo) and unrestricted mutual delete power (a real moderation risk the repo's own larger-org assumption doesn't carry over cleanly) is worth Management's own call before building either way — **flag this as an open decision for the user**, don't silently pick one.
+**Management experience**: same posting UI, no special admin powers beyond what any staff member has, EXCEPT deleting someone else's post. **Decided by the user 2026-10-09: report-to-Management, not open delete.** Every staff member can post/edit/delete their OWN posts freely; attempting to remove someone else's post files a report (notifies Management) instead of deleting it outright. This is a deliberate, documented deviation from the repo's `notice_delete_any` openness.
 
 **Data model**: `notice_board_posts` as in the real migration, field-for-field.
 
@@ -151,7 +155,7 @@ Each of these needs its own dedicated repo-file read (the real page/client/actio
 5. **Calendar** (`/calendar`) — schema read (migration 001: `calendar_events`, sourced from leave/wfh/visitors/holidays via `source_table`/`source_id`) — a real aggregation layer over other modules' own events, build this AFTER the modules it aggregates (Leave is already item 1; Visitors/Corrections/WFH need their own pass first).
 6. **Diary** (`/diary`) — schema read (migration 001: private per-user notes with tags + optional reminder) — closest V1 analog is V1's own "Notes" app (private per-agent notes already in ALL_GRANTABLE_TOOLS from today's work) — check for overlap before building a second private-notes feature.
 7. **Office Today / seating canvas** (`/office`, `office-canvas.tsx`) — not yet read; genuinely novel concept (a visual "who's in today, where are they sitting" canvas) with no V1 equivalent and no schema read yet.
-8. **AI chat bubble** (`components/chat/chat-bubble.tsx`, `app/api/chat/route.ts`) — ties directly into the OSS-foundation master instruction's AI Assistant requirements (Section 5: "must become a Palmstead intelligence layer... retrieve authorized information, summarize activities, identify overdue work...") — this is likely better scoped as part of build-order item 6 (AI Assistant) rather than item 2, since the master instruction describes a cross-ecosystem capability, not a staff-portal-local widget. **Flag for the user**: confirm whether this chat bubble belongs in item 2 or should be deferred to item 6 before building it.
+8. **AI chat bubble** — **Decided by the user 2026-10-09: deferred to build-order item 6 (AI Assistant).** Not built as part of item 2. Item 6 builds the real cross-app intelligence layer the master instruction describes, not a staff-portal-local widget here.
 
 ---
 
