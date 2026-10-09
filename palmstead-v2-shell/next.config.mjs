@@ -5,9 +5,36 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactCompiler: true,
+  // Real fix for the "Compiling... freezes the tab" complaint: the React
+  // Compiler's Babel transform runs on every file on every dev compile,
+  // which is a production-only memoization win with zero dev benefit --
+  // it was adding real overhead to the already-slow first-visit compile
+  // of every route (several routes measured 2-11s cold in dev server
+  // logs). Full per-route code-splitting of the heavier libs (exceljs,
+  // jspdf, d3-geo/topojson, FullCalendar) is a separate, larger follow-on
+  // -- this is the single highest-leverage lever available without
+  // restructuring every page's imports.
+  reactCompiler: process.env.NODE_ENV === "production",
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
+  },
+  experimental: {
+    // Second lever for the same cold-compile problem: these are large
+    // barrel-export packages (simple-icons alone is 3000+ icon modules,
+    // radix-ui/@base-ui/react re-export dozens of primitives, recharts
+    // and date-fns are both sizeable) that this app imports named
+    // exports from all over the place. Without this, a route that
+    // imports one icon from simple-icons can pull the whole package's
+    // module graph into that route's dev compile.
+    optimizePackageImports: [
+      "lucide-react",
+      "simple-icons",
+      "radix-ui",
+      "@base-ui/react",
+      "recharts",
+      "date-fns",
+      "lodash-es",
+    ],
   },
   // Real web-next Sales-desk screens/hooks (src/webnext/) are copied in
   // verbatim and import from the 'react-router' package unedited -- this
