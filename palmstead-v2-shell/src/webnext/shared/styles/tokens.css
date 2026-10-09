@@ -2,9 +2,26 @@
    Design Language" artifact for the full research/rationale. This file
    is the SINGLE highest-leverage lever for the visual redesign: every
    component in this app was already built against these variable
-   NAMES (var(--green), var(--card), var(--ok)...), so redefining their
-   VALUES here re-skins the entire app in one place, with zero risk of
-   breaking any individual screen's layout.
+   NAMES (var(--green), var(--wn-card), var(--ok)...), so redefining
+   their VALUES here re-skins the entire app in one place, with zero
+   risk of breaking any individual screen's layout.
+
+   REAL BUG FOUND AND FIXED 2026-10-09: --card and --muted were
+   originally aliased under those exact names, colliding with shadcn's
+   own reserved --card/--muted design tokens (bg-card, bg-muted) used
+   by every real shadcn component (Card, Skeleton, Avatar, Badge...)
+   across the ENTIRE app, since .webnext-theme wraps every dashboard
+   page's content (dashboard/layout.tsx), not just migrated web-next
+   screens. --muted's real value here (#6A6E8E, a muted TEXT color)
+   silently overrode shadcn's own --muted BACKGROUND token everywhere,
+   producing near-invisible low-contrast text on bg-muted elements
+   app-wide (caught live building the Directory screen's Avatar
+   fallback). --card similarly diverged from the shell's real dark-mode
+   --card value (navy-purple #141530 instead of the shell's real
+   neutral oklch(0.205 0 0)). Renamed to --wn-card/--wn-muted -- no
+   other prefix change needed, since every OTHER legacy name here
+   (--paper, --text, --line, --green, --gold...) has no shadcn
+   equivalent and was never colliding.
 
    New semantic tokens (--c-*) are the real source of truth, named for
    what they actually are. The legacy names below (--green, --gold,
@@ -42,8 +59,8 @@
   --green: var(--c-accent); --green2: var(--c-accent-soft); --leaf: var(--c-accent-soft);
   --gold: var(--c-accent); --gold2: var(--c-accent-soft);
   --premium: var(--c-accent); --premium2: var(--c-accent-soft);
-  --paper: var(--c-paper); --card: var(--c-card); --line: var(--c-line);
-  --text: var(--c-text); --muted: var(--c-muted);
+  --paper: var(--c-paper); --wn-card: var(--c-card); --line: var(--c-line);
+  --text: var(--c-text); --wn-muted: var(--c-muted);
   --danger: var(--c-danger); --warn: var(--c-warn); --info: var(--c-info); --ok: var(--c-success);
   --shadow: 0 1px 2px rgb(20 22 50 / 5%), 0 10px 28px rgb(20 22 50 / 7%);
   --shadow-lg: 0 18px 44px rgb(20 22 50 / 16%);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDashboardRealtime } from "@/webnext/features/dashboard/hooks/useDashboardRealtime";
+import { usePresenceHeartbeat } from "@/lib/palmstead/use-presence-heartbeat";
 
 // Real user request: an allocation edited/deleted/changed (or a lead,
 // payment, complaint, enquiry, referral, contract, memo...) on one
@@ -11,5 +12,6 @@ import { useDashboardRealtime } from "@/webnext/features/dashboard/hooks/useDash
 // a change must update a screen that isn't even the one currently open.
 export function RealtimeBridge() {
   useDashboardRealtime();
+  usePresenceHeartbeat();
   return null;
 }

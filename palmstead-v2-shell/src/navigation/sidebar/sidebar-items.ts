@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ClipboardList,
   Compass,
+  Contact,
   FileSignature,
   FileText,
   Fingerprint,
@@ -102,6 +103,11 @@ export const sidebarItems: NavGroup[] = [
       { id: "complaints", title: "Complaints", url: "/dashboard/complaints", icon: AlertTriangle },
       { id: "company-leads", title: "Company Leads", url: "/dashboard/company-leads", icon: Building2 },
     ],
+  },
+  {
+    id: 10,
+    label: "Team",
+    items: [{ id: "directory", title: "Directory", url: "/dashboard/directory", icon: Contact }],
   },
   {
     id: 3,

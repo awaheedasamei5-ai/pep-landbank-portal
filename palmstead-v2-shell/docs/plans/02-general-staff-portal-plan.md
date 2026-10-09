@@ -59,7 +59,15 @@ Per the OSS-foundation master instruction (Section 8) and today's V1 lesson (a r
 
 ## Part B — Modules with full detail (V1-parity-checked, repo-file-read, ready to build against)
 
-### B.1 Staff Directory & Profile
+### B.1 Staff Directory & Profile — DONE 2026-10-09
+
+Built at `/dashboard/directory` (new "Team" sidebar group), `directory-screen.tsx` + `use-directory.ts`. Real `external_contacts` table (own-row RLS) + `profiles.department`/`desk_extension` columns added (migration `staff_directory_foundation`). Presence ("who's online now") is real, not simulated: `profiles.last_seen_at` existed in the schema but nothing wrote to it -- added `use-presence-heartbeat.ts`, mounted once in the shared `RealtimeBridge` (every authenticated page), writing a heartbeat every 60s; Directory reads it back and treats the last 5 minutes as online.
+
+**Real systemic bug found and fixed while building this**: `.webnext-theme`'s legacy CSS aliases (`tokens.css`) defined `--card` and `--muted` under those EXACT names, colliding with shadcn's own reserved `--card`/`--muted` design tokens used by every real shadcn component (Card, Skeleton, Avatar, Badge...) across the whole app, since `.webnext-theme` wraps every dashboard page's content, not just migrated web-next screens. `--muted`'s webnext value (`#6A6E8E`, a muted TEXT color) was silently overriding shadcn's `--muted` BACKGROUND token everywhere, producing near-invisible low-contrast text on every `bg-muted` element app-wide (caught live: Directory's avatar initials were invisible). `--card` similarly diverged in dark mode (navy-purple `#141530` instead of the shell's real neutral `oklch(0.205 0 0)`). Renamed to `--wn-card`/`--wn-muted` in `tokens.css`; the one real internal consumer (`AttendanceCalendar.tsx`'s `var(--muted)` for weekend styling) now correctly falls through to the real shadcn token instead of needing an edit. Verified live app-wide (Directory + Operations Tracker, light + dark) -- no regressions, avatar initials now legible, dark-mode cards now neutral instead of purple-tinted.
+
+`npx tsc -b` clean. Verified live: saved a real external contact, confirmed the row's real `owner_key` in the database; staff directory loads all 7 real active profiles with real email/phone tap-to-contact links.
+
+**Original B.1 spec, for reference:**
 
 **What problem it solves**: "Who is this person, how do I reach them, what do they do" — currently scattered across V1 (no dedicated screen) and this shell's own barebones `AccountSwitcher`.
 
