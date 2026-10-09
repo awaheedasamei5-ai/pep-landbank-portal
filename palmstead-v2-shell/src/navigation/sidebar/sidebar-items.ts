@@ -107,7 +107,7 @@ export const sidebarItems: NavGroup[] = [
     id: 3,
     label: "Office",
     items: [
-      { id: "operations-tracker", title: "Operations Tracker", url: NOT_BUILT_YET, icon: ListChecks },
+      { id: "operations-tracker", title: "Operations Tracker", url: "/dashboard/operations", icon: ListChecks },
       { id: "memorandum", title: "Memorandum", url: NOT_BUILT_YET, icon: FileText },
       { id: "attendance", title: "Attendance", url: "/dashboard/attendance", icon: Fingerprint },
       { id: "log-payment", title: "Log Payment", url: NOT_BUILT_YET, icon: Wallet },
