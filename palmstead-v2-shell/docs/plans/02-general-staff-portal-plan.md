@@ -162,7 +162,13 @@ Built at `/dashboard/staff-complaints` (Office sidebar group). **Real collision 
 
 **Data model**: `complaints` table as in the real migration, field-for-field.
 
-### B.6 Team Feedback — gap-check against what already exists
+### B.6 Team Feedback — DONE 2026-10-09
+
+Gap-check confirmed: `feedback`/`feedback_comments` already existed in V2 as a real dormant schema replica of V1's own table (identical shape, real RLS already correct -- own/manager delete, everyone read/insert), completely unwired to any frontend, same pattern as B.2 Announcements and B.4's comment infra. No new table. Built `/dashboard/team-feedback` (Communication sidebar group) porting V1's real logic directly: `FEEDBACK_CATEGORIES` (`Bug`/`Suggestion`/`Feature Request`/`Other`) and the real comment-thread pattern -- not the OSS repo's separate `feedback` table, per the blueprint's own "don't build a duplicate mechanism" instruction.
+
+`npx tsc -b` clean. Verified live: posted real feedback, which surfaced a genuine pre-existing historical entry from Elias ("The system needs an update of the chat", 2 months old, previously invisible with no UI) alongside it; replied on a thread, confirmed the real row and its correct feedback_id join in the database; correct dark-mode rendering.
+
+**Original B.6 spec, for reference:**
 
 V1 already has "Team Feedback" (staff-to-management feedback, distinct from both client feedback and the new HR Complaints above) — confirm it's genuinely ported/working in this shell already (check against item 1's own scope; if not yet ported, this becomes a real small item here) before building anything new under the repo's separate `feedback` table (migration 001: subject, message, category, status). **Do not build a duplicate feedback mechanism** — if V1's Team Feedback already covers this ground, this module in V2 is "port what V1 has," not "build what the repo has," same reasoning as B.2.
 
