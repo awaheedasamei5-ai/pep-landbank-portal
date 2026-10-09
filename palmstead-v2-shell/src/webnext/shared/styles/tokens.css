@@ -61,12 +61,20 @@
 }
 
 /* Dark mode, designed as a first-class theme (not an inverted
-   afterthought) -- automatic via the OS/browser setting. A manual
-   in-app toggle (writing body.dark, kept below for when that ships)
-   isn't wired to any UI yet, so prefers-color-scheme is what actually
-   controls dark mode for everyone today. */
+   afterthought). The shell's real in-app toggle (theme-switcher.tsx /
+   theme-utils.ts's applyThemeMode) sets `.dark` on <html>, resolving
+   "system" to a concrete class itself -- so `html.dark` is the single
+   real source of truth once JS has run. `.webnext-theme` wraps every
+   dashboard page's content (see dashboard/layout.tsx), so it has to
+   react to that ANCESTOR class, not just a class/attribute on itself
+   (which nothing ever set) -- that mismatch was the real bug: toggling
+   the app to dark while the OS stayed light left every page's content
+   area stuck in light tokens while the sidebar/header (real Tailwind
+   `.dark`) went dark around it. prefers-color-scheme is kept only as a
+   pre-hydration fallback for the instant before theme-boot's inline
+   script has run. */
 @media (prefers-color-scheme: dark) {
-  .webnext-theme {
+  html:not([data-theme-mode]) .webnext-theme {
     --c-ink: #EDEEFA; --c-ink-2: #C7CBEF;
     --c-accent: #B794F6; --c-accent-soft: #5B3A96; --c-accent-bg: #241638;
     --c-success: #4FBE85; --c-success-soft: #1F5C3D; --c-success-bg: #0F241A;
@@ -81,7 +89,7 @@
   }
 }
 
-.webnext-theme.dark, .webnext-theme[data-theme='dark'] {
+html.dark .webnext-theme, .webnext-theme.dark, .webnext-theme[data-theme='dark'] {
   --c-ink: #EDEEFA; --c-ink-2: #C7CBEF;
   --c-accent: #B794F6; --c-accent-soft: #5B3A96; --c-accent-bg: #241638;
   --c-success: #4FBE85; --c-success-soft: #1F5C3D; --c-success-bg: #0F241A;
