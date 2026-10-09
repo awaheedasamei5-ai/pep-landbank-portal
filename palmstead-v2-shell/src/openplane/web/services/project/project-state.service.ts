@@ -45,13 +45,24 @@ export class ProjectStateService extends APIService {
     return toPlaneState(row as OpStateRow);
   }
 
-  /** Phase 4b: real update -- clears the project's existing default state first, same single-default invariant plane enforces. */
+  /**
+   * Phase 4b/6: real update -- clears the project's existing default state
+   * first, same single-default invariant plane enforces.
+   * Real bug found live: this only flipped op_states.default (the UI
+   * star), never op_projects.default_state_id (the column createIssue
+   * actually falls back to for a new issue's state) -- the two drifted
+   * out of sync the first time this was exercised from the Settings
+   * panel, so a newly-marked default state wasn't where new issues
+   * actually landed. Both now update together.
+   */
   async markDefault(_workspaceSlug: string, projectId: string, stateId: string): Promise<void> {
     const sb = requireSupabase();
     const { error: clearError } = await sb.from("op_states").update({ default: false }).eq("project_id", projectId);
     if (clearError) throw clearError;
     const { error } = await sb.from("op_states").update({ default: true }).eq("id", stateId);
     if (error) throw error;
+    const { error: projectError } = await sb.from("op_projects").update({ default_state_id: stateId }).eq("id", projectId);
+    if (projectError) throw projectError;
   }
 
   /** Phase 4b: real read from op_states. */

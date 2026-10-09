@@ -18,6 +18,7 @@ import { ALL_ISSUES } from "@plane/constants";
 import { IssueKanbanBoard } from "./issue-kanban-board";
 import { CyclesPanel } from "./cycles-panel";
 import { ModulesPanel } from "./modules-panel";
+import { ProjectSettingsPanel } from "./project-settings-panel";
 
 // Phase 6 issues slice: a real list + a real kanban board for one project,
 // against the real op_issues/op_states rows rewired in issue.service.ts /
@@ -34,7 +35,7 @@ const PRIORITY_VARIANT: Record<string, "outline" | "default" | "destructive"> = 
 };
 
 export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"list" | "board" | "cycles" | "modules">("list");
+  const [view, setView] = useState<"list" | "board" | "cycles" | "modules" | "settings">("list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newIssueName, setNewIssueName] = useState("");
@@ -43,6 +44,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
   const issueRoot = store.issue;
   const projectIssues = issueRoot.projectIssues;
   const stateStore = issueRoot.rootStore.state;
+  const labelStore = issueRoot.rootStore.label;
   const project = store.projectRoot.project.getProjectById(projectId);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
       try {
         await ensureCurrentPlaneUser(requireSupabase(), store.user);
         if (!project) await store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId);
-        await stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId);
+        await Promise.all([stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId), labelStore.fetchProjectLabels(WORKSPACE_SLUG, projectId)]);
         if (view === "board") {
           await projectIssues.fetchIssues(WORKSPACE_SLUG, projectId, "init-loader", {
             canGroup: true,
@@ -104,18 +106,19 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
         title={project?.name ?? "Project"}
         description={project ? `${project.identifier} · real op_issues rows` : undefined}
         action={
-          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles" | "modules")}>
+          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles" | "modules" | "settings")}>
             <TabsList>
               <TabsTrigger value="list">List</TabsTrigger>
               <TabsTrigger value="board">Board</TabsTrigger>
               <TabsTrigger value="cycles">Cycles</TabsTrigger>
               <TabsTrigger value="modules">Modules</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
           </Tabs>
         }
       />
 
-      {view !== "cycles" && view !== "modules" && (
+      {view !== "cycles" && view !== "modules" && view !== "settings" && (
         <Card className="mb-4">
           <CardContent className="flex gap-2 pt-6">
             <Input
@@ -139,6 +142,8 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
         <CyclesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
       ) : view === "modules" ? (
         <ModulesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
+      ) : view === "settings" ? (
+        <ProjectSettingsPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
       ) : view === "list" ? (
         <Card>
           <CardContent className="grid gap-2 pt-6">

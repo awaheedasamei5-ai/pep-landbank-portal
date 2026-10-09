@@ -343,7 +343,29 @@ doesn't build them out into working screens against real data.
       real "WORK STALLED" issue to it through the UI, confirmed the
       assignment directly in the database, confirmed the module's progress
       card updated to "0 / 1 issues completed". `npx tsc -b` clean.
-- [ ] Phase 6: UI surface — states/labels/estimates settings
+- [x] Phase 6: UI surface — states/labels settings (estimates not built) --
+      new Settings tab on the project screen
+      (`project-settings-panel.tsx`): real rename/recolor (inline edit on
+      blur, matching the rest of the app's pattern)/create/delete for
+      both states and labels, real "set as default" star for states. The
+      data layer was already real since Phase 4b
+      (`project-state.service.ts`/`issue_label.service.ts`) -- this is the
+      first UI that actually reaches it, since every project was
+      otherwise stuck on the 5 states seeded at creation with no way to
+      change them.
+      **Real bug found and fixed live**: `markDefault` only ever updated
+      `op_states.default` (the UI star), never `op_projects.
+      default_state_id` -- the column `createIssue` actually reads to
+      pick a new issue's state. Marking a new default in the Settings
+      panel flipped the star but new issues kept landing in the OLD
+      default. Fixed to update both columns together, and corrected the
+      one real project's already-drifted data to match what the user had
+      just set through the UI.
+      **Verified live** against the user's own real "SITE DEMARCATIONS"
+      project: created a real label, confirmed it in the database, then
+      removed it; marked "Todo" as the default state, caught the drift
+      via a direct query, fixed the bug, and corrected the real data.
+      `npx tsc -b` clean.
 - [ ] Phase 6: UI surface — views
 - [ ] Phase 6: UI surface — pages
 - [ ] Verified live end-to-end (staff + management) signed in as a real test account
@@ -380,9 +402,24 @@ doesn't build them out into working screens against real data.
       then removed the test leave row and test dates (left the real
       escalation in place -- it's genuine verified functionality on the
       user's real data, not throwaway test data). `npx tsc -b` clean.
-      **Still open in Phase 7**: task-scheduling refinements beyond what
-      cycles/modules/dates already give (V1's real recurring-to-dos/
-      drag-to-reschedule model hasn't been ported), and reviewing whether
-      any other V1 Operations Tracker behavior (multi-attendee invites,
-      the AI companion mentioned in an old web-next commit) should carry
-      over.
+      **Checked and deliberately NOT ported**: V1's recurring-to-dos
+      (commit `7296b9b`), drag-to-reschedule time grid (`28f2a944`), and
+      multi-attendee invites (`19e1739`'s invite half) all belong to V1's
+      separate `schedule_items` subsystem -- a time-of-day personal
+      planner (exact start/end times on a specific day) -- not the `tasks`
+      table escalation/collision-detection were grounded in. Issues here
+      have `start_date`/`target_date` (whole-day granularity, no time
+      slots), so forcing a time-grid drag/recurrence model on would be
+      building a mismatched feature onto the wrong data shape, not a real
+      twist-to-fit. The "AI companion" from an old web-next commit
+      (`b47348f`) is a rule-based nudge panel from web-next's own
+      Operations Tracker rebuild -- explicitly superseded by the
+      2026-09-11 OSS-foundation pivot (see
+      `feedback-oss-foundation-strategy-2026-09-11`: web-next apps are
+      "NOT the deliverable going forward"), not V1's real logic, so it
+      doesn't carry over either.
+      With this check done, Phase 7's three explicitly-named asks (task
+      scheduling via cycles/modules/dates, escalation, collision
+      detection) are complete. Remaining Phase 6/7 work is settings UI
+      (states/labels), kanban drag-and-drop, and staff-account
+      verification -- tracked below, not blocked on anything further here.
