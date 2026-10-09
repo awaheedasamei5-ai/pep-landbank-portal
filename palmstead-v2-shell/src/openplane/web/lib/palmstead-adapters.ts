@@ -21,6 +21,7 @@ import type {
   TIssuePriorities,
   TIssueComment,
   TIssueActivity,
+  ICycle,
 } from "@plane/types";
 import { EUserWorkspaceRoles, EInboxIssueSource, EIssueCommentAccessSpecifier } from "@plane/types";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -454,4 +455,70 @@ export async function ensureCurrentPlaneUser(sb: SupabaseClient, rootStoreUser: 
   if (!staffKey) return;
   const { data } = await sb.from("profiles").select("agent_key,name,email,role,active").eq("agent_key", staffKey).single();
   if (data) rootStoreUser.data = toPlaneUser(data as ProfileRow);
+}
+
+export type OpCycleRow = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  owned_by_key: string | null;
+  sort_order: number;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Real per-cycle issue counts by state group, grouped in one query for a page of cycles, not N+1. */
+export type CycleProgressCounts = Record<
+  string,
+  { total_issues: number; completed_issues: number; backlog_issues: number; started_issues: number; unstarted_issues: number; cancelled_issues: number }
+>;
+
+function deriveCycleStatus(row: OpCycleRow): "draft" | "upcoming" | "completed" | "current" {
+  if (!row.start_date && !row.end_date) return "draft";
+  const today = new Date().toISOString().slice(0, 10);
+  if (row.start_date && today < row.start_date) return "upcoming";
+  if (row.end_date && today > row.end_date) return "completed";
+  return "current";
+}
+
+export function toPlaneCycle(row: OpCycleRow, counts: CycleProgressCounts[string] | undefined): ICycle {
+  const c = counts ?? { total_issues: 0, completed_issues: 0, backlog_issues: 0, started_issues: 0, unstarted_issues: 0, cancelled_issues: 0 };
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    project_id: row.project_id,
+    name: row.name,
+    description: row.description ?? "",
+    start_date: row.start_date,
+    end_date: row.end_date,
+    owned_by_id: row.owned_by_key ?? "",
+    sort_order: row.sort_order,
+    archived_at: row.archived_at,
+    created_at: row.created_at,
+    created_by: row.created_by ?? undefined,
+    updated_at: row.updated_at,
+    is_favorite: false,
+    status: deriveCycleStatus(row),
+    view_props: { filters: {} },
+    project_detail: { id: row.project_id },
+    progress: [],
+    version: 0,
+    progress_snapshot: undefined,
+    total_issues: c.total_issues,
+    completed_issues: c.completed_issues,
+    backlog_issues: c.backlog_issues,
+    started_issues: c.started_issues,
+    unstarted_issues: c.unstarted_issues,
+    cancelled_issues: c.cancelled_issues,
+    backlog_estimate_points: 0,
+    started_estimate_points: 0,
+    unstarted_estimate_points: 0,
+    cancelled_estimate_points: 0,
+  };
 }

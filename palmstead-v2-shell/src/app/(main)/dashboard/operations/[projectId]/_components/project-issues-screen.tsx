@@ -16,6 +16,7 @@ import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { requireSupabase } from "@/lib/supabase.client";
 import { ALL_ISSUES } from "@plane/constants";
 import { IssueKanbanBoard } from "./issue-kanban-board";
+import { CyclesPanel } from "./cycles-panel";
 
 // Phase 6 issues slice: a real list + a real kanban board for one project,
 // against the real op_issues/op_states rows rewired in issue.service.ts /
@@ -32,7 +33,7 @@ const PRIORITY_VARIANT: Record<string, "outline" | "default" | "destructive"> = 
 };
 
 export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"list" | "board">("list");
+  const [view, setView] = useState<"list" | "board" | "cycles">("list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newIssueName, setNewIssueName] = useState("");
@@ -58,7 +59,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
             perPageCount: 100,
             groupedBy: "state",
           });
-        } else {
+        } else if (view === "list") {
           await projectIssues.fetchIssues(WORKSPACE_SLUG, projectId, "init-loader", { canGroup: false, perPageCount: 100 });
         }
       } catch (err) {
@@ -101,34 +102,39 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
         title={project?.name ?? "Project"}
         description={project ? `${project.identifier} · real op_issues rows` : undefined}
         action={
-          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board")}>
+          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles")}>
             <TabsList>
               <TabsTrigger value="list">List</TabsTrigger>
               <TabsTrigger value="board">Board</TabsTrigger>
+              <TabsTrigger value="cycles">Cycles</TabsTrigger>
             </TabsList>
           </Tabs>
         }
       />
 
-      <Card className="mb-4">
-        <CardContent className="flex gap-2 pt-6">
-          <Input
-            placeholder="New issue name"
-            value={newIssueName}
-            onChange={(e) => setNewIssueName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && createIssue()}
-            className="max-w-md"
-          />
-          <SubmitButton type="button" loading={creating} onClick={createIssue}>
-            <Plus />
-            Add
-          </SubmitButton>
-        </CardContent>
-      </Card>
+      {view !== "cycles" && (
+        <Card className="mb-4">
+          <CardContent className="flex gap-2 pt-6">
+            <Input
+              placeholder="New issue name"
+              value={newIssueName}
+              onChange={(e) => setNewIssueName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && createIssue()}
+              className="max-w-md"
+            />
+            <SubmitButton type="button" loading={creating} onClick={createIssue}>
+              <Plus />
+              Add
+            </SubmitButton>
+          </CardContent>
+        </Card>
+      )}
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {view === "list" ? (
+      {view === "cycles" ? (
+        <CyclesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
+      ) : view === "list" ? (
         <Card>
           <CardContent className="grid gap-2 pt-6">
             {loading && <p className="text-sm text-muted-foreground">Loading real issues from Supabase…</p>}

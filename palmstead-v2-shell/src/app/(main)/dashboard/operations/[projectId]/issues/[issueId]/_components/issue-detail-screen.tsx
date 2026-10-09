@@ -48,6 +48,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
   const projectIssues = issueRoot.projectIssues;
   const stateStore = issueRoot.rootStore.state;
   const labelStore = issueRoot.rootStore.label;
+  const cycleStore = issueRoot.rootStore.cycle;
   const detail = issueRoot.issueDetail;
   const project = store.projectRoot.project.getProjectById(projectId);
   const issue = issueRoot.issues.getIssueById(issueId);
@@ -62,6 +63,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
         await Promise.all([
           stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId),
           labelStore.fetchProjectLabels(WORKSPACE_SLUG, projectId),
+          cycleStore.fetchAllCycles(WORKSPACE_SLUG, projectId),
           detail.issue.fetchIssue(WORKSPACE_SLUG, projectId, issueId),
           project ? Promise.resolve() : store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId),
         ]);
@@ -236,6 +238,29 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                         {p}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">Cycle</p>
+                <Select
+                  value={issue.cycle_id ?? "none"}
+                  onValueChange={(v) => patch({ cycle_id: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No cycle</SelectItem>
+                    {(cycleStore.getProjectCycleIds(projectId) ?? []).map((id) => {
+                      const cycle = cycleStore.getCycleById(id);
+                      if (!cycle) return null;
+                      return (
+                        <SelectItem key={id} value={id}>
+                          {cycle.name}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

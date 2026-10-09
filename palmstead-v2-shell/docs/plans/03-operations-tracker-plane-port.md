@@ -304,7 +304,24 @@ doesn't build them out into working screens against real data.
       move bug), posted a real comment, confirmed all three rows
       (created/updated/comment) directly in the database, then removed the
       test project. `npx tsc -b` clean throughout.
-- [ ] Phase 6: UI surface — cycles
+- [x] Phase 6: UI surface — cycles (Cycles tab on the project screen, real
+      quick-create, real per-cycle issue-count progress bar) — rewrote
+      `cycle.service.ts`'s `createCycle`/`getCyclesWithParams`/
+      `getCycleDetails`/`patchCycle`/`deleteCycle` against `op_cycles`.
+      `deleteCycle` unassigns the cycle's issues first (plain FK, no
+      cascade/set-null in the schema, so a naive delete would fail
+      outright). `toPlaneCycle` derives `status` (draft/upcoming/current/
+      completed) from start/end date vs today, matching plane's own real
+      semantics, and a new `getCycleProgressCounts` grouped-query computes
+      real per-cycle issue counts by state group for a whole page of
+      cycles in one query. Also added a real Cycle select to the issue
+      detail screen so issues can actually be assigned (`patchIssue`
+      already supported `cycle_id`). **Verified live** against the user's
+      own real "SITE DEMARCATIONS" project (not a test project): created a
+      real cycle, assigned a real existing issue ("WORK STALLED") to it
+      through the UI, confirmed the assignment directly in the database,
+      and confirmed the cycle's progress card updated to "0 / 1 issues
+      completed". Zero console errors. `npx tsc -b` clean.
 - [ ] Phase 6: UI surface — modules
 - [ ] Phase 6: UI surface — states/labels/estimates settings
 - [ ] Phase 6: UI surface — views
