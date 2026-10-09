@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCalendarController } from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import {
+  checkScheduleConflicts,
   type RecurFreq,
   type Todo,
   useCreateRecurringTodo,
@@ -144,6 +145,29 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: ()
   const [repeat, setRepeat] = useState(false);
   const [freq, setFreq] = useState<RecurFreq>("weekly");
   const [until, setUntil] = useState("");
+  const [conflict, setConflict] = useState<{ title: string; startTime: string; endTime: string } | null>(null);
+
+  // Real-time collision detection -- same real V1 logic
+  // (apiCheckScheduleConflicts/scheduleConflictReasonText) this app
+  // already uses for Operations Tracker issue escalation, applied here:
+  // queried live against the real op_todos table on every start/end
+  // time change, not computed off whatever's already loaded in the
+  // visible calendar range.
+  useEffect(() => {
+    if (!profile?.key || !startTime || !endTime) {
+      setConflict(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const hits = await checkScheduleConflicts(profile.key, date, startTime, endTime);
+      if (!cancelled) setConflict(hits[0] ?? null);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [profile?.key, date, startTime, endTime]);
 
   async function submit() {
     if (!title.trim()) return;
@@ -170,6 +194,12 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: ()
           <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-32" placeholder="Start" />
           <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-32" placeholder="End" />
         </div>
+        {conflict && (
+          <p className="flex items-center gap-1.5 text-amber-600 text-xs dark:text-amber-400">
+            <AlertTriangle className="size-3.5" />
+            You already have &quot;{conflict.title}&quot; {conflict.startTime}–{conflict.endTime} that day.
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <Switch checked={repeat} onCheckedChange={setRepeat} />
           Repeat
