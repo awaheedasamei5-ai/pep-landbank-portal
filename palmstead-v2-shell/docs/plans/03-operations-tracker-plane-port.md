@@ -368,7 +368,20 @@ doesn't build them out into working screens against real data.
       `npx tsc -b` clean.
 - [ ] Phase 6: UI surface — views
 - [ ] Phase 6: UI surface — pages
-- [ ] Verified live end-to-end (staff + management) signed in as a real test account
+- [x] Verified live end-to-end (staff + management) signed in as a real test account --
+      management side already verified per-phase above (manager account
+      used throughout). Staff side verified separately: logged in as the
+      real `agent`-role account Elias Torgbuivi (`opsofficer@landbankghana.com`),
+      a real assignee on "WORK STALLED" via the earlier escalation. Checked
+      every real screen against "SITE DEMARCATIONS": List, Board (kanban
+      columns + card render correctly), Cycles ("Week 1 Demarcation
+      Sprint" with real progress), Modules ("Phase 1 Site Grading" with
+      real progress), Settings (real states + labels), and the issue
+      detail screen (status/priority/cycle/assignees/modules all real,
+      full activity feed including the earlier escalation entry rendering
+      by name, not a raw id). No RLS blocks, no manager-only UI
+      assumptions, no console errors encountered on any tab for this
+      non-manager account.
 - [~] Phase 7: twist to fit Palmstead's operations -- started with the two
       features the user named by name, grounded in V1's own real logic
       (`index.html`, the real production app on `main`), not invented:
