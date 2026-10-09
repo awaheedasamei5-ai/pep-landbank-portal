@@ -126,6 +126,7 @@ export class IssueService extends APIService {
     if (data.label_ids?.length) {
       await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: row.id, label_id: labelId })));
     }
+    await sb.from("op_issue_activity").insert({ issue_id: row.id, actor_key: staffKey, verb: "created", field: null });
     const [hydrated] = await hydrateIssues([row as OpIssueRow]);
     return hydrated;
   }
@@ -357,7 +358,9 @@ export class IssueService extends APIService {
   /** Phase 6: real update of op_issues (+ reconciling the assignee/label join tables when provided). */
   async patchIssue(_workspaceSlug: string, _projectId: string, issueId: string, data: Partial<TIssue>): Promise<TIssue> {
     const sb = requireSupabase();
-    const patch: Record<string, unknown> = { updated_by: currentStaffKey() };
+    const staffKey = currentStaffKey();
+    const { data: before } = await sb.from("op_issues").select("state_id,priority,name,target_date").eq("id", issueId).single();
+    const patch: Record<string, unknown> = { updated_by: staffKey };
     if (data.name !== undefined) patch.name = data.name;
     if (data.description_html !== undefined) patch.description_html = data.description_html;
     if (data.state_id !== undefined) patch.state_id = data.state_id;
@@ -385,6 +388,31 @@ export class IssueService extends APIService {
         await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: issueId, label_id: labelId })));
       }
     }
+
+    // Real audit trail: one op_issue_activity row per field that actually
+    // changed, old_value -> new_value -- this is the escalation/history
+    // record the Operations Tracker needs, not a cosmetic log.
+    if (before) {
+      const diffs: { field: string; old_value: string | null; new_value: string | null }[] = [];
+      if (data.state_id !== undefined && data.state_id !== before.state_id) {
+        diffs.push({ field: "state", old_value: before.state_id, new_value: data.state_id });
+      }
+      if (data.priority !== undefined && data.priority !== before.priority) {
+        diffs.push({ field: "priority", old_value: before.priority, new_value: data.priority });
+      }
+      if (data.name !== undefined && data.name !== before.name) {
+        diffs.push({ field: "name", old_value: before.name, new_value: data.name });
+      }
+      if (data.target_date !== undefined && data.target_date !== before.target_date) {
+        diffs.push({ field: "target_date", old_value: before.target_date, new_value: data.target_date });
+      }
+      if (diffs.length) {
+        await sb
+          .from("op_issue_activity")
+          .insert(diffs.map((d) => ({ issue_id: issueId, actor_key: staffKey, verb: "updated", ...d })));
+      }
+    }
+
     const [hydrated] = await hydrateIssues([row as OpIssueRow]);
     return hydrated;
   }

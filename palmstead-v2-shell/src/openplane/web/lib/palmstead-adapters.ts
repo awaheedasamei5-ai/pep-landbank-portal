@@ -11,9 +11,20 @@
  * satisfy IWorkspace.owner / IProject.project_lead etc.'s shape, scoped to
  * what this adapter needs.
  */
-import type { IProject, IState, IIssueLabel, IUser, IWorkspace, TBaseIssue, TIssuePriorities } from "@plane/types";
-import { EUserWorkspaceRoles } from "@plane/types";
+import type {
+  IProject,
+  IState,
+  IIssueLabel,
+  IUser,
+  IWorkspace,
+  TBaseIssue,
+  TIssuePriorities,
+  TIssueComment,
+  TIssueActivity,
+} from "@plane/types";
+import { EUserWorkspaceRoles, EInboxIssueSource, EIssueCommentAccessSpecifier } from "@plane/types";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ProfileRow = {
   agent_key: string;
@@ -259,4 +270,188 @@ export function toPlaneIssue(
     updated_by: row.updated_by ?? "",
     is_draft: row.is_draft,
   };
+}
+
+/**
+ * Real values for the nested "_detail" objects plane's own activity/comment
+ * types carry (so the UI can render an actor's name or a project's
+ * identifier without a separate lookup) -- built from the real workspace/
+ * project/issue rows and profiles already fetched once per request by the
+ * caller, not fabricated placeholders.
+ */
+export type ActivityContext = {
+  workspace: { id: string; name: string; slug: string };
+  project: { id: string; identifier: string; name: string };
+  issue: { id: string; sequence_id: number; name: string; description_html: string | null; priority: string; start_date: string | null; target_date: string | null; is_draft: boolean };
+  profilesByKey: Map<string, ProfileRow>;
+};
+
+/**
+ * Builds the shared ActivityContext (workspace/project/issue + the distinct
+ * actor profiles for a batch of comments/activity rows) in a fixed, small
+ * number of queries, so a page of comments/activity costs a handful of
+ * round trips, not N+1.
+ */
+export async function buildActivityContext(
+  sb: SupabaseClient,
+  projectId: string,
+  issueId: string,
+  actorKeys: (string | null)[]
+): Promise<ActivityContext> {
+  const [{ data: issue, error: issueError }, { data: project, error: projectError }] = await Promise.all([
+    sb.from("op_issues").select("id,sequence_id,name,description_html,priority,start_date,target_date,is_draft,workspace_id").eq("id", issueId).single(),
+    sb.from("op_projects").select("id,identifier,name,workspace_id").eq("id", projectId).single(),
+  ]);
+  if (issueError || !issue) throw issueError ?? new Error("Issue not found");
+  if (projectError || !project) throw projectError ?? new Error("Project not found");
+  const { data: workspace, error: workspaceError } = await sb
+    .from("op_workspaces")
+    .select("id,name,slug")
+    .eq("id", project.workspace_id)
+    .single();
+  if (workspaceError || !workspace) throw workspaceError ?? new Error("Workspace not found");
+  const distinctKeys = Array.from(new Set(actorKeys.filter((k): k is string => !!k)));
+  const profilesByKey = new Map<string, ProfileRow>();
+  if (distinctKeys.length) {
+    const { data: profiles } = await sb.from("profiles").select("agent_key,name,email,role,active").in("agent_key", distinctKeys);
+    (profiles ?? []).forEach((p) => profilesByKey.set(p.agent_key, p as ProfileRow));
+  }
+  return { workspace, project, issue, profilesByKey };
+}
+
+function actorDetail(ctx: ActivityContext, actorKey: string | null) {
+  const profile = actorKey ? ctx.profilesByKey.get(actorKey) : undefined;
+  const name = profile?.name ?? actorKey ?? "Unknown";
+  const [first, ...rest] = name.split(" ");
+  return {
+    id: actorKey ?? "",
+    first_name: first ?? name,
+    last_name: rest.join(" "),
+    avatar_url: "",
+    is_bot: false,
+    display_name: name,
+  };
+}
+
+function workspaceDetail(ctx: ActivityContext) {
+  return { id: ctx.workspace.id, name: ctx.workspace.name, slug: ctx.workspace.slug };
+}
+
+function projectDetail(ctx: ActivityContext) {
+  return {
+    id: ctx.project.id,
+    identifier: ctx.project.identifier,
+    name: ctx.project.name,
+    cover_image: "",
+    description: null,
+    emoji: null,
+    icon_prop: null,
+  };
+}
+
+function issueDetail(ctx: ActivityContext) {
+  return {
+    id: ctx.issue.id,
+    sequence_id: ctx.issue.sequence_id,
+    sort_order: false,
+    name: ctx.issue.name,
+    description_html: ctx.issue.description_html ?? "",
+    priority: ctx.issue.priority as TIssuePriorities,
+    start_date: ctx.issue.start_date ?? "",
+    target_date: ctx.issue.target_date ?? "",
+    is_draft: ctx.issue.is_draft,
+  };
+}
+
+export type OpIssueCommentRow = {
+  id: string;
+  issue_id: string;
+  comment_html: string;
+  actor_key: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function toPlaneComment(row: OpIssueCommentRow, ctx: ActivityContext): TIssueComment {
+  return {
+    id: row.id,
+    workspace: ctx.workspace.id,
+    workspace_detail: workspaceDetail(ctx),
+    project: ctx.project.id,
+    project_detail: projectDetail(ctx),
+    issue: row.issue_id,
+    issue_detail: issueDetail(ctx),
+    actor: row.actor_key ?? "",
+    actor_detail: actorDetail(ctx, row.actor_key),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    created_by: row.actor_key ?? undefined,
+    updated_by: row.actor_key ?? undefined,
+    attachments: [],
+    comment_reactions: [],
+    comment_stripped: row.comment_html.replace(/<[^>]*>/g, ""),
+    comment_html: row.comment_html,
+    comment_json: {},
+    external_id: undefined,
+    external_source: undefined,
+    access: EIssueCommentAccessSpecifier.INTERNAL,
+  };
+}
+
+export type OpIssueActivityRow = {
+  id: string;
+  issue_id: string;
+  actor_key: string | null;
+  verb: string;
+  field: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  comment: string | null;
+  created_at: string;
+};
+
+export function toPlaneActivity(row: OpIssueActivityRow, ctx: ActivityContext): TIssueActivity {
+  return {
+    id: row.id,
+    workspace: ctx.workspace.id,
+    workspace_detail: workspaceDetail(ctx),
+    project: ctx.project.id,
+    project_detail: projectDetail(ctx),
+    issue: row.issue_id,
+    issue_detail: issueDetail(ctx),
+    actor: row.actor_key ?? "",
+    actor_detail: actorDetail(ctx, row.actor_key),
+    created_at: row.created_at,
+    updated_at: row.created_at,
+    created_by: row.actor_key ?? undefined,
+    updated_by: row.actor_key ?? undefined,
+    attachments: [],
+    verb: row.verb,
+    field: row.field ?? undefined,
+    old_value: row.old_value ?? undefined,
+    new_value: row.new_value ?? undefined,
+    comment: row.comment ?? undefined,
+    old_identifier: undefined,
+    new_identifier: undefined,
+    epoch: new Date(row.created_at).getTime(),
+    issue_comment: null,
+    source_data: { source: EInboxIssueSource.IN_APP, extra: {} },
+  };
+}
+
+/**
+ * Real gap found live: plane's own store code (e.g.
+ * issue-details/subscription.store.ts's `currentUserId` check) reads
+ * `rootStore.user.data.id` and throws "user id not available" when it's
+ * unset -- this phase never rewired the full user.service.ts pipeline
+ * (`fetchCurrentUser`, a bigger Phase 6 slice of its own), so this sets the
+ * minimal real IUser directly from the signed-in staff's own profiles row
+ * once per session, without touching plane's user service/store logic.
+ */
+export async function ensureCurrentPlaneUser(sb: SupabaseClient, rootStoreUser: { data: IUser | undefined }): Promise<void> {
+  if (rootStoreUser.data) return;
+  const staffKey = currentStaffKey();
+  if (!staffKey) return;
+  const { data } = await sb.from("profiles").select("agent_key,name,email,role,active").eq("agent_key", staffKey).single();
+  if (data) rootStoreUser.data = toPlaneUser(data as ProfileRow);
 }

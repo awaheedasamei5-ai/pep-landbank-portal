@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
+import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
+import { requireSupabase } from "@/lib/supabase.client";
 import { ALL_ISSUES } from "@plane/constants";
 import { IssueKanbanBoard } from "./issue-kanban-board";
 
@@ -47,6 +49,8 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
     (async () => {
       setLoading(true);
       try {
+        await ensureCurrentPlaneUser(requireSupabase(), store.user);
+        if (!project) await store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId);
         await stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId);
         if (view === "board") {
           await projectIssues.fetchIssues(WORKSPACE_SLUG, projectId, "init-loader", {
@@ -137,7 +141,11 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
                 if (!issue) return null;
                 const state = issue.state_id ? stateStore.stateMap?.[issue.state_id] : undefined;
                 return (
-                  <div key={id} className="flex items-center justify-between gap-3 border-b py-2 last:border-0">
+                  <Link
+                    key={id}
+                    href={`/dashboard/operations/${projectId}/issues/${id}`}
+                    className="flex items-center justify-between gap-3 border-b py-2 last:border-0 hover:bg-muted/50"
+                  >
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs text-muted-foreground">
                         {project?.identifier}-{issue.sequence_id}
@@ -154,7 +162,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
                         {issue.priority ?? "none"}
                       </Badge>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
           </CardContent>

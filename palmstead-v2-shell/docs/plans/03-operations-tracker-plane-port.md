@@ -245,7 +245,65 @@ doesn't build them out into working screens against real data.
       columns via its real state and watched it land in the right column
       after the fix, re-verified zero console errors/warnings on a hard
       reload, then deleted the test project. `npx tsc -b` clean throughout.
-      Issue DETAIL screen is still open.
+- [x] Phase 6: UI surface — issue detail (`/dashboard/operations/[projectId]/issues/[issueId]`) --
+      real edit (title/description/status/priority/dates/assignees/labels,
+      each a direct patchIssue call), real comments
+      (issue_comment.service.ts rewritten: getIssueComments/
+      createIssueComment/patchIssueComment/deleteIssueComment against
+      op_issue_comments), and the real audit trail
+      (issue_activity.service.ts rewritten: getIssueActivities against
+      op_issue_activity) merged via plane's own
+      getActivityAndCommentsByIssueId. patchIssue now diffs state/priority/
+      name/target_date against the row's prior values and writes one
+      op_issue_activity row per real change (old_value -> new_value) --
+      this is the escalation/history record the Operations Tracker needs,
+      not a cosmetic log. createIssue also writes a "created" row.
+      palmstead-adapters.ts gained `buildActivityContext` (batches the
+      workspace/project/issue + distinct actor profiles for a page of
+      comments/activity in a fixed small number of queries, not N+1),
+      `toPlaneComment`/`toPlaneActivity`, and `ensureCurrentPlaneUser`
+      (see bug 3 below). No rich-text editor yet (@plane/editor still
+      deferred) -- description is plain text, not @plane/editor's JSON.
+      **Three more real bugs found and fixed live:**
+      (3) `rootStore.user.data` was never populated (the full user.service.ts
+      `fetchCurrentUser` pipeline is its own, bigger, not-yet-rewired slice)
+      -- several of plane's own store files read `user.data.id` and throw
+      ("user id not available" surfaced live, from
+      issue-details/subscription.store.ts). Fixed with `ensureCurrentPlaneUser`,
+      which sets the minimal real `IUser` from the signed-in staff's own
+      `profiles` row once per session, without touching plane's user
+      service/store logic -- wired into all three Operations Tracker
+      screens' init effects.
+      (4) Navigating straight to a project or issue URL (not via the list)
+      left `projectStore.projectMap` empty, so `{project?.identifier}`
+      rendered blank (`"-1"` instead of `"OPS-1"`). Fixed by fetching
+      project details on-demand when not already cached.
+      (5) The biggest one: opening the issue detail screen threw
+      `Uncaught ReferenceError: Cannot access 'IssueSubIssuesStore' before
+      initialization` -- a real circular-import TDZ in plane's own copied
+      code (`issue/helpers/base-issues-utils.ts` imports the `store`
+      singleton from `lib/store-context.tsx`, which gets reached mid
+      construction via `root.store.ts -> issue/root.store.ts ->
+      issue-details/sub_issues.store.ts -> sub_issues_filter.store.ts ->
+      base-issues-utils.ts`). The original `export const rootStore = new
+      RootStore()` constructed the entire MobX tree synchronously at this
+      module's own top-level evaluation, which Turbopack's module
+      instantiation order doesn't tolerate for this cycle (plane's real
+      webpack build apparently does). Fixed by deferring construction to
+      first real property access via a `Proxy` in `store-context.tsx` --
+      every module in the cycle finishes its own evaluation before
+      `new RootStore()` ever runs, without touching plane's own store
+      logic. Confirmed with a full `.next` cache clear + cold server
+      restart first (ruled out stale-cache, same as the known
+      project-v2-env-fix-2026-10-08 gotcha) before concluding it was a
+      real cycle, not a caching artifact.
+      **Verified live end-to-end**: opened a real issue, edited its
+      priority (watched the real audit-trail row appear after a refetch
+      fix of its own -- activity didn't auto-refresh after patch, since
+      plane's optimistic path isn't wired, same root cause as the kanban
+      move bug), posted a real comment, confirmed all three rows
+      (created/updated/comment) directly in the database, then removed the
+      test project. `npx tsc -b` clean throughout.
 - [ ] Phase 6: UI surface — cycles
 - [ ] Phase 6: UI surface — modules
 - [ ] Phase 6: UI surface — states/labels/estimates settings

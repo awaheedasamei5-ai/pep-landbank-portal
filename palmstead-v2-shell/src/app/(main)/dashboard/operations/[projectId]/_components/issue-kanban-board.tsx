@@ -1,6 +1,7 @@
 "use client";
 
 import { observer } from "mobx-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -68,14 +69,19 @@ export const IssueKanbanBoard = observer(function IssueKanbanBoard({
                   <Card key={id}>
                     <CardContent className="grid gap-2 p-3">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">
+                        <Link
+                          href={`/dashboard/operations/${projectId}/issues/${id}`}
+                          className="font-mono text-xs text-muted-foreground hover:underline"
+                        >
                           {projectIdentifier}-{issue.sequence_id}
-                        </span>
+                        </Link>
                         <Badge variant={PRIORITY_VARIANT[issue.priority ?? "none"]} className="h-5 px-1.5 text-[10px] capitalize">
                           {issue.priority ?? "none"}
                         </Badge>
                       </div>
-                      <p className="text-sm">{issue.name}</p>
+                      <Link href={`/dashboard/operations/${projectId}/issues/${id}`} className="text-sm hover:underline">
+                        {issue.name}
+                      </Link>
                       <Select value={issue.state_id ?? undefined} onValueChange={(value) => moveIssue(id, value)}>
                         <SelectTrigger size="sm" className="w-full">
                           <SelectValue placeholder="Move to…" />

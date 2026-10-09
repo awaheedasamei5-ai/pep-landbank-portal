@@ -8,6 +8,8 @@ import { API_BASE_URL } from "@plane/constants";
 import type { TIssueActivity, TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 import { APIService } from "@openplane-web/services/api.service";
+import { requireSupabase } from "@/lib/supabase.client";
+import { buildActivityContext, toPlaneActivity, type OpIssueActivityRow } from "@openplane-web/lib/palmstead-adapters";
 // types
 // helper
 
@@ -19,25 +21,13 @@ export class IssueActivityService extends APIService {
     this.serviceType = serviceType;
   }
 
-  async getIssueActivities(
-    workspaceSlug: string,
-    projectId: string,
-    issueId: string,
-    params:
-      | {
-          created_at__gt: string;
-        }
-      | object = {}
-  ): Promise<TIssueActivity[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/history/`, {
-      params: {
-        activity_type: `${this.serviceType === EIssueServiceType.EPICS ? "epic-property" : "issue-property"}`,
-        ...params,
-      },
-    })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /** Phase 6: real read from op_issue_activity -- the full audit trail (who changed what, old -> new). */
+  async getIssueActivities(_workspaceSlug: string, projectId: string, issueId: string, _params: object = {}): Promise<TIssueActivity[]> {
+    const sb = requireSupabase();
+    const { data, error } = await sb.from("op_issue_activity").select("*").eq("issue_id", issueId).order("created_at");
+    if (error) throw error;
+    const rows = (data ?? []) as OpIssueActivityRow[];
+    const ctx = await buildActivityContext(sb, projectId, issueId, rows.map((r) => r.actor_key));
+    return rows.map((row) => toPlaneActivity(row, ctx));
   }
 }

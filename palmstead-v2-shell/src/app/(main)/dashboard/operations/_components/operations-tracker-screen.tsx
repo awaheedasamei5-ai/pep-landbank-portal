@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
+import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
+import { requireSupabase } from "@/lib/supabase.client";
 
 // Phase 4b's first real screen against the raw-duplicated plane store: lists
 // the real op_projects rows for the one seeded op_workspaces row ("palmstead").
@@ -33,6 +35,7 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
     let cancelled = false;
     (async () => {
       try {
+        await ensureCurrentPlaneUser(requireSupabase(), store.user);
         await store.workspaceRoot.fetchWorkspaces();
         await projectStore.fetchProjects(WORKSPACE_SLUG);
       } catch (err) {
