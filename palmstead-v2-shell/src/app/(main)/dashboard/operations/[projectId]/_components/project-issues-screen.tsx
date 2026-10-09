@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
@@ -20,6 +21,7 @@ import { IssueKanbanBoard } from "./issue-kanban-board";
 import { CyclesPanel } from "./cycles-panel";
 import { ModulesPanel } from "./modules-panel";
 import { ProjectSettingsPanel } from "./project-settings-panel";
+import { ViewsPanel, type IssueFilters } from "./views-panel";
 
 // Phase 6 issues slice: a real list + a real kanban board for one project,
 // against the real op_issues/op_states rows rewired in issue.service.ts /
@@ -36,16 +38,18 @@ const PRIORITY_VARIANT: Record<string, "outline" | "default" | "destructive"> = 
 };
 
 export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"list" | "board" | "cycles" | "modules" | "settings">("list");
+  const [view, setView] = useState<"list" | "board" | "cycles" | "modules" | "views" | "settings">("list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newIssueName, setNewIssueName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [filters, setFilters] = useState<IssueFilters>({ priority: null, stateGroup: null });
 
   const issueRoot = store.issue;
   const projectIssues = issueRoot.projectIssues;
   const stateStore = issueRoot.rootStore.state;
   const labelStore = issueRoot.rootStore.label;
+  const viewStore = store.projectView;
   const project = store.projectRoot.project.getProjectById(projectId);
 
   useEffect(() => {
@@ -56,7 +60,11 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
       try {
         await ensureCurrentPlaneUser(requireSupabase(), store.user);
         if (!project) await store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId);
-        await Promise.all([stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId), labelStore.fetchProjectLabels(WORKSPACE_SLUG, projectId)]);
+        await Promise.all([
+          stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId),
+          labelStore.fetchProjectLabels(WORKSPACE_SLUG, projectId),
+          viewStore.fetchViews(WORKSPACE_SLUG, projectId),
+        ]);
         if (view === "board") {
           await projectIssues.fetchIssues(WORKSPACE_SLUG, projectId, "init-loader", {
             canGroup: true,
@@ -79,7 +87,17 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, view]);
 
-  const issueIds = (projectIssues.groupedIssueIds?.[ALL_ISSUES] as string[] | undefined) ?? [];
+  const allIssueIds = (projectIssues.groupedIssueIds?.[ALL_ISSUES] as string[] | undefined) ?? [];
+  const issueIds = allIssueIds.filter((id) => {
+    const issue = issueRoot.issues.getIssueById(id);
+    if (!issue) return false;
+    if (filters.priority && (issue.priority ?? "none") !== filters.priority) return false;
+    if (filters.stateGroup) {
+      const state = issue.state_id ? stateStore.stateMap?.[issue.state_id] : undefined;
+      if (state?.group !== filters.stateGroup) return false;
+    }
+    return true;
+  });
 
   async function createIssue() {
     if (!newIssueName.trim()) return;
@@ -107,21 +125,22 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
         title={project?.name ?? "Project"}
         description={project ? `${project.identifier} · real op_issues rows` : undefined}
         action={
-          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles" | "modules" | "settings")}>
+          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles" | "modules" | "views" | "settings")}>
             <TabsList>
               <TabsTrigger value="list">List</TabsTrigger>
               <TabsTrigger value="board">Board</TabsTrigger>
               <TabsTrigger value="cycles">Cycles</TabsTrigger>
               <TabsTrigger value="modules">Modules</TabsTrigger>
+              <TabsTrigger value="views">Views</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
           </Tabs>
         }
       />
 
-      {view !== "cycles" && view !== "modules" && view !== "settings" && (
+      {(view === "list" || view === "board") && (
         <Card className="mb-4">
-          <CardContent className="flex gap-2 pt-6">
+          <CardContent className="flex flex-wrap gap-2 pt-6">
             <Input
               placeholder="New issue name"
               value={newIssueName}
@@ -133,6 +152,36 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
               <Plus />
               Add
             </SubmitButton>
+            {view === "list" && (
+              <div className="ml-auto flex gap-2">
+                <Select value={filters.stateGroup ?? "all"} onValueChange={(v) => setFilters((f) => ({ ...f, stateGroup: v === "all" ? null : v }))}>
+                  <SelectTrigger className="w-36" size="sm">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="backlog">Backlog</SelectItem>
+                    <SelectItem value="unstarted">Unstarted</SelectItem>
+                    <SelectItem value="started">In progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filters.priority ?? "all"} onValueChange={(v) => setFilters((f) => ({ ...f, priority: v === "all" ? null : v }))}>
+                  <SelectTrigger className="w-36" size="sm">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All priorities</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -143,6 +192,16 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
         <CyclesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
       ) : view === "modules" ? (
         <ModulesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
+      ) : view === "views" ? (
+        <ViewsPanel
+          workspaceSlug={WORKSPACE_SLUG}
+          projectId={projectId}
+          activeFilters={filters}
+          onApply={(f) => {
+            setFilters(f);
+            setView("list");
+          }}
+        />
       ) : view === "settings" ? (
         <ProjectSettingsPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
       ) : view === "list" ? (
@@ -161,8 +220,11 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
                   </div>
                 </div>
               ))}
-            {!loading && !error && issueIds.length === 0 && (
+            {!loading && !error && issueIds.length === 0 && allIssueIds.length === 0 && (
               <p className="text-sm text-muted-foreground">No issues yet in {project?.identifier ?? "this project"}.</p>
+            )}
+            {!loading && !error && issueIds.length === 0 && allIssueIds.length > 0 && (
+              <p className="text-sm text-muted-foreground">No issues match the current filters.</p>
             )}
             {!loading &&
               issueIds.map((id) => {

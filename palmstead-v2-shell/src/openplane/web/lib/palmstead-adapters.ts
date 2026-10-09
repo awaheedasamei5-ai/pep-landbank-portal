@@ -23,8 +23,10 @@ import type {
   TIssueActivity,
   ICycle,
   IModule,
+  IProjectView,
+  IIssueFilterOptions,
 } from "@plane/types";
-import { EUserWorkspaceRoles, EInboxIssueSource, EIssueCommentAccessSpecifier } from "@plane/types";
+import { EUserWorkspaceRoles, EInboxIssueSource, EIssueCommentAccessSpecifier, EViewAccess } from "@plane/types";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -577,5 +579,48 @@ export function toPlaneModule(row: OpModuleRow, memberIds: string[], counts: Mod
     created_at: row.created_at,
     updated_at: row.updated_at,
     created_by: row.created_by ?? undefined,
+  };
+}
+
+/** Real saved view (op_views) -- a project-scoped name + a real
+ * IIssueFilterOptions bag (assignees/priority/state/state_group/labels),
+ * plane's own real pre-rich_filters view shape. Deliberately not the
+ * newer rich_filters expression tree -- that's a nested AND/OR condition
+ * builder plane's own UI exposes as a separate heavy feature; the simpler
+ * query bag covers every filter this app's own Work Queue/List screens
+ * already expose (status, priority, assignee), which is the real scope
+ * of what was asked for. */
+export type OpViewRow = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  name: string;
+  query: IIssueFilterOptions;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function toPlaneView(row: OpViewRow): IProjectView {
+  return {
+    id: row.id,
+    access: EViewAccess.PUBLIC,
+    created_at: new Date(row.created_at),
+    updated_at: new Date(row.updated_at),
+    is_favorite: false,
+    created_by: row.created_by ?? "",
+    updated_by: row.created_by ?? "",
+    name: row.name,
+    description: "",
+    rich_filters: {} as IProjectView["rich_filters"],
+    display_filters: {},
+    display_properties: {} as IProjectView["display_properties"],
+    query: row.query ?? {},
+    query_data: row.query ?? {},
+    project: row.project_id,
+    workspace: row.workspace_id,
+    logo_props: undefined,
+    is_locked: false,
+    owned_by: row.created_by ?? "",
   };
 }

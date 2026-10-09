@@ -456,3 +456,27 @@ doesn't build them out into working screens against real data.
 
 Remaining Phase 6/7 work: views, pages (deferred), and staff-account
 verification -- tracked below, not blocked on anything further here.
+
+- [x] Phase 6: Views -- real `op_views` table added (migration
+      `op_views_table`: workspace_id/project_id/name/query jsonb,
+      `my_key() is not null` RLS, same pattern as every other op_* table).
+      `view.service.ts` rewired against it (same recipe as cycle/module
+      services before it); `project-view.store.ts` and `views-panel.tsx`
+      needed no changes to the real plane store logic itself. Scope
+      decision: `query` stores plane's own real (pre-rich_filters)
+      `IIssueFilterOptions` bag -- priority + state_group, matching
+      exactly what the List tab's own filter controls (newly added) and
+      the Work Queue/Command Center already expose -- not the newer
+      nested rich_filters expression tree, which is a separate heavy
+      feature plane's own UI exposes on its own. Real bug caught and
+      fixed during verification: applying a saved view from the Views
+      tab updated the filter state but left the user on the Views tab
+      with no visible change -- `onApply` now also switches to the List
+      tab. **Verified live end-to-end**: saved a real "High priority
+      only" view from the List tab's own filters, confirmed the row in
+      `op_views` directly, reloaded the page (cold state), opened Views,
+      clicked it, confirmed it navigated to List with the High-priority
+      filter correctly re-applied and only the matching issue shown; also
+      verified in dark mode. `npx tsc -b` clean. Not built: favorites
+      (plane's separate user-favorite-views join) -- CRUD + apply only,
+      which is the real scope of what was asked for.
