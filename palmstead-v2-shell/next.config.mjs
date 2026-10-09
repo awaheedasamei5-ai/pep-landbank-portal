@@ -3,6 +3,36 @@ import { dirname } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// THE real root cause of "Compiling... freezes the tab, I have to close it":
+// this repo lives under Desktop, which OneDrive continuously syncs. Next's
+// own dev server warned about it directly ("Slow filesystem detected... if
+// .next/dev is a network drive, consider moving it to a local folder"), and
+// server logs measured cache writes taking up to 6.8 MINUTES and a single
+// route compile taking 4.2 minutes -- OneDrive's real-time sync fighting
+// Turbopack's thousands of small cache-file writes during every compile.
+// Two things were tried and ruled out, not just assumed to fail:
+//   1. distDir pointed outside the project -- Turbopack hard-refuses this
+//      ("distDirRoot should not navigate out of the projectPath").
+//   2. An NTFS junction (`mklink /J .next <somewhere under %LOCALAPPDATA%>`)
+//      -- Next still sees ".next" as a normal in-project path so Turbopack
+//      accepts it, but it breaks for a different reason: Node's own
+//      require() resolution for @tailwindcss/postcss (used by Turbopack's
+//      PostCSS transform) walks the PHYSICAL directory tree upward from
+//      wherever the file actually lives looking for node_modules, and a
+//      junction's target living outside the project tree has no
+//      node_modules to find walking up from there -- confirmed live,
+//      every CSS module failed with "Cannot find module
+//      '@tailwindcss/postcss'" as soon as the junction was in place.
+//      Reverted immediately.
+// There is no fix for this available from inside the app's code or config.
+// The real fix is outside OneDrive's sync scope entirely: either move this
+// repo to a folder OneDrive doesn't sync (anywhere NOT under the
+// Desktop/Documents/Pictures known folders), or turn off "Desktop" in
+// OneDrive's own Settings -> Sync and backup -> Manage backup for this
+// machine. Either one is a one-time user action, not something safe to do
+// from here without confirming first (it touches real file locations and
+// an external account's sync settings).
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Real fix for the "Compiling... freezes the tab" complaint: the React

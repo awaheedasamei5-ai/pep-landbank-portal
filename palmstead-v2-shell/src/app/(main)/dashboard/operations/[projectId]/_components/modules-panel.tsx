@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
 
@@ -77,10 +78,24 @@ export const ModulesPanel = observer(function ModulesPanel({ workspaceSlug, proj
       </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <p className="text-sm text-muted-foreground">Loading real modules from Supabase…</p>}
       {!loading && moduleIds.length === 0 && <p className="text-sm text-muted-foreground">No modules yet.</p>}
 
       <div className="grid gap-3 xl:grid-cols-2">
+        {loading &&
+          Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-2">
+                <Skeleton className="h-1.5 w-full rounded-full" />
+                <Skeleton className="h-3 w-28" />
+              </CardContent>
+            </Card>
+          ))}
         {moduleIds.map((id) => {
           const mod = moduleStore.getModuleById(id);
           if (!mod) return null;

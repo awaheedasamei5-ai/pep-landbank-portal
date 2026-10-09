@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
@@ -147,7 +148,19 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
       ) : view === "list" ? (
         <Card>
           <CardContent className="grid gap-2 pt-6">
-            {loading && <p className="text-sm text-muted-foreground">Loading real issues from Supabase…</p>}
+            {loading &&
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 border-b py-2 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-4 w-48" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                </div>
+              ))}
             {!loading && !error && issueIds.length === 0 && (
               <p className="text-sm text-muted-foreground">No issues yet in {project?.identifier ?? "this project"}.</p>
             )}

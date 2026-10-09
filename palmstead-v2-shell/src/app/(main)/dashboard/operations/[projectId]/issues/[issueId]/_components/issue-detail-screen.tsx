@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
@@ -159,7 +160,21 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
     }
   }
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading real issue from Supabase…</p>;
+  if (loading)
+    return (
+      <div className="grid gap-4 xl:grid-cols-12">
+        <div className="grid gap-4 xl:col-span-8">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+        <div className="grid gap-3 xl:col-span-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      </div>
+    );
   if (error && !issue) return <p className="text-sm text-destructive">{error}</p>;
   if (!issue) return <p className="text-sm text-muted-foreground">Issue not found.</p>;
 
