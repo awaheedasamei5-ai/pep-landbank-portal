@@ -431,6 +431,84 @@ export class IssueService extends APIService {
     return { success: true };
   }
 
+  /**
+   * Phase 7 "twist to fit": real escalation, grounded in V1's own
+   * apiEscalateTask (index.html, commit 9bba34f) -- reassign (adds the
+   * target as a real assignee, doesn't replace existing ones, matching
+   * plane's own multi-assignee model unlike V1's single assignedTo),
+   * write a real audit-trail row (verb "escalated", the reason as
+   * `comment`), and notify the target in chat via the real `messages`
+   * table (same insert shape web-next's own chat.send already uses).
+   */
+  async escalateIssue(issueId: string, toStaffKey: string, note: string): Promise<void> {
+    const sb = requireSupabase();
+    const staffKey = currentStaffKey();
+    const [{ data: issue }, { data: fromProfile }, { data: toProfile }] = await Promise.all([
+      sb.from("op_issues").select("name,assignee_ids:op_issue_assignees(assignee_key)").eq("id", issueId).single(),
+      staffKey ? sb.from("profiles").select("agent_key,name").eq("agent_key", staffKey).single() : Promise.resolve({ data: null }),
+      sb.from("profiles").select("agent_key,name").eq("agent_key", toStaffKey).single(),
+    ]);
+    if (!issue) throw new Error("Issue not found");
+    const alreadyAssigned = (issue.assignee_ids as { assignee_key: string }[] | null)?.some((a) => a.assignee_key === toStaffKey);
+    if (!alreadyAssigned) {
+      const { error } = await sb.from("op_issue_assignees").insert({ issue_id: issueId, assignee_key: toStaffKey });
+      if (error) throw error;
+    }
+    const { error: activityError } = await sb.from("op_issue_activity").insert({
+      issue_id: issueId,
+      actor_key: staffKey,
+      verb: "escalated",
+      field: "assignees",
+      new_value: toProfile?.name ?? toStaffKey,
+      comment: note || null,
+    });
+    if (activityError) throw activityError;
+    const fromName = fromProfile?.name ?? staffKey ?? "Someone";
+    const { error: messageError } = await sb.from("messages").insert({
+      sender_key: staffKey,
+      sender_name: fromName,
+      recipient_key: toStaffKey,
+      body: `${fromName} escalated "${issue.name}" to you${note ? `: ${note}` : ""}`,
+      ref_type: "op_issue",
+      ref_id: issueId,
+    });
+    if (messageError) throw messageError;
+  }
+
+  /**
+   * Phase 7 "twist to fit": real collision detection, grounded in V1's own
+   * apiCheckScheduleConflictsMulti (index.html, commit 19e1739) --
+   * narrowed to what actually matters for date-ranged issues rather than
+   * V1's exact-time-slot model (two active tasks overlapping is normal on
+   * a project tracker; a staff member being on leave for the dates they'd
+   * be assigned is the real conflict). Checks every given staff key's
+   * leave_requests against the issue's date range using V1's own
+   * leaveIsBlocking statuses (planned/pending/approved).
+   */
+  async checkAssigneeLeaveConflicts(
+    staffKeys: string[],
+    startDate: string | null,
+    targetDate: string | null
+  ): Promise<{ staffKey: string; staffName: string }[]> {
+    if (staffKeys.length === 0) return [];
+    const sb = requireSupabase();
+    const { data, error } = await sb
+      .from("leave_requests")
+      .select("agent_key,agent_name,dates,status")
+      .in("agent_key", staffKeys)
+      .in("status", ["planned", "pending", "approved"]);
+    if (error) throw error;
+    const rangeStart = startDate ?? targetDate;
+    const rangeEnd = targetDate ?? startDate;
+    if (!rangeStart || !rangeEnd) return [];
+    const hits: { staffKey: string; staffName: string }[] = [];
+    (data ?? []).forEach((row: { agent_key: string; agent_name: string; dates: string[] | null; status: string }) => {
+      const overlaps = (row.dates ?? []).some((d) => d >= rangeStart && d <= rangeEnd);
+      if (overlaps) hits.push({ staffKey: row.agent_key, staffName: row.agent_name });
+    });
+    return hits;
+  }
+
   async updateIssueDates(
     workspaceSlug: string,
     projectId: string,

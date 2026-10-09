@@ -347,4 +347,42 @@ doesn't build them out into working screens against real data.
 - [ ] Phase 6: UI surface — views
 - [ ] Phase 6: UI surface — pages
 - [ ] Verified live end-to-end (staff + management) signed in as a real test account
-- [ ] Phase 7: twist to fit Palmstead's operations
+- [~] Phase 7: twist to fit Palmstead's operations -- started with the two
+      features the user named by name, grounded in V1's own real logic
+      (`index.html`, the real production app on `main`), not invented:
+      **Escalation** (`issue.service.ts`'s new `escalateIssue`), matching
+      V1's real `apiEscalateTask` (commit `9bba34f`) almost exactly: adds
+      the target as a real assignee (plane's multi-assignee model, so this
+      doesn't replace existing assignees the way V1's single `assignedTo`
+      did), writes a real `op_issue_activity` row (`verb: "escalated"`,
+      the reason as `comment`), and notifies the target with a real
+      `messages` row (same insert shape web-next's own chat `send` already
+      uses, `ref_type: "op_issue"` linking back to the issue) -- real UI:
+      an "Escalate" button + panel on issue detail (colleague picker
+      excluding current assignees + reason textarea), and the activity
+      feed renders escalation entries specially.
+      **Collision detection** (`checkAssigneeLeaveConflicts`), grounded in
+      V1's real `apiCheckScheduleConflictsMulti` (commit `19e1739`) but
+      deliberately narrowed: V1's exact-time-slot double-booking check
+      doesn't apply to date-ranged project issues (two active tasks
+      overlapping is normal here), so only the leave-conflict half of
+      V1's real check carries over -- same `leaveIsBlocking` statuses
+      (planned/pending/approved) V1 uses, checked against the issue's
+      `start_date`/`target_date` range. Non-blocking (unlike V1's hard
+      block on a literal time slot): a warning banner, not a save-blocker.
+      **Verified live end-to-end** against the user's own real "SITE
+      DEMARCATIONS" project and its real "WORK STALLED" issue: escalated
+      it to a real colleague through the UI, confirmed the real assignee
+      row, activity row, and chat message all landed correctly in the
+      database and that the UI's activity feed rendered the escalation
+      entry; separately inserted a real overlapping `leave_requests` row
+      for an assignee and confirmed the UI's warning banner appeared,
+      then removed the test leave row and test dates (left the real
+      escalation in place -- it's genuine verified functionality on the
+      user's real data, not throwaway test data). `npx tsc -b` clean.
+      **Still open in Phase 7**: task-scheduling refinements beyond what
+      cycles/modules/dates already give (V1's real recurring-to-dos/
+      drag-to-reschedule model hasn't been ported), and reviewing whether
+      any other V1 Operations Tracker behavior (multi-attendee invites,
+      the AI companion mentioned in an old web-next commit) should carry
+      over.

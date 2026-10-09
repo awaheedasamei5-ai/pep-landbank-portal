@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { observer } from "mobx-react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import { store } from "@openplane-web/lib/store-context";
 import { requireSupabase } from "@/lib/supabase.client";
 import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { E_SORT_ORDER } from "@plane/constants";
+import { IssueService } from "@openplane-web/services/issue";
 
 // Phase 6's issue detail slice: real edit (state/priority/dates/assignees/
 // labels/description), real comments (op_issue_comments), and the real
@@ -30,6 +31,8 @@ type StaffOption = { agent_key: string; name: string };
 
 const FIELD_LABEL: Record<string, string> = { state: "status", priority: "priority", name: "title", target_date: "due date" };
 
+const issueService = new IssueService();
+
 export const IssueDetailScreen = observer(function IssueDetailScreen({
   projectId,
   issueId,
@@ -43,6 +46,11 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [leaveConflicts, setLeaveConflicts] = useState<{ staffKey: string; staffName: string }[]>([]);
+  const [showEscalate, setShowEscalate] = useState(false);
+  const [escalateTo, setEscalateTo] = useState("");
+  const [escalateNote, setEscalateNote] = useState("");
+  const [escalating, setEscalating] = useState(false);
 
   const issueRoot = store.issue;
   const projectIssues = issueRoot.projectIssues;
@@ -87,6 +95,26 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
     if (issue) setDescriptionDraft(issue.description_html ?? "");
   }, [issue?.id]);
 
+  // Phase 7 "twist to fit": real collision detection, grounded in V1's own
+  // leave-conflict check (index.html's apiCheckScheduleConflictsMulti) --
+  // re-runs whenever the assignee list or date range changes, surfaced as
+  // a non-blocking warning (unlike V1's hard block on a literal time slot,
+  // two active tasks overlapping is normal here; being on leave isn't).
+  useEffect(() => {
+    if (!issue) return;
+    let cancelled = false;
+    issueService
+      .checkAssigneeLeaveConflicts(issue.assignee_ids, issue.start_date, issue.target_date)
+      .then((hits) => {
+        if (!cancelled) setLeaveConflicts(hits);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue?.assignee_ids.join(","), issue?.start_date, issue?.target_date]);
+
   async function patch(data: Parameters<typeof projectIssues.updateIssue>[3]) {
     try {
       await projectIssues.updateIssue(WORKSPACE_SLUG, projectId, issueId, data);
@@ -96,6 +124,25 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
       await detail.activity.fetchActivities(WORKSPACE_SLUG, projectId, issueId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update issue.");
+    }
+  }
+
+  async function escalate() {
+    if (!escalateTo) return;
+    setEscalating(true);
+    try {
+      await issueService.escalateIssue(issueId, escalateTo, escalateNote.trim());
+      await Promise.all([
+        detail.issue.fetchIssue(WORKSPACE_SLUG, projectId, issueId),
+        detail.activity.fetchActivities(WORKSPACE_SLUG, projectId, issueId),
+      ]);
+      setShowEscalate(false);
+      setEscalateTo("");
+      setEscalateNote("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to escalate.");
+    } finally {
+      setEscalating(false);
     }
   }
 
@@ -133,11 +180,48 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
 
       <div className="grid gap-6 xl:grid-cols-12">
         <div className="grid gap-4 xl:col-span-7">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-sm text-muted-foreground">
               {project?.identifier}-{issue.sequence_id}
             </span>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowEscalate((v) => !v)}>
+              <ArrowUp />
+              Escalate
+            </Button>
           </div>
+          {showEscalate && (
+            <Card>
+              <CardContent className="grid gap-3 pt-6">
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Escalate to</p>
+                  <Select value={escalateTo} onValueChange={setEscalateTo}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose a colleague…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {staff
+                        .filter((s) => !issue.assignee_ids.includes(s.agent_key))
+                        .map((s) => (
+                          <SelectItem key={s.agent_key} value={s.agent_key}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Textarea
+                  placeholder="Why this needs their attention…"
+                  value={escalateNote}
+                  onChange={(e) => setEscalateNote(e.target.value)}
+                  rows={2}
+                />
+                <SubmitButton type="button" loading={escalating} onClick={escalate} disabled={!escalateTo}>
+                  Escalate
+                </SubmitButton>
+                <p className="text-xs text-muted-foreground">Adds them as an assignee and sends a chat message with your reason.</p>
+              </CardContent>
+            </Card>
+          )}
           <Input
             defaultValue={issue.name}
             className="h-auto border-none px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
@@ -188,6 +272,11 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                     <span className="font-medium text-foreground">{activity.actor_detail.display_name}</span>{" "}
                     {activity.verb === "created" ? (
                       "created this issue"
+                    ) : activity.verb === "escalated" ? (
+                      <>
+                        escalated to <span className="font-medium text-foreground">{activity.new_value}</span>
+                        {activity.comment ? `: "${activity.comment}"` : ""}
+                      </>
                     ) : (
                       <>
                         changed {FIELD_LABEL[activity.field ?? ""] ?? activity.field} from{" "}
@@ -308,6 +397,12 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                     );
                   })}
                 </div>
+                {leaveConflicts.length > 0 && (
+                  <p className="mt-1.5 text-xs text-destructive">
+                    {leaveConflicts.map((c) => c.staffName).join(", ")} {leaveConflicts.length === 1 ? "is" : "are"} on leave during this issue's
+                    dates.
+                  </p>
+                )}
               </div>
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">Labels</p>
