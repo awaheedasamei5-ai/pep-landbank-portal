@@ -12,7 +12,7 @@ export function AttendanceSettingsScreen() {
   const mgmt = useAttendanceManagement();
 
   return (
-    <div className="p-4 pb-24 md:p-8 md:max-w-2xl">
+    <div className="mx-auto w-full max-w-2xl">
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/attendance/management">
           <ArrowLeft />

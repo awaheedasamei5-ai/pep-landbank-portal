@@ -1,20 +1,19 @@
-import { fmtLongDate, today } from '../../../shared/lib/format';
-import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
+"use client";
+
+import { Calendar } from '@/components/ui/calendar';
+import { ghanaHolidayMapForYear } from '../../../shared/lib/ghanaHolidays';
 import { companyClosuresForYear, leaveConflictDatesFromOthers, leaveIsBlocking } from '../lib/leaveLogic';
 import type { Config, LeaveHoliday, LeaveRequest } from '../../../types/domain';
-import styles from './LeaveCalendar.module.css';
 
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-function leaveIso(year: number, month0: number, day: number): string {
-  return `${year}-${String(month0 + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+function toIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// V1's real leave calendar -- same cell states (weekend/holiday/already-
-// taken/colleague-conflict/selected/today/past), same click-to-toggle
-// multi-select (V1's model is discrete selected dates, not a start/end
-// range).
+// V1's real leave calendar (weekend/holiday/already-taken/colleague-
+// conflict/selected/today/past), rebuilt on the shell's real shadcn
+// Calendar (react-day-picker, mode="multiple") after the 2026-10-09
+// correction -- same real component used everywhere else, fixed small
+// cell size instead of the earlier hand-rolled grid.
 export function LeaveCalendar({
   year,
   month,
@@ -36,89 +35,75 @@ export function LeaveCalendar({
   onToggleDate: (iso: string) => void;
   companyClosures?: LeaveHoliday[];
 }) {
-  const nDays = new Date(year, month + 1, 0).getDate();
-  const firstDow = new Date(year, month, 1).getDay();
-  const myTaken = new Set(
-    requests
-      .filter((r) => r.agentKey === agentKey && leaveIsBlocking(r.status))
-      .flatMap((r) => r.dates || []),
-  );
+  const monthDate = new Date(year, month, 1);
+  const myTaken = new Set(requests.filter((r) => r.agentKey === agentKey && leaveIsBlocking(r.status)).flatMap((r) => r.dates || []));
   const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
   const holidays = ghanaHolidayMapForYear(year, config.eidWindows, companyClosuresForYear(companyClosures, year));
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
-  const t = today();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  const cells: { iso: string | null; day: number }[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push({ iso: null, day: 0 });
-  for (let d = 1; d <= nDays; d++) cells.push({ iso: leaveIso(year, month, d), day: d });
+  function isHoliday(iso: string) {
+    const h = holidays.get(iso);
+    return !!h && !(h.isEid && observesEid);
+  }
+
+  const holidayDates = Array.from(holidays.keys()).filter(isHoliday).map((d) => new Date(`${d}T00:00:00`));
+  const takenDates = Array.from(myTaken).map((d) => new Date(`${d}T00:00:00`));
+  const conflictDates = Array.from(otherConflicts).map((d) => new Date(`${d}T00:00:00`));
+  const selected = selectedDates.map((d) => new Date(`${d}T00:00:00`));
+
+  function handleMonthChange(next: Date) {
+    const delta = (next.getFullYear() - year) * 12 + (next.getMonth() - month);
+    if (delta !== 0) onNavMonth(delta);
+  }
+
+  function handleSelect(next: Date[] | undefined) {
+    const nextIso = new Set((next ?? []).map(toIso));
+    const prevIso = new Set(selectedDates);
+    for (const iso of nextIso) if (!prevIso.has(iso)) onToggleDate(iso);
+    for (const iso of prevIso) if (!nextIso.has(iso)) onToggleDate(iso);
+  }
 
   return (
-    <div>
-      <div className={styles.nav}>
-        <button type="button" className={styles.navBtn} onClick={() => onNavMonth(-1)} aria-label="Previous month">
-          &lsaquo;
-        </button>
-        <div className={styles.navLabel}>
-          {MONTH_NAMES[month]} {year}
-        </div>
-        <button type="button" className={styles.navBtn} onClick={() => onNavMonth(1)} aria-label="Next month">
-          &rsaquo;
-        </button>
-      </div>
-      <div className={styles.grid}>
-        {WEEKDAY_LABELS.map((w, i) => (
-          <div className={styles.wd} key={i}>
-            {w}
-          </div>
-        ))}
-        {cells.map((c, i) => {
-          if (!c.iso) return <div className={`${styles.cell} ${styles.empty}`} key={i} />;
-          const iso = c.iso;
-          const isSel = selectedDates.includes(iso);
-          const isPast = iso < t;
-          const isToday = iso === t;
-          const isWeekend = isWeekendIso(iso);
-          const holiday = holidays.get(iso);
-          const isHoliday = !!holiday && !(holiday.isEid && observesEid);
-          const isTaken = myTaken.has(iso) && !isSel;
-          const isConflict = otherConflicts.has(iso) && !isSel;
-          const disabled = isPast || isWeekend || isHoliday || isTaken || isConflict;
-          let reason = '';
-          if (isTaken) reason = 'Already requested';
-          else if (isConflict) reason = "Conflicts with a colleague's leave";
-          else if (isHoliday) reason = holiday?.isEid ? 'Eid window — restricted to selected staff' : (holiday?.name ?? '');
-          else if (isWeekend) reason = 'Weekend';
-          const cls = [styles.cell, isSel && styles.sel, (isTaken || isConflict) && styles.taken, isHoliday && styles.holiday, isWeekend && styles.weekend, isToday && styles.today].filter(Boolean).join(' ');
-          return (
-            <button type="button" key={iso} className={cls} disabled={disabled} title={reason} onClick={() => onToggleDate(iso)}>
-              {c.day}
-            </button>
-          );
-        })}
-      </div>
-      <div className={styles.legend}>
-        <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--c-ink)' }} />
-          Selected
+    <div className="flex flex-col items-center gap-3">
+      <Calendar
+        mode="multiple"
+        month={monthDate}
+        onMonthChange={handleMonthChange}
+        selected={selected}
+        onSelect={handleSelect}
+        disabled={[{ before: todayStart }, ...holidayDates, ...takenDates, ...conflictDates, { dayOfWeek: [0, 6] }]}
+        modifiers={{ holiday: holidayDates, taken: [...takenDates, ...conflictDates] }}
+        modifiersClassNames={{
+          holiday: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+          taken: 'bg-destructive/15 text-destructive',
+        }}
+      />
+      <div className="flex flex-wrap justify-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-primary" /> Selected
         </span>
-        <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--c-warn)' }} />
-          Public holiday
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-amber-500" /> Public holiday
         </span>
-        <span className={styles.legendItem}>
-          <i className={styles.legendSwatch} style={{ background: 'var(--c-danger)' }} />
-          Taken / colleague&apos;s leave
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-destructive" /> Taken / colleague&apos;s leave
         </span>
       </div>
-      <div className={styles.summary}>Selected: {selectedDates.length ? `${selectedDates.length} day(s) selected` : 'none yet'}</div>
       {selectedDates.length > 0 && (
-        <div className={styles.chips}>
+        <div className="flex flex-wrap justify-center gap-2">
           {selectedDates
             .slice()
             .sort()
             .map((d) => (
-              <button type="button" key={d} className={styles.chip} onClick={() => onToggleDate(d)}>
-                {fmtLongDate(d)} ✕
+              <button
+                key={d}
+                type="button"
+                onClick={() => onToggleDate(d)}
+                className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs font-medium text-primary hover:bg-primary/20"
+              >
+                {d} ✕
               </button>
             ))}
         </div>

@@ -85,14 +85,14 @@ export function LeaveRequestEditScreen() {
 
   if (!request) {
     return (
-      <div className="p-4 pb-24 md:p-8">
+      <div className="mx-auto w-full max-w-2xl">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
   if (request.status !== 'planned') {
     return (
-      <div className="p-4 pb-24 md:p-8">
+      <div className="mx-auto w-full max-w-2xl">
         <Button asChild variant="ghost" size="sm" className="mb-2">
           <Link href={`/dashboard/leave/requests/${request.id}`}>
             <ArrowLeft />
@@ -105,7 +105,7 @@ export function LeaveRequestEditScreen() {
   }
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div className="mx-auto w-full max-w-2xl">
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href={`/dashboard/leave/requests/${request.id}`}>
           <ArrowLeft />

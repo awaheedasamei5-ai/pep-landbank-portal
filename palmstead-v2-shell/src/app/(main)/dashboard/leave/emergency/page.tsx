@@ -5,7 +5,7 @@ import { LeaveEmergencyForm } from "@/webnext/features/leave/components/LeaveEme
 
 export default function Page() {
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div className="mx-auto w-full max-w-2xl">
       <Button asChild variant="ghost" size="sm" className="mb-4">
         <Link href="/dashboard/leave">
           <ArrowLeft />

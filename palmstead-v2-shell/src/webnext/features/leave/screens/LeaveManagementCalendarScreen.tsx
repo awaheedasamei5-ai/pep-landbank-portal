@@ -2,22 +2,21 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Calendar } from '@/components/ui/calendar';
 import { PageHeader } from '@/components/page-header';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
 import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
 import { companyClosuresForYear } from '../lib/leaveLogic';
-import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
+import { ghanaHolidayMapForYear } from '../../../shared/lib/ghanaHolidays';
 import { today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
-import styles from './LeaveManagementCalendarScreen.module.css';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function iso(year: number, month0: number, day: number): string {
   return `${year}-${String(month0 + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -27,11 +26,12 @@ function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
 }
 
-// Real "who's out when" company-wide calendar. The day-chip grid is a
-// genuinely specialized widget (no equivalent in the reference repo or
-// the shell's own shadcn library), kept as its own CSS module; the
-// surrounding chrome and the "out this month" list are rebuilt on the
-// shell's real shadcn Card/Table after the 2026-10-08 correction.
+// Real "who's out when" company-wide calendar, rebuilt on the shell's
+// real shadcn Calendar (react-day-picker) after the 2026-10-09
+// correction -- a custom DayButton renders each day's initials chips
+// inside the same real calendar grid used throughout the rest of the
+// app, instead of a bespoke hand-rolled grid that could balloon to
+// oversized cells on a wide container.
 export function LeaveManagementCalendarScreen() {
   const { data: config } = useConfig();
   const { data: requests } = useLeaveRequests();
@@ -44,9 +44,7 @@ export function LeaveManagementCalendarScreen() {
   const relevant = all.filter((r) => r.status === 'approved' || r.status === 'pending');
 
   const nDays = new Date(year, month + 1, 0).getDate();
-  const firstDow = new Date(year, month, 1).getDay();
   const holidays = config ? ghanaHolidayMapForYear(year, config.eidWindows, companyClosuresForYear(companyClosures ?? [], year)) : new Map();
-  const t = today();
 
   const byDate = useMemo(() => {
     const map = new Map<string, LeaveRequest[]>();
@@ -71,26 +69,27 @@ export function LeaveManagementCalendarScreen() {
     return Array.from(seen.values()).sort((a, b) => (a.dates[0] ?? '').localeCompare(b.dates[0] ?? ''));
   }, [byDate, nDays, year, month]);
 
-  function navMonth(delta: number) {
+  function handleMonthChange(next: Date) {
+    const delta = (next.getFullYear() - year) * 12 + (next.getMonth() - month);
+    if (delta === 0) return;
     let m = month + delta;
     let y = year;
-    if (m < 0) {
-      m = 11;
+    while (m < 0) {
+      m += 12;
       y--;
-    } else if (m > 11) {
-      m = 0;
+    }
+    while (m > 11) {
+      m -= 12;
       y++;
     }
     setMonth(m);
     setYear(y);
   }
 
-  const cells: { iso: string | null; day: number }[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push({ iso: null, day: 0 });
-  for (let d = 1; d <= nDays; d++) cells.push({ iso: iso(year, month, d), day: d });
+  const holidayDates = Array.from(holidays.keys()).map((d) => new Date(`${d}T00:00:00`));
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave/management">
           <ArrowLeft />
@@ -100,59 +99,44 @@ export function LeaveManagementCalendarScreen() {
       <PageHeader title="Team calendar" description="Who's out, company-wide" />
 
       <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <Button variant="outline" size="icon-sm" onClick={() => navMonth(-1)} aria-label="Previous month">
-              <ChevronLeft />
-            </Button>
-            <CardTitle>
-              {MONTH_NAMES[month]} {year}
-            </CardTitle>
-            <Button variant="outline" size="icon-sm" onClick={() => navMonth(1)} aria-label="Next month">
-              <ChevronRight />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className={styles.grid}>
-            {WEEKDAY_LABELS.map((w, i) => (
-              <div className={styles.wd} key={i}>
-                {w}
-              </div>
-            ))}
-            {cells.map((c, i) => {
-              if (!c.iso) return <div className={`${styles.cell} ${styles.empty}`} key={i} />;
-              const cellIso = c.iso;
-              const isToday = cellIso === t;
-              const isWeekend = isWeekendIso(cellIso);
-              const holiday = holidays.get(cellIso);
-              const onLeave = byDate.get(cellIso) ?? [];
-              return (
-                <div key={cellIso} className={`${styles.cell} ${isToday ? styles.today : ''} ${holiday ? styles.holiday : ''} ${isWeekend && !holiday ? styles.weekend : ''}`}>
-                  <span className={styles.dayNum}>{c.day}</span>
-                  {onLeave.length > 0 && (
-                    <div className={styles.chips} title={onLeave.map((r) => r.agentName).join(', ')}>
-                      {onLeave.slice(0, 3).map((r) => (
-                        <span key={r.id} className={`${styles.chip} ${r.status === 'pending' ? styles.chipPending : ''}`}>
-                          {initials(r.agentName)}
-                        </span>
-                      ))}
-                      {onLeave.length > 3 && <span className={styles.chipMore}>+{onLeave.length - 3}</span>}
-                    </div>
-                  )}
-                  {holiday && !onLeave.length && <div className={styles.holidayLabel}>{holiday.name}</div>}
-                </div>
-              );
-            })}
-          </div>
-          <div className={styles.legend}>
-            <span className={styles.legendItem}>
-              <i className={styles.legendSwatch} style={{ background: 'var(--c-accent)' }} />
-              Approved
+        <CardContent className="flex flex-col items-center gap-3 pt-6">
+          <Calendar
+            month={new Date(year, month, 1)}
+            onMonthChange={handleMonthChange}
+            modifiers={{ holiday: holidayDates }}
+            modifiersClassNames={{ holiday: 'bg-amber-500/15' }}
+            className="[--cell-size:--spacing(14)]"
+            components={{
+              DayButton: ({ day, modifiers, className, children, ...props }) => {
+                const dayIso = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, '0')}-${String(day.date.getDate()).padStart(2, '0')}`;
+                const onLeave = byDate.get(dayIso) ?? [];
+                return (
+                  <button type="button" className={`${className} flex-col gap-1 rounded-md`} {...props}>
+                    <span className="text-xs">{day.date.getDate()}</span>
+                    {onLeave.length > 0 && (
+                      <span className="flex flex-wrap items-center justify-center gap-0.5" title={onLeave.map((r) => r.agentName).join(', ')}>
+                        {onLeave.slice(0, 2).map((r) => (
+                          <span
+                            key={r.id}
+                            className={`flex size-4 items-center justify-center rounded-full text-[8px] font-bold text-white ${r.status === 'pending' ? 'bg-amber-500' : 'bg-primary'}`}
+                          >
+                            {initials(r.agentName)}
+                          </span>
+                        ))}
+                        {onLeave.length > 2 && <span className="text-[8px] text-muted-foreground">+{onLeave.length - 2}</span>}
+                      </span>
+                    )}
+                  </button>
+                );
+              },
+            }}
+          />
+          <div className="flex flex-wrap justify-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block size-2 rounded-full bg-primary" /> Approved
             </span>
-            <span className={styles.legendItem}>
-              <i className={styles.legendSwatch} style={{ background: 'var(--c-warn)' }} />
-              Pending / holiday
+            <span className="flex items-center gap-1.5">
+              <i className="inline-block size-2 rounded-full bg-amber-500" /> Pending / holiday
             </span>
           </div>
         </CardContent>

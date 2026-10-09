@@ -9,14 +9,12 @@ import { LeaveManagementScreen } from "@/webnext/features/leave/screens/LeaveMan
 export default function Page() {
   return (
     <div>
-      <div className="px-4 pt-5 md:px-8 md:pt-7">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/dashboard/leave">
-            <ArrowLeft />
-            My Leave
-          </Link>
-        </Button>
-      </div>
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href="/dashboard/leave">
+          <ArrowLeft />
+          My Leave
+        </Link>
+      </Button>
       <LeaveManagementScreen />
     </div>
   );

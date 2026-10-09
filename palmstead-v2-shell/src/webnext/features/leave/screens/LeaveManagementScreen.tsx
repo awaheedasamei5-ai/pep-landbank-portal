@@ -59,7 +59,7 @@ export function LeaveManagementScreen() {
   const pendingEmergencyCount = emergencies.filter((r) => r.status === 'pending').length;
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div>
       <PageHeader
         title="Management"
         description={`Every staff member's ${year} leave plan, at a glance`}

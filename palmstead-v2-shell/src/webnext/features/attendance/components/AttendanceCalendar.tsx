@@ -1,58 +1,67 @@
 "use client";
 
+import { Calendar } from '@/components/ui/calendar';
 import type { DayCell } from '../hooks/useAttendanceMonth';
-import styles from './AttendanceCalendar.module.css';
 
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-function cellClass(cell: DayCell): string {
-  if (cell.isFuture) return styles.future;
-  if (cell.isOnLeave) return styles.leave;
-  if (!cell.isWorkday) return styles.weekend;
-  if (cell.record?.signInAt) return cell.isLate ? styles.late : styles.onTime;
-  return styles.absent;
-}
-
-function cellTitle(cell: DayCell): string {
-  if (cell.isFuture) return `${cell.date} — upcoming`;
-  if (cell.isOnLeave) return `${cell.date} — on leave`;
-  if (!cell.isWorkday) return `${cell.date} — not a workday`;
-  if (cell.record?.signInAt) return `${cell.date} — ${cell.isLate ? 'late' : 'on time'}`;
-  return `${cell.date} — absent`;
-}
-
-// Leave-aware calendar heatmap (Attendance plan Part 3) -- every day of
-// the current month colored by what actually happened, using the same
-// real attendance_log + leave_requests rows the month KPI card sums up,
-// so the two views can never disagree.
+// Leave-aware calendar heatmap (Attendance plan Part 3), rebuilt on the
+// shell's real shadcn Calendar (react-day-picker) after the 2026-10-09
+// correction -- the earlier hand-rolled CSS-module grid had no width cap
+// on its cells and ballooned to oversized squares once the page's own
+// redundant padding wrapper was removed. The real Calendar's cells are a
+// fixed --cell-size, so this can never happen again, and it matches the
+// same calendar component used throughout the rest of the app.
 export function AttendanceCalendar({ cells }: { cells: DayCell[] }) {
   if (!cells.length) return null;
-  const [fy, fm, fd] = cells[0].date.split('-').map(Number);
-  const leadingBlanks = new Date(fy, fm - 1, fd).getDay();
+  const monthDate = new Date(`${cells[0].date}T00:00:00`);
+
+  const onTime: Date[] = [];
+  const late: Date[] = [];
+  const absent: Date[] = [];
+  const leave: Date[] = [];
+  const weekend: Date[] = [];
+  const future: Date[] = [];
+
+  cells.forEach((cell) => {
+    const d = new Date(`${cell.date}T00:00:00`);
+    if (cell.isFuture) future.push(d);
+    else if (cell.isOnLeave) leave.push(d);
+    else if (!cell.isWorkday) weekend.push(d);
+    else if (cell.record?.signInAt) (cell.isLate ? late : onTime).push(d);
+    else absent.push(d);
+  });
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.weekdayRow}>
-        {WEEKDAY_LABELS.map((w, i) => (
-          <span key={i}>{w}</span>
-        ))}
-      </div>
-      <div className={styles.grid}>
-        {Array.from({ length: leadingBlanks }).map((_, i) => (
-          <span key={`b${i}`} />
-        ))}
-        {cells.map((cell) => (
-          <div key={cell.date} className={`${styles.cell} ${cellClass(cell)}`} title={cellTitle(cell)}>
-            {cell.dayOfMonth}
-          </div>
-        ))}
-      </div>
-      <div className={styles.legend}>
-        <span><i className={styles.onTime} /> On time</span>
-        <span><i className={styles.late} /> Late</span>
-        <span><i className={styles.absent} /> Absent</span>
-        <span><i className={styles.leave} /> Leave</span>
-        <span><i className={styles.weekend} /> Off day</span>
+    <div className="flex flex-col items-center gap-3">
+      <Calendar
+        startMonth={monthDate}
+        endMonth={monthDate}
+        defaultMonth={monthDate}
+        modifiers={{ onTime, late, absent, leave, weekend, future }}
+        modifiersClassNames={{
+          onTime: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+          late: 'bg-destructive/15 text-destructive',
+          absent: 'bg-muted text-muted-foreground',
+          leave: 'bg-primary/15 text-primary',
+          weekend: 'text-muted-foreground/40',
+          future: 'text-muted-foreground/30',
+        }}
+      />
+      <div className="flex flex-wrap justify-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-emerald-500" /> On time
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-destructive" /> Late
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-muted-foreground/50" /> Absent
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-primary" /> Leave
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block size-2 rounded-full bg-muted-foreground/20" /> Off day
+        </span>
       </div>
     </div>
   );

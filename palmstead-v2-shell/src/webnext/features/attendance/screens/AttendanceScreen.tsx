@@ -45,7 +45,7 @@ export function AttendanceScreen() {
   const signedOut = !!today?.signOutAt;
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div className="mx-auto w-full max-w-3xl">
       <PageHeader
         title="Attendance"
         description="Sign in when you arrive, sign out when you leave — your location is captured automatically."

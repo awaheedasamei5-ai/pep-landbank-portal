@@ -73,7 +73,7 @@ export function LeaveManagementRequestsScreen() {
   }
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave/management">
           <ArrowLeft />

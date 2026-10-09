@@ -38,7 +38,7 @@ export function LeavePlanScreen() {
   const monthsWithPlan = new Set(planned.flatMap((r) => r.dates.map((d) => Number(d.slice(5, 7)) - 1)));
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div className="mx-auto w-full max-w-2xl">
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave">
           <ArrowLeft />

@@ -22,7 +22,7 @@ export function AttendanceManagementScreen() {
   const signedIn = mgmt.today.filter((r) => r.signInAt).length;
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div>
       <PageHeader
         title="Attendance — Management"
         description="Who's in today, what needs your attention."

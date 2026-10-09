@@ -69,7 +69,7 @@ export function LeaveDashboardScreen() {
   }
 
   return (
-    <div className="p-4 pb-24 md:p-8">
+    <div>
       <PageHeader
         title="Leave"
         description={`Your ${thisYear} leave at a glance`}
