@@ -106,7 +106,15 @@ Built at `/dashboard/announcements` (Communication sidebar group) + a real bell/
 
 **Data model**: new `announcements` table (content, category, created_by, expires_at) + `announcement_reads` (announcement_id, user_id, read_at) replacing V1's localStorage-only dismiss tracking with a real server-side record — this ALSO fixes a real V1 limitation: dismissing on one device doesn't dismiss on another, since it's `localStorage`-only there.
 
-### B.3 Notice Board
+### B.3 Notice Board — DONE 2026-10-09
+
+Built at `/dashboard/notice-board` (Office sidebar group). Real `notice_board_posts` table, field-for-field from the source repo's migration 023, plus a real `notice_board_reports` table implementing the user's decided report-to-Management model (not the repo's open-delete-by-anyone) -- migration `notice_board`. RLS: anyone reads/posts, own-post or manager-only update/delete, report insert by anyone, report list manager-only (or the reporter's own). Management gets a real "Reported" tab with a live count badge.
+
+Real bug caught and fixed during verification: the create-post mutation spread the camelCase form object (`...data`) into the Supabase insert alongside explicit snake_case overrides, sending an unknown `linkLabel` column and failing with `PGRST204` -- insert now builds the payload explicitly, snake_case only.
+
+`npx tsc -b` clean. Verified live as manager: posted a real sticky note, confirmed the row and its colour in the database, confirmed it renders correctly in both light and dark mode with the right colour-coded card background.
+
+**Original B.3 spec, for reference:**
 
 **No V1 equivalent** — net new. Real repo schema already read in full (migration 023): `notice_board_posts` (content, link_url, link_label, colour, created_by, expires_at). Real RLS: everyone reads, any authenticated person posts, ANY authenticated person can delete ANY post (`notice_delete_any` — an "open board" moderation model, worth keeping as-is, it matches a genuinely low-stakes physical notice-board metaphor).
 
