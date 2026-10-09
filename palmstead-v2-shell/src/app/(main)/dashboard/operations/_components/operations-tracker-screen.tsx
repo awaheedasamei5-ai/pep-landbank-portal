@@ -9,16 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { SubmitButton } from "@/components/submit-button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { store } from "@openplane-web/lib/store-context";
 import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { requireSupabase } from "@/lib/supabase.client";
+import { OperationsCommandCenter } from "./operations-command-center";
 
-// Phase 4b's first real screen against the raw-duplicated plane store: lists
-// the real op_projects rows for the one seeded op_workspaces row ("palmstead").
-// Deliberately minimal -- issues/kanban/cycles/modules are later Phase 6
-// slices, per docs/plans/03-operations-tracker-plane-port.md. Not yet linked
-// from the sidebar (still NOT_BUILT_YET there) because a project list alone
-// isn't the real Operations Tracker experience the user asked for.
+// Home page: a real Command Center (operations-command-center.tsx) built
+// from real op_issues/op_states/op_issue_activity rows across every
+// project, same house pattern as dashboard/default's manager overview.
+// The project list below it is the original Phase 4b screen -- kept as
+// the real project switcher, not replaced.
 const WORKSPACE_SLUG = "palmstead";
 
 export const OperationsTrackerScreen = observer(function OperationsTrackerScreen() {
@@ -69,16 +70,19 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
 
   return (
     <div>
-      <PageHeader
-        title="Operations Tracker"
-        description="Real projects from the raw-duplicated plane data layer -- issues, states and kanban are real; cycles/modules come next."
-        action={
-          <Button onClick={() => setShowNewProject((v) => !v)}>
-            <Plus />
-            New project
-          </Button>
-        }
-      />
+      <PageHeader title="Operations Tracker" description="Company-wide view across every real project." />
+
+      <div className="mb-6">
+        <OperationsCommandCenter />
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold text-lg">Projects</h2>
+        <Button onClick={() => setShowNewProject((v) => !v)} size="sm">
+          <Plus />
+          New project
+        </Button>
+      </div>
 
       {showNewProject && (
         <Card className="mb-4">
@@ -97,8 +101,24 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
         </Card>
       )}
 
-      {loading && <p className="text-sm text-muted-foreground">Loading real projects from Supabase…</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {loading && (
+        <div className="grid gap-4 xl:grid-cols-12">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="xl:col-span-4">
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-5 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full" />
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && !error && (
         <div className="grid gap-4 xl:grid-cols-12">
