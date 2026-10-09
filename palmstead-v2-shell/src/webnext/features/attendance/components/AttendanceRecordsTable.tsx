@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { FormItem } from '@/components/form-item';
+import { SubmitButton } from '@/components/submit-button';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { TableEmpty } from '@/components/table-empty';
 import type { AttendanceRecord } from '../../../types/domain';
 import { resolveAttendancePhotoUrl } from '../lib/attendancePhotoQueue';
-import styles from './AttendanceRecordsTable.module.css';
 
 function timeToInput(iso: string | null): string {
   if (!iso) return '';
@@ -19,11 +29,11 @@ function combineDateTime(workDate: string, hhmm: string): string | null {
   return d.toISOString();
 }
 
-// Real correction tool -- ATTENDANCE_BLUEPRINT.md §8, adapted from
-// OpenHRApp's real src/pages/AttendanceLogs.tsx (its own admin
-// audit/correction view). Every save writes only signInAt/signOutAt
-// (the real al_upd_own_or_mgr RLS shape); every correction and delete
-// is Management-only, matching the real al_del_mgr policy.
+// Real correction tool -- ATTENDANCE_BLUEPRINT.md §8. Rebuilt on the
+// shell's real Table/Dialog after the 2026-10-08/09 correction. Every
+// save writes only signInAt/signOutAt (the real al_upd_own_or_mgr RLS
+// shape); every correction and delete is Management-only, matching the
+// real al_del_mgr policy.
 export function AttendanceRecordsTable({
   records,
   onCorrect,
@@ -37,7 +47,6 @@ export function AttendanceRecordsTable({
 }) {
   const [search, setSearch] = useState('');
   const [staffFilter, setStaffFilter] = useState('ALL');
-  // 2026-10-08 ask: "filters for late days, days u arrived on time."
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LATE' | 'ON_TIME' | 'OFF_SITE'>('ALL');
   const [selected, setSelected] = useState<AttendanceRecord | null>(null);
   const [editIn, setEditIn] = useState('');
@@ -45,10 +54,6 @@ export function AttendanceRecordsTable({
   const [busy, setBusy] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
-  // The Storage bucket backing sign-in photos is private (real folder-
-  // scoped RLS, not a public bucket) -- a stored path needs a signed URL
-  // resolved per view, same as the upload pipeline's own
-  // resolveAttendancePhotoUrl (attendancePhotoQueue.ts).
   useEffect(() => {
     let cancelled = false;
     setPhotoUrl(null);
@@ -103,7 +108,6 @@ export function AttendanceRecordsTable({
 
   async function handleDelete() {
     if (!selected) return;
-    if (!window.confirm('Permanently delete this attendance record? This cannot be undone.')) return;
     setBusy(true);
     try {
       await onRemove(selected.id);
@@ -113,109 +117,140 @@ export function AttendanceRecordsTable({
     }
   }
 
-  async function handleResetAll() {
-    if (!window.confirm('This deletes EVERY attendance record for EVERY staff member. Are you absolutely sure?')) return;
-    if (!window.confirm('Second confirmation: this cannot be undone. Proceed?')) return;
-    await onResetAll();
-  }
-
   return (
-    <div className={styles.wrap}>
-      <div className={styles.header}>
-        <h3>Attendance records</h3>
-        <button type="button" className={styles.resetBtn} onClick={handleResetAll}>
-          Reset all records
-        </button>
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-heading text-lg font-semibold">Attendance records</h3>
+        <ConfirmDialog
+          trigger={
+            <Button variant="destructive" size="sm">
+              Reset all records
+            </Button>
+          }
+          title="Delete EVERY attendance record for EVERY staff member?"
+          description="This cannot be undone. Present/absent counters restart at zero."
+          confirmLabel="Reset all"
+          onConfirm={onResetAll}
+        />
       </div>
 
-      <div className={styles.filters}>
-        <input className={styles.search} placeholder="Search by name or date…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className={styles.staffSelect} value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
-          <option value="ALL">All staff</option>
-          {staffOptions.map(([key, name]) => (
-            <option key={key} value={key}>{name}</option>
-          ))}
-        </select>
-        <select className={styles.staffSelect} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
-          <option value="ALL">All statuses</option>
-          <option value="LATE">Late</option>
-          <option value="ON_TIME">On time</option>
-          <option value="OFF_SITE">Off-site</option>
-        </select>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Input placeholder="Search by name or date…" className="max-w-56" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Select value={staffFilter} onValueChange={setStaffFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All staff</SelectItem>
+            {staffOptions.map(([key, name]) => (
+              <SelectItem key={key} value={key}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All statuses</SelectItem>
+            <SelectItem value="LATE">Late</SelectItem>
+            <SelectItem value="ON_TIME">On time</SelectItem>
+            <SelectItem value="OFF_SITE">Off-site</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
-      <p className={styles.date}>{filtered.length} record{filtered.length === 1 ? '' : 's'}</p>
+      <p className="mb-2 text-xs text-muted-foreground">
+        {filtered.length} record{filtered.length === 1 ? '' : 's'}
+      </p>
 
-      <div className={styles.list}>
-        {!filtered.length ? (
-          <p className={styles.empty}>No matching records.</p>
-        ) : (
-          filtered.map((rec) => (
-            <div key={rec.id} className={styles.row} onClick={() => openDetail(rec)}>
-              <div className={styles.rowLeft}>
-                <strong>{rec.staffName ?? rec.staffKey}</strong>
-                <span className={styles.date}>{rec.workDate}</span>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Staff</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>In — Out</TableHead>
+            <TableHead>Flags</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.length === 0 ? (
+            <TableEmpty colSpan={4} message="No matching records." />
+          ) : (
+            filtered.map((rec) => (
+              <TableRow key={rec.id} className="cursor-pointer" onClick={() => openDetail(rec)}>
+                <TableCell className="font-medium">{rec.staffName ?? rec.staffKey}</TableCell>
+                <TableCell>{rec.workDate}</TableCell>
+                <TableCell>
+                  {timeToInput(rec.signInAt) || '--:--'} — {timeToInput(rec.signOutAt) || 'Active'}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {rec.lateReason && <Badge variant="destructive">Late</Badge>}
+                    {(rec.isOffSiteIn || rec.isOffSiteOut) && <Badge variant="secondary">Off-site</Badge>}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+
+      <Dialog open={!!selected} onOpenChange={(open) => !open && !busy && setSelected(null)}>
+        <DialogContent className="sm:max-w-md">
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {selected.staffName ?? selected.staffKey} · {selected.workDate}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                {selected.signInPhoto && (photoUrl ? <img src={photoUrl} alt="Sign-in" className="max-h-48 w-full rounded-lg border object-cover" /> : <p className="text-xs text-muted-foreground">Loading photo…</p>)}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <FormItem label="Sign-in time" htmlFor="editIn">
+                    <Input id="editIn" type="time" value={editIn} onChange={(e) => setEditIn(e.target.value)} />
+                  </FormItem>
+                  <FormItem label="Sign-out time" htmlFor="editOut">
+                    <Input id="editOut" type="time" value={editOut} onChange={(e) => setEditOut(e.target.value)} />
+                  </FormItem>
+                </div>
+
+                {selected.signInLat != null && selected.signInLng != null && (
+                  <a className="text-sm font-medium text-primary hover:underline" href={`https://www.google.com/maps?q=${selected.signInLat},${selected.signInLng}`} target="_blank" rel="noreferrer">
+                    View sign-in location on map →
+                  </a>
+                )}
+
+                {selected.signInReason && <p className="text-xs text-muted-foreground">Off-site reason: {selected.signInReason}</p>}
+                {selected.lateReason && <p className="text-xs text-muted-foreground">Late reason: {selected.lateReason}</p>}
               </div>
-              <div className={styles.rowRight}>
-                <span className={styles.time}>{timeToInput(rec.signInAt) || '--:--'} — {timeToInput(rec.signOutAt) || 'Active'}</span>
-                {rec.lateReason && <span className={styles.tag}>Late</span>}
-                {(rec.isOffSiteIn || rec.isOffSiteOut) && <span className={styles.tag}>Off-site</span>}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
 
-      {selected && (
-        <div className={styles.modalBackdrop} onClick={() => !busy && setSelected(null)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h4>{selected.staffName ?? selected.staffKey} · {selected.workDate}</h4>
-              <button type="button" className={styles.closeBtn} onClick={() => setSelected(null)}>✕</button>
-            </div>
-
-            <div className={styles.modalBody}>
-              {selected.signInPhoto && (
-                photoUrl ? <img src={photoUrl} alt="Sign-in" className={styles.photo} /> : <p className={styles.photoLoading}>Loading photo…</p>
-              )}
-
-              <div className={styles.fieldRow}>
-                <label className={styles.field}>
-                  <span>Sign-in time</span>
-                  <input type="time" value={editIn} onChange={(e) => setEditIn(e.target.value)} />
-                </label>
-                <label className={styles.field}>
-                  <span>Sign-out time</span>
-                  <input type="time" value={editOut} onChange={(e) => setEditOut(e.target.value)} />
-                </label>
-              </div>
-
-              {(selected.signInLat != null && selected.signInLng != null) && (
-                <a
-                  className={styles.mapLink}
-                  href={`https://www.google.com/maps?q=${selected.signInLat},${selected.signInLng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View sign-in location on map
-                </a>
-              )}
-
-              {selected.signInReason && <p className={styles.reasonNote}>Off-site reason: {selected.signInReason}</p>}
-              {selected.lateReason && <p className={styles.reasonNote}>Late reason: {selected.lateReason}</p>}
-            </div>
-
-            <div className={styles.modalFooter}>
-              <button type="button" className={styles.deleteBtn} disabled={busy} onClick={handleDelete}>
-                Delete record
-              </button>
-              <button type="button" className={styles.saveBtn} disabled={busy} onClick={handleSave}>
-                {busy ? 'Saving…' : 'Save correction'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+              <DialogFooter className="justify-between sm:justify-between">
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={busy}>
+                      <Trash2 />
+                      Delete record
+                    </Button>
+                  }
+                  title="Permanently delete this attendance record?"
+                  description="This cannot be undone."
+                  confirmLabel="Delete"
+                  onConfirm={handleDelete}
+                />
+                <SubmitButton type="button" loading={busy} onClick={handleSave}>
+                  Save correction
+                </SubmitButton>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

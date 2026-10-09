@@ -1,7 +1,34 @@
 "use client";
 
-import styles from './AttendanceComparison.module.css';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+function ComparisonRow({ label, you, team }: { label: string; you: number; team: number }) {
+  const max = Math.max(you, team, 1);
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-10 shrink-0 text-right text-xs font-medium">{you}</span>
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary" style={{ width: `${(you / max) * 100}%` }} />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-10 shrink-0 text-right text-xs font-medium text-muted-foreground">{team}</span>
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-muted-foreground/40" style={{ width: `${(team / max) * 100}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Rebuilt on the shell's real Card/Badge after the 2026-10-08/09
+// correction -- same progress-bar pattern as LeaveBalanceCard, applied
+// here to a you-vs-team comparison instead of a quota.
 export function AttendanceComparison({
   you,
   rank,
@@ -18,52 +45,27 @@ export function AttendanceComparison({
   if (!teamCount) return null;
   const yourOnTime = you?.onTimeDays ?? 0;
   const yourAttended = you?.daysAttended ?? 0;
-  const maxOnTime = Math.max(yourOnTime, teamAvgOnTime, 1);
-  const maxAttended = Math.max(yourAttended, teamAvgAttended, 1);
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.header}>
-        <h3>You vs the team</h3>
-        {rank && <span className={styles.rank}>Rank #{rank} of {teamCount}</span>}
-      </div>
-
-      <div className={styles.row}>
-        <div className={styles.rowLabel}>On-time days</div>
-        <div className={styles.bars}>
-          <div className={styles.barTrack}>
-            <div className={`${styles.bar} ${styles.you}`} style={{ width: `${(yourOnTime / maxOnTime) * 100}%` }} />
-          </div>
-          <span className={styles.barVal}>{yourOnTime}</span>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>You vs the team</CardTitle>
+          {rank && <Badge variant="outline">Rank #{rank} of {teamCount}</Badge>}
         </div>
-        <div className={styles.bars}>
-          <div className={styles.barTrack}>
-            <div className={`${styles.bar} ${styles.team}`} style={{ width: `${(teamAvgOnTime / maxOnTime) * 100}%` }} />
-          </div>
-          <span className={styles.barVal}>{teamAvgOnTime}</span>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <ComparisonRow label="On-time days" you={yourOnTime} team={teamAvgOnTime} />
+        <ComparisonRow label="Days attended" you={yourAttended} team={teamAvgAttended} />
+        <div className="flex gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <i className="inline-block size-2 rounded-full bg-primary" /> You
+          </span>
+          <span className="flex items-center gap-1.5">
+            <i className="inline-block size-2 rounded-full bg-muted-foreground/40" /> Team average
+          </span>
         </div>
-      </div>
-
-      <div className={styles.row}>
-        <div className={styles.rowLabel}>Days attended</div>
-        <div className={styles.bars}>
-          <div className={styles.barTrack}>
-            <div className={`${styles.bar} ${styles.you}`} style={{ width: `${(yourAttended / maxAttended) * 100}%` }} />
-          </div>
-          <span className={styles.barVal}>{yourAttended}</span>
-        </div>
-        <div className={styles.bars}>
-          <div className={styles.barTrack}>
-            <div className={`${styles.bar} ${styles.team}`} style={{ width: `${(teamAvgAttended / maxAttended) * 100}%` }} />
-          </div>
-          <span className={styles.barVal}>{teamAvgAttended}</span>
-        </div>
-      </div>
-
-      <div className={styles.legend}>
-        <span><i className={styles.you} /> You</span>
-        <span><i className={styles.team} /> Team average</span>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

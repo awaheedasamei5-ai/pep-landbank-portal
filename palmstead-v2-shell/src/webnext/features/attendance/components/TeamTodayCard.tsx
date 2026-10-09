@@ -1,12 +1,13 @@
 "use client";
 
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AttendanceRecord } from '../../../types/domain';
-import styles from './TeamTodayCard.module.css';
 
-function statusOf(rec: AttendanceRecord): { label: string; cls: string } {
-  if (rec.signOutAt) return { label: 'Done for the day', cls: styles.done };
-  if (rec.signInAt) return { label: 'Signed in', cls: styles.in };
-  return { label: 'Not signed in', cls: styles.out };
+function statusOf(rec: AttendanceRecord): { label: string; variant: 'default' | 'secondary' | 'outline' } {
+  if (rec.signOutAt) return { label: 'Done for the day', variant: 'secondary' };
+  if (rec.signInAt) return { label: 'Signed in', variant: 'default' };
+  return { label: 'Not signed in', variant: 'outline' };
 }
 
 function timeStr(iso: string | null): string {
@@ -15,53 +16,53 @@ function timeStr(iso: string | null): string {
 }
 
 // Management's real first question ("is anything wrong today, and who
-// do I need to deal with") -- Attendance plan Part 4. Backed by
-// attendance.listToday(), the same real attendance_log rows Records
-// reads, just narrowed to today so this loads as a glance, not a report.
+// do I need to deal with") -- Attendance plan Part 4. Rebuilt on the
+// shell's real Card/Badge after the 2026-10-08/09 correction.
 export function TeamTodayCard({ records, isLoading }: { records: AttendanceRecord[]; isLoading: boolean }) {
   const signedIn = records.filter((r) => r.signInAt).length;
   const lateCount = records.filter((r) => r.lateReason).length;
   const offSiteCount = records.filter((r) => r.isOffSiteIn || r.isOffSiteOut).length;
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.header}>
-        <h3>Team today</h3>
-        <div className={styles.summary}>
-          <span><strong>{signedIn}</strong> in</span>
-          {lateCount > 0 && <span className={styles.warnTag}><strong>{lateCount}</strong> late</span>}
-          {offSiteCount > 0 && <span className={styles.infoTag}><strong>{offSiteCount}</strong> off-site</span>}
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Team today</CardTitle>
+          <div className="flex gap-2">
+            <Badge variant="outline">{signedIn} in</Badge>
+            {lateCount > 0 && <Badge variant="destructive">{lateCount} late</Badge>}
+            {offSiteCount > 0 && <Badge variant="secondary">{offSiteCount} off-site</Badge>}
+          </div>
         </div>
-      </div>
-
-      {isLoading ? (
-        <p className={styles.empty}>Loading…</p>
-      ) : !records.length ? (
-        <p className={styles.empty}>Nobody has signed in yet today.</p>
-      ) : (
-        <div className={styles.grid}>
-          {records.map((rec) => {
-            const st = statusOf(rec);
-            return (
-              <div key={rec.id} className={styles.person}>
-                <div className={styles.personTop}>
-                  <span className={styles.name}>{rec.staffName ?? rec.staffKey}</span>
-                  <span className={`${styles.pill} ${st.cls}`}>{st.label}</span>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !records.length ? (
+          <p className="text-sm text-muted-foreground">Nobody has signed in yet today.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {records.map((rec) => {
+              const st = statusOf(rec);
+              return (
+                <div key={rec.id} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{rec.staffName ?? rec.staffKey}</span>
+                    <Badge variant={st.variant}>{st.label}</Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {timeStr(rec.signInAt)}
+                    {rec.signOutAt && ` — ${timeStr(rec.signOutAt)}`}
+                    {rec.lateReason && ' · Late'}
+                    {(rec.isOffSiteIn || rec.isOffSiteOut) && ' · Off-site'}
+                  </div>
+                  {(rec.signInReason || rec.lateReason) && <div className="mt-1 text-xs text-muted-foreground italic">{rec.signInReason || rec.lateReason}</div>}
                 </div>
-                <div className={styles.meta}>
-                  {timeStr(rec.signInAt)}
-                  {rec.signOutAt && ` — ${timeStr(rec.signOutAt)}`}
-                  {rec.lateReason && <span className={styles.flag}> · Late</span>}
-                  {(rec.isOffSiteIn || rec.isOffSiteOut) && <span className={styles.flag}> · Off-site</span>}
-                </div>
-                {(rec.signInReason || rec.lateReason) && (
-                  <div className={styles.reason}>{rec.signInReason || rec.lateReason}</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

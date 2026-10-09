@@ -1,79 +1,71 @@
 "use client";
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { ClipboardList, Settings, Siren } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
+import { StatCard } from '@/components/stat-card';
 import { useAttendanceManagement } from '../hooks/useAttendanceManagement';
 import { TeamTodayCard } from '../components/TeamTodayCard';
 import { AttendanceSuggestions } from '../components/AttendanceSuggestions';
-import { AttendanceExceptionsQueue } from '../components/AttendanceExceptionsQueue';
-import { AttendanceRecordsTable } from '../components/AttendanceRecordsTable';
-import { AttendancePolicyCard } from '../components/AttendancePolicyCard';
-import { OfficeLocationsCard } from '../components/OfficeLocationsCard';
-import styles from './AttendanceManagementScreen.module.css';
-
-type Tab = 'today' | 'records' | 'exceptions' | 'settings';
 
 // Attendance plan Part 4 -- "Management's real question is almost never
 // 'show me a table' -- it's 'is anything wrong today, and who do I need
-// to deal with.'" Everything about how attendance is judged (policy,
-// office locations) lives inside this same view, per the user's own
-// explicit correction: not a separate Settings app.
+// to deal with.'" Rebuilt on the shell's real shadcn components after
+// the 2026-10-08/09 correction: the old 4-way tab-state toggle
+// (Today/Records/Exceptions/Policy&Locations) is now real routes
+// (/management/records, /management/exceptions, /management/settings),
+// same treatment Leave's Management screens already got.
 export function AttendanceManagementScreen() {
   const mgmt = useAttendanceManagement();
-  const [tab, setTab] = useState<Tab>('today');
+  const signedIn = mgmt.today.filter((r) => r.signInAt).length;
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.tabs}>
-        <button type="button" className={tab === 'today' ? styles.tabActive : styles.tab} onClick={() => setTab('today')}>
-          Today
-        </button>
-        <button type="button" className={tab === 'records' ? styles.tabActive : styles.tab} onClick={() => setTab('records')}>
-          Records
-        </button>
-        <button type="button" className={tab === 'exceptions' ? styles.tabActive : styles.tab} onClick={() => setTab('exceptions')}>
-          Exceptions {mgmt.pendingExceptions.length > 0 && <span className={styles.tabBadge}>{mgmt.pendingExceptions.length}</span>}
-        </button>
-        <button type="button" className={tab === 'settings' ? styles.tabActive : styles.tab} onClick={() => setTab('settings')}>
-          Policy &amp; Locations
-        </button>
+    <div className="p-4 pb-24 md:p-8">
+      <PageHeader
+        title="Attendance — Management"
+        description="Who's in today, what needs your attention."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/dashboard/attendance/management/records">
+                <ClipboardList />
+                Records
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/attendance/management/exceptions">
+                <Siren />
+                Exceptions {mgmt.pendingExceptions.length > 0 ? `(${mgmt.pendingExceptions.length})` : ''}
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/attendance/management/settings">
+                <Settings />
+                Policy &amp; Locations
+              </Link>
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <StatCard label="Signed in today" value={signedIn} />
+        <StatCard label="Pending exceptions" value={mgmt.pendingExceptions.length} />
+        <StatCard label="Records (30 days)" value={mgmt.recent30.length} />
       </div>
 
-      {tab === 'today' && (
-        <>
-          <TeamTodayCard records={mgmt.today} isLoading={mgmt.isLoadingToday} />
-          <AttendanceSuggestions
-            suggestions={mgmt.suggestions}
-            onIssue={async (s, reason) => {
-              await mgmt.issueNote(s.staffKey, s.staffName, s.kind, reason, s.workDate);
-            }}
-          />
-        </>
-      )}
+      <div className="mb-6">
+        <TeamTodayCard records={mgmt.today} isLoading={mgmt.isLoadingToday} />
+      </div>
 
-      {tab === 'records' && (
-        <AttendanceRecordsTable
-          records={mgmt.recent30}
-          onCorrect={mgmt.correctRecord}
-          onRemove={mgmt.removeRecord}
-          onResetAll={mgmt.resetAll}
-        />
-      )}
-
-      {tab === 'exceptions' && (
-        <AttendanceExceptionsQueue pending={mgmt.pendingExceptions} onDecide={mgmt.decideException} />
-      )}
-
-      {tab === 'settings' && (
-        <>
-          <AttendancePolicyCard policy={mgmt.policy} onUpdate={mgmt.updatePolicy} />
-          <OfficeLocationsCard
-            locations={mgmt.officeLocations}
-            onCreate={mgmt.createOfficeLocation}
-            onUpdate={mgmt.updateOfficeLocation}
-            onRemove={mgmt.removeOfficeLocation}
-          />
-        </>
-      )}
+      <AttendanceSuggestions
+        suggestions={mgmt.suggestions}
+        onIssue={async (s, reason) => {
+          await mgmt.issueNote(s.staffKey, s.staffName, s.kind, reason, s.workDate);
+        }}
+      />
     </div>
   );
 }

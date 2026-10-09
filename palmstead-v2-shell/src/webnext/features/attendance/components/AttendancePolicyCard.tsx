@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { SubmitButton } from '@/components/submit-button';
+import { FormItem } from '@/components/form-item';
 import type { AttendancePolicy } from '../../../types/domain';
-import styles from './AttendancePolicyCard.module.css';
 
 const WEEKDAYS = [
   { value: 0, label: 'Sun' },
@@ -16,11 +20,10 @@ const WEEKDAYS = [
 
 // Attendance plan Part 4: "the work hours, the grace period, which days
 // count as workdays ... all editable from inside Attendance's own
-// management view, with a history of what the policy used to be."
-// Writes go through set_attendance_policy() (via useAttendanceManagement's
-// updatePolicy), which versions the row server-side rather than
-// overwriting it -- a historical sign-in stays judged against whatever
-// policy was actually in force on that date.
+// management view." Rebuilt on the shell's real Card/Input after the
+// 2026-10-08/09 correction. Writes go through set_attendance_policy()
+// (via useAttendanceManagement's updatePolicy), which versions the row
+// server-side rather than overwriting it.
 export function AttendancePolicyCard({ policy, onUpdate }: { policy: AttendancePolicy | null; onUpdate: (input: { workStartTime: string; workEndTime: string; graceMinutes: number; workDays: number[] }) => Promise<void> }) {
   const [workStartTime, setWorkStartTime] = useState(policy?.workStartTime ?? '08:00');
   const [workEndTime, setWorkEndTime] = useState(policy?.workEndTime ?? '17:00');
@@ -29,10 +32,6 @@ export function AttendancePolicyCard({ policy, onUpdate }: { policy: AttendanceP
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Local form state only has real values to seed from once the policy
-  // query resolves (it's null on first render) -- sync it in rather than
-  // leaving the form stuck on hardcoded defaults after a real policy
-  // loads in.
   useEffect(() => {
     if (!policy) return;
     setWorkStartTime(policy.workStartTime);
@@ -58,47 +57,42 @@ export function AttendancePolicyCard({ policy, onUpdate }: { policy: AttendanceP
   }
 
   return (
-    <div className={styles.wrap}>
-      <h3>Attendance policy</h3>
-      <p className={styles.sub}>What counts as "late" and which days count as workdays. Changing this creates a new version — past sign-ins stay judged against the policy that was in force then.</p>
-
-      <div className={styles.row}>
-        <label className={styles.field}>
-          <span>Work start</span>
-          <input type="time" value={workStartTime} onChange={(e) => setWorkStartTime(e.target.value)} />
-        </label>
-        <label className={styles.field}>
-          <span>Work end</span>
-          <input type="time" value={workEndTime} onChange={(e) => setWorkEndTime(e.target.value)} />
-        </label>
-        <label className={styles.field}>
-          <span>Grace (minutes)</span>
-          <input type="number" min={0} max={120} value={graceMinutes} onChange={(e) => setGraceMinutes(Number(e.target.value))} />
-        </label>
-      </div>
-
-      <div className={styles.daysRow}>
-        <span className={styles.daysLabel}>Workdays</span>
-        <div className={styles.days}>
-          {WEEKDAYS.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              className={`${styles.dayBtn} ${workDays.includes(d.value) ? styles.dayActive : ''}`}
-              onClick={() => toggleDay(d.value)}
-            >
-              {d.label}
-            </button>
-          ))}
+    <Card>
+      <CardHeader>
+        <CardTitle>Attendance policy</CardTitle>
+        <CardDescription>What counts as &quot;late&quot; and which days count as workdays. Changing this creates a new version — past sign-ins stay judged against the policy that was in force then.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid grid-cols-3 gap-3">
+          <FormItem label="Work start" htmlFor="workStart">
+            <Input id="workStart" type="time" value={workStartTime} onChange={(e) => setWorkStartTime(e.target.value)} />
+          </FormItem>
+          <FormItem label="Work end" htmlFor="workEnd">
+            <Input id="workEnd" type="time" value={workEndTime} onChange={(e) => setWorkEndTime(e.target.value)} />
+          </FormItem>
+          <FormItem label="Grace (min)" htmlFor="grace">
+            <Input id="grace" type="number" min={0} max={120} value={graceMinutes} onChange={(e) => setGraceMinutes(Number(e.target.value))} />
+          </FormItem>
         </div>
-      </div>
 
-      <div className={styles.footer}>
-        {policy && <span className={styles.currentNote}>Currently in force since {policy.effectiveFrom}</span>}
-        <button type="button" className={styles.saveBtn} onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : saved ? 'Saved' : 'Save policy'}
-        </button>
-      </div>
-    </div>
+        <div className="grid gap-2">
+          <span className="text-sm font-medium">Workdays</span>
+          <div className="flex flex-wrap gap-2">
+            {WEEKDAYS.map((d) => (
+              <Badge key={d.value} variant={workDays.includes(d.value) ? 'default' : 'outline'} className="cursor-pointer px-3 py-1.5" onClick={() => toggleDay(d.value)}>
+                {d.label}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t pt-4">
+          {policy && <span className="text-xs text-muted-foreground">Currently in force since {policy.effectiveFrom}</span>}
+          <SubmitButton type="button" className="ml-auto" loading={saving} onClick={handleSave}>
+            {saved ? 'Saved' : 'Save policy'}
+          </SubmitButton>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
