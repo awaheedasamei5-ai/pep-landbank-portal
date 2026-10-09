@@ -108,7 +108,11 @@ function IssueRowLink({ issue }: { issue: OpsIssueRow }) {
   );
 }
 
-export function OperationsCommandCenter() {
+function scrollToProjects() {
+  document.getElementById("projects-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+export function OperationsCommandCenter({ onNewProject }: { onNewProject?: () => void }) {
   const { data, isLoading } = useOperationsOverview();
   const isManager = useSessionStore((s) => s.profile?.role === "manager");
   const [trendWindow, setTrendWindow] = useState<(typeof TREND_WINDOWS)[number]["value"]>("14");
@@ -354,17 +358,20 @@ export function OperationsCommandCenter() {
               <CardDescription>Jump straight into the work.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
-              <Button asChild variant="outline" className="h-auto flex-col items-start gap-1 py-3">
-                <Link href="/dashboard/operations">
-                  <FolderPlus className="size-4" />
-                  New project
-                </Link>
+              <Button
+                variant="outline"
+                className="h-auto flex-col items-start gap-1 py-3"
+                onClick={() => {
+                  onNewProject?.();
+                  scrollToProjects();
+                }}
+              >
+                <FolderPlus className="size-4" />
+                New project
               </Button>
-              <Button asChild variant="outline" className="h-auto flex-col items-start gap-1 py-3">
-                <Link href="/dashboard/operations">
-                  <ListChecks className="size-4" />
-                  View all projects
-                </Link>
+              <Button variant="outline" className="h-auto flex-col items-start gap-1 py-3" onClick={scrollToProjects}>
+                <ListChecks className="size-4" />
+                View all projects
               </Button>
             </CardContent>
           </Card>
@@ -481,17 +488,20 @@ export function OperationsCommandCenter() {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-            <Button asChild variant="outline" className="h-auto flex-col items-start gap-1 py-3">
-              <Link href="/dashboard/operations">
-                <FolderPlus className="size-4" />
-                New project
-              </Link>
+            <Button
+              variant="outline"
+              className="h-auto flex-col items-start gap-1 py-3"
+              onClick={() => {
+                onNewProject?.();
+                scrollToProjects();
+              }}
+            >
+              <FolderPlus className="size-4" />
+              New project
             </Button>
-            <Button asChild variant="outline" className="h-auto flex-col items-start gap-1 py-3">
-              <Link href="/dashboard/operations">
-                <ListChecks className="size-4" />
-                View all projects
-              </Link>
+            <Button variant="outline" className="h-auto flex-col items-start gap-1 py-3" onClick={scrollToProjects}>
+              <ListChecks className="size-4" />
+              View all projects
             </Button>
           </CardContent>
         </Card>

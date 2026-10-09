@@ -93,10 +93,10 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
       {view === "overview" && (
         <>
           <div className="mb-6">
-            <OperationsCommandCenter />
+            <OperationsCommandCenter onNewProject={() => setShowNewProject(true)} />
           </div>
 
-          <div className="mb-3 flex items-center justify-between">
+          <div id="projects-section" className="mb-3 flex scroll-mt-20 items-center justify-between">
             <h2 className="font-semibold text-lg">Projects</h2>
             <Button onClick={() => setShowNewProject((v) => !v)} size="sm">
               <Plus />
