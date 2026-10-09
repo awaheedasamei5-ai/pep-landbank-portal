@@ -420,6 +420,26 @@ doesn't build them out into working screens against real data.
       doesn't carry over either.
       With this check done, Phase 7's three explicitly-named asks (task
       scheduling via cycles/modules/dates, escalation, collision
-      detection) are complete. Remaining Phase 6/7 work is settings UI
-      (states/labels), kanban drag-and-drop, and staff-account
-      verification -- tracked below, not blocked on anything further here.
+      detection) are complete.
+
+- [x] Phase 6: kanban drag-and-drop -- `issue-kanban-board.tsx` rewritten
+      against the shell's own real `@dnd-kit/react` pattern
+      (`src/app/(main)/dashboard/kanban/_components/kanban.tsx` is the
+      reference, per AGENTS.md's "inspect the closest existing screen"
+      rule), replacing the "move to" select with real drag. Cross-column
+      drag writes a real `state_id` patch through the same
+      `projectIssues.updateIssue` path already proven; same-column
+      reorder is cosmetic only (resets to server `sort_order` on the next
+      fetch) -- persisting a custom drag order is out of this slice's
+      scope. **Verified live** against the user's own real "WORK STALLED"
+      issue: dragged it from Todo to In Progress, confirmed the real
+      `state_id` write in the database and the board's column counts
+      updating correctly. (Browser-automation note: the tool's native
+      `left_click_drag` doesn't trigger dnd-kit's pointer sensor --
+      verified instead via a real `pointerdown`/`pointermove`×N/`pointerup`
+      sequence dispatched on the card element, which is what confirmed the
+      drag path itself works, not just a mocked write.) `npx tsc -b`
+      clean.
+
+Remaining Phase 6/7 work: views, pages (deferred), and staff-account
+verification -- tracked below, not blocked on anything further here.
