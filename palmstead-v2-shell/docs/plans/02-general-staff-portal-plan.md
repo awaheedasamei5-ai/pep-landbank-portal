@@ -124,7 +124,13 @@ Real bug caught and fixed during verification: the create-post mutation spread t
 
 **Data model**: `notice_board_posts` as in the real migration, field-for-field.
 
-### B.4 Polls
+### B.4 Polls — DONE 2026-10-09
+
+Built at `/dashboard/polls` (Office sidebar group). Real `polls`/`poll_votes` tables, field-for-field from the source repo's migration 023, migration `polls`. Creation gated through the real existing permission system (`has_permission('polls.create')`, new catalog entry defaulting both roles to granted) instead of inventing a parallel flag -- Management can later restrict a specific person via `set_permission_override` with zero schema change, matching the blueprint's "Tool Access could gate CREATE specifically" intent using infrastructure that already exists.
+
+`npx tsc -b` clean. Verified live: published a real 2-option poll, voted, confirmed live results updated (1 vote, 100%) and the real row in `poll_votes`, correct rendering in dark mode.
+
+**Original B.4 spec, for reference:**
 
 **No V1 equivalent** — net new. Real repo schema already read in full (migration 023): `polls` (question, options JSONB array, created_by, deadline, is_archived) + `poll_votes` (poll_id, user_id, option_index, one vote per person per poll via a real UNIQUE constraint). RLS: everyone reads polls and votes (so results are visible to all, not just the creator — a transparency choice worth keeping), any authenticated person can create a poll, only the creator can update/delete their own poll, a voter can delete their own vote (change their mind before the deadline).
 

@@ -22,6 +22,7 @@ import {
   MapPin,
   Megaphone,
   Pin,
+  Vote,
   MessageSquare,
   Phone,
   ReceiptText,
@@ -116,6 +117,7 @@ export const sidebarItems: NavGroup[] = [
     items: [
       { id: "operations-tracker", title: "Operations Tracker", url: "/dashboard/operations", icon: ListChecks },
       { id: "notice-board", title: "Notice Board", url: "/dashboard/notice-board", icon: Pin },
+      { id: "polls", title: "Polls", url: "/dashboard/polls", icon: Vote },
       { id: "memorandum", title: "Memorandum", url: NOT_BUILT_YET, icon: FileText },
       { id: "attendance", title: "Attendance", url: "/dashboard/attendance", icon: Fingerprint },
       { id: "log-payment", title: "Log Payment", url: NOT_BUILT_YET, icon: Wallet },
