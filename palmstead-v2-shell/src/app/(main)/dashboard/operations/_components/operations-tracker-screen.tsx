@@ -5,8 +5,10 @@ import Link from "next/link";
 import { observer } from "mobx-react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
+import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
 
 // Phase 4b's first real screen against the raw-duplicated plane store: lists
@@ -20,6 +22,10 @@ const WORKSPACE_SLUG = "palmstead";
 export const OperationsTrackerScreen = observer(function OperationsTrackerScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newIdentifier, setNewIdentifier] = useState("");
+  const [creating, setCreating] = useState(false);
   const projectStore = store.projectRoot.project;
 
   useEffect(() => {
@@ -43,18 +49,50 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
 
   const projectIds = projectStore.workspaceProjectIds ?? [];
 
+  async function createProject() {
+    if (!newName.trim() || !newIdentifier.trim()) return;
+    setCreating(true);
+    try {
+      await projectStore.createProject(WORKSPACE_SLUG, { name: newName.trim(), identifier: newIdentifier.trim().toUpperCase() });
+      setNewName("");
+      setNewIdentifier("");
+      setShowNewProject(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Operations Tracker"
-        description="Real projects from the raw-duplicated plane data layer (Phase 4b) -- workspace shell and issues/kanban come next."
+        description="Real projects from the raw-duplicated plane data layer -- issues, states and kanban are real; cycles/modules come next."
         action={
-          <Button disabled>
+          <Button onClick={() => setShowNewProject((v) => !v)}>
             <Plus />
             New project
           </Button>
         }
       />
+
+      {showNewProject && (
+        <Card className="mb-4">
+          <CardContent className="flex gap-2 pt-6">
+            <Input placeholder="Project name" value={newName} onChange={(e) => setNewName(e.target.value)} className="max-w-xs" />
+            <Input
+              placeholder="Identifier (e.g. OPS)"
+              value={newIdentifier}
+              onChange={(e) => setNewIdentifier(e.target.value)}
+              className="max-w-40"
+            />
+            <SubmitButton type="button" loading={creating} onClick={createProject}>
+              Create
+            </SubmitButton>
+          </CardContent>
+        </Card>
+      )}
 
       {loading && <p className="text-sm text-muted-foreground">Loading real projects from Supabase…</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}

@@ -87,22 +87,25 @@ export class IssueService extends APIService {
   async createIssue(_workspaceSlug: string, projectId: string, data: Partial<TIssue>): Promise<TIssue> {
     const sb = requireSupabase();
     const staffKey = currentStaffKey();
-    const { data: project, error: projectError } = await sb
-      .from("op_projects")
-      .select("workspace_id,next_work_item_sequence")
-      .eq("id", projectId)
-      .single();
-    if (projectError || !project) throw projectError ?? new Error("Project not found");
-    const sequenceId = project.next_work_item_sequence;
+    // Real race found live: a plain read-then-write of
+    // next_work_item_sequence let two concurrent creates claim the same
+    // sequence_id and trip the (project_id, sequence_id) unique constraint.
+    // op_claim_issue_sequence() does the claim+increment as one atomic
+    // UPDATE ... RETURNING, so concurrent inserts always get distinct
+    // numbers (migration op_issues_atomic_sequence_claim).
+    const { data: claimed, error: claimError } = await sb
+      .rpc("op_claim_issue_sequence", { p_project_id: projectId })
+      .single<{ claimed_sequence: number; workspace_id: string; default_state_id: string | null }>();
+    if (claimError || !claimed) throw claimError ?? new Error("Project not found");
     const { data: row, error } = await sb
       .from("op_issues")
       .insert({
-        workspace_id: project.workspace_id,
+        workspace_id: claimed.workspace_id,
         project_id: projectId,
-        sequence_id: sequenceId,
+        sequence_id: claimed.claimed_sequence,
         name: data.name,
         description_html: data.description_html ?? null,
-        state_id: data.state_id ?? null,
+        state_id: data.state_id ?? claimed.default_state_id ?? null,
         priority: data.priority ?? "none",
         parent_id: data.parent_id ?? null,
         cycle_id: data.cycle_id ?? null,
@@ -115,10 +118,6 @@ export class IssueService extends APIService {
       .select("*")
       .single();
     if (error) throw error;
-    await sb
-      .from("op_projects")
-      .update({ next_work_item_sequence: sequenceId + 1 })
-      .eq("id", projectId);
     if (data.assignee_ids?.length) {
       await sb
         .from("op_issue_assignees")
@@ -140,7 +139,12 @@ export class IssueService extends APIService {
    * not this one. Not silently wrong: every real issue for the project IS
    * returned, just not grouped or paged the way plane's backend would.
    */
-  async getIssuesFromServer(_workspaceSlug: string, projectId: string, _queries?: any, _config = {}): Promise<TIssuesResponse> {
+  async getIssuesFromServer(
+    _workspaceSlug: string,
+    projectId: string,
+    queries?: Partial<Record<string, string | boolean>>,
+    _config = {}
+  ): Promise<TIssuesResponse> {
     const sb = requireSupabase();
     const { data, error } = await sb
       .from("op_issues")
@@ -149,19 +153,48 @@ export class IssueService extends APIService {
       .is("archived_at", null)
       .order("sort_order");
     if (error) throw error;
-    const results = await hydrateIssues((data ?? []) as OpIssueRow[]);
+    const issues = await hydrateIssues((data ?? []) as OpIssueRow[]);
+
+    // Phase 6 kanban slice: only "state" grouping is real so far (priority/
+    // labels/assignees/cycle/module grouping are later refinements) --
+    // group_by is a literal pass-through of IssuePaginationOptions.groupedBy
+    // (see issue-filter-helper.store.ts's getPaginationParams), so this
+    // reads the exact value the kanban screen asked for.
+    if (queries?.group_by === "state") {
+      const grouped: Record<string, { results: TIssue[]; total_results: number }> = {};
+      for (const issue of issues) {
+        const key = issue.state_id ?? "none";
+        if (!grouped[key]) grouped[key] = { results: [], total_results: 0 };
+        grouped[key].results.push(issue);
+        grouped[key].total_results += 1;
+      }
+      return {
+        grouped_by: "state",
+        next_cursor: "",
+        prev_cursor: "",
+        next_page_results: false,
+        prev_page_results: false,
+        total_count: issues.length,
+        count: issues.length,
+        total_pages: 1,
+        extra_stats: null,
+        results: grouped,
+        total_results: issues.length,
+      };
+    }
+
     return {
       grouped_by: "",
       next_cursor: "",
       prev_cursor: "",
       next_page_results: false,
       prev_page_results: false,
-      total_count: results.length,
-      count: results.length,
+      total_count: issues.length,
+      count: issues.length,
       total_pages: 1,
       extra_stats: null,
-      results,
-      total_results: results.length,
+      results: issues,
+      total_results: issues.length,
     };
   }
 

@@ -191,26 +191,61 @@ doesn't build them out into working screens against real data.
 - [ ] Phase 5: editor evaluated/copied if needed
 - [x] Phase 6: UI surface — workspace shell (minimal: `fetchWorkspaces` wired, no settings UI yet)
 - [x] Phase 6: UI surface — projects (list + create, `/dashboard/operations`)
-- [~] Phase 6: UI surface — issues (list + create only, `/dashboard/operations/[projectId]`) —
-      rewrote `services/issue/issue.service.ts`'s `createIssue`/
-      `getIssuesFromServer`/`retrieve`/`patchIssue`/`deleteIssue` and
-      `services/issue/issue_archive.service.ts`'s `archiveIssue`/
-      `restoreIssue` against `op_issues` + `op_issue_assignees`/
-      `op_issue_labels`/`op_issue_modules`. `getIssuesFromServer` is a
-      deliberate simplification: returns every non-archived issue for the
-      project UNGROUPED (`grouped_by: ""`), ignoring plane's own group_by/
-      order_by/cursor params — real data, just not paginated/grouped the
-      way plane's Django backend would; kanban/grouped views are still
-      open. `palmstead-adapters.ts` gained `toPlaneIssue`/`OpIssueRow`;
+- [x] Phase 6: UI surface — issues, list + kanban board (`/dashboard/operations/[projectId]`,
+      List/Board tabs) — rewrote `services/issue/issue.service.ts`'s
+      `createIssue`/`getIssuesFromServer`/`retrieve`/`patchIssue`/
+      `deleteIssue` and `services/issue/issue_archive.service.ts`'s
+      `archiveIssue`/`restoreIssue` against `op_issues` +
+      `op_issue_assignees`/`op_issue_labels`/`op_issue_modules`.
+      `getIssuesFromServer` honors `queries.group_by === "state"` (the
+      literal pass-through value `IssuePaginationOptions.groupedBy`
+      produces, confirmed by reading `issue-filter-helper.store.ts`) and
+      returns real grouped results in plane's own
+      `{ [stateId]: { results, total_results } }` shape; otherwise returns
+      an ungrouped flat list. Priority/labels/assignees/cycle/module
+      grouping and real pagination/cursors are still open.
+      `palmstead-adapters.ts` gained `toPlaneIssue`/`OpIssueRow`;
       `attachment_count`/`link_count` stay 0 (not yet computed, flagged in
       a comment, not fabricated) while `sub_issues_count` is a real grouped
-      count. **Verified live**: created a real issue through the UI
-      (`OPS-1`, real sequence number from `op_projects.
-      next_work_item_sequence`), confirmed it round-tripped through the
-      actual plane `ProjectIssues`/`IssueStore` MobX classes, zero console
-      errors, then deleted the test project (cascaded the test issue).
-      `npx tsc -b` clean. Issue DETAIL screen, kanban/calendar views,
-      cycles, modules are still open.
+      count. `createProject` now seeds the real 5 default states (one per
+      state group, Backlog marked default, matching plane's own real
+      backend behaviour) — without this every new project would have
+      nowhere valid for an issue to live and the board would always be
+      empty; `createIssue` falls back to the project's `default_state_id`
+      when no `state_id` is given.
+      **Two real bugs found and fixed during live verification, not
+      pre-emptively**: (1) the original read-then-write of
+      `op_projects.next_work_item_sequence` raced under two quick creates
+      and tripped the `(project_id, sequence_id)` unique constraint (HTTP
+      409) — fixed with a new atomic Postgres function,
+      `op_claim_issue_sequence()` (migration
+      `op_issues_atomic_sequence_claim`, additive only), called via
+      `.rpc()` instead of a plain select+update. (2) moving a card on the
+      kanban board updated the real row but didn't move visually — plane's
+      own optimistic regroup-on-update (`updateIssueList`) keys off
+      `issueFilterStore`'s persisted `displayFilters.group_by`, which this
+      phase never populates (no `project_user_properties`-equivalent table
+      or `fetchFilters` wiring yet); fixed by refetching the grouped board
+      after a move rather than relying on plane's optimistic path. Also
+      found live: plane's own `issue/root.store.ts` autorun mutates
+      observables outside a MobX action by design, which this project's
+      MobX strict-mode default (`enforceActions`) flagged as a warning not
+      produced in plane's real app (their own bootstrap presumably
+      configures this somewhere outside the store/services/hooks/lib slice
+      this port copied) — matched with one `configure({ enforceActions:
+      "never" })` call in `lib/store-context.tsx`, not by editing plane's
+      own store logic.
+      Also added a real (non-fake) "New project" quick-create on
+      `/dashboard/operations`, closing the placeholder-disabled-button gap
+      from the Phase 4b checkpoint.
+      **Verified live end-to-end**: created a project through the UI
+      (confirmed all 5 real states seeded + Backlog set as the real
+      default), created two issues through the UI back-to-back (confirmed
+      the sequence-race fix holds), switched to Board, moved a card between
+      columns via its real state and watched it land in the right column
+      after the fix, re-verified zero console errors/warnings on a hard
+      reload, then deleted the test project. `npx tsc -b` clean throughout.
+      Issue DETAIL screen is still open.
 - [ ] Phase 6: UI surface — cycles
 - [ ] Phase 6: UI surface — modules
 - [ ] Phase 6: UI surface — states/labels/estimates settings

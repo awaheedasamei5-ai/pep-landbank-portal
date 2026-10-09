@@ -59,6 +59,29 @@ export class ProjectService extends APIService {
       .select("*")
       .single();
     if (error) throw error;
+
+    // Real plane backend behaviour: a new project is seeded with its 5
+    // default states (one per state group), Backlog marked default --
+    // without this, new issues have nowhere valid to live and the kanban
+    // board would always be empty.
+    const defaultStates = [
+      { name: "Backlog", group: "backlog", color: "#60646C", sequence: 15000, order: 0, default: true },
+      { name: "Todo", group: "unstarted", color: "#3A3A3A", sequence: 25000, order: 1, default: false },
+      { name: "In Progress", group: "started", color: "#F59E0B", sequence: 35000, order: 2, default: false },
+      { name: "Done", group: "completed", color: "#16A34A", sequence: 45000, order: 3, default: false },
+      { name: "Cancelled", group: "cancelled", color: "#EF4444", sequence: 55000, order: 4, default: false },
+    ];
+    const { data: states, error: statesError } = await sb
+      .from("op_states")
+      .insert(defaultStates.map((s) => ({ workspace_id: workspaceId, project_id: row.id, ...s })))
+      .select("id,default");
+    if (statesError) throw statesError;
+    const backlogState = states?.find((s) => s.default);
+    if (backlogState) {
+      await sb.from("op_projects").update({ default_state_id: backlogState.id }).eq("id", row.id);
+      row.default_state_id = backlogState.id;
+    }
+
     return toPlaneProject(row as OpProjectRow) as TProject;
   }
 

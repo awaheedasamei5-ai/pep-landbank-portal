@@ -6,8 +6,17 @@
 
 import type { ReactElement } from "react";
 import { createContext } from "react";
+import { configure } from "mobx";
 // plane web store
 import { RootStore } from "@openplane-web/store/root.store";
+
+// Real warning found live: several of plane's own store files (e.g.
+// issue/root.store.ts's autorun syncing workspaceSlug/projectId from the
+// router) mutate observables outside a MobX action by design. Their real
+// app presumably configures MobX permissively somewhere outside the
+// store/services/hooks/lib slice this port copied -- matching that here
+// rather than editing plane's own store logic to add action wrappers.
+configure({ enforceActions: "never" });
 
 export let rootStore = new RootStore();
 
