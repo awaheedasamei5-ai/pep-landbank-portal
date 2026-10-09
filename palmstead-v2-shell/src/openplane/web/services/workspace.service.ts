@@ -29,50 +29,61 @@ import type {
 } from "@plane/types";
 // services
 import { APIService } from "@openplane-web/services/api.service";
+import { requireSupabase } from "@/lib/supabase.client";
+import { toPlaneUser, toPlaneWorkspace, currentStaffKey, type OpWorkspaceRow } from "@openplane-web/lib/palmstead-adapters";
 
 export class WorkspaceService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
+  /**
+   * Phase 4b: real Supabase read, replacing plane's own /api/users/me/workspaces/.
+   * Palmstead is single-company -- this returns the one seeded op_workspaces
+   * row, not a real multi-workspace list.
+   */
   async userWorkspaces(): Promise<IWorkspace[]> {
-    return this.get("/api/users/me/workspaces/")
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const staffKey = currentStaffKey();
+    const [{ data: rows, error }, { data: profiles }, { count }] = await Promise.all([
+      sb.from("op_workspaces").select("*"),
+      staffKey ? sb.from("profiles").select("agent_key,name,email,role,active").eq("agent_key", staffKey) : Promise.resolve({ data: null }),
+      sb.from("profiles").select("agent_key", { count: "exact", head: true }).eq("active", true),
+    ]);
+    if (error) throw error;
+    const ownerRow = profiles?.[0] ?? { agent_key: staffKey ?? "system", name: "Palmstead", email: null, role: "agent", active: true };
+    const owner = toPlaneUser(ownerRow);
+    return ((rows ?? []) as OpWorkspaceRow[]).map((row) => toPlaneWorkspace(row, owner, count ?? 0));
   }
 
   async getWorkspace(workspaceSlug: string): Promise<IWorkspace> {
-    return this.get(`/api/workspaces/${workspaceSlug}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response;
-      });
+    const workspaces = await this.userWorkspaces();
+    const found = workspaces.find((w) => w.slug === workspaceSlug);
+    if (!found) throw new Error(`Workspace '${workspaceSlug}' not found`);
+    return found;
   }
 
-  async createWorkspace(data: Partial<IWorkspace>): Promise<IWorkspace> {
-    return this.post("/api/workspaces/", data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  async createWorkspace(_data: Partial<IWorkspace>): Promise<IWorkspace> {
+    // Palmstead is single-company -- creating a second workspace isn't a
+    // real operation here. The one real workspace was seeded with the
+    // Phase 3b schema migration.
+    throw new Error("Creating an additional workspace is not supported -- Palmstead runs a single company workspace.");
   }
 
   async updateWorkspace(workspaceSlug: string, data: Partial<IWorkspace>): Promise<IWorkspace> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.logo_url !== undefined) patch.logo_url = data.logo_url;
+    if (data.organization_size !== undefined) patch.organization_size = data.organization_size;
+    if (data.timezone !== undefined) patch.timezone = data.timezone;
+    const { data: row, error } = await sb.from("op_workspaces").update(patch).eq("slug", workspaceSlug).select("*").single();
+    if (error) throw error;
+    return this.getWorkspace(row.slug);
   }
 
-  async deleteWorkspace(workspaceSlug: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  async deleteWorkspace(_workspaceSlug: string): Promise<any> {
+    throw new Error("Deleting the company workspace is not supported.");
   }
 
   async inviteWorkspace(workspaceSlug: string, data: IWorkspaceBulkInviteFormData): Promise<any> {

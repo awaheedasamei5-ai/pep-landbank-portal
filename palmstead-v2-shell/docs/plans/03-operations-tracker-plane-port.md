@@ -160,15 +160,34 @@ doesn't build them out into working screens against real data.
       That rewrite (Phase 4b below) is the actual unblocking work; this
       checkpoint is "the data layer exists and compiles," not "the data
       layer works."
-- [ ] Phase 4b: rewrite the service layer's real HTTP calls against the
-      applied op_* schema (Phase 3b), smallest closed set first --
-      `services/workspace.service.ts` (just enough for `userWorkspaces()` to
-      return the real seeded `op_workspaces` row), `services/project/
-      project.service.ts`, `services/project/project-state.service.ts`,
-      `services/issue/issue_label.service.ts` -- the minimum Phase 6's own
-      first screen (workspace shell -> project list) needs. The other ~48
-      service files stay untouched/non-functional until their own screen's
-      turn in the Phase 6 order.
+- [x] Phase 4b: rewrote the smallest closed set of service files' real
+      methods against the applied `op_*` schema -- `services/
+      workspace.service.ts` (`userWorkspaces`/`getWorkspace`/
+      `updateWorkspace`; `createWorkspace`/`deleteWorkspace` throw on
+      purpose, Palmstead is single-company), `services/project/
+      project.service.ts` (full CRUD + `checkProjectIdentifierAvailability`
+      + `updateProjectUserProperties` simplified to a direct `sort_order`
+      column patch -- plane's own per-user view-prefs table doesn't exist
+      here), `services/project/project-state.service.ts` (full CRUD +
+      `markDefault`), `services/issue/issue_label.service.ts` (full CRUD).
+      New `src/openplane/web/lib/palmstead-adapters.ts` translates between
+      `op_*` rows / the real `profiles` table and plane's own TS shapes
+      (`IWorkspace`, `IProject`, `IState`, `IIssueLabel`) -- SaaS-only fields
+      plane expects (owner, role, total_members, url) get explicit, flagged
+      fill values, never fabricated as if read from a real table. All other
+      methods on these 4 files, and all ~49 other service files, are
+      untouched/still axios-shaped -- non-functional until their own
+      screen's turn.
+      **Verified live**, not just typechecked: built a first real screen,
+      `src/app/(main)/dashboard/operations/` (NOT yet linked from the
+      sidebar -- `sidebar-items.ts`'s `operations-tracker` entry stays on
+      `NOT_BUILT_YET`, a bare project list isn't the real experience asked
+      for). Round-tripped through the actual raw-duplicated MobX store
+      (`workspaceRoot.fetchWorkspaces()` -> `projectRoot.project.
+      fetchProjects()`) against the real `sbydzrlzqxcdbudjaube` project:
+      inserted a real test project via direct SQL, confirmed it rendered
+      live in the browser through the full store/service/Supabase chain,
+      then deleted it. Zero console errors. `npx tsc -b` clean.
 - [ ] Phase 5: editor evaluated/copied if needed
 - [ ] Phase 6: UI surface — workspace shell
 - [ ] Phase 6: UI surface — projects
