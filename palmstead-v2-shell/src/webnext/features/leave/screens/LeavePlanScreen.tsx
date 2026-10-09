@@ -1,22 +1,25 @@
 "use client";
 
 import Link from 'next/link';
+import { ArrowLeft, CalendarPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
-import { LeaveBalanceRing } from '../components/LeaveBalanceRing';
+import { LeaveBalanceCard } from '../components/LeaveBalanceCard';
 import { PlannedLeaveRow } from '../components/LeaveRequestRow';
 import { leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
-import styles from './LeavePlanScreen.module.css';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Real "prefill your leave plan for the year" page -- distinct from
 // /requests/new (a single one-shot request) and /requests (sent/decided
-// history): this is every still-private 'planned' block for the year,
-// seen together, plus a year-at-a-glance strip of which months already
-// have something planned, before anything is sent to Management.
+// history): every still-private 'planned' block for the year, seen
+// together, plus a year-at-a-glance strip.
 export function LeavePlanScreen() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
@@ -35,36 +38,43 @@ export function LeavePlanScreen() {
   const monthsWithPlan = new Set(planned.flatMap((r) => r.dates.map((d) => Number(d.slice(5, 7)) - 1)));
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
-        <Link href="/dashboard/leave" className={styles.backLink}>
-          ← Dashboard
+    <div className="p-4 pb-24 md:p-8">
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href="/dashboard/leave">
+          <ArrowLeft />
+          Dashboard
         </Link>
-        <h1 className={styles.title}>My leave plan — {year}</h1>
-        <p className={styles.sub}>Block out dates across the year before sending anything to Management. Nothing here counts against your quota until sent and decided.</p>
-      </div>
+      </Button>
+      <PageHeader title={`My leave plan — ${year}`} description="Block out dates across the year before sending anything to Management. Nothing here counts against your quota until sent and decided." />
 
-      {config && <LeaveBalanceRing total={config.leaveTotalDays} reserved={reserved} remaining={remaining} confirmedUsed={confirmedUsed} year={year} />}
+      {config && <LeaveBalanceCard total={config.leaveTotalDays} reserved={reserved} remaining={remaining} confirmedUsed={confirmedUsed} />}
 
-      <div className={styles.monthStrip}>
+      <div className="my-6 grid grid-cols-6 gap-2">
         {MONTH_NAMES.map((m, i) => (
-          <div key={m} className={`${styles.monthChip} ${monthsWithPlan.has(i) ? styles.monthPlanned : ''}`}>
+          <Badge key={m} variant={monthsWithPlan.has(i) ? 'default' : 'outline'} className="justify-center py-1.5">
             {m}
-          </div>
+          </Badge>
         ))}
       </div>
 
-      <Link href="/dashboard/leave/requests/new" className={styles.addBtn}>
-        + Add a leave block
-      </Link>
+      <Button asChild className="mb-6">
+        <Link href="/dashboard/leave/requests/new">
+          <CalendarPlus />
+          Add a leave block
+        </Link>
+      </Button>
 
-      <div className={styles.sectitle}>Planned blocks</div>
-      {planned.length === 0 && <p className={styles.hint}>Nothing planned yet — add a block for any dates you already know you'll want off this year.</p>}
-      <div className={styles.list}>
-        {planned.map((r) => (
-          <PlannedLeaveRow key={r.id} request={r} />
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planned blocks</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {planned.length === 0 && <p className="text-sm text-muted-foreground">Nothing planned yet — add a block for any dates you already know you&apos;ll want off this year.</p>}
+          {planned.map((r) => (
+            <PlannedLeaveRow key={r.id} request={r} />
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

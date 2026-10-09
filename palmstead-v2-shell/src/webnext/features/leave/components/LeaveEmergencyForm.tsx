@@ -2,6 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FormItem } from '@/components/form-item';
+import { SubmitButton } from '@/components/submit-button';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useCreateLeaveRequest, useLeaveRequests } from '../hooks/useLeaveRequests';
@@ -9,12 +16,12 @@ import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
 import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
 import { isWeekendIso } from '../../../shared/lib/ghanaHolidays';
-import styles from '../screens/LeaveScreen.module.css';
 
-// Extracted from LeaveScreen.tsx's real EmergencyLeaveForm -- same logic,
-// now its own route (/dashboard/leave/emergency), a deliberately separate
+// Extracted from LeaveScreen.tsx's real EmergencyLeaveForm, rebuilt on
+// the shell's real shadcn Card/FormItem (Shreyasmark1/leave-management-
+// system's LeaveRequestForm layout pattern) -- a deliberately separate
 // flow from a normal request both in business logic (can override the
-// colleague-overlap block) and now in navigation too.
+// colleague-overlap block) and in navigation.
 export function LeaveEmergencyForm() {
   const router = useRouter();
   const create = useCreateLeaveRequest();
@@ -59,28 +66,41 @@ export function LeaveEmergencyForm() {
   }
 
   return (
-    <div className={`${styles.formCard} ${styles.emergencyCard}`}>
-      <p className={styles.emergencyHint}>This goes straight to Management for urgent approval, even if it conflicts with a colleague's leave or an entitlement limit — they'll see the conflict and decide.</p>
-      <div className={styles.grid2}>
-        <div className={styles.field}>
-          <label className={styles.label}>From</label>
-          <input className={styles.input} type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <AlertTriangle className="size-4 text-destructive" />
+          Emergency leave
+        </CardTitle>
+        <CardDescription>This goes straight to Management for urgent approval, even if it conflicts with a colleague's leave or an entitlement limit — they'll see the conflict and decide.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid max-w-md gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <FormItem label="From" htmlFor="fromDate">
+            <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </FormItem>
+          <FormItem label="To" htmlFor="toDate">
+            <Input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </FormItem>
         </div>
-        <div className={styles.field}>
-          <label className={styles.label}>To</label>
-          <input className={styles.input} type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-        </div>
-      </div>
-      <div className={styles.field}>
-        <label className={styles.label}>Reason (required)</label>
-        <textarea className={styles.textarea} placeholder="What's the emergency?" value={reason} onChange={(e) => setReason(e.target.value)} />
-      </div>
-      {dates.length > 0 && <p className={styles.emergencyDaysNote}>{dates.length} working day(s): {dates[0]} to {dates[dates.length - 1]}</p>}
-      {conflictWarning && <p className={styles.error}>⚠ {conflictWarning} Management will see this too.</p>}
-      {error && <p className={styles.error}>{error}</p>}
-      <button type="button" className={styles.emergencySubmitBtn} disabled={create.isPending} onClick={submit}>
-        {create.isPending ? 'Sending…' : 'Send emergency request'}
-      </button>
-    </div>
+        <FormItem label="Reason (required)" htmlFor="reason">
+          <Textarea id="reason" placeholder="What's the emergency?" value={reason} onChange={(e) => setReason(e.target.value)} />
+        </FormItem>
+        {dates.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {dates.length} working day(s): {dates[0]} to {dates[dates.length - 1]}
+          </p>
+        )}
+        {conflictWarning && (
+          <Alert variant="destructive">
+            <AlertDescription>{conflictWarning} Management will see this too.</AlertDescription>
+          </Alert>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <SubmitButton type="button" variant="destructive" loading={create.isPending} onClick={submit}>
+          Send emergency request
+        </SubmitButton>
+      </CardContent>
+    </Card>
   );
 }

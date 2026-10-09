@@ -3,17 +3,25 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { AlertTriangle, CalendarClock, FileText, Settings, Siren, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/page-header';
+import { StatCard } from '@/components/stat-card';
+import { SubmitButton } from '@/components/submit-button';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useDecideLeaveRequest, useLeaveRequests, useRescheduleLeaveRequest } from '../hooks/useLeaveRequests';
 import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
+import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
 import { leaveUpcomingForAll } from '../lib/leaveLogic';
 import { fmtLongDate, today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
-import styles from './LeaveManagementScreen.module.css';
-
-const STATUS_LABEL: Record<LeaveRequest['status'], string> = { planned: 'Planned', pending: 'Pending', approved: 'Approved', declined: 'Declined', rescheduled: 'Reschedule requested' };
-const STATUS_CLASS: Record<LeaveRequest['status'], string> = { planned: 'tagMuted', pending: 'tagPending', approved: 'tagApproved', declined: 'tagDeclined', rescheduled: 'tagPending' };
 
 function dateRangeLabel(r: LeaveRequest): string {
   const first = r.dates[0] ?? '';
@@ -30,11 +38,10 @@ function useActiveAgentRoster() {
   });
 }
 
-// Plan Part 4, written from Management's own seat: every staff member's
-// whole year visible at once, a live remaining-days number, unprompted
-// approaching-leave alerts, emergency requests standing out visually,
-// and approve/decline/reschedule as one screen, one action -- the real
-// company-wide "who's out this week/month" view V1 never had at all.
+// Plan Part 4, rebuilt on the shell's real shadcn components after the
+// 2026-10-08 correction -- same AdminOverviewPage composition pattern
+// (PageHeader + StatCard row + pending-decisions list) adapted from
+// Shreyasmark1/leave-management-system's admin page.
 export function LeaveManagementScreen() {
   const { data: roster } = useActiveAgentRoster();
   const { data: requests } = useLeaveRequests();
@@ -52,96 +59,87 @@ export function LeaveManagementScreen() {
   const pendingEmergencyCount = emergencies.filter((r) => r.status === 'pending').length;
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
-        <p className={styles.sub}>Every staff member&apos;s {year} leave plan, at a glance</p>
-        <div className={styles.navRow}>
-          <Link href="/dashboard/leave/management/requests" className={styles.navLink}>
-            Company-wide requests →
-          </Link>
-          <Link href="/dashboard/leave/management/calendar" className={styles.navLink}>
-            Team calendar →
-          </Link>
-          <Link href="/dashboard/leave/management/settings" className={styles.navLink}>
-            Settings →
-          </Link>
-        </div>
-      </div>
+    <div className="p-4 pb-24 md:p-8">
+      <PageHeader
+        title="Management"
+        description={`Every staff member's ${year} leave plan, at a glance`}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/dashboard/leave/management/requests">Company-wide requests</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/leave/management/calendar">Team calendar</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/leave/management/settings">
+                <Settings />
+                Settings
+              </Link>
+            </Button>
+          </div>
+        }
+      />
 
-      <div className={styles.summaryRow}>
-        <div className={styles.summaryTile}>
-          <div className={styles.summaryCount}>{roster?.length ?? 0}</div>
-          <div className={styles.summaryLabel}>Staff</div>
-        </div>
-        <div className={styles.summaryTile}>
-          <div className={styles.summaryCount}>{upcoming.length}</div>
-          <div className={styles.summaryLabel}>Leave coming up</div>
-        </div>
-        <div className={`${styles.summaryTile} ${pendingEmergencyCount > 0 ? styles.summaryEmergency : ''}`}>
-          <div className={styles.summaryCount}>{pendingEmergencyCount}</div>
-          <div className={styles.summaryLabel}>Emergency pending</div>
-        </div>
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard label="Staff" value={roster?.length ?? 0} icon={Users} />
+        <StatCard label="Leave coming up" value={upcoming.length} icon={CalendarClock} />
+        <StatCard label="Emergency pending" value={pendingEmergencyCount} icon={AlertTriangle} />
       </div>
 
       {pending.length > 0 && (
-        <>
-          <div className={styles.sectitle}>Pending decisions</div>
-          <div className={styles.list}>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Pending decisions</CardTitle>
+            <CardDescription>Approve, decline, or reschedule</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
             {pending.map((r) => (
               <PendingRequestRow key={r.id} request={r} />
             ))}
-          </div>
-        </>
+          </CardContent>
+        </Card>
       )}
 
       {upcoming.length > 0 && (
-        <>
-          <div className={styles.sectitle}>Coming up in the next 7 days</div>
-          <div className={styles.list}>
-            {upcoming.map(({ request, startDate }) => (
-              <div className={styles.row} key={request.id}>
-                <div className={styles.rowMain}>
-                  <div className={styles.name}>
-                    {request.agentName}
-                    {request.isEmergency && <span className={styles.emergencyTag}>🚨 Emergency</span>}
-                  </div>
-                  <div className={styles.meta}>
-                    Starts {fmtLongDate(startDate)} &middot; {dateRangeLabel(request)}
-                  </div>
-                </div>
-                <span className={styles[STATUS_CLASS[request.status]]}>{STATUS_LABEL[request.status]}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Coming up in the next 7 days</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LeaveRequestsDataTable requests={upcoming.map((u) => u.request)} showAgent emptyMessage="Nobody has leave coming up." />
+          </CardContent>
+        </Card>
       )}
 
       {emergencies.length > 0 && (
-        <>
-          <div className={styles.sectitle}>🚨 Emergency leave</div>
-          <div className={styles.list}>
-            {emergencies.map((r) => (
-              <div className={styles.row} key={r.id}>
-                <div className={styles.rowMain}>
-                  <div className={styles.name}>{r.agentName}</div>
-                  <div className={styles.meta}>
-                    {r.daysCount} day{r.daysCount === 1 ? '' : 's'} &middot; {dateRangeLabel(r)}
-                  </div>
-                </div>
-                <span className={styles[STATUS_CLASS[r.status]]}>{STATUS_LABEL[r.status]}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Siren className="size-4 text-destructive" />
+              Emergency leave
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LeaveRequestsDataTable requests={emergencies} showAgent emptyMessage="No emergency leave on record." />
+          </CardContent>
+        </Card>
       )}
 
-      <div className={styles.cardHeadRow}>
-        <div className={styles.sectitle}>Every staff member</div>
-        <Link href="/dashboard/leave/management/requests" className={styles.cardLink}>
-          Open full roster →
-        </Link>
-      </div>
-      <p className={styles.hint}>{roster?.length ?? 0} active staff — per-person countdown, request history and filters live on the company-wide requests page.</p>
+      <Card>
+        <CardHeader>
+          <CardTitle>Every staff member</CardTitle>
+          <CardDescription>{roster?.length ?? 0} active staff — per-person countdown, request history, and filters</CardDescription>
+          <CardAction>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard/leave/management/requests">
+                <FileText />
+                Open full roster
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
+      </Card>
     </div>
   );
 }
@@ -197,85 +195,86 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
   }
 
   return (
-    <div className={styles.row}>
-      <div className={styles.rowMain}>
-        <div className={styles.name}>
+    <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border p-4">
+      <div className="min-w-56 flex-1">
+        <div className="flex items-center gap-2 font-medium">
           {request.agentName}
-          {request.isEmergency && <span className={styles.emergencyTag}>🚨 Emergency</span>}
+          {request.isEmergency && <Badge variant="destructive">Emergency</Badge>}
         </div>
-        <div className={styles.meta}>
+        <div className="mt-1 text-sm text-muted-foreground">
           {request.daysCount} day{request.daysCount === 1 ? '' : 's'} &middot; {dateRangeLabel(request)}
         </div>
         {request.letterText && (
-          <button type="button" className={styles.letterBtn} disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
-            {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
-          </button>
+          <Button variant="link" size="sm" className="mt-1 h-auto px-0" disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
+            <FileText className="size-3.5" />
+            {downloadLetter.isPending ? 'Preparing…' : 'Leave request letter'}
+          </Button>
         )}
         {request.isEmergency && (
-          <label className={styles.deductRow}>
-            <input type="checkbox" checked={deductQuota} onChange={(e) => setDeductQuota(e.target.checked)} />
+          <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox checked={deductQuota} onCheckedChange={(v) => setDeductQuota(v === true)} />
             Count against annual quota
           </label>
         )}
         {pendingAction === 'decline' && (
-          <div className={styles.noteBox}>
-            <textarea className={styles.textarea} placeholder="Reason for declining (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <div className={styles.inlineActions}>
-              <button type="button" className={styles.declineBtn} onClick={cancelPending}>
+          <div className="mt-3 grid max-w-md gap-2">
+            <Textarea placeholder="Reason for declining (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={cancelPending}>
                 Cancel
-              </button>
-              <button type="button" className={styles.approveBtn} disabled={busy} onClick={confirmDecline}>
-                {decide.isPending ? 'Saving…' : 'Confirm decline'}
-              </button>
+              </Button>
+              <SubmitButton size="sm" type="button" loading={decide.isPending} onClick={confirmDecline}>
+                Confirm decline
+              </SubmitButton>
             </div>
           </div>
         )}
         {pendingAction === 'reschedule' && (
-          <div className={styles.noteBox}>
-            <textarea className={styles.textarea} placeholder="Reason for reschedule (required)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <div className={styles.rescheduleDateRow}>
-              <input className={styles.input} type="date" value={newDateInput} onChange={(e) => setNewDateInput(e.target.value)} />
-              <button type="button" className={styles.letterBtn} onClick={addRescheduleDate} disabled={!newDateInput}>
+          <div className="mt-3 grid max-w-md gap-2">
+            <Textarea placeholder="Reason for reschedule (required)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <div className="flex gap-2">
+              <Input type="date" className="flex-1" value={newDateInput} onChange={(e) => setNewDateInput(e.target.value)} />
+              <Button variant="outline" size="sm" onClick={addRescheduleDate} disabled={!newDateInput}>
                 + Add date
-              </button>
+              </Button>
             </div>
             {rescheduleDates.length > 0 ? (
-              <div className={styles.dateChips}>
+              <div className="flex flex-wrap gap-1.5">
                 {rescheduleDates.map((d) => (
-                  <span key={d} className={styles.dateChip}>
+                  <Badge key={d} variant="secondary" className="gap-1">
                     {d}
-                    <button type="button" onClick={() => setRescheduleDates((prev) => prev.filter((x) => x !== d))} aria-label={`Remove ${d}`}>
+                    <button type="button" onClick={() => setRescheduleDates((prev) => prev.filter((x) => x !== d))} aria-label={`Remove ${d}`} className="hover:text-destructive">
                       ×
                     </button>
-                  </span>
+                  </Badge>
                 ))}
               </div>
             ) : (
-              <p className={styles.hint}>No new dates entered yet — confirming without any just asks {request.agentName.split(' ')[0]} to pick fresh dates themselves.</p>
+              <p className="text-xs text-muted-foreground">No new dates entered yet — confirming without any just asks {request.agentName.split(' ')[0]} to pick fresh dates themselves.</p>
             )}
-            {rescheduleError && <p className={styles.error}>{rescheduleError}</p>}
-            <div className={styles.inlineActions}>
-              <button type="button" className={styles.declineBtn} onClick={cancelPending}>
+            {rescheduleError && <p className="text-xs text-destructive">{rescheduleError}</p>}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={cancelPending}>
                 Cancel
-              </button>
-              <button type="button" className={styles.approveBtn} disabled={busy} onClick={confirmReschedule}>
-                {reschedule.isPending ? 'Saving…' : rescheduleDates.length ? 'Reschedule & approve' : 'Ask to reschedule'}
-              </button>
+              </Button>
+              <SubmitButton size="sm" type="button" loading={reschedule.isPending} onClick={confirmReschedule}>
+                {rescheduleDates.length ? 'Reschedule & approve' : 'Ask to reschedule'}
+              </SubmitButton>
             </div>
           </div>
         )}
       </div>
       {!pendingAction && (
-        <div className={styles.decideActions}>
-          <button type="button" className={styles.approveBtn} disabled={busy} onClick={approve}>
+        <div className="flex flex-col gap-2">
+          <SubmitButton size="sm" type="button" loading={busy} onClick={approve}>
             Approve
-          </button>
-          <button type="button" className={styles.declineBtn} disabled={busy} onClick={() => setPendingAction('decline')}>
+          </SubmitButton>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => setPendingAction('decline')}>
             Decline
-          </button>
-          <button type="button" className={styles.declineBtn} disabled={busy} onClick={() => setPendingAction('reschedule')}>
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => setPendingAction('reschedule')}>
             Reschedule
-          </button>
+          </Button>
         </div>
       )}
     </div>

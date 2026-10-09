@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
+import { SubmitButton } from '@/components/submit-button';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
@@ -10,7 +15,6 @@ import { useLeaveRequests, useUpdatePlannedLeave } from '../hooks/useLeaveReques
 import { LeaveCalendar } from '../components/LeaveCalendar';
 import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
-import styles from './LeaveRequestEditScreen.module.css';
 
 // Edit a still-'planned' draft's dates -- only ever reachable from the
 // detail page's own "Edit dates" link, which only shows while status is
@@ -81,45 +85,55 @@ export function LeaveRequestEditScreen() {
 
   if (!request) {
     return (
-      <div className={styles.wrap}>
-        <p className={styles.hint}>Loading…</p>
+      <div className="p-4 pb-24 md:p-8">
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
   if (request.status !== 'planned') {
     return (
-      <div className={styles.wrap}>
-        <Link href={`/dashboard/leave/requests/${request.id}`} className={styles.backLink}>
-          ← Back
-        </Link>
-        <p className={styles.hint}>This request has already been sent and can no longer be edited.</p>
+      <div className="p-4 pb-24 md:p-8">
+        <Button asChild variant="ghost" size="sm" className="mb-2">
+          <Link href={`/dashboard/leave/requests/${request.id}`}>
+            <ArrowLeft />
+            Back
+          </Link>
+        </Button>
+        <p className="text-sm text-muted-foreground">This request has already been sent and can no longer be edited.</p>
       </div>
     );
   }
 
   return (
-    <div className={styles.wrap}>
-      <Link href={`/dashboard/leave/requests/${request.id}`} className={styles.backLink}>
-        ← Back
-      </Link>
-      <h1 className={styles.title}>Edit dates</h1>
-      {config && (
-        <LeaveCalendar
-          year={year}
-          month={month}
-          onNavMonth={navMonth}
-          requests={(requests ?? []).filter((r) => r.id !== request.id)}
-          agentKey={agentKey}
-          config={config}
-          selectedDates={selectedDates}
-          onToggleDate={toggleDate}
-          companyClosures={companyClosures}
-        />
-      )}
-      {error && <p className={styles.error}>{error}</p>}
-      <button type="button" className={styles.saveBtn} disabled={update.isPending} onClick={save}>
-        {update.isPending ? 'Saving…' : 'Save changes'}
-      </button>
+    <div className="p-4 pb-24 md:p-8">
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href={`/dashboard/leave/requests/${request.id}`}>
+          <ArrowLeft />
+          Back
+        </Link>
+      </Button>
+      <PageHeader title="Edit dates" />
+      <Card className="max-w-md">
+        <CardContent>
+          {config && (
+            <LeaveCalendar
+              year={year}
+              month={month}
+              onNavMonth={navMonth}
+              requests={(requests ?? []).filter((r) => r.id !== request.id)}
+              agentKey={agentKey}
+              config={config}
+              selectedDates={selectedDates}
+              onToggleDate={toggleDate}
+              companyClosures={companyClosures}
+            />
+          )}
+          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+          <SubmitButton type="button" className="mt-4" loading={update.isPending} onClick={save}>
+            Save changes
+          </SubmitButton>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -2,27 +2,32 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { AlertTriangle, CalendarClock, CalendarDays, CalendarPlus, Hourglass, ListChecks, Siren } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
+import { StatCard } from '@/components/stat-card';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
 import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
-import { LeaveBalanceRing } from '../components/LeaveBalanceRing';
+import { LeaveBalanceCard } from '../components/LeaveBalanceCard';
 import { LeaveDashboardCalendar } from '../components/LeaveDashboardCalendar';
-import { LeaveStatusCards } from '../components/LeaveStatusCards';
+import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
 import { DueSoonBanner, UsageConfirmationBanner } from '../components/LeaveBanners';
-import { MyLeaveRow } from '../components/LeaveRequestRow';
 import { leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved, leaveNeedingUsageConfirmation, leavePlannedDueSoon, leaveUpcomingForAll } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
-import styles from './LeaveDashboardScreen.module.css';
 
-// The real Leave app home page -- a genuine dashboard, not a scrolling
-// single screen: the countdown as the hero element, a read-only calendar,
-// clickable status counts that land on the filtered requests page (the
-// "click this, open another page" pattern from the real resource this
-// app's page architecture is duplicated from), due-soon/confirmation
-// nudges promoted to their own section, and (for managers) a live teaser
-// into the team-wide Management dashboard. Docs: docs/plans/
-// 04-leave-full-app-build-plan.md.
+// Real Leave app home page, rebuilt on the shell's own real shadcn
+// component system (Card/Badge/Table/Button -- the same primitives
+// Finance/CRM already use) after a direct correction that the earlier
+// hand-rolled CSS-module version read as generic AI-tile UI. PageHeader/
+// StatCard are ported verbatim from Shreyasmark1/leave-management-system
+// (same stack: Next.js App Router + shadcn/ui); LeaveRequestsDataTable
+// and LeaveBalanceCard are adapted from that same repo's
+// leave-requests-table.tsx / balance-list.tsx to Palmstead's real data
+// shape (a single pooled annual quota, not multiple leave types). Docs:
+// docs/plans/04-leave-full-app-build-plan.md.
 export function LeaveDashboardScreen() {
   const profile = useSessionStore((s) => s.profile);
   const isManager = profile?.role === 'manager';
@@ -44,9 +49,9 @@ export function LeaveDashboardScreen() {
   const myReserved = leaveDaysReserved(all, myKey, thisYear);
   const myRemaining = config ? leaveDaysRemaining(config, all, myKey, thisYear) : 0;
   const myConfirmedUsed = leaveDaysConfirmedUsed(all, myKey, thisYear, today());
+  const myPending = mine.filter((r) => r.status === 'pending').length;
 
   const myMonthApproved = mine.filter((r) => r.status === 'approved');
-
   const companyUpcoming = isManager ? leaveUpcomingForAll(all.filter((r) => r.status !== 'planned'), today(), 7) : [];
 
   function navMonth(delta: number) {
@@ -64,86 +69,113 @@ export function LeaveDashboardScreen() {
   }
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
-        <div>
-          <h1 className={styles.title}>Leave</h1>
-          <p className={styles.sub}>Your {thisYear} leave at a glance</p>
-        </div>
-        <div className={styles.headBtns}>
-          {isManager && (
-            <Link href="/dashboard/leave/management" className={styles.managementBtn}>
-              Management
-            </Link>
-          )}
-          <Link href="/dashboard/leave/emergency" className={styles.emergencyBtn}>
-            🚨 Emergency Leave
-          </Link>
-          <Link href="/dashboard/leave/plan" className={styles.managementBtn}>
-            My leave plan
-          </Link>
-          <Link href="/dashboard/leave/requests/new" className={styles.addBtn}>
-            + Request leave
-          </Link>
-        </div>
+    <div className="p-4 pb-24 md:p-8">
+      <PageHeader
+        title="Leave"
+        description={`Your ${thisYear} leave at a glance`}
+        action={
+          <div className="flex flex-wrap gap-2">
+            {isManager && (
+              <Button asChild variant="outline">
+                <Link href="/dashboard/leave/management">Management</Link>
+              </Button>
+            )}
+            <Button asChild variant="outline">
+              <Link href="/dashboard/leave/plan">My leave plan</Link>
+            </Button>
+            <Button asChild variant="destructive">
+              <Link href="/dashboard/leave/emergency">
+                <Siren />
+                Emergency leave
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/dashboard/leave/requests/new">
+                <CalendarPlus />
+                Request leave
+              </Link>
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard label="Days remaining" value={myRemaining} icon={CalendarDays} />
+        <StatCard label="Pending requests" value={myPending} icon={Hourglass} />
+        <StatCard label="Confirmed used (all time)" value={myConfirmedUsed} icon={CalendarClock} />
       </div>
 
-      {config && <LeaveBalanceRing total={config.leaveTotalDays} reserved={myReserved} remaining={myRemaining} confirmedUsed={myConfirmedUsed} year={thisYear} />}
-
-      {dueSoon.map((r) => (
-        <DueSoonBanner key={r.id} request={r} />
-      ))}
-      {needsUsageConfirmation.map((r) => (
-        <UsageConfirmationBanner key={r.id} request={r} />
-      ))}
-
-      <LeaveStatusCards requests={mine} baseHref="/dashboard/leave/requests" />
-
-      <div className={styles.card}>
-        <h2 className={styles.cardTitle}>Calendar</h2>
-        {config ? (
-          <LeaveDashboardCalendar year={year} month={month} onNavMonth={navMonth} approvedRequests={myMonthApproved} config={config} companyClosures={companyClosures} />
-        ) : (
-          <p className={styles.hint}>Loading…</p>
-        )}
+      <div className="mb-6">
+        {config && <LeaveBalanceCard total={config.leaveTotalDays} reserved={myReserved} remaining={myRemaining} confirmedUsed={myConfirmedUsed} />}
       </div>
 
-      {isManager && companyUpcoming.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.cardHeadRow}>
-            <h2 className={styles.cardTitle}>Team leave coming up</h2>
-            <Link href="/dashboard/leave/management" className={styles.cardLink}>
-              Open Management dashboard →
-            </Link>
-          </div>
-          <div className={styles.list}>
-            {companyUpcoming.slice(0, 3).map(({ request, startDate }) => (
-              <div className={styles.upcomingRow} key={request.id}>
-                <span className={styles.upcomingName}>
-                  {request.agentName}
-                  {request.isEmergency && <span className={styles.emergencyTag}>🚨</span>}
-                </span>
-                <span className={styles.upcomingDate}>Starts {startDate}</span>
-              </div>
-            ))}
-          </div>
+      {(dueSoon.length > 0 || needsUsageConfirmation.length > 0) && (
+        <div className="mb-6 grid gap-3">
+          {dueSoon.map((r) => (
+            <DueSoonBanner key={r.id} request={r} />
+          ))}
+          {needsUsageConfirmation.map((r) => (
+            <UsageConfirmationBanner key={r.id} request={r} />
+          ))}
         </div>
       )}
 
-      <div className={styles.cardHeadRow}>
-        <h2 className={styles.sectitle}>Recent requests</h2>
-        <Link href="/dashboard/leave/requests" className={styles.cardLink}>
-          View all →
-        </Link>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <CardTitle>Calendar</CardTitle>
+            <CardDescription>{myMonthApproved.length} approved day(s) this view</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {config ? (
+              <LeaveDashboardCalendar year={year} month={month} onNavMonth={navMonth} approvedRequests={myMonthApproved} config={config} companyClosures={companyClosures} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Recent requests</CardTitle>
+            <CardDescription>Your latest leave activity</CardDescription>
+            <CardAction>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/dashboard/leave/requests">
+                  <ListChecks />
+                  View all
+                </Link>
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <LeaveRequestsDataTable requests={visible.slice(0, 5)} emptyMessage="You have no leave requests yet." />
+            )}
+          </CardContent>
+        </Card>
       </div>
-      {isLoading && <p className={styles.hint}>Loading…</p>}
-      {!isLoading && visible.length === 0 && <p className={styles.hint}>No leave requests yet.</p>}
-      {visible.length > 0 && (
-        <div className={styles.list}>
-          {visible.slice(0, 3).map((r) => (
-            <MyLeaveRow key={r.id} request={r} />
-          ))}
-        </div>
+
+      {isManager && companyUpcoming.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Team leave coming up</CardTitle>
+            <CardDescription>Next 7 days, company-wide</CardDescription>
+            <CardAction>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/dashboard/leave/management">
+                  <AlertTriangle />
+                  Open Management dashboard
+                </Link>
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <LeaveRequestsDataTable requests={companyUpcoming.slice(0, 5).map((u) => u.request)} showAgent emptyMessage="Nobody has leave coming up." />
+          </CardContent>
+        </Card>
       )}
     </div>
   );

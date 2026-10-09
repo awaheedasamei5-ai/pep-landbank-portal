@@ -1,19 +1,24 @@
 "use client";
 
+import { BellRing } from 'lucide-react';
+import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert';
+import { SubmitButton } from '@/components/submit-button';
 import { useConfirmLeaveUsed, useSendPlannedLeave } from '../hooks/useLeaveRequests';
 import type { LeaveRequest } from '../../../types/domain';
-import styles from '../screens/LeaveScreen.module.css';
 
 export function DueSoonBanner({ request }: { request: LeaveRequest }) {
   const sendPlanned = useSendPlannedLeave();
   const firstDate = request.dates[0] ?? '';
   return (
-    <div className={styles.dueSoonBanner}>
-      <span>Your planned leave starting {firstDate} is coming up — tap to send this request to Management now.</span>
-      <button type="button" className={styles.dueSoonBtn} disabled={sendPlanned.isPending} onClick={() => sendPlanned.mutate(request.id)}>
-        {sendPlanned.isPending ? 'Sending…' : 'Send now'}
-      </button>
-    </div>
+    <Alert>
+      <BellRing />
+      <AlertDescription>Your planned leave starting {firstDate} is coming up — send it to Management now.</AlertDescription>
+      <AlertAction>
+        <SubmitButton size="sm" loading={sendPlanned.isPending} onClick={() => sendPlanned.mutate(request.id)}>
+          Send now
+        </SubmitButton>
+      </AlertAction>
+    </Alert>
   );
 }
 
@@ -22,14 +27,17 @@ export function UsageConfirmationBanner({ request }: { request: LeaveRequest }) 
   const firstDate = request.dates[0] ?? '';
   const lastDate = request.dates[request.dates.length - 1] ?? '';
   return (
-    <div className={styles.dueSoonBanner}>
-      <span>
+    <Alert>
+      <BellRing />
+      <AlertDescription>
         Did you take your approved leave ({firstDate}
         {lastDate !== firstDate ? ` to ${lastDate}` : ''})? Confirm it so it counts against your yearly total.
-      </span>
-      <button type="button" className={styles.dueSoonBtn} disabled={confirmUsed.isPending} onClick={() => confirmUsed.mutate(request)}>
-        {confirmUsed.isPending ? 'Confirming…' : 'Yes, I took it'}
-      </button>
-    </div>
+      </AlertDescription>
+      <AlertAction>
+        <SubmitButton size="sm" loading={confirmUsed.isPending} onClick={() => confirmUsed.mutate(request)}>
+          Yes, I took it
+        </SubmitButton>
+      </AlertAction>
+    </Alert>
   );
 }

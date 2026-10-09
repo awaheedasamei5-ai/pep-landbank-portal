@@ -2,11 +2,16 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageHeader } from '@/components/page-header';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
-import { MyLeaveRow, PlannedLeaveRow } from '../components/LeaveRequestRow';
+import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
+import { PlannedRowActions } from '../components/PlannedRowActions';
 import type { LeaveRequest } from '../../../types/domain';
-import styles from './LeaveRequestsScreen.module.css';
 
 const ALL_STATUSES: LeaveRequest['status'][] = ['planned', 'pending', 'approved', 'declined', 'rescheduled'];
 const STATUS_FILTER_LABEL: Record<LeaveRequest['status'], string> = {
@@ -17,15 +22,14 @@ const STATUS_FILTER_LABEL: Record<LeaveRequest['status'], string> = {
   rescheduled: 'Rescheduled',
 };
 
-// Real filterable history page -- the destination every status card on the
-// Dashboard links to (?status=X), plus a year filter. Previously this was
-// just "every request in one flat list" on the same screen as everything
-// else.
+// Real filterable history page, rebuilt on the shell's real shadcn Select
+// + Table (Shreyasmark1/leave-management-system's ApprovalsView filter
+// pattern, adapted to a single-user "my requests" view).
 export function LeaveRequestsScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const statusFilter = searchParams.get('status') as LeaveRequest['status'] | null;
-  const yearFilter = searchParams.get('year');
+  const statusFilter = (searchParams.get('status') as LeaveRequest['status'] | null) ?? 'all';
+  const yearFilter = searchParams.get('year') ?? 'all';
 
   const profile = useSessionStore((s) => s.profile);
   const myKey = profile?.key ?? '';
@@ -36,56 +40,65 @@ export function LeaveRequestsScreen() {
   const years = Array.from(new Set(mine.map((r) => String(r.year)))).sort().reverse();
 
   let filtered = mine;
-  if (statusFilter) filtered = filtered.filter((r) => r.status === statusFilter);
-  if (yearFilter) filtered = filtered.filter((r) => String(r.year) === yearFilter);
+  if (statusFilter !== 'all') filtered = filtered.filter((r) => r.status === statusFilter);
+  if (yearFilter !== 'all') filtered = filtered.filter((r) => String(r.year) === yearFilter);
   filtered = filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  function setParam(key: string, value: string | null) {
+  function setParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
-    if (value) next.set(key, value);
-    else next.delete(key);
+    if (value === 'all') next.delete(key);
+    else next.set(key, value);
     router.push(`/dashboard/leave/requests${next.toString() ? `?${next.toString()}` : ''}`);
   }
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
-        <div>
-          <Link href="/dashboard/leave" className={styles.backLink}>
-            ← Dashboard
-          </Link>
-          <h1 className={styles.title}>My requests</h1>
-          <p className={styles.sub}>
-            {filtered.length} request{filtered.length === 1 ? '' : 's'}
-            {statusFilter ? ` · ${STATUS_FILTER_LABEL[statusFilter]}` : ''}
-          </p>
-        </div>
+    <div className="p-4 pb-24 md:p-8">
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href="/dashboard/leave">
+          <ArrowLeft />
+          Dashboard
+        </Link>
+      </Button>
+      <PageHeader title="My requests" description={`${filtered.length} request${filtered.length === 1 ? '' : 's'}${statusFilter !== 'all' ? ` · ${STATUS_FILTER_LABEL[statusFilter]}` : ''}`} />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Select value={statusFilter} onValueChange={(v) => setParam('status', v)}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {ALL_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {STATUS_FILTER_LABEL[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={yearFilter} onValueChange={(v) => setParam('year', v)}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="All years" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All years</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={y}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className={styles.filters}>
-        <select className={styles.select} value={statusFilter ?? ''} onChange={(e) => setParam('status', e.target.value || null)}>
-          <option value="">All statuses</option>
-          {ALL_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_FILTER_LABEL[s]}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={yearFilter ?? ''} onChange={(e) => setParam('year', e.target.value || null)}>
-          <option value="">All years</option>
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {isLoading && <p className={styles.hint}>Loading…</p>}
-      {!isLoading && filtered.length === 0 && <p className={styles.hint}>No matching requests.</p>}
-      <div className={styles.list}>
-        {filtered.map((r) => (r.status === 'planned' ? <PlannedLeaveRow key={r.id} request={r} /> : <MyLeaveRow key={r.id} request={r} />))}
-      </div>
+      <Card>
+        <CardContent>
+          {isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <LeaveRequestsDataTable requests={filtered} actionSlot={(r) => <PlannedRowActions request={r} />} emptyMessage="No matching requests." />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

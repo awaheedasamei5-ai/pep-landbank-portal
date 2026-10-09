@@ -1,13 +1,19 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
 import { LeaveNewRequestForm } from "@/webnext/features/leave/components/LeaveNewRequestForm";
 
 export default function Page() {
   return (
-    <div className="px-4 pt-5 pb-24 md:px-8 md:pt-7">
-      <Link href="/dashboard/leave" className="mb-3 inline-block text-xs font-bold text-[var(--c-accent)] no-underline">
-        ← Dashboard
-      </Link>
-      <h1 className="mb-4 text-xl font-bold">Request leave</h1>
+    <div className="p-4 pb-24 md:p-8">
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href="/dashboard/leave">
+          <ArrowLeft />
+          Dashboard
+        </Link>
+      </Button>
+      <PageHeader title="Request leave" />
       <LeaveNewRequestForm />
     </div>
   );

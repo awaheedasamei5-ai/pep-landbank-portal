@@ -1,22 +1,27 @@
 "use client";
 
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageHeader } from '@/components/page-header';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveRequests } from '../hooks/useLeaveRequests';
-import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
+import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
+import { StatusBadge } from '../components/StatusBadge';
 import { leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved } from '../lib/leaveLogic';
 import { fmtLongDate, today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
-import styles from './LeaveManagementRequestsScreen.module.css';
 
-const ALL_STATUSES: LeaveRequest['status'][] = ['planned', 'pending', 'approved', 'declined', 'rescheduled'];
+const ALL_STATUSES: LeaveRequest['status'][] = ['pending', 'approved', 'declined', 'rescheduled'];
 const STATUS_LABEL: Record<LeaveRequest['status'], string> = { planned: 'Planned', pending: 'Pending', approved: 'Approved', declined: 'Declined', rescheduled: 'Reschedule requested' };
-const STATUS_CLASS: Record<LeaveRequest['status'], string> = { planned: 'tagMuted', pending: 'tagPending', approved: 'tagApproved', declined: 'tagDeclined', rescheduled: 'tagPending' };
 
 function dateRangeLabel(r: LeaveRequest): string {
   const first = r.dates[0] ?? '';
@@ -33,22 +38,19 @@ function useActiveAgentRoster() {
   });
 }
 
-// Company-wide, filterable history -- the "every staff member" roster
-// (per-person live countdown, expand for their own request history)
-// plus a flat filterable list across everyone, as its own route instead
-// of being folded into the Management dashboard home.
+// Company-wide, filterable history -- rebuilt on the shell's real shadcn
+// Select/Collapsible/Table after the 2026-10-08 correction, same
+// ApprovalsView filter pattern as Shreyasmark1/leave-management-system.
 export function LeaveManagementRequestsScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const statusFilter = searchParams.get('status') as LeaveRequest['status'] | null;
-  const yearFilter = searchParams.get('year');
-  const staffFilter = searchParams.get('staff');
+  const statusFilter = (searchParams.get('status') as LeaveRequest['status'] | null) ?? 'all';
+  const yearFilter = searchParams.get('year') ?? 'all';
+  const staffFilter = searchParams.get('staff') ?? 'all';
 
   const { data: config } = useConfig();
   const { data: roster } = useActiveAgentRoster();
   const { data: requests } = useLeaveRequests();
-  const downloadLetter = useDownloadLeaveLetterPdf();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const year = new Date(today()).getFullYear();
   const all = requests ?? [];
@@ -56,140 +58,127 @@ export function LeaveManagementRequestsScreen() {
   const years = Array.from(new Set(visible.map((r) => String(r.year)))).sort().reverse();
 
   let filtered = visible;
-  if (statusFilter) filtered = filtered.filter((r) => r.status === statusFilter);
-  if (yearFilter) filtered = filtered.filter((r) => String(r.year) === yearFilter);
-  if (staffFilter) filtered = filtered.filter((r) => r.agentKey === staffFilter);
+  if (statusFilter !== 'all') filtered = filtered.filter((r) => r.status === statusFilter);
+  if (yearFilter !== 'all') filtered = filtered.filter((r) => String(r.year) === yearFilter);
+  if (staffFilter !== 'all') filtered = filtered.filter((r) => r.agentKey === staffFilter);
   filtered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  function setParam(key: string, value: string | null) {
+  const noFiltersActive = statusFilter === 'all' && yearFilter === 'all' && staffFilter === 'all';
+
+  function setParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams.toString());
-    if (value) next.set(key, value);
-    else next.delete(key);
+    if (value === 'all') next.delete(key);
+    else next.set(key, value);
     router.push(`/dashboard/leave/management/requests${next.toString() ? `?${next.toString()}` : ''}`);
   }
 
-  function toggle(key: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
   return (
-    <div className={styles.wrap}>
-      <div className={styles.head}>
-        <Link href="/dashboard/leave/management" className={styles.backLink}>
-          ← Management
+    <div className="p-4 pb-24 md:p-8">
+      <Button asChild variant="ghost" size="sm" className="mb-2">
+        <Link href="/dashboard/leave/management">
+          <ArrowLeft />
+          Management
         </Link>
-        <h1 className={styles.title}>Company-wide requests</h1>
-        <p className={styles.sub}>
-          {filtered.length} request{filtered.length === 1 ? '' : 's'}
-          {statusFilter ? ` · ${STATUS_LABEL[statusFilter]}` : ''}
-        </p>
+      </Button>
+      <PageHeader title="Company-wide requests" description={`${filtered.length} request${filtered.length === 1 ? '' : 's'}${statusFilter !== 'all' ? ` · ${STATUS_LABEL[statusFilter]}` : ''}`} />
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Select value={staffFilter} onValueChange={(v) => setParam('staff', v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All staff" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All staff</SelectItem>
+            {(roster ?? []).map((s) => (
+              <SelectItem key={s.key} value={s.key}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => setParam('status', v)}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {ALL_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {STATUS_LABEL[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={yearFilter} onValueChange={(v) => setParam('year', v)}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="All years" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All years</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={y}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className={styles.filters}>
-        <select className={styles.select} value={staffFilter ?? ''} onChange={(e) => setParam('staff', e.target.value || null)}>
-          <option value="">All staff</option>
-          {(roster ?? []).map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={statusFilter ?? ''} onChange={(e) => setParam('status', e.target.value || null)}>
-          <option value="">All statuses</option>
-          {ALL_STATUSES.filter((s) => s !== 'planned').map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-        <select className={styles.select} value={yearFilter ?? ''} onChange={(e) => setParam('year', e.target.value || null)}>
-          <option value="">All years</option>
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {!statusFilter && !yearFilter && !staffFilter && (
-        <>
-          <div className={styles.sectitle}>Every staff member — {year}</div>
-          {!roster && <p className={styles.hint}>Loading roster…</p>}
-          {roster && roster.length === 0 && <p className={styles.hint}>No active staff on the roster.</p>}
-          <div className={styles.list}>
+      {noFiltersActive && (
+        <Card className="mb-6">
+          <CardContent className="grid gap-2">
+            <h2 className="mb-1 text-sm font-medium text-muted-foreground">Every staff member — {year}</h2>
+            {!roster && <p className="text-sm text-muted-foreground">Loading roster…</p>}
+            {roster && roster.length === 0 && <p className="text-sm text-muted-foreground">No active staff on the roster.</p>}
             {(roster ?? []).map((s) => {
               const reserved = config ? leaveDaysReserved(visible, s.key, year) : 0;
               const confirmedUsed = leaveDaysConfirmedUsed(visible, s.key, year, today());
               const remaining = config ? leaveDaysRemaining(config, visible, s.key, year) : null;
               const own = visible.filter((r) => r.agentKey === s.key).sort((a, b) => (a.dates[0] ?? '').localeCompare(b.dates[0] ?? ''));
-              const isOpen = expanded.has(s.key);
               return (
-                <div className={styles.staffRow} key={s.key}>
-                  <button type="button" className={styles.staffHead} onClick={() => toggle(s.key)}>
-                    <div className={styles.rowMain}>
-                      <div className={styles.name}>{s.name}</div>
-                      <div className={styles.meta}>
+                <Collapsible key={s.key} className="rounded-lg border">
+                  <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 p-3 text-left">
+                    <div>
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">
                         {own.length} request{own.length === 1 ? '' : 's'} in {year}
                       </div>
                     </div>
-                    <span className={styles.remainingBadge}>
-                      {remaining ?? '--'}/{config?.leaveTotalDays ?? '--'} left
-                    </span>
-                    <span className={styles.chevron}>{isOpen ? '▲' : '▼'}</span>
-                  </button>
-                  {isOpen && (
-                    <div className={styles.staffDates}>
-                      {own.length === 0 && <p className={styles.hint}>No leave requests yet.</p>}
-                      {own.map((r) => (
-                        <div className={styles.dateRow} key={r.id}>
-                          <span>
-                            {dateRangeLabel(r)}
-                            {r.isEmergency ? ' · 🚨' : ''}
-                          </span>
-                          <span className={styles[STATUS_CLASS[r.status]]}>{STATUS_LABEL[r.status]}</span>
-                        </div>
-                      ))}
-                      <div className={styles.usedNote}>
-                        {reserved} reserved &middot; {confirmedUsed} confirmed used of {config?.leaveTotalDays ?? 20} in {year}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">
+                        {remaining ?? '--'}/{config?.leaveTotalDays ?? '--'} left
+                      </Badge>
+                      <ChevronDown className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
                     </div>
-                  )}
-                </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="grid gap-2 border-t p-3 text-sm">
+                    {own.length === 0 && <p className="text-muted-foreground">No leave requests yet.</p>}
+                    {own.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2">
+                        <span>
+                          {dateRangeLabel(r)}
+                          {r.isEmergency ? <Badge variant="destructive" className="ml-2">Emergency</Badge> : null}
+                        </span>
+                        <StatusBadge status={r.status} />
+                      </div>
+                    ))}
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {reserved} reserved &middot; {confirmedUsed} confirmed used of {config?.leaveTotalDays ?? 20} in {year}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               );
             })}
-          </div>
-        </>
+          </CardContent>
+        </Card>
       )}
 
-      <div className={styles.sectitle}>{statusFilter || yearFilter || staffFilter ? 'Matching requests' : 'All requests'}</div>
-      {filtered.length === 0 && <p className={styles.hint}>No matching requests.</p>}
-      <div className={styles.list}>
-        {filtered.map((r) => (
-          <div className={styles.row} key={r.id}>
-            <div className={styles.rowMain}>
-              <div className={styles.name}>
-                {r.agentName}
-                {r.isEmergency && <span className={styles.emergencyTag}>🚨 Emergency</span>}
-              </div>
-              <div className={styles.meta}>
-                {r.daysCount} day{r.daysCount === 1 ? '' : 's'} &middot; {dateRangeLabel(r)}
-              </div>
-              {r.letterText && (
-                <button type="button" className={styles.letterBtn} disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(r)}>
-                  {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
-                </button>
-              )}
-            </div>
-            <span className={styles[STATUS_CLASS[r.status]]}>{STATUS_LABEL[r.status]}</span>
-          </div>
-        ))}
-      </div>
+      <Card>
+        <CardContent>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">{noFiltersActive ? 'All requests' : 'Matching requests'}</h2>
+          <LeaveRequestsDataTable requests={filtered} showAgent emptyMessage="No matching requests." />
+        </CardContent>
+      </Card>
     </div>
   );
 }
