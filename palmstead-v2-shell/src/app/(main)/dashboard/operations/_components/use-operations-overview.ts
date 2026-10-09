@@ -33,6 +33,8 @@ export interface OpsIssueRow {
   sequence_id: number;
   priority: string;
   target_date: string | null;
+  createdAt: string;
+  completedAt: string | null;
   projectId: string;
   projectIdentifier: string;
   stateId: string;
@@ -40,6 +42,7 @@ export interface OpsIssueRow {
   stateColor: string;
   stateGroup: string;
   assignees: string[];
+  assigneeKeys: string[];
 }
 
 export interface OpsActivityRow {
@@ -57,24 +60,42 @@ export interface OpsActivityRow {
   issueId: string;
 }
 
+export interface Delta {
+  value: number;
+  direction: "up" | "down" | "flat";
+}
+
+export interface WorkloadRow {
+  key: string;
+  name: string;
+  open: number;
+  highPriority: number;
+  overdue: number;
+  completed: number;
+}
+
 export interface OperationsOverview {
   totalOpen: number;
   highPriorityOpen: number;
   dueTodayCount: number;
   overdueCount: number;
   completedCount: number;
-  statusBreakdown: { group: string; label: string; count: number }[];
+  openDelta: Delta;
+  highPriorityDelta: Delta;
+  completedDelta: Delta;
+  statusBreakdown: { group: string; label: string; count: number; color: string }[];
   priorityBreakdown: { priority: string; label: string; count: number }[];
   createdTrend: { day: string; label: string; count: number }[];
-  workQueue: OpsIssueRow[];
+  allOpenIssues: OpsIssueRow[];
   attention: OpsIssueRow[];
   recentActivity: OpsActivityRow[];
+  workloadByStaff: WorkloadRow[];
 }
 
-function trailing14Days(): string[] {
+function trailingDays(n: number): string[] {
   const out: string[] = [];
   const now = new Date();
-  for (let i = 13; i >= 0; i--) {
+  for (let i = n - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
     out.push(isoDateOnly(d));
   }
@@ -83,12 +104,26 @@ function trailing14Days(): string[] {
 
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
 
+const STATUS_GROUP_COLOR: Record<string, string> = {
+  backlog: "var(--chart-5)",
+  unstarted: "var(--chart-4)",
+  started: "var(--chart-1)",
+  completed: "var(--chart-2)",
+  cancelled: "var(--chart-3)",
+};
+
+function pctDelta(current: number, previous: number): Delta {
+  if (previous === 0) return { value: current > 0 ? 100 : 0, direction: current > 0 ? "up" : "flat" };
+  const change = Math.round(((current - previous) / previous) * 100);
+  return { value: Math.abs(change), direction: change > 0 ? "up" : change < 0 ? "down" : "flat" };
+}
+
 async function fetchOperationsOverview(): Promise<OperationsOverview> {
   const sb = requireSupabase();
   const [issuesRes, statesRes, projectsRes, assigneesRes, profilesRes, activityRes] = await Promise.all([
     sb
       .from("op_issues")
-      .select("id,name,sequence_id,priority,target_date,created_at,project_id,state_id")
+      .select("id,name,sequence_id,priority,target_date,created_at,completed_at,project_id,state_id")
       .is("archived_at", null),
     sb.from("op_states").select("id,name,color,group"),
     sb.from("op_projects").select("id,identifier"),
@@ -114,6 +149,7 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
     priority: string | null;
     target_date: string | null;
     created_at: string;
+    completed_at: string | null;
     project_id: string;
     state_id: string | null;
   };
@@ -136,29 +172,33 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
   const stateMap = new Map(states.map((s) => [s.id, s]));
   const projectMap = new Map(projects.map((p) => [p.id, p]));
   const profileMap = new Map(profiles.map((p) => [p.agent_key, p.name]));
-  const assigneesByIssue = new Map<string, string[]>();
+  const assigneeKeysByIssue = new Map<string, string[]>();
   for (const row of assigneeRows) {
-    const list = assigneesByIssue.get(row.issue_id) ?? [];
-    list.push(profileMap.get(row.assignee_key) ?? row.assignee_key);
-    assigneesByIssue.set(row.issue_id, list);
+    const list = assigneeKeysByIssue.get(row.issue_id) ?? [];
+    list.push(row.assignee_key);
+    assigneeKeysByIssue.set(row.issue_id, list);
   }
 
   const rows: OpsIssueRow[] = issues.map((i) => {
     const state = i.state_id ? stateMap.get(i.state_id) : undefined;
     const project = projectMap.get(i.project_id);
+    const assigneeKeys = assigneeKeysByIssue.get(i.id) ?? [];
     return {
       id: i.id,
       name: i.name,
       sequence_id: i.sequence_id,
       priority: i.priority ?? "none",
       target_date: i.target_date,
+      createdAt: i.created_at,
+      completedAt: i.completed_at,
       projectId: i.project_id,
       projectIdentifier: project?.identifier ?? "?",
       stateId: i.state_id ?? "",
       stateName: state?.name ?? "Unknown",
       stateColor: state?.color ?? "#999",
       stateGroup: state?.group ?? "unstarted",
-      assignees: assigneesByIssue.get(i.id) ?? [],
+      assignees: assigneeKeys.map((k) => profileMap.get(k) ?? k),
+      assigneeKeys,
     };
   });
 
@@ -166,10 +206,22 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
   const todayIso = isoDateOnly(new Date());
   const completed = rows.filter((r) => r.stateGroup === "completed");
 
+  // Real week-over-week deltas, not fabricated: a 7-day-old snapshot
+  // reconstructed from the same created_at/completed_at columns already
+  // fetched (an issue was "open as of" a past date if it existed by then
+  // and either isn't completed yet or completed after that date).
+  const weekAgoIso = isoDateOnly(new Date(Date.now() - 7 * 86400000));
+  const openAsOfWeekAgo = rows.filter(
+    (r) => r.createdAt.slice(0, 10) <= weekAgoIso && (!r.completedAt || r.completedAt.slice(0, 10) > weekAgoIso),
+  );
+  const highPriorityAsOfWeekAgo = openAsOfWeekAgo.filter((r) => r.priority === "high" || r.priority === "urgent");
+  const completedAsOfWeekAgo = rows.filter((r) => r.completedAt && r.completedAt.slice(0, 10) <= weekAgoIso);
+
   const statusBreakdown = (["backlog", "unstarted", "started", "completed", "cancelled"] as const).map((group) => ({
     group,
     label: STATE_GROUP_LABELS[group],
     count: rows.filter((r) => r.stateGroup === group).length,
+    color: STATUS_GROUP_COLOR[group],
   }));
 
   const priorityBreakdown = (["urgent", "high", "medium", "low", "none"] as const).map((priority) => ({
@@ -178,7 +230,7 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
     count: open.filter((r) => r.priority === priority).length,
   }));
 
-  const days = trailing14Days();
+  const days = trailingDays(30);
   const createdByDay = new Map<string, number>();
   for (const i of issues) {
     const day = (i.created_at ?? "").slice(0, 10);
@@ -189,17 +241,6 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
     label: new Date(day).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
     count: createdByDay.get(day) ?? 0,
   }));
-
-  const workQueue = [...open]
-    .sort((a, b) => {
-      const pr = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-      if (pr !== 0) return pr;
-      if (a.target_date && b.target_date) return a.target_date.localeCompare(b.target_date);
-      if (a.target_date) return -1;
-      if (b.target_date) return 1;
-      return 0;
-    })
-    .slice(0, 8);
 
   // Real rule-based attention list (not a hardcoded list, not an LLM
   // call): urgent/high priority AND (already overdue OR due within the
@@ -235,18 +276,52 @@ async function fetchOperationsOverview(): Promise<OperationsOverview> {
     };
   });
 
+  // Management-only panel: real per-staff workload, company-wide --
+  // every active profile, not just staff who happen to have an issue
+  // (a 0-everywhere row is itself the signal that someone has nothing
+  // assigned).
+  const workloadByStaff: WorkloadRow[] = profiles
+    .map((p) => {
+      const mine = rows.filter((r) => r.assigneeKeys.includes(p.agent_key));
+      const mineOpen = mine.filter((r) => r.stateGroup !== "completed" && r.stateGroup !== "cancelled");
+      return {
+        key: p.agent_key,
+        name: p.name,
+        open: mineOpen.length,
+        highPriority: mineOpen.filter((r) => r.priority === "high" || r.priority === "urgent").length,
+        overdue: mineOpen.filter((r) => r.target_date && r.target_date < todayIso).length,
+        completed: mine.filter((r) => r.stateGroup === "completed").length,
+      };
+    })
+    .filter((w) => w.open + w.completed > 0)
+    .sort((a, b) => b.open - a.open);
+
   return {
     totalOpen: open.length,
     highPriorityOpen: open.filter((r) => r.priority === "high" || r.priority === "urgent").length,
     dueTodayCount: open.filter((r) => r.target_date === todayIso).length,
     overdueCount: open.filter((r) => r.target_date && r.target_date < todayIso).length,
     completedCount: completed.length,
+    openDelta: pctDelta(open.length, openAsOfWeekAgo.length),
+    highPriorityDelta: pctDelta(
+      open.filter((r) => r.priority === "high" || r.priority === "urgent").length,
+      highPriorityAsOfWeekAgo.length,
+    ),
+    completedDelta: pctDelta(completed.length, completedAsOfWeekAgo.length),
     statusBreakdown,
     priorityBreakdown,
     createdTrend,
-    workQueue,
+    allOpenIssues: [...open].sort((a, b) => {
+      const pr = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      if (pr !== 0) return pr;
+      if (a.target_date && b.target_date) return a.target_date.localeCompare(b.target_date);
+      if (a.target_date) return -1;
+      if (b.target_date) return 1;
+      return 0;
+    }),
     attention,
     recentActivity,
+    workloadByStaff,
   };
 }
 
