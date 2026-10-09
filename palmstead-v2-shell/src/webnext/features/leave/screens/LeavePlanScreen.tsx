@@ -51,11 +51,14 @@ export function LeavePlanScreen() {
 
       <div className="my-6 grid grid-cols-6 gap-2">
         {MONTH_NAMES.map((m, i) => (
-          <Badge key={m} variant={monthsWithPlan.has(i) ? 'default' : 'outline'} className="justify-center py-1.5">
-            {m}
-          </Badge>
+          <Link key={m} href={`/dashboard/leave/requests/new?month=${i}&year=${year}`} className="block">
+            <Badge variant={monthsWithPlan.has(i) ? 'default' : 'outline'} className="w-full cursor-pointer justify-center py-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+              {m}
+            </Badge>
+          </Link>
         ))}
       </div>
+      <p className="-mt-4 mb-6 text-xs text-muted-foreground">Tap a month to block out dates in it.</p>
 
       <Button asChild className="mb-6">
         <Link href="/dashboard/leave/requests/new">

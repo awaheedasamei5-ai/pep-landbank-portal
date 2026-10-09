@@ -224,12 +224,17 @@ carries a real reference number, which it doesn't today.
       app code.
 - [x] Phase 4: UI — Plan (prefill for the year): built `/dashboard/leave/plan`
       — distinct from `/requests/new` (a one-shot request): the year's
-      balance ring, a 12-month strip highlighting which months already
+      balance card, a 12-month strip highlighting which months already
       have a planned block, and the list of still-`planned` drafts
       (reuses `PlannedLeaveRow` — send/edit/delete), with a prominent
       "+ Add a leave block" into the existing new-request flow. Linked
-      from the Dashboard header. Verified live: real data, zero app-code
-      console errors.
+      from the Dashboard header. CORRECTED 2026-10-09: the month strip
+      was display-only on first ship (no onClick) — the user called this
+      out as non-functional. Each month badge is now a real link to
+      `/requests/new?month=N&year=YYYY`, and `LeaveNewRequestForm` reads
+      those params to open its calendar pre-navigated to that month.
+      Verified live: clicking "Dec" lands on `/requests/new?month=11&
+      year=2026` with the calendar showing December 2026.
 - [x] Phase 4: UI — My requests (list + filters): own route
       (`/leave/requests`), status + year filters via `?status=`/`?year=`
       query params, verified live (manager test account currently has 0
@@ -276,21 +281,25 @@ carries a real reference number, which it doesn't today.
       superseded, left in place unreferenced rather than deleted.
       Verified live: added a real test closure, confirmed it saved and
       listed, then removed it (no stray test data left in prod).
-- [x] Phase 5: reminder SMS — confirmed ALREADY LIVE (built in an earlier
-      phase of this same session, before this doc's checklist was last
-      updated — verified directly against the real DB, not assumed): a
-      `send_leave_reminders()` SECURITY DEFINER function + two real
-      `pg_cron` jobs (`leave-reminder-7am` calling it once daily) send a
-      3-days-out advance SMS and a 1-day-out final SMS to the staff
-      member for any `approved` request, each gated by
-      `reminder_advance_sent_at`/`reminder_final_sent_at` so it never
-      double-sends. (Timing is 3-day/1-day, not the literal "5 days"
-      the user originally said — a deliberate earlier design choice, not
-      a gap.) The Management-facing half ("staff X has a pending request,
-      please approve") is covered separately and immediately at submit
-      time by `notifyManagementOfLeaveRequest()` in `useLeaveRequests.ts`
-      (already existed, not new this check) — Management is not also
-      reminded again as leave approaches, only notified once up front.
+- [x] Phase 5: reminder SMS — CORRECTED 2026-10-09 to match the literal
+      ask ("an sms to the staff and management alerting the staff he is
+      due for leave in 5 days time... and an alert to management"): the
+      `send_leave_reminders()` function (migration
+      `leave_reminders_5day_plus_management_sms`) now fires at
+      `current_date + 5` (was 3) and, at that same mark, also SMSes every
+      manager's phone plus `app_config.company_phone` (no manager profile
+      currently has a phone on file, confirmed live — falls back to
+      `company_phone` alone, same pattern the rest of the app already
+      uses for Management SMS). The 1-day-out final reminder stays
+      staff-only, unchanged. Both legs still gated by
+      `reminder_advance_sent_at`/`reminder_final_sent_at`. Verified: the
+      function recompiled and re-confirmed its SQL contains the 5-day
+      window; no row is currently 5 days out, so nothing fired during
+      verification — real send behavior will only be observable the next
+      time a request legitimately hits that mark. The separate
+      submit-time Management notification (`notifyManagementOfLeaveRequest`)
+      is unchanged and still fires immediately on submit, independent of
+      this 5-day mark.
 - [x] Phase 6: real `request_no` wired in. Added column
       `leave_requests.request_no` (migration
       `leave_requests_add_request_no`), populated once at `create()` via

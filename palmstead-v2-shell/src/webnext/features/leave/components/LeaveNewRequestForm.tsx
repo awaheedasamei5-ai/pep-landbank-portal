@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
@@ -22,13 +22,16 @@ import { today } from '../../../shared/lib/format';
 // shell's own component library).
 export function LeaveNewRequestForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const create = useCreateLeaveRequest();
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
   const { data: requests } = useLeaveRequests();
   const { data: companyClosures } = useLeaveHolidays();
-  const [year, setYear] = useState(() => new Date(today()).getFullYear());
-  const [month, setMonth] = useState(() => new Date(today()).getMonth());
+  const monthParam = searchParams.get('month');
+  const yearParam = searchParams.get('year');
+  const [year, setYear] = useState(() => (yearParam ? Number(yearParam) : new Date(today()).getFullYear()));
+  const [month, setMonth] = useState(() => (monthParam ? Number(monthParam) : new Date(today()).getMonth()));
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
