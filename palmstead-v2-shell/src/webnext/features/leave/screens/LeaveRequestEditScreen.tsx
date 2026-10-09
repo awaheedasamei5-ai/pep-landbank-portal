@@ -85,14 +85,14 @@ export function LeaveRequestEditScreen() {
 
   if (!request) {
     return (
-      <div className="mx-auto w-full max-w-2xl">
+      <div>
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
   if (request.status !== 'planned') {
     return (
-      <div className="mx-auto w-full max-w-2xl">
+      <div>
         <Button asChild variant="ghost" size="sm" className="mb-2">
           <Link href={`/dashboard/leave/requests/${request.id}`}>
             <ArrowLeft />
@@ -105,7 +105,7 @@ export function LeaveRequestEditScreen() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href={`/dashboard/leave/requests/${request.id}`}>
           <ArrowLeft />
@@ -113,7 +113,7 @@ export function LeaveRequestEditScreen() {
         </Link>
       </Button>
       <PageHeader title="Edit dates" />
-      <Card className="max-w-md">
+      <Card>
         <CardContent>
           {config && (
             <LeaveCalendar

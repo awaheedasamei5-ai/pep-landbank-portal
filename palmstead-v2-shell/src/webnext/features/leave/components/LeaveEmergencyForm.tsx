@@ -74,7 +74,7 @@ export function LeaveEmergencyForm() {
         </CardTitle>
         <CardDescription>This goes straight to Management for urgent approval, even if it conflicts with a colleague's leave or an entitlement limit — they'll see the conflict and decide.</CardDescription>
       </CardHeader>
-      <CardContent className="grid max-w-md gap-4">
+      <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-4">
           <FormItem label="From" htmlFor="fromDate">
             <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />

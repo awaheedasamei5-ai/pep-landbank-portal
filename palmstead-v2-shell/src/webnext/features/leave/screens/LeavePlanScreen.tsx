@@ -38,46 +38,62 @@ export function LeavePlanScreen() {
   const monthsWithPlan = new Set(planned.flatMap((r) => r.dates.map((d) => Number(d.slice(5, 7)) - 1)));
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave">
           <ArrowLeft />
           Dashboard
         </Link>
       </Button>
-      <PageHeader title={`My leave plan — ${year}`} description="Block out dates across the year before sending anything to Management. Nothing here counts against your quota until sent and decided." />
+      <PageHeader
+        title={`My leave plan — ${year}`}
+        description="Block out dates across the year before sending anything to Management. Nothing here counts against your quota until sent and decided."
+        action={
+          <Button asChild>
+            <Link href="/dashboard/leave/requests/new">
+              <CalendarPlus />
+              Add a leave block
+            </Link>
+          </Button>
+        }
+      />
 
-      {config && <LeaveBalanceCard total={config.leaveTotalDays} reserved={reserved} remaining={remaining} confirmedUsed={confirmedUsed} />}
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="grid gap-6 xl:col-span-5">
+          {config && <LeaveBalanceCard total={config.leaveTotalDays} reserved={reserved} remaining={remaining} confirmedUsed={confirmedUsed} />}
+          <Card>
+            <CardHeader>
+              <CardTitle>Year at a glance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 xl:grid-cols-4">
+                {MONTH_NAMES.map((m, i) => (
+                  <Link key={m} href={`/dashboard/leave/requests/new?month=${i}&year=${year}`} className="block">
+                    <Badge variant={monthsWithPlan.has(i) ? 'default' : 'outline'} className="w-full cursor-pointer justify-center py-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+                      {m}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">Tap a month to block out dates in it.</p>
+            </CardContent>
+          </Card>
+        </div>
 
-      <div className="my-6 grid grid-cols-6 gap-2">
-        {MONTH_NAMES.map((m, i) => (
-          <Link key={m} href={`/dashboard/leave/requests/new?month=${i}&year=${year}`} className="block">
-            <Badge variant={monthsWithPlan.has(i) ? 'default' : 'outline'} className="w-full cursor-pointer justify-center py-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
-              {m}
-            </Badge>
-          </Link>
-        ))}
+        <div className="xl:col-span-7">
+          <Card>
+            <CardHeader>
+              <CardTitle>Planned blocks</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {planned.length === 0 && <p className="text-sm text-muted-foreground">Nothing planned yet — add a block for any dates you already know you&apos;ll want off this year.</p>}
+              {planned.map((r) => (
+                <PlannedLeaveRow key={r.id} request={r} />
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      <p className="-mt-4 mb-6 text-xs text-muted-foreground">Tap a month to block out dates in it.</p>
-
-      <Button asChild className="mb-6">
-        <Link href="/dashboard/leave/requests/new">
-          <CalendarPlus />
-          Add a leave block
-        </Link>
-      </Button>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Planned blocks</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {planned.length === 0 && <p className="text-sm text-muted-foreground">Nothing planned yet — add a block for any dates you already know you&apos;ll want off this year.</p>}
-          {planned.map((r) => (
-            <PlannedLeaveRow key={r.id} request={r} />
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }

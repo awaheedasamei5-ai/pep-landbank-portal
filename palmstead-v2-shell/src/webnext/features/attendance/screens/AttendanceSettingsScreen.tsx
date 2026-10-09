@@ -12,7 +12,7 @@ export function AttendanceSettingsScreen() {
   const mgmt = useAttendanceManagement();
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/attendance/management">
           <ArrowLeft />
@@ -20,7 +20,7 @@ export function AttendanceSettingsScreen() {
         </Link>
       </Button>
       <PageHeader title="Policy & locations" description="What counts as late, which days count as workdays, and every real office geofence — in-app, for Attendance only." />
-      <div className="grid gap-6">
+      <div className="grid gap-6 xl:grid-cols-2">
         <AttendancePolicyCard policy={mgmt.policy} onUpdate={mgmt.updatePolicy} />
         <OfficeLocationsCard locations={mgmt.officeLocations} onCreate={mgmt.createOfficeLocation} onUpdate={mgmt.updateOfficeLocation} onRemove={mgmt.removeOfficeLocation} />
       </div>

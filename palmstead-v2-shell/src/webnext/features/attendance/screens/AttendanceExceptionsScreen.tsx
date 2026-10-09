@@ -54,7 +54,7 @@ export function AttendanceExceptionsScreen() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/attendance">
           <ArrowLeft />
@@ -63,83 +63,89 @@ export function AttendanceExceptionsScreen() {
       </Button>
       <PageHeader title="Exception requests" description="Pre-authorize an off-site errand, site visit, or field assignment ahead of time — Management decides, and an approved one skips the reactive off-site prompt at sign-in." />
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Request an exception</CardTitle>
-        </CardHeader>
-        <CardContent className="grid max-w-md gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <FormItem label="Date" htmlFor="exceptionDate">
-              <Input id="exceptionDate" type="date" value={exceptionDate} onChange={(e) => setExceptionDate(e.target.value)} />
-            </FormItem>
-            <FormItem label="Type" htmlFor="exceptionType">
-              <Select value={exceptionType} onValueChange={(v) => setExceptionType(v as AttendanceExceptionType)}>
-                <SelectTrigger id="exceptionType" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(TYPE_LABELS) as AttendanceExceptionType[]).map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {TYPE_LABELS[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormItem>
-          </div>
-          <FormItem label="Reason (required)" htmlFor="reason">
-            <Textarea id="reason" placeholder="What's the errand / visit / assignment?" value={reason} onChange={(e) => setReason(e.target.value)} />
-          </FormItem>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <SubmitButton type="button" loading={request.isPending} onClick={submit}>
-            Send request
-          </SubmitButton>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="xl:col-span-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Request an exception</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormItem label="Date" htmlFor="exceptionDate">
+                  <Input id="exceptionDate" type="date" value={exceptionDate} onChange={(e) => setExceptionDate(e.target.value)} />
+                </FormItem>
+                <FormItem label="Type" htmlFor="exceptionType">
+                  <Select value={exceptionType} onValueChange={(v) => setExceptionType(v as AttendanceExceptionType)}>
+                    <SelectTrigger id="exceptionType" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(TYPE_LABELS) as AttendanceExceptionType[]).map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {TYPE_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              </div>
+              <FormItem label="Reason (required)" htmlFor="reason">
+                <Textarea id="reason" placeholder="What's the errand / visit / assignment?" value={reason} onChange={(e) => setReason(e.target.value)} />
+              </FormItem>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <SubmitButton type="button" loading={request.isPending} onClick={submit}>
+                Send request
+              </SubmitButton>
+            </CardContent>
+          </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>My requests</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.length === 0 ? (
-                  <TableEmpty colSpan={4} message="No exception requests yet." />
-                ) : (
-                  sorted.map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell>{e.exceptionDate}</TableCell>
-                      <TableCell>{TYPE_LABELS[e.exceptionType]}</TableCell>
-                      <TableCell className="max-w-64">
-                        <span className="line-clamp-1" title={e.reason}>
-                          {e.reason}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANT[e.status] ?? 'outline'} className="capitalize">
-                          {e.status}
-                        </Badge>
-                      </TableCell>
+        <div className="xl:col-span-7">
+          <Card>
+            <CardHeader>
+              <CardTitle>My requests</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {sorted.length === 0 ? (
+                      <TableEmpty colSpan={4} message="No exception requests yet." />
+                    ) : (
+                      sorted.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell>{e.exceptionDate}</TableCell>
+                          <TableCell>{TYPE_LABELS[e.exceptionType]}</TableCell>
+                          <TableCell className="max-w-64">
+                            <span className="line-clamp-1" title={e.reason}>
+                              {e.reason}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={STATUS_VARIANT[e.status] ?? 'outline'} className="capitalize">
+                              {e.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

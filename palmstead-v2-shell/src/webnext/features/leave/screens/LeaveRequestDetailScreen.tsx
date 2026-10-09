@@ -39,14 +39,14 @@ export function LeaveRequestDetailScreen() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-2xl">
+      <div>
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
   if (!request) {
     return (
-      <div className="mx-auto w-full max-w-2xl">
+      <div>
         <Button asChild variant="ghost" size="sm" className="mb-2">
           <Link href="/dashboard/leave/requests">
             <ArrowLeft />
@@ -62,7 +62,7 @@ export function LeaveRequestDetailScreen() {
   const lastDate = request.dates[request.dates.length - 1] ?? '';
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave/requests">
           <ArrowLeft />
@@ -76,79 +76,88 @@ export function LeaveRequestDetailScreen() {
         action={<StatusBadge status={request.status} />}
       />
 
-      {request.rescheduleNote && (
-        <Alert className="mb-4">
-          <AlertDescription>
-            <span className="font-medium text-foreground">Note from Management:</span> {request.rescheduleNote}
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="grid gap-4 self-start xl:col-span-7">
+          {request.rescheduleNote && (
+            <Alert>
+              <AlertDescription>
+                <span className="font-medium text-foreground">Note from Management:</span> {request.rescheduleNote}
+              </AlertDescription>
+            </Alert>
+          )}
 
-      {request.status === 'approved' && !request.deductQuota && <p className="mb-4 text-sm text-muted-foreground">Not counted against the annual quota (Management's call).</p>}
-
-      <div className="mb-6 flex flex-wrap gap-2">
-        {request.letterText && (
-          <Button variant="outline" disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
-            <FileText />
-            {downloadLetter.isPending ? 'Preparing…' : 'Leave request letter'}
-          </Button>
-        )}
-        {isMine && request.status === 'planned' && (
-          <>
-            <Button asChild variant="outline">
-              <Link href={`/dashboard/leave/requests/${request.id}/edit`}>
-                <Pencil />
-                Edit dates
-              </Link>
-            </Button>
-            <Button disabled={sendPlanned.isPending} onClick={() => sendPlanned.mutate(request.id)}>
-              <Send />
-              {sendPlanned.isPending ? 'Sending…' : 'Send to Management now'}
-            </Button>
-            <ConfirmDialog
-              trigger={
-                <Button variant="destructive">
-                  <Trash2 />
-                  Delete
-                </Button>
-              }
-              title="Delete this planned leave?"
-              description="This can't be undone."
-              confirmLabel="Delete"
-              onConfirm={() => remove.mutateAsync(request.id).then(() => router.push('/dashboard/leave/requests'))}
-            />
-          </>
-        )}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(logs ?? []).length === 0 && <p className="text-sm text-muted-foreground">No history yet.</p>}
-          <div className="grid gap-4">
-            {(logs ?? []).map((log) => (
-              <div key={log.id} className="flex gap-3 border-l-2 pl-3">
-                <div className="grid gap-0.5">
-                  <div className="text-sm font-medium">
-                    {log.fromStatus ? (
-                      <>
-                        {STATUS_LABEL[log.fromStatus] ?? log.fromStatus} → {STATUS_LABEL[log.toStatus] ?? log.toStatus}
-                      </>
-                    ) : (
-                      <>Created as {STATUS_LABEL[log.toStatus] ?? log.toStatus}</>
-                    )}
-                    <span className="font-normal text-muted-foreground"> · {actorLabel(log.actorKey, request.agentKey)}</span>
-                  </div>
-                  {log.note && <div className="text-sm text-muted-foreground italic">&ldquo;{log.note}&rdquo;</div>}
-                  <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
-                </div>
+          <Card>
+            <CardContent className="grid gap-4 pt-6">
+              {request.status === 'approved' && !request.deductQuota && <p className="text-sm text-muted-foreground">Not counted against the annual quota (Management&apos;s call).</p>}
+              <div className="flex flex-wrap gap-2">
+                {request.letterText && (
+                  <Button variant="outline" disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
+                    <FileText />
+                    {downloadLetter.isPending ? 'Preparing…' : 'Leave request letter'}
+                  </Button>
+                )}
+                {isMine && request.status === 'planned' && (
+                  <>
+                    <Button asChild variant="outline">
+                      <Link href={`/dashboard/leave/requests/${request.id}/edit`}>
+                        <Pencil />
+                        Edit dates
+                      </Link>
+                    </Button>
+                    <Button disabled={sendPlanned.isPending} onClick={() => sendPlanned.mutate(request.id)}>
+                      <Send />
+                      {sendPlanned.isPending ? 'Sending…' : 'Send to Management now'}
+                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="destructive">
+                          <Trash2 />
+                          Delete
+                        </Button>
+                      }
+                      title="Delete this planned leave?"
+                      description="This can't be undone."
+                      confirmLabel="Delete"
+                      onConfirm={() => remove.mutateAsync(request.id).then(() => router.push('/dashboard/leave/requests'))}
+                    />
+                  </>
+                )}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="xl:col-span-5">
+          <Card>
+            <CardHeader>
+              <CardTitle>History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(logs ?? []).length === 0 && <p className="text-sm text-muted-foreground">No history yet.</p>}
+              <div className="grid gap-4">
+                {(logs ?? []).map((log) => (
+                  <div key={log.id} className="flex gap-3 border-l-2 pl-3">
+                    <div className="grid gap-0.5">
+                      <div className="text-sm font-medium">
+                        {log.fromStatus ? (
+                          <>
+                            {STATUS_LABEL[log.fromStatus] ?? log.fromStatus} → {STATUS_LABEL[log.toStatus] ?? log.toStatus}
+                          </>
+                        ) : (
+                          <>Created as {STATUS_LABEL[log.toStatus] ?? log.toStatus}</>
+                        )}
+                        <span className="font-normal text-muted-foreground"> · {actorLabel(log.actorKey, request.agentKey)}</span>
+                      </div>
+                      {log.note && <div className="text-sm text-muted-foreground italic">&ldquo;{log.note}&rdquo;</div>}
+                      <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

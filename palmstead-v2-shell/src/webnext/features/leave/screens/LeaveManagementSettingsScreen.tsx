@@ -57,7 +57,7 @@ export function LeaveManagementSettingsScreen() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave/management">
           <ArrowLeft />
@@ -66,21 +66,21 @@ export function LeaveManagementSettingsScreen() {
       </Button>
       <PageHeader title="Leave settings" description="Quota, Eid windows, and company closures — in-app, for Leave only" />
 
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Annual leave quota</CardTitle>
-            <CardDescription>Every staff member&apos;s pooled annual entitlement. One number, company-wide — Palmstead has no separate leave types.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-3">
-            <Input type="number" min={0} className="w-24 text-center font-heading text-lg font-semibold" value={quota} onChange={(e) => setQuotaDraft(Number(e.target.value))} />
-            <span className="text-sm text-muted-foreground">days / year</span>
-            <SubmitButton type="button" className="ml-auto" size="sm" disabled={quotaDraft === null} loading={updateConfig.isPending} onClick={saveQuota}>
-              Save
-            </SubmitButton>
-          </CardContent>
-        </Card>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Annual leave quota</CardTitle>
+          <CardDescription>Every staff member&apos;s pooled annual entitlement. One number, company-wide — Palmstead has no separate leave types.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Input type="number" min={0} className="w-24 text-center font-heading text-lg font-semibold" value={quota} onChange={(e) => setQuotaDraft(Number(e.target.value))} />
+          <span className="text-sm text-muted-foreground">days / year</span>
+          <SubmitButton type="button" className="ml-auto" size="sm" disabled={quotaDraft === null} loading={updateConfig.isPending} onClick={saveQuota}>
+            Save
+          </SubmitButton>
+        </CardContent>
+      </Card>
 
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Eid windows</CardTitle>

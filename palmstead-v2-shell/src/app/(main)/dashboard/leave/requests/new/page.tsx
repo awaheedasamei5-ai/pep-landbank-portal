@@ -6,7 +6,7 @@ import { LeaveNewRequestForm } from "@/webnext/features/leave/components/LeaveNe
 
 export default function Page() {
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link href="/dashboard/leave">
           <ArrowLeft />
