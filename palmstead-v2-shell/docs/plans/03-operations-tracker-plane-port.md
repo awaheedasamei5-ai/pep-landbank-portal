@@ -131,7 +131,44 @@ doesn't build them out into working screens against real data.
       tables, nothing existing touched. Verified after apply: 17/17 tables
       present, 17/17 RLS policies created, 1 seed workspace row
       ("Palmstead"), zero security advisories on any `op_*` table.
-- [ ] Phase 4: service layer rebuilt against real schema
+- [x] Phase 4a: the REST of `apps/web`'s own data layer raw-duplicated --
+      `store/` (full MobX store tree, ~75 files), `services/` (53 files,
+      still axios/Django-backed), the real `@plane/services` base package
+      (58 files, `packages/services/src/`), plus the small `hooks/`/`lib/`
+      cluster the store layer actually needs (`use-multiple-select`,
+      `store-context`, `local-storage`). Copied into
+      `src/openplane/web/{store,services,hooks,lib}` and
+      `src/openplane/services/`, aliased via `next.config.mjs`
+      `resolveAlias` + `tsconfig.json` `paths` as `@openplane-web/*` and
+      `@plane/services` (same pattern as Phase 1/2). `npx tsc -b` clean
+      against this project's strict config -- installed `axios` and
+      `mobx-react@^9` (pinned below `mobx-react@10`'s `mobx@7` peer dep,
+      since this repo is on real `mobx@6.16.1` from Phase 2).
+      **Deferred, explicitly, not silently dropped**: Power K (command
+      palette) and the Gantt/Timeline view -- `store/base-power-k.store.ts`,
+      `store/timeline/`, `store/issue/issue_gantt_view.store.ts` -- and
+      Pages (rich-text docs, needs the real `@plane/editor` package,
+      hundreds of files on its own, same as Phase 5 already flagged) --
+      `store/pages/`. All three are outside Phase 6's own priority order
+      (workspace -> projects -> issues -> cycles -> modules -> settings ->
+      views -> pages) and nothing else in the copied tree needed them once
+      removed from `root.store.ts`'s composition (confirmed via grep before
+      cutting, not guessed).
+      **Still axios/Django-shaped, not yet real**: all 53 `services/*.ts`
+      files still call `/api/workspaces/...` endpoints -- they raw-duplicate
+      cleanly and typecheck, but nothing in them talks to Supabase yet.
+      That rewrite (Phase 4b below) is the actual unblocking work; this
+      checkpoint is "the data layer exists and compiles," not "the data
+      layer works."
+- [ ] Phase 4b: rewrite the service layer's real HTTP calls against the
+      applied op_* schema (Phase 3b), smallest closed set first --
+      `services/workspace.service.ts` (just enough for `userWorkspaces()` to
+      return the real seeded `op_workspaces` row), `services/project/
+      project.service.ts`, `services/project/project-state.service.ts`,
+      `services/issue/issue_label.service.ts` -- the minimum Phase 6's own
+      first screen (workspace shell -> project list) needs. The other ~48
+      service files stay untouched/non-functional until their own screen's
+      turn in the Phase 6 order.
 - [ ] Phase 5: editor evaluated/copied if needed
 - [ ] Phase 6: UI surface — workspace shell
 - [ ] Phase 6: UI surface — projects

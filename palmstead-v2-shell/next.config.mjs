@@ -36,6 +36,11 @@ const nextConfig = {
       "@plane/hooks": "./src/openplane/hooks/index.ts",
       "@plane/i18n": "./src/openplane/i18n/index.ts",
       "@plane/shared-state": "./src/openplane/shared-state/index.ts",
+      "@plane/services": "./src/openplane/services/index.ts",
+      // apps/web's own real services/store/hooks/lib (its "@/..." imports,
+      // rewritten to this prefix on copy since "@/" already means "./src/"
+      // in this project) -- see src/openplane/web.
+      "@openplane-web/*": "./src/openplane/web/*",
     },
   },
   async redirects() {
