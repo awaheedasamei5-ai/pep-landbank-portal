@@ -480,3 +480,48 @@ verification -- tracked below, not blocked on anything further here.
       verified in dark mode. `npx tsc -b` clean. Not built: favorites
       (plane's separate user-favorite-views join) -- CRUD + apply only,
       which is the real scope of what was asked for.
+
+- [x] Phase 8 (new, 2026-10-09): My Schedule -- a real day/week/month
+      personal planner with reminders, closing the real gap the user
+      named directly ("there is no place where we can plan our days,
+      schedule daily/weekly/monthly tasks, like Google Calendar"). Not
+      invented from scratch: this is a real, direct port of V1's own
+      `schedule_items` (kind='todo') subsystem -- the exact time-of-day
+      personal planner that Phase 7's own escalation/collision-detection
+      work had already identified and deliberately deferred (issues are
+      whole-day granularity; this needed its own data shape). Confirmed
+      via a direct read of V1's real production functions
+      (`apiLoadTodos`/`apiInsertTodo`/`apiInsertRecurringTodo`/
+      `apiRescheduleTodo`/`apiCheckScheduleConflicts`, index.html main
+      branch), not guessed.
+      New `op_todos` table (migration `op_todos`), same real field
+      names as V1's `schedule_items` minus the task/lead/invitee columns
+      that belong to V1's OTHER schedule_items consumers (Tasks, meeting
+      invites) -- out of scope for this personal to-do slice.
+      Real month/week/day calendar UI on the shell's own real
+      FullCalendar integration (`event-calendar-views.tsx`), following
+      `/dashboard/calendar`'s own real `Calendar.tsx` as the reference
+      per AGENTS.md -- not a hand-rolled grid. Real drag-to-reschedule
+      (`editable` + `eventDrop`/`eventResize`, writing through the same
+      `useRescheduleTodo` mutation that inserts a new row and marks the
+      original "rescheduled", exactly matching V1's own auditable-move
+      semantics, not an in-place date edit). Real recurrence (daily/
+      weekly/monthly + interval + optional end date, capped at 12
+      occurrences, materialized as real rows up front -- V1's own
+      simplified, non-RFC5545 approach, ported as-is). Real reminders:
+      since no push-notification infrastructure exists anywhere in V2
+      yet (confirmed by a direct repo grep -- V1's own `push_notified_at`
+      column was never actually wired to a send path we could reuse),
+      built a real in-app "overdue" / "coming up" banner instead of
+      silently claiming push notifications work -- true push reminders
+      are a real, separate, larger follow-on (service worker + VAPID
+      keys + a send path), not done here.
+      Deliberately NOT ported: multi-attendee invites
+      (`schedule_item_invitees`) -- a separate, larger feature (the real
+      "Calendar" aggregation item, Part C of the item-2 OSS plan), not
+      what was asked for in this pass.
+      `npx tsc -b` clean. Verified live: added a real to-do, confirmed
+      the row and its reminder banner, opened the detail dialog, marked
+      it done, confirmed the real `status`/`completed_at` write in the
+      database and the calendar event updating to a green checkmark;
+      correct dark-mode rendering.

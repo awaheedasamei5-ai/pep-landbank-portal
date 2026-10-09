@@ -17,6 +17,7 @@ import { requireSupabase } from "@/lib/supabase.client";
 import { OperationsCommandCenter } from "./operations-command-center";
 import { OperationsWorkQueuePage } from "./operations-work-queue-page";
 import { OperationsAuditLog } from "./operations-audit-log";
+import { MyScheduleScreen } from "./my-schedule-screen";
 
 // Home page: a real Command Center (operations-command-center.tsx) built
 // from real op_issues/op_states/op_issue_activity rows across every
@@ -28,7 +29,7 @@ import { OperationsAuditLog } from "./operations-audit-log";
 const WORKSPACE_SLUG = "palmstead";
 
 export const OperationsTrackerScreen = observer(function OperationsTrackerScreen() {
-  const [view, setView] = useState<"overview" | "queue" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "schedule" | "queue" | "audit">("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -83,6 +84,7 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
           <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="schedule">My Schedule</TabsTrigger>
               <TabsTrigger value="queue">Work Queue</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
@@ -173,6 +175,7 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
         </>
       )}
 
+      {view === "schedule" && <MyScheduleScreen />}
       {view === "queue" && <OperationsWorkQueuePage />}
       {view === "audit" && <OperationsAuditLog />}
     </div>
