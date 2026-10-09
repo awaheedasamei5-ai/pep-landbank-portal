@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Siren, X } from 'lucide-react';
+import { ClipboardEdit, Siren, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertAction, AlertDescription } from '@/components/ui/alert';
@@ -107,6 +107,21 @@ export function AttendanceScreen() {
             <Button asChild variant="ghost" size="sm">
               <Link href="/dashboard/attendance/exceptions">
                 <Siren />
+                View / request
+              </Link>
+            </Button>
+          </CardAction>
+        </CardHeader>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Correction requests</CardTitle>
+          <CardDescription>Dispute a wrong clock-in or clock-out from a past day</CardDescription>
+          <CardAction>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/dashboard/attendance/corrections">
+                <ClipboardEdit />
                 View / request
               </Link>
             </Button>
