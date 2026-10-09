@@ -525,3 +525,52 @@ verification -- tracked below, not blocked on anything further here.
       it done, confirmed the real `status`/`completed_at` write in the
       database and the calendar event updating to a green checkmark;
       correct dark-mode rendering.
+
+- [x] Phase 8b (2026-10-09): real-time collision detection, wired. The
+      `checkScheduleConflicts()` function was already built in Phase 8
+      (a direct port of V1's real `apiCheckScheduleConflicts`) but never
+      actually called from the UI -- closed that gap. Queried live
+      against `op_todos` on every start/end time change in the quick-add
+      form (debounced 300ms), surfacing V1's own real warning text
+      ("You already have 'X' 09:00-09:30 that day"), non-blocking.
+      Verified live: a 09:00-09:30 item followed by a 09:15-09:45 item
+      the same day correctly surfaced the real warning naming the
+      correct conflicting item and time range.
+
+- [x] Phase 8c (2026-10-09): SMS reminders when a to-do's time is due.
+      **Real infrastructure discovered before building anything new**:
+      `pg_cron` and `pg_net` are already installed and already running
+      live jobs on this project (`cron.job` listed 9 active jobs,
+      including one firing every minute at a real `send-todo-alarms`
+      Edge Function); real `send-sms`/`send-push` Edge Functions (the
+      same Arkesel-backed `send-sms` payment reminders/SVE invites
+      already use) and a real `push_subscriptions` table already exist
+      too. `send-todo-alarms` targets V1's own `schedule_items` table,
+      not `op_todos` -- no existing coverage for this app's own to-dos.
+      Added a parallel real job for `op_todos` specifically (migration
+      `op_todos_sms_reminders`): a new `sms_notified_at` column, a
+      `send_op_todos_sms_reminders()` SQL function (same real
+      `net.http_post` pattern the existing live job already uses,
+      calling the real `send-sms` function) finding open, not-yet-
+      notified to-dos whose `start_time` fell within the last 15
+      minutes, looking up the assignee's real `profiles.phone`, and
+      sending a real SMS -- scheduled via `pg_cron` every minute
+      (jobid 10, `send-op-todos-sms-reminders`).
+      Verified: the function runs cleanly against real current data (no
+      SQL errors). **Deliberately not forced further**: only one real
+      staff profile (Elias) has a phone number on file, and sending an
+      unprompted test SMS to his real phone just to prove delivery
+      (rather than as a real due-reminder) isn't a legitimate reason to
+      text a real colleague -- the mechanism is verified structurally
+      and matches the exact pattern of the already-proven-live
+      `send-todo-alarms` job byte-for-byte in its `net.http_post` shape;
+      real end-to-end delivery will self-confirm the first time someone
+      actually has a timed to-do open when its start time arrives.
+      Web push (the second half of "SMS or notification") was not
+      additionally built: it needs a real client-side opt-in flow
+      (service worker registration + browser permission prompt) that
+      doesn't exist anywhere in this shell yet -- SMS alone fully
+      satisfies the real ask ("SMS or notification reminders"), and
+      building an unused push opt-in UI nobody can enable yet would be
+      exactly the kind of partial, nothing-really-works feature the
+      house rules rule out.
