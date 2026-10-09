@@ -11,7 +11,7 @@
  * satisfy IWorkspace.owner / IProject.project_lead etc.'s shape, scoped to
  * what this adapter needs.
  */
-import type { IProject, IState, IIssueLabel, IUser, IWorkspace } from "@plane/types";
+import type { IProject, IState, IIssueLabel, IUser, IWorkspace, TBaseIssue, TIssuePriorities } from "@plane/types";
 import { EUserWorkspaceRoles } from "@plane/types";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
@@ -190,5 +190,73 @@ export function toPlaneLabel(row: OpLabelRow): IIssueLabel {
     workspace_id: row.workspace_id,
     parent: row.parent_id,
     sort_order: row.sort_order,
+  };
+}
+
+export type OpIssueRow = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  sequence_id: number;
+  name: string;
+  description_html: string | null;
+  state_id: string | null;
+  priority: string;
+  parent_id: string | null;
+  cycle_id: string | null;
+  sort_order: number;
+  start_date: string | null;
+  target_date: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
+  is_draft: boolean;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Real assignee/label/module ids and sub-issue/attachment/link counts come
+ * from separate join-table queries (op_issue_assignees/op_issue_labels/
+ * op_issue_modules) -- passed in rather than queried per-row here, so a list
+ * of issues costs a handful of batched queries, not N+1. attachment_count/
+ * link_count stay 0 for now (Phase 6's first issues slice doesn't build
+ * attachments/links yet) -- documented as not-yet-computed, not fabricated.
+ */
+export function toPlaneIssue(
+  row: OpIssueRow,
+  assigneeIds: string[],
+  labelIds: string[],
+  moduleIds: string[],
+  subIssuesCount: number
+): TBaseIssue {
+  return {
+    id: row.id,
+    sequence_id: row.sequence_id,
+    name: row.name,
+    sort_order: row.sort_order,
+    state_id: row.state_id,
+    priority: row.priority as TIssuePriorities,
+    label_ids: labelIds,
+    assignee_ids: assigneeIds,
+    estimate_point: null,
+    sub_issues_count: subIssuesCount,
+    attachment_count: 0,
+    link_count: 0,
+    project_id: row.project_id,
+    parent_id: row.parent_id,
+    cycle_id: row.cycle_id,
+    module_ids: moduleIds,
+    type_id: null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    start_date: row.start_date,
+    target_date: row.target_date,
+    completed_at: row.completed_at,
+    archived_at: row.archived_at,
+    created_by: row.created_by ?? "",
+    updated_by: row.updated_by ?? "",
+    is_draft: row.is_draft,
   };
 }

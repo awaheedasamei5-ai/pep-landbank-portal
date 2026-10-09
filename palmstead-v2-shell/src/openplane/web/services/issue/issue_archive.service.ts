@@ -8,6 +8,7 @@ import { API_BASE_URL } from "@plane/constants";
 import type { TIssue, TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 import { APIService } from "@openplane-web/services/api.service";
+import { requireSupabase } from "@/lib/supabase.client";
 // types
 // constants
 
@@ -33,26 +34,25 @@ export class IssueArchiveService extends APIService {
       });
   }
 
+  /** Phase 6: real op_issues.archived_at write, replacing plane's own /archive/ endpoint. */
   async archiveIssue(
-    workspaceSlug: string,
-    projectId: string,
+    _workspaceSlug: string,
+    _projectId: string,
     issueId: string
   ): Promise<{
     archived_at: string;
   }> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/archive/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const archivedAt = new Date().toISOString();
+    const { error } = await sb.from("op_issues").update({ archived_at: archivedAt }).eq("id", issueId);
+    if (error) throw error;
+    return { archived_at: archivedAt };
   }
 
-  async restoreIssue(workspaceSlug: string, projectId: string, issueId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/archive/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  async restoreIssue(_workspaceSlug: string, _projectId: string, issueId: string): Promise<void> {
+    const sb = requireSupabase();
+    const { error } = await sb.from("op_issues").update({ archived_at: null }).eq("id", issueId);
+    if (error) throw error;
   }
 
   async retrieveArchivedIssue(

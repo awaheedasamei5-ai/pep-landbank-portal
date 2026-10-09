@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { observer } from "mobx-react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -71,17 +72,19 @@ export const OperationsTrackerScreen = observer(function OperationsTrackerScreen
             const project = projectStore.getProjectById(id);
             if (!project) return null;
             return (
-              <Card key={id} className="xl:col-span-4">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span>{project.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{project.identifier}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {project.description || "No description."}
-                </CardContent>
-              </Card>
+              <Link key={id} href={`/dashboard/operations/${id}`} className="xl:col-span-4">
+                <Card className="transition-colors hover:border-primary">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between text-base">
+                      <span>{project.name}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{project.identifier}</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    {project.description || "No description."}
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>

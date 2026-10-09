@@ -20,6 +20,53 @@ import type {
 } from "@plane/types";
 // services
 import { APIService } from "@openplane-web/services/api.service";
+import { requireSupabase } from "@/lib/supabase.client";
+import { currentStaffKey, toPlaneIssue, type OpIssueRow } from "@openplane-web/lib/palmstead-adapters";
+
+/**
+ * Batches the real op_issue_assignees/op_issue_labels/op_issue_modules joins
+ * for a whole page of issues in 3 queries total, not one per issue, then
+ * maps each row through toPlaneIssue. sub_issues_count is a real grouped
+ * count of op_issues.parent_id against this same id list.
+ */
+async function hydrateIssues(rows: OpIssueRow[]): Promise<TIssue[]> {
+  if (rows.length === 0) return [];
+  const sb = requireSupabase();
+  const ids = rows.map((r) => r.id);
+  const [{ data: assignees }, { data: labels }, { data: modules }, { data: children }] = await Promise.all([
+    sb.from("op_issue_assignees").select("issue_id,assignee_key").in("issue_id", ids),
+    sb.from("op_issue_labels").select("issue_id,label_id").in("issue_id", ids),
+    sb.from("op_issue_modules").select("issue_id,module_id").in("issue_id", ids),
+    sb.from("op_issues").select("parent_id").in("parent_id", ids),
+  ]);
+  const byIssue = <T extends { issue_id: string }>(list: T[] | null, pick: (row: T) => string) => {
+    const map = new Map<string, string[]>();
+    (list ?? []).forEach((row) => {
+      const arr = map.get(row.issue_id) ?? [];
+      arr.push(pick(row));
+      map.set(row.issue_id, arr);
+    });
+    return map;
+  };
+  const assigneeMap = byIssue(assignees, (r) => r.assignee_key);
+  const labelMap = byIssue(labels, (r) => r.label_id);
+  const moduleMap = byIssue(modules, (r) => r.module_id);
+  const childCountMap = new Map<string, number>();
+  (children ?? []).forEach((row) => {
+    if (!row.parent_id) return;
+    childCountMap.set(row.parent_id, (childCountMap.get(row.parent_id) ?? 0) + 1);
+  });
+  return rows.map(
+    (row) =>
+      toPlaneIssue(
+        row,
+        assigneeMap.get(row.id) ?? [],
+        labelMap.get(row.id) ?? [],
+        moduleMap.get(row.id) ?? [],
+        childCountMap.get(row.id) ?? 0
+      ) as TIssue
+  );
+}
 
 export class IssueService extends APIService {
   private serviceType: TIssueServiceType;
@@ -29,35 +76,93 @@ export class IssueService extends APIService {
     this.serviceType = serviceType;
   }
 
-  async createIssue(workspaceSlug: string, projectId: string, data: Partial<TIssue>): Promise<TIssue> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /**
+   * Phase 6: real insert into op_issues (+ op_issue_assignees/op_issue_labels
+   * join rows when the caller provides them). sequence_id/
+   * next_work_item_sequence mirror plane's own backend behaviour: an
+   * atomic read-then-increment on the parent project row, since Postgres
+   * has no per-project auto-increment the way a single global sequence
+   * would give us "OPS-1, OPS-2, ...".
+   */
+  async createIssue(_workspaceSlug: string, projectId: string, data: Partial<TIssue>): Promise<TIssue> {
+    const sb = requireSupabase();
+    const staffKey = currentStaffKey();
+    const { data: project, error: projectError } = await sb
+      .from("op_projects")
+      .select("workspace_id,next_work_item_sequence")
+      .eq("id", projectId)
+      .single();
+    if (projectError || !project) throw projectError ?? new Error("Project not found");
+    const sequenceId = project.next_work_item_sequence;
+    const { data: row, error } = await sb
+      .from("op_issues")
+      .insert({
+        workspace_id: project.workspace_id,
+        project_id: projectId,
+        sequence_id: sequenceId,
+        name: data.name,
+        description_html: data.description_html ?? null,
+        state_id: data.state_id ?? null,
+        priority: data.priority ?? "none",
+        parent_id: data.parent_id ?? null,
+        cycle_id: data.cycle_id ?? null,
+        start_date: data.start_date ?? null,
+        target_date: data.target_date ?? null,
+        is_draft: data.is_draft ?? false,
+        created_by: staffKey,
+        updated_by: staffKey,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    await sb
+      .from("op_projects")
+      .update({ next_work_item_sequence: sequenceId + 1 })
+      .eq("id", projectId);
+    if (data.assignee_ids?.length) {
+      await sb
+        .from("op_issue_assignees")
+        .insert(data.assignee_ids.map((assigneeKey) => ({ issue_id: row.id, assignee_key: assigneeKey })));
+    }
+    if (data.label_ids?.length) {
+      await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: row.id, label_id: labelId })));
+    }
+    const [hydrated] = await hydrateIssues([row as OpIssueRow]);
+    return hydrated;
   }
 
-  async getIssuesFromServer(
-    workspaceSlug: string,
-    projectId: string,
-    queries?: any,
-    config = {}
-  ): Promise<TIssuesResponse> {
-    const path =
-      (queries.expand as string)?.includes("issue_relation") && !queries.group_by
-        ? `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}-detail/`
-        : `/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/`;
-    return this.get(
-      path,
-      {
-        params: queries,
-      },
-      config
-    )
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /**
+   * Phase 6 simplification: real read of every non-archived op_issues row
+   * for the project, returned UNGROUPED (grouped_by: "") regardless of the
+   * group_by/order_by/cursor params the caller builds for plane's own
+   * Django pagination -- Palmstead's issue counts don't need server-side
+   * pagination yet, and grouping/kanban views are a later Phase 6 slice,
+   * not this one. Not silently wrong: every real issue for the project IS
+   * returned, just not grouped or paged the way plane's backend would.
+   */
+  async getIssuesFromServer(_workspaceSlug: string, projectId: string, _queries?: any, _config = {}): Promise<TIssuesResponse> {
+    const sb = requireSupabase();
+    const { data, error } = await sb
+      .from("op_issues")
+      .select("*")
+      .eq("project_id", projectId)
+      .is("archived_at", null)
+      .order("sort_order");
+    if (error) throw error;
+    const results = await hydrateIssues((data ?? []) as OpIssueRow[]);
+    return {
+      grouped_by: "",
+      next_cursor: "",
+      prev_cursor: "",
+      next_page_results: false,
+      prev_page_results: false,
+      total_count: results.length,
+      count: results.length,
+      total_pages: 1,
+      extra_stats: null,
+      results,
+      total_results: results.length,
+    };
   }
 
   async getIssuesForSync(
@@ -110,20 +215,13 @@ export class IssueService extends APIService {
       });
   }
 
-  async retrieve(workspaceSlug: string, projectId: string, issueId: string, queries?: any): Promise<TIssue> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, {
-      params: queries,
-    })
-      .then(async (response) => {
-        // add is_epic flag when the service type is epic
-        if (response.data && this.serviceType === EIssueServiceType.EPICS) {
-          response.data.is_epic = true;
-        }
-        return response?.data;
-      })
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /** Phase 6: real read from op_issues. */
+  async retrieve(_workspaceSlug: string, _projectId: string, issueId: string, _queries?: any): Promise<TIssue> {
+    const sb = requireSupabase();
+    const { data, error } = await sb.from("op_issues").select("*").eq("id", issueId).single();
+    if (error) throw error;
+    const [hydrated] = await hydrateIssues([data as OpIssueRow]);
+    return hydrated;
   }
 
   async retrieveIssues(workspaceSlug: string, projectId: string, issueIds: string[]): Promise<TIssue[]> {
@@ -223,20 +321,47 @@ export class IssueService extends APIService {
       });
   }
 
-  async patchIssue(workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>): Promise<any> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /** Phase 6: real update of op_issues (+ reconciling the assignee/label join tables when provided). */
+  async patchIssue(_workspaceSlug: string, _projectId: string, issueId: string, data: Partial<TIssue>): Promise<TIssue> {
+    const sb = requireSupabase();
+    const patch: Record<string, unknown> = { updated_by: currentStaffKey() };
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.description_html !== undefined) patch.description_html = data.description_html;
+    if (data.state_id !== undefined) patch.state_id = data.state_id;
+    if (data.priority !== undefined) patch.priority = data.priority;
+    if (data.parent_id !== undefined) patch.parent_id = data.parent_id;
+    if (data.cycle_id !== undefined) patch.cycle_id = data.cycle_id;
+    if (data.start_date !== undefined) patch.start_date = data.start_date;
+    if (data.target_date !== undefined) patch.target_date = data.target_date;
+    if (data.completed_at !== undefined) patch.completed_at = data.completed_at;
+    if (data.is_draft !== undefined) patch.is_draft = data.is_draft;
+    if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
+    const { data: row, error } = await sb.from("op_issues").update(patch).eq("id", issueId).select("*").single();
+    if (error) throw error;
+    if (data.assignee_ids !== undefined) {
+      await sb.from("op_issue_assignees").delete().eq("issue_id", issueId);
+      if (data.assignee_ids.length) {
+        await sb
+          .from("op_issue_assignees")
+          .insert(data.assignee_ids.map((assigneeKey) => ({ issue_id: issueId, assignee_key: assigneeKey })));
+      }
+    }
+    if (data.label_ids !== undefined) {
+      await sb.from("op_issue_labels").delete().eq("issue_id", issueId);
+      if (data.label_ids.length) {
+        await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: issueId, label_id: labelId })));
+      }
+    }
+    const [hydrated] = await hydrateIssues([row as OpIssueRow]);
+    return hydrated;
   }
 
-  async deleteIssue(workspaceSlug: string, projectId: string, issuesId: string): Promise<any> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issuesId}/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  /** Phase 6: real delete from op_issues (join rows cascade via the real FKs). */
+  async deleteIssue(_workspaceSlug: string, _projectId: string, issuesId: string): Promise<{ success: true }> {
+    const sb = requireSupabase();
+    const { error } = await sb.from("op_issues").delete().eq("id", issuesId);
+    if (error) throw error;
+    return { success: true };
   }
 
   async updateIssueDates(

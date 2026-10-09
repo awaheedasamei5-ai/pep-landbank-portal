@@ -189,9 +189,28 @@ doesn't build them out into working screens against real data.
       live in the browser through the full store/service/Supabase chain,
       then deleted it. Zero console errors. `npx tsc -b` clean.
 - [ ] Phase 5: editor evaluated/copied if needed
-- [ ] Phase 6: UI surface — workspace shell
-- [ ] Phase 6: UI surface — projects
-- [ ] Phase 6: UI surface — issues (list/kanban/calendar/detail)
+- [x] Phase 6: UI surface — workspace shell (minimal: `fetchWorkspaces` wired, no settings UI yet)
+- [x] Phase 6: UI surface — projects (list + create, `/dashboard/operations`)
+- [~] Phase 6: UI surface — issues (list + create only, `/dashboard/operations/[projectId]`) —
+      rewrote `services/issue/issue.service.ts`'s `createIssue`/
+      `getIssuesFromServer`/`retrieve`/`patchIssue`/`deleteIssue` and
+      `services/issue/issue_archive.service.ts`'s `archiveIssue`/
+      `restoreIssue` against `op_issues` + `op_issue_assignees`/
+      `op_issue_labels`/`op_issue_modules`. `getIssuesFromServer` is a
+      deliberate simplification: returns every non-archived issue for the
+      project UNGROUPED (`grouped_by: ""`), ignoring plane's own group_by/
+      order_by/cursor params — real data, just not paginated/grouped the
+      way plane's Django backend would; kanban/grouped views are still
+      open. `palmstead-adapters.ts` gained `toPlaneIssue`/`OpIssueRow`;
+      `attachment_count`/`link_count` stay 0 (not yet computed, flagged in
+      a comment, not fabricated) while `sub_issues_count` is a real grouped
+      count. **Verified live**: created a real issue through the UI
+      (`OPS-1`, real sequence number from `op_projects.
+      next_work_item_sequence`), confirmed it round-tripped through the
+      actual plane `ProjectIssues`/`IssueStore` MobX classes, zero console
+      errors, then deleted the test project (cascaded the test issue).
+      `npx tsc -b` clean. Issue DETAIL screen, kanban/calendar views,
+      cycles, modules are still open.
 - [ ] Phase 6: UI surface — cycles
 - [ ] Phase 6: UI surface — modules
 - [ ] Phase 6: UI surface — states/labels/estimates settings
