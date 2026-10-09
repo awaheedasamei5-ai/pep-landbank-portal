@@ -124,6 +124,7 @@ export const sidebarItems: NavGroup[] = [
       { id: "team-feedback", title: "Team Feedback", url: "/dashboard/team-feedback", icon: MessagesSquare },
       { id: "memorandum", title: "Memorandum", url: NOT_BUILT_YET, icon: FileText },
       { id: "attendance", title: "Attendance", url: "/dashboard/attendance", icon: Fingerprint },
+      { id: "attendance-corrections", title: "Attendance Corrections", url: "/dashboard/attendance-corrections", icon: ClipboardList },
       { id: "log-payment", title: "Log Payment", url: NOT_BUILT_YET, icon: Wallet },
       { id: "contract-of-sale", title: "Contract of Sale", url: NOT_BUILT_YET, icon: FileSignature },
       { id: "quotation", title: "Quotation", url: "/dashboard/quotation", icon: ReceiptText },

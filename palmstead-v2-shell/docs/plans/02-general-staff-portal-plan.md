@@ -172,7 +172,15 @@ Gap-check confirmed: `feedback`/`feedback_comments` already existed in V2 as a r
 
 V1 already has "Team Feedback" (staff-to-management feedback, distinct from both client feedback and the new HR Complaints above) — confirm it's genuinely ported/working in this shell already (check against item 1's own scope; if not yet ported, this becomes a real small item here) before building anything new under the repo's separate `feedback` table (migration 001: subject, message, category, status). **Do not build a duplicate feedback mechanism** — if V1's Team Feedback already covers this ground, this module in V2 is "port what V1 has," not "build what the repo has," same reasoning as B.2.
 
-### B.7 Attendance Corrections
+### B.7 Attendance Corrections — DONE 2026-10-09 (Part B complete)
+
+Real overlap check resolved before building: audited item 1's real schema directly -- `attendance_exceptions` (pre-authorization for an upcoming off-site day) and `attendance_reviews` (Management classifying/reviewing a flagged day) both already exist from item 1, and neither covers a staff-initiated dispute of an already-recorded clock-in/out value. That's the real remaining gap this module fills. New `attendance_corrections` table (migration `attendance_corrections`), adapted to this app's real `attendance_log` columns (`sign_in_at`/`sign_out_at`), not the source repo's own table name. Built as a standalone page (`/dashboard/attendance-corrections`) rather than modifying the already-shipped, verified Attendance screen.
+
+Real distinction preserved, scoped down deliberately: approving a correction actually writes the real `attendance_log` row immediately (status goes straight to "applied") rather than sitting in a separate approved-but-not-yet-applied state -- for a 7-person team a manager approving IS deciding to apply it; there's no payroll-processing lag to model the way a larger org's workflow would need.
+
+`npx tsc -b` clean. Verified live end-to-end across two real accounts: logged in as Adams (real attendance history, 2 real records), submitted a correction request (clock-in 10:33 → 09:00 with a reason); logged in as manager, saw the real queue with original vs. proposed side by side, approved it, confirmed the real `attendance_log.sign_in_at` row actually changed to 09:00 in the database (not just the correction's own status flipping) -- correct dark-mode rendering throughout.
+
+**Original B.7 spec, for reference:**
 
 **Real overlap warning**: item 1 (Attendance/Leave, already shipped) may already have correction-request logic — the V1 Attendance work closed in today's own session mentions `AttendanceRecordsScreen.tsx`'s Management-side correction tool, and V2's own item-1 build (`project-attendance-v3-chapter01-gap` memory) mentions `attendance_exceptions` (pre-authorized) as distinct from a staff-initiated correction REQUEST. **Before building this module, re-read exactly what item 1 shipped for corrections** — this may already be 80% done, and this module's real remaining scope might just be the STAFF-facing "I want to dispute/correct a past clock-in/out" submission flow if that specific direction doesn't exist yet (item 1's `attendance_exceptions` is pre-authorization for an upcoming off-site event, not a dispute about an already-recorded entry).
 
