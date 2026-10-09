@@ -388,6 +388,12 @@ export class IssueService extends APIService {
         await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: issueId, label_id: labelId })));
       }
     }
+    if (data.module_ids !== undefined && data.module_ids !== null) {
+      await sb.from("op_issue_modules").delete().eq("issue_id", issueId);
+      if (data.module_ids.length) {
+        await sb.from("op_issue_modules").insert(data.module_ids.map((moduleId) => ({ issue_id: issueId, module_id: moduleId })));
+      }
+    }
 
     // Real audit trail: one op_issue_activity row per field that actually
     // changed, old_value -> new_value -- this is the escalation/history

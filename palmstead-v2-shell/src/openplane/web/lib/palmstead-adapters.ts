@@ -22,6 +22,7 @@ import type {
   TIssueComment,
   TIssueActivity,
   ICycle,
+  IModule,
 } from "@plane/types";
 import { EUserWorkspaceRoles, EInboxIssueSource, EIssueCommentAccessSpecifier } from "@plane/types";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -520,5 +521,61 @@ export function toPlaneCycle(row: OpCycleRow, counts: CycleProgressCounts[string
     started_estimate_points: 0,
     unstarted_estimate_points: 0,
     cancelled_estimate_points: 0,
+  };
+}
+
+export type OpModuleRow = {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  description_html: string | null;
+  lead_key: string | null;
+  status: string;
+  start_date: string | null;
+  target_date: string | null;
+  sort_order: number;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Real per-module issue counts by state group -- same shape as CycleProgressCounts, keyed by module id. */
+export type ModuleProgressCounts = CycleProgressCounts;
+
+export function toPlaneModule(row: OpModuleRow, memberIds: string[], counts: ModuleProgressCounts[string] | undefined): IModule {
+  const c = counts ?? { total_issues: 0, completed_issues: 0, backlog_issues: 0, started_issues: 0, unstarted_issues: 0, cancelled_issues: 0 };
+  return {
+    total_issues: c.total_issues,
+    completed_issues: c.completed_issues,
+    backlog_issues: c.backlog_issues,
+    started_issues: c.started_issues,
+    unstarted_issues: c.unstarted_issues,
+    cancelled_issues: c.cancelled_issues,
+    backlog_estimate_points: 0,
+    started_estimate_points: 0,
+    unstarted_estimate_points: 0,
+    cancelled_estimate_points: 0,
+    id: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    description_text: undefined,
+    description_html: row.description_html ?? "",
+    workspace_id: row.workspace_id,
+    project_id: row.project_id,
+    lead_id: row.lead_key,
+    member_ids: memberIds,
+    is_favorite: false,
+    sort_order: row.sort_order,
+    view_props: { filters: {} },
+    status: row.status as IModule["status"],
+    archived_at: row.archived_at,
+    start_date: row.start_date,
+    target_date: row.target_date,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    created_by: row.created_by ?? undefined,
   };
 }

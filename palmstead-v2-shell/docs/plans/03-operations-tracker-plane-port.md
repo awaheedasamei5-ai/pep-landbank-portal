@@ -322,7 +322,27 @@ doesn't build them out into working screens against real data.
       through the UI, confirmed the assignment directly in the database,
       and confirmed the cycle's progress card updated to "0 / 1 issues
       completed". Zero console errors. `npx tsc -b` clean.
-- [ ] Phase 6: UI surface — modules
+- [x] Phase 6: UI surface — modules (Modules tab on the project screen, real
+      quick-create, real per-module issue-count progress bar) — rewrote
+      `module.service.ts`'s `getModules`/`createModule`/`getModuleDetails`/
+      `patchModule`/`deleteModule` against `op_modules`. Unlike a cycle's
+      `cycle_id` column, a module's issues come through the real
+      `op_issue_modules` join table (many-to-many), so
+      `getModuleProgressCounts` groups through that join instead of a
+      direct column, and `deleteModule` can rely on real `on delete
+      cascade` FKs (confirmed via `pg_constraint`, not assumed) instead of
+      needing cycle's manual unassign-first step. Also added a real
+      "Module" multi-select (badges) to issue detail, and
+      `issue.service.ts`'s `patchIssue` now reconciles `op_issue_modules`
+      when `module_ids` changes. **Real bug fixed live**: the activity
+      feed showed raw state UUIDs ("changed status from c31ae88d... to
+      e8af40ed...") instead of names -- fixed by resolving `field ===
+      "state"` values through `stateStore.stateMap` before rendering.
+      **Verified live end-to-end**, again against the user's own real
+      "SITE DEMARCATIONS" project: created a real module, assigned the
+      real "WORK STALLED" issue to it through the UI, confirmed the
+      assignment directly in the database, confirmed the module's progress
+      card updated to "0 / 1 issues completed". `npx tsc -b` clean.
 - [ ] Phase 6: UI surface — states/labels/estimates settings
 - [ ] Phase 6: UI surface — views
 - [ ] Phase 6: UI surface — pages

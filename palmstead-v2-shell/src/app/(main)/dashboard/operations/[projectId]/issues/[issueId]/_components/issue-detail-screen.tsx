@@ -49,6 +49,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
   const stateStore = issueRoot.rootStore.state;
   const labelStore = issueRoot.rootStore.label;
   const cycleStore = issueRoot.rootStore.cycle;
+  const moduleStore = issueRoot.rootStore.module;
   const detail = issueRoot.issueDetail;
   const project = store.projectRoot.project.getProjectById(projectId);
   const issue = issueRoot.issues.getIssueById(issueId);
@@ -64,6 +65,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
           stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId),
           labelStore.fetchProjectLabels(WORKSPACE_SLUG, projectId),
           cycleStore.fetchAllCycles(WORKSPACE_SLUG, projectId),
+          moduleStore.fetchModules(WORKSPACE_SLUG, projectId),
           detail.issue.fetchIssue(WORKSPACE_SLUG, projectId, issueId),
           project ? Promise.resolve() : store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId),
         ]);
@@ -176,6 +178,11 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                 }
                 const activity = detail.activity.getActivityById(item.id);
                 if (!activity) return null;
+                const resolve = (value: string | undefined) => {
+                  if (!value) return "none";
+                  if (activity.field === "state") return stateStore.stateMap?.[value]?.name ?? value;
+                  return value;
+                };
                 return (
                   <div key={item.id} className="border-l-2 pl-3 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">{activity.actor_detail.display_name}</span>{" "}
@@ -184,8 +191,8 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                     ) : (
                       <>
                         changed {FIELD_LABEL[activity.field ?? ""] ?? activity.field} from{" "}
-                        <span className="font-medium text-foreground">{activity.old_value || "none"}</span> to{" "}
-                        <span className="font-medium text-foreground">{activity.new_value || "none"}</span>
+                        <span className="font-medium text-foreground">{resolve(activity.old_value)}</span> to{" "}
+                        <span className="font-medium text-foreground">{resolve(activity.new_value)}</span>
                       </>
                     )}
                     <div className="text-xs">{new Date(activity.created_at).toLocaleString()}</div>
@@ -320,6 +327,33 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                         }}
                       >
                         {l.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">Modules</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(moduleStore.getProjectModuleIds(projectId) ?? []).length === 0 && (
+                    <p className="text-xs text-muted-foreground">No modules on this project yet.</p>
+                  )}
+                  {(moduleStore.getProjectModuleIds(projectId) ?? []).map((id) => {
+                    const mod = moduleStore.getModuleById(id);
+                    if (!mod) return null;
+                    const checked = issue.module_ids?.includes(id) ?? false;
+                    return (
+                      <Badge
+                        key={id}
+                        variant={checked ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          const current = issue.module_ids ?? [];
+                          const next = checked ? current.filter((mid) => mid !== id) : [...current, id];
+                          patch({ module_ids: next });
+                        }}
+                      >
+                        {mod.name}
                       </Badge>
                     );
                   })}
