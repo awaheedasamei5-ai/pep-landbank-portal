@@ -140,7 +140,15 @@ Built at `/dashboard/polls` (Office sidebar group). Real `polls`/`poll_votes` ta
 
 **Data model**: `polls` + `poll_votes`, field-for-field from the real migration.
 
-### B.5 Staff Complaints (HR/workplace, distinct from client complaints)
+### B.5 Staff Complaints — DONE 2026-10-09
+
+Built at `/dashboard/staff-complaints` (Office sidebar group). **Real collision avoided**: confirmed `complaints` already exists in V2 as the real client-facing table (plot/owner/agent_key shape, used by `src/webnext/features/complaints/`) -- used a new `staff_complaints` table instead, field-for-field from the source repo's migration 001. Real anonymity: `is_anonymous` submissions store `staff_key = null`, not just a UI flag -- Management genuinely cannot trace them. Management gets a real status queue (submitted/investigating/resolved/closed), private resolution notes, and a critical-severity banner.
+
+**Deferred, not invented**: automatic escalation for an unactioned critical complaint needs a real threshold from Management ("N days"), not a guessed default -- not built until that number is given.
+
+`npx tsc -b` clean. Verified live: submitted a real complaint, confirmed the row (including correct `staff_key`/`is_anonymous`), updated its status to Investigating as manager, confirmed the real `reviewed_by` write, correct dark-mode rendering.
+
+**Original B.5 spec, for reference:**
 
 **V1 has a "Complaint" concept already, but it's the WRONG one to reuse** — V1's complaint/feedback system (98+158 matches in index.html) is entirely CLIENT-facing (a client's complaint about their plot/purchase), already fully built in the Sales desk as "Client feedback." This module is a different, staff-facing concept: a workplace grievance/HR complaint channel, genuinely new to Palmstead.
 
