@@ -154,9 +154,13 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
   doc.text('DESCRIPTION', tblX[0] + 3, y + 5.3);
-  doc.text('QTY', tblX[1] + 3, y + 5.3);
-  doc.text('UNIT PRICE', tblX[2] + 3, y + 5.3);
-  doc.text('TOTAL', tblX[3] + 3, y + 5.3);
+  // Numeric columns' headers right-align to sit directly above their own
+  // values (fixed real bug: headers used to be left-aligned while QTY/
+  // UNIT PRICE/TOTAL values are right-aligned, so each amount visually
+  // "drifted" away from its own column header instead of sitting under it).
+  doc.text('QTY', tblX[1] + tblW[1] - 3, y + 5.3, { align: 'right' });
+  doc.text('UNIT PRICE', tblX[2] + tblW[2] - 3, y + 5.3, { align: 'right' });
+  doc.text('TOTAL', tblX[3] + tblW[3] - 3, y + 5.3, { align: 'right' });
   y += 8;
   const grand = lead?.grandTotal ?? 0;
   const desc = lead ? `${lead.plotType || 'Plot'} — ${siteName}` : 'Payment received';
@@ -168,7 +172,7 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setFontSize(8.5);
   doc.setTextColor(...DARK);
   doc.text(fitText(doc, desc, tblW[0] - 6), tblX[0] + 3, y + 6.2);
-  doc.text(String(qtyOfType), tblX[1] + 3, y + 6.2);
+  doc.text(String(qtyOfType), tblX[1] + tblW[1] - 3, y + 6.2, { align: 'right' });
   doc.text(unitPrice, tblX[2] + tblW[2] - 3, y + 6.2, { align: 'right' });
   doc.setFont('helvetica', 'bold');
   doc.text(ghs(payment.amount), tblX[3] + tblW[3] - 3, y + 6.2, { align: 'right' });

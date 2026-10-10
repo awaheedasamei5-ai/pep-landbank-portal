@@ -54,6 +54,52 @@ export function useCommissionBreakdown(month: string) {
   });
 }
 
+export interface CommissionReportConfig {
+  companyName: string;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankBranch: string;
+  bankSwiftCode: string;
+}
+
+// Real company bank-account details for the Commission report's sign-off
+// section -- "so it can be taken to the bank for payment," per the user's
+// own words. Editable via Finance Settings (see docs/plans/04-finance-app-plan.md
+// Part B.7); blank fields render as "—" on the PDF rather than blocking
+// the report, same graceful-empty pattern already used for
+// company_phone/email/tin elsewhere.
+export function useCommissionReportConfig() {
+  return useQuery({
+    queryKey: ["commission-report-config"],
+    queryFn: async (): Promise<CommissionReportConfig> => {
+      const sb = requireSupabase();
+      const { data, error } = await sb
+        .from("app_config")
+        .select("quote_company_name,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code")
+        .limit(1)
+        .single();
+      if (error) throw error;
+      const row = data as {
+        quote_company_name: string | null;
+        company_bank_name: string | null;
+        company_bank_account_name: string | null;
+        company_bank_account_number: string | null;
+        company_bank_branch: string | null;
+        company_bank_swift_code: string | null;
+      };
+      return {
+        companyName: row.quote_company_name ?? "Palmstead",
+        bankName: row.company_bank_name ?? "",
+        bankAccountName: row.company_bank_account_name ?? "",
+        bankAccountNumber: row.company_bank_account_number ?? "",
+        bankBranch: row.company_bank_branch ?? "",
+        bankSwiftCode: row.company_bank_swift_code ?? "",
+      };
+    },
+  });
+}
+
 export function useRaiseCommissionConcern(callerKey: string | undefined, callerName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
