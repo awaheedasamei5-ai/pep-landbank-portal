@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
 
+import { ExpensesPanel } from "./_components/expenses-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 
 // Real Finance app (replaces the "Log Payment" and "Expenses" sidebar
@@ -31,9 +32,7 @@ export default function Page() {
         </TabsContent>
 
         <TabsContent value="expenses">
-          <div className="flex h-64 items-center justify-center rounded-xl border border-border border-dashed text-muted-foreground">
-            Expenses — next in the build order.
-          </div>
+          <ExpensesPanel />
         </TabsContent>
 
         <TabsContent value="commission">
