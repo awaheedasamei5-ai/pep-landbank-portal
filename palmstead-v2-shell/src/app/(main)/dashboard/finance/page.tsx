@@ -1,14 +1,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
 
+import { CommissionPanel } from "./_components/commission-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 
 // Real Finance app (replaces the "Log Payment" and "Expenses" sidebar
-// placeholders -- docs/plans/04-finance-app-plan.md). Payments and Expenses
-// shipped first so Overview's KPIs read from real ledgers, not empty
-// shells; Commission is the one tab still pending.
+// placeholders -- docs/plans/04-finance-app-plan.md). All four tabs real.
 export default function Page() {
   return (
     <div className="flex flex-col gap-4">
@@ -35,9 +34,7 @@ export default function Page() {
         </TabsContent>
 
         <TabsContent value="commission">
-          <div className="flex h-64 items-center justify-center rounded-xl border border-border border-dashed text-muted-foreground">
-            Commission breakdown — last in the build order.
-          </div>
+          <CommissionPanel />
         </TabsContent>
       </Tabs>
     </div>
