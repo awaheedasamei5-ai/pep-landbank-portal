@@ -6,12 +6,13 @@ import { ExpensesPanel } from "./_components/expenses-panel";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 import { PayrollPanel } from "./_components/payroll-panel";
+import { SettingsPanel } from "./_components/settings-panel";
 
 // Real Accounting app (renamed from "Finance" -- docs/plans/05-accounting-app-blueprint.md
 // Part B.1. Route stays /dashboard/finance so the real /receipt/:token
 // links and any bookmarks keep working; only the display name changed.
 // Overview/Payments/Expenses/Commission are real (04-finance-app-plan.md);
-// Payroll is real (05-accounting-app-blueprint.md Part B.8).
+// Payroll and Settings are real (05-accounting-app-blueprint.md Part B.7/B.8).
 export default function Page() {
   return (
     <div className="flex flex-col gap-4">
@@ -24,6 +25,7 @@ export default function Page() {
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="commission">Commission</TabsTrigger>
           <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -44,6 +46,10 @@ export default function Page() {
 
         <TabsContent value="payroll">
           <PayrollPanel />
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <SettingsPanel />
         </TabsContent>
       </Tabs>
     </div>

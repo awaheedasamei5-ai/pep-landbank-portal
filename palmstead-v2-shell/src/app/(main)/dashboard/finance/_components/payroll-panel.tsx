@@ -322,7 +322,7 @@ function RunBreakdownDialog({ run, staffBankLookup }: { run: PayrollRun; staffBa
                     if (!reportConfig) return;
                     setDownloadingSlip(staffId);
                     try {
-                      const doc = await buildPayslipPdf(run.period, v.name, staffBankLookup.get(staffId) ?? null, v.lines ?? [], reportConfig.companyName);
+                      const doc = await buildPayslipPdf(run.period, v.name, staffBankLookup.get(staffId) ?? null, v.lines ?? [], reportConfig.companyName, reportConfig.logoImage);
                       doc.save(`Payslip_${v.name.replace(/\s+/g, "_")}_${run.period}.pdf`);
                     } finally {
                       setDownloadingSlip(null);

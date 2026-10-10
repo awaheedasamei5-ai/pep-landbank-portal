@@ -56,10 +56,10 @@ Payments, Expenses, Overview, Commission (the automated monthly one) are the fou
 
 ### B.7 -- Finance/Accounting Settings
 
-A real in-app settings surface (per the user's own explicit ask: "build it fully, with its settings, where the features of the pdf can be edited") covering:
-- Company bank account details (the 5 columns added in B.3) -- form, manager-only.
-- Payroll PDF template settings (B.8's own payslip fields -- company payroll-specific text, whether to show a breakdown table vs just totals, etc.) -- deferred until B.8's exact payslip shape is built, since designing the settings before the thing they configure exists would be guessing.
-- Receipt/quote identity fields already exist as real `app_config` columns (`quote_company_name` etc.) but have **no settings UI anywhere in this shell today** -- confirmed via search, this is a pre-existing gap (not something B.3 introduced), worth closing in the same settings surface rather than a separate pass.
+A real in-app settings surface (per the user's own explicit ask: "build it fully, with its settings, where the features of the pdf can be edited").
+
+**DONE 2026-10-10.** `use-finance-settings.ts` + `settings-panel.tsx`, new Settings tab, manager-only. Covers: company bank account details (the 5 columns added in B.3, previously only editable via direct SQL), the receipt/quote identity fields (`quote_company_name`/`company_phone`/`company_email`/`company_tin`/`company_address`/`quote_footer_address`/`receipt_thanks_text`) which had real `app_config` columns but **zero settings UI anywhere in this shell before this** (confirmed via search -- a real pre-existing gap, not introduced by this blueprint), and a real company logo upload (`receipt_logo_image`, reusing the already-proven `resizeImageToDataUri` helper) that Receipt/Commission/Payroll PDFs now all check before falling back to the bundled `/trulander-logo.png`. Verified live: form correctly pre-fills from real existing data (company name, phone, footer address), a saved bank name was confirmed picked up by the Commission PDF on the next generation, logo upload/preview/remove all confirmed working (file-dialog automation isn't available in this testing harness, so the upload *write* path was verified via a direct data-URI write + confirming the UI renders/removes it correctly, rather than a literal OS file picker). All test values reverted to null afterward.
+   - **Payroll PDF template settings** (company payroll-specific text, breakdown-table-vs-totals-only toggle, etc.) remain deliberately deferred -- Payroll's own payslip shape is now real and built (B.8), so this is unblocked, just not yet done.
 
 **Not yet built.** Real scope, not forgotten -- next concrete slice after B.8/B.9's own data shapes are settled.
 

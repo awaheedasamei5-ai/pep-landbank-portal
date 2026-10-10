@@ -61,14 +61,17 @@ export interface CommissionReportConfig {
   bankAccountNumber: string;
   bankBranch: string;
   bankSwiftCode: string;
+  logoImage: string | null;
 }
 
 // Real company bank-account details for the Commission report's sign-off
 // section -- "so it can be taken to the bank for payment," per the user's
-// own words. Editable via Finance Settings (see docs/plans/04-finance-app-plan.md
-// Part B.7); blank fields render as "—" on the PDF rather than blocking
-// the report, same graceful-empty pattern already used for
-// company_phone/email/tin elsewhere.
+// own words. Editable via Finance Settings (Part B.7, now real -- see
+// use-finance-settings.ts); blank fields render as "—" on the PDF rather
+// than blocking the report, same graceful-empty pattern already used for
+// company_phone/email/tin elsewhere. logoImage is a real uploaded
+// company logo (Settings), checked before the bundled
+// /trulander-logo.png fallback every report PDF uses.
 export function useCommissionReportConfig() {
   return useQuery({
     queryKey: ["commission-report-config"],
@@ -76,7 +79,7 @@ export function useCommissionReportConfig() {
       const sb = requireSupabase();
       const { data, error } = await sb
         .from("app_config")
-        .select("quote_company_name,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code")
+        .select("quote_company_name,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code,receipt_logo_image")
         .limit(1)
         .single();
       if (error) throw error;
@@ -87,6 +90,7 @@ export function useCommissionReportConfig() {
         company_bank_account_number: string | null;
         company_bank_branch: string | null;
         company_bank_swift_code: string | null;
+        receipt_logo_image: string | null;
       };
       return {
         companyName: row.quote_company_name ?? "Palmstead",
@@ -94,6 +98,7 @@ export function useCommissionReportConfig() {
         bankAccountName: row.company_bank_account_name ?? "",
         bankAccountNumber: row.company_bank_account_number ?? "",
         bankBranch: row.company_bank_branch ?? "",
+        logoImage: row.receipt_logo_image,
         bankSwiftCode: row.company_bank_swift_code ?? "",
       };
     },
