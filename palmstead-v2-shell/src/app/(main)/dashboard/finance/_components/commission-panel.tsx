@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SubmitButton } from "@/components/submit-button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { shiftMonth, today } from "@/lib/palmstead/format";
 import { loadImageAsDataUri } from "@/webnext/shared/lib/image";
@@ -17,6 +18,7 @@ import { pdfStampSignature } from "@/webnext/shared/lib/pdfSignature";
 import { pdfAccentStatRow, pdfBarChart, pdfBrandedHeader, pdfGeneratedStamp, pdfReportFooter, pdfSectionTitle, pdfSimpleTable, PDF_GOLD, PDF_INK, PDF_LEAF, PDF_MUTED, PDF_OK, PDF_PALETTE } from "@/webnext/shared/lib/pdfReport";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { CommissionCalculatorPanel } from "./commission-calculator-panel";
 import { type CommissionReportConfig, type CommissionRow, useCommissionBreakdown, useCommissionReportConfig, useRaiseCommissionConcern } from "./use-finance-commission";
 
 // Real Commission (Part B.4). No new math -- get_commission_breakdown()
@@ -183,7 +185,7 @@ function ConcernDialog({ month, total, callerKey, callerName }: { month: string;
   );
 }
 
-export function CommissionPanel() {
+function AutomatedCommissionPanel() {
   const profile = useAuthStore((s) => s.profile);
   const isManager = profile?.role === "manager";
   const [cursor, setCursor] = useState(() => shiftMonth(today().slice(0, 7), -1));
@@ -308,5 +310,31 @@ export function CommissionPanel() {
         </Card>
       )}
     </div>
+  );
+}
+
+// Real Commission Calculator (Part B.9) nested as a sub-tab alongside the
+// automated monthly commission -- same page, same mental model as the
+// user asked for ("in the commission section"), not a separate top-level
+// tab. Staff never see the calculator tab at all (manager-only tool).
+export function CommissionPanel() {
+  const profile = useAuthStore((s) => s.profile);
+  const isManager = profile?.role === "manager";
+
+  if (!isManager) return <AutomatedCommissionPanel />;
+
+  return (
+    <Tabs defaultValue="monthly" className="flex flex-col gap-4">
+      <TabsList variant="line">
+        <TabsTrigger value="monthly">Monthly commission</TabsTrigger>
+        <TabsTrigger value="calculator">Calculator</TabsTrigger>
+      </TabsList>
+      <TabsContent value="monthly">
+        <AutomatedCommissionPanel />
+      </TabsContent>
+      <TabsContent value="calculator">
+        <CommissionCalculatorPanel />
+      </TabsContent>
+    </Tabs>
   );
 }
