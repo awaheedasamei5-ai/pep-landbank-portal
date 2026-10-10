@@ -110,7 +110,7 @@ export function ReportsPanel() {
         const doc = await buildPayrollReportPdf(range, payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
       } else {
-        const doc = await buildSummaryReportPdf(range, summary.collected, summary.expensesTotal, summary.commissionTotal, summary.payrollTotal, reportConfig.companyName, profile?.name, reportConfig.logoImage);
+        const doc = await buildSummaryReportPdf(range, paymentsQ.data ?? [], expensesQ.data ?? [], commissionQ.data ?? [], payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
       }
     } finally {

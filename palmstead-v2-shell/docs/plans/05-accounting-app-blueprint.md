@@ -100,6 +100,32 @@ Verified live with real production data across the whole year (2026-01-01 to 202
 - Ghana tax-specific calculations (PAYE bands, SSNIT %) inside Payroll -- real research needed before any number is shown as authoritative tax guidance; Payroll's own deduction components (B.8) are free-text/manual amounts Management enters, not an auto-computed tax engine, unless/until this is explicitly asked for.
 - Real-time cross-app sync beyond what already exists (the shared `useDashboardRealtime` channel) -- Payroll/Commission Calculator are new tables, so they're real candidates to add to that channel once built, not before.
 
+## Part E -- Real correction after real user feedback (2026-10-10, second pass)
+
+The user called out, correctly, that B.10's reports were a shallow pass (stat boxes + one flat table, no real benchmark) and that B.9's Commission Calculator didn't match the workflow they'd actually described (entry-first with free-text client names, no real client search, no staff-first grouping, no per-session commission settings). Both are being rebuilt against real research instead of being patched.
+
+### E.1 -- Real report design research (this time actually done)
+
+- **Xero's own real P&L sample** (xero.com/us/example/profit-and-loss, read directly, not assumed): a real, authoritative professional accounting report is a **grouped ledger statement**, not a stat-card dashboard -- `PROFIT & LOSS STATEMENT` / company name / date header, then bold section headers (REVENUE, COST OF SALES, OTHER INCOME, EXPENSES) each with indented line items and a `TOTAL <SECTION>` row, a shaded/boxed `GROSS PROFIT (LOSS)` subtotal row between sections, right-aligned figures throughout, thin horizontal rules. This is the real visual language Part B.10's PDFs are being rebuilt against -- not a redesign guess.
+- **Real payroll register structure** (web research across PrismHR/Deltek/OnPay real documentation): Employee | Period | Earnings | Deductions | Net Pay | Payment method, with a totals row -- and real industry practice is that a *register* does **not** print bank account numbers (security practice, kept in a separate restricted bank-transfer document instead). This confirms B.8's existing split (payslip = no bank number, combined payroll-run PDF = bank numbers) was already structurally correct; what needed fixing was the *table's own visual density/grouping*, not the document split.
+- `apache/superset` (the "report builder repo," already catalogued in `feedback-oss-foundation-strategy-2026-09-11` as repo #9, LOW literal-merge feasibility -- 1.1GB Python/Flask, cannot run inside this Next.js/Supabase stack): its real contribution is the UX paradigm -- a filter panel driving a live preview before export, which Part B.10's `reports-panel.tsx` already does (section + date-range filters → live preview → PDF); what was missing was carrying that same real row-level/grouped detail into the PDF itself instead of collapsing it to 3 stat boxes.
+- Pinterest (login-walled for full search results, but real preview thumbnails visible without logging in): confirmed the same real pattern from a different angle -- KPI tiles + grouped ledger tables + category/region breakdown charts, not a single flat table.
+
+**Real fix**: every report PDF (Payments/Expenses/Commission/Payroll/Summary) rebuilt around a new real grouped-ledger PDF primitive (bold section header, indented rows, shaded total row) matching the Xero reference, with full row-level detail always present -- the Financial Summary becomes a real income-statement-shaped document (Revenue → Expenses → Commission → Payroll → Net, each its own section with real line items, not 5 numbers in boxes).
+
+### E.2 -- Commission Calculator real workflow correction
+
+The user's actual intended workflow, verbatim-grounded:
+1. Select a staff member first.
+2. Under that staff, a "monthly collected" section: add every client they collected from this month -- **searched from the real `leads` table** (same combobox pattern already proven in Payments' lead search), falling back to free-text only when the client genuinely isn't in the system yet.
+3. Toggle whether that staff is pool-eligible.
+4. Move to the next staff, repeat.
+5. Once every staff is entered, a **"Commission settings"** section: the standard commission cap amount and the standard pool-per-plot amount to use for *this specific calculation* (pre-filled from the real live `app_config` rates, but editable/overridable per session -- a what-if tool needs to be able to ask "what if the cap were different this month," not just replay live rates).
+6. Calculate using the identical real formula, allocate per staff.
+7. Download a PDF for the bank -- company details, company bank account, **and each staff's own bank account number** (deliberately different from a plain payroll register, because this document's entire purpose is the bank transfer instruction itself, same real reasoning as Payroll's own combined run PDF).
+
+**Real fix**: `commission_calc_entries.client_name` stays free-text (for the real "not in the system yet" case) but the add-entry UI now searches `leads` first via the same `useLeadSearch` combobox Payments already uses, selecting a real lead pre-fills the name (and could extend to plot type/price in a later pass). The session workspace is restructured staff-first (one expandable section per participant, their entries nested inside, pool-eligibility toggle right there) instead of a flat entry table with a separate allocation section bolted on afterward. A new `commission_calc_settings` row per session (full cap/half cap/full price/half price/pool per plot, defaulted from live `app_config` at session creation, editable after) replaces the previous hard dependency on live rates only. The PDF is rebuilt to match Payroll's real combined-run-PDF shape: company header, settings used, per-staff breakdown, **staff bank account numbers**, company bank account, and a Management signature line.
+
 ## Part D -- After this blueprint (per the user's own explicit sequencing)
 
 Once Accounting (Payroll + Commission Calculator + Settings + Report builder) is real and shipped: Operations Tracker reports system (staff + management, staff-to-staff comparisons, task reports, detailed filters) → Leave letters (re-analyze V1's real letter drafting/format, rebuild more professionally) → Leave reports → Attendance reports. Each gets its own real research pass before building, same discipline as this doc -- not started until Accounting is done.

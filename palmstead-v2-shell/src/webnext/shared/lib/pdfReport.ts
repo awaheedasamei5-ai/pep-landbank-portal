@@ -205,6 +205,61 @@ export function pdfSimpleTable(doc: jsPDF, y: number, pageW: number, headers: st
   return y + 7;
 }
 
+export interface PdfLedgerLine {
+  label: string;
+  value: string;
+}
+
+// Real grouped-ledger section -- a bold section header, indented line
+// items (label left, amount right, thin rule under each), then a shaded
+// TOTAL row. Direct match to a real professional accounting statement's
+// own visual language (confirmed against Xero's own published P&L
+// sample: xero.com/us/example/profit-and-loss -- REVENUE / COST OF SALES
+// / EXPENSES each rendered exactly this way, with a boxed GROSS PROFIT
+// subtotal between sections), not a flat stat-card dashboard. Every
+// report PDF in this app (Payments/Expenses/Commission/Payroll/Summary)
+// is built from this, so they all read as one consistent document family.
+export function pdfLedgerSection(doc: jsPDF, y: number, pageW: number, title: string, lines: PdfLedgerLine[], totalLabel: string, totalValue: string, options?: { emphasize?: boolean }): number {
+  const usableW = pageW - 24;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...PDF_INK);
+  doc.text(title.toUpperCase(), 12, y);
+  y += 5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.3);
+  if (lines.length === 0) {
+    doc.setTextColor(...PDF_MUTED);
+    doc.text('No entries', 16, y + 1);
+    y += 6.5;
+  } else {
+    lines.forEach((line) => {
+      doc.setTextColor(60, 66, 74);
+      doc.text(pdfFitText(doc, line.label, usableW * 0.65), 16, y + 1);
+      doc.setTextColor(20, 20, 20);
+      doc.text(line.value, 12 + usableW, y + 1, { align: 'right' });
+      doc.setDrawColor(238, 241, 245);
+      doc.setLineWidth(0.2);
+      doc.line(12, y + 3, 12 + usableW, y + 3);
+      y += 6.5;
+    });
+  }
+
+  const totalH = options?.emphasize ? 9 : 7.5;
+  doc.setFillColor(options?.emphasize ? 244 : 248, options?.emphasize ? 246 : 249, options?.emphasize ? 240 : 251);
+  doc.rect(12, y, usableW, totalH, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(options?.emphasize ? 10 : 8.6);
+  doc.setTextColor(...PDF_INK);
+  doc.text(totalLabel.toUpperCase(), 16, y + totalH / 2 + 1.5);
+  doc.text(totalValue, 12 + usableW - 4, y + totalH / 2 + 1.5, { align: 'right' });
+  y += totalH + 7;
+
+  doc.setTextColor(20, 20, 20);
+  return y;
+}
+
 export interface PdfLinePoint {
   label: string;
   value: number;
