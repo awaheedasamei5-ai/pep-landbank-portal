@@ -6,12 +6,15 @@ import { ExpensesPanel } from "./_components/expenses-panel";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 
-// Real Finance app (replaces the "Log Payment" and "Expenses" sidebar
-// placeholders -- docs/plans/04-finance-app-plan.md). All four tabs real.
+// Real Accounting app (renamed from "Finance" -- docs/plans/05-accounting-app-blueprint.md
+// Part B.1. Route stays /dashboard/finance so the real /receipt/:token
+// links and any bookmarks keep working; only the display name changed.
+// Overview/Payments/Expenses/Commission are real (04-finance-app-plan.md);
+// Payroll is the next real slice to build.
 export default function Page() {
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Finance" description="Payments, expenses and commission in one place." />
+      <PageHeader title="Accounting" description="Payments, expenses, commission and payroll in one place." />
 
       <Tabs defaultValue="overview" className="flex flex-col gap-4">
         <TabsList variant="line">

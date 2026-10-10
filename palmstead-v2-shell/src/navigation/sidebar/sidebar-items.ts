@@ -118,7 +118,7 @@ export const sidebarItems: NavGroup[] = [
       { id: "operations-tracker", title: "Operations Tracker", url: "/dashboard/operations", icon: ListChecks },
       { id: "memorandum", title: "Memorandum", url: NOT_BUILT_YET, icon: FileText },
       { id: "attendance", title: "Attendance", url: "/dashboard/attendance", icon: Fingerprint },
-      { id: "finance", title: "Finance", url: "/dashboard/finance", icon: Wallet },
+      { id: "finance", title: "Accounting", url: "/dashboard/finance", icon: Wallet },
       { id: "contract-of-sale", title: "Contract of Sale", url: NOT_BUILT_YET, icon: FileSignature },
       { id: "quotation", title: "Quotation", url: "/dashboard/quotation", icon: ReceiptText },
       { id: "leave", title: "Leave", url: "/dashboard/leave", icon: CalendarClock },
