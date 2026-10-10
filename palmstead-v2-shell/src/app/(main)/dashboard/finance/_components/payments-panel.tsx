@@ -25,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { ReceiptModal } from "./receipt-modal";
 import {
   type LeadOption,
   type Payment,
@@ -57,7 +58,15 @@ function money(n: number): string {
   return `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function LogPaymentDialog({ canManage, callerRole }: { canManage: boolean; callerRole: "agent" | "manager" | undefined }) {
+function LogPaymentDialog({
+  canManage,
+  callerRole,
+  onApproved,
+}: {
+  canManage: boolean;
+  callerRole: "agent" | "manager" | undefined;
+  onApproved: (payment: Payment) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<LeadOption | null>(null);
@@ -82,9 +91,10 @@ function LogPaymentDialog({ canManage, callerRole }: { canManage: boolean; calle
     if (!selectedLead) return;
     const parsed = Number(amount);
     if (!parsed || parsed <= 0) return;
-    await logPayment.mutateAsync({ lead: selectedLead, amount: parsed, paymentMethod: method, note, referenceNumber: reference });
+    const result = await logPayment.mutateAsync({ lead: selectedLead, amount: parsed, paymentMethod: method, note, referenceNumber: reference });
     reset();
     setOpen(false);
+    if (result.status === "approved") onApproved(result);
   }
 
   if (!canManage) return null;
@@ -327,6 +337,7 @@ export function PaymentsPanel() {
   const { data: canManage, isLoading: loadingPermission } = useHasPaymentsManage();
   const { data: payments, isLoading } = usePayments();
   const approve = useApprovePayment();
+  const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null);
 
   const visible = useMemo(() => {
     if (!payments) return [];
@@ -352,7 +363,7 @@ export function PaymentsPanel() {
           <h2 className="text-lg font-medium">Payments ledger</h2>
           <p className="text-sm text-muted-foreground">{canManage ? "Every payment across all agents." : "Your own leads' payment history."}</p>
         </div>
-        <LogPaymentDialog canManage={!!canManage} callerRole={profile?.role} />
+        <LogPaymentDialog canManage={!!canManage} callerRole={profile?.role} onApproved={setReceiptPayment} />
       </div>
 
       {profile?.role === "manager" && pendingQueue.length > 0 && (
@@ -371,7 +382,14 @@ export function PaymentsPanel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => approve.mutate(p.id)} disabled={approve.isPending}>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await approve.mutateAsync(p.id);
+                      setReceiptPayment({ ...p, status: "approved" });
+                    }}
+                    disabled={approve.isPending}
+                  >
                     {approve.isPending ? <Loader2 className="animate-spin" /> : <Check data-icon="inline-start" />}
                     Approve
                   </Button>
@@ -417,6 +435,11 @@ export function PaymentsPanel() {
                   <TableCell className="text-muted-foreground">{new Date(p.paymentDate).toLocaleDateString("en-GB")}</TableCell>
                   <TableCell className="text-right">
                     {p.status === "needs_correction" && (profile?.role === "manager" || profile?.key === "elias") && <ResubmitDialog payment={p} />}
+                    {p.status === "approved" && (
+                      <Button size="sm" variant="ghost" onClick={() => setReceiptPayment(p)}>
+                        Receipt
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -424,6 +447,8 @@ export function PaymentsPanel() {
           </Table>
         </CardContent>
       </Card>
+
+      <ReceiptModal payment={receiptPayment} open={!!receiptPayment} onOpenChange={(next) => !next && setReceiptPayment(null)} />
     </div>
   );
 }

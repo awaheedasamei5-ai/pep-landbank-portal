@@ -179,11 +179,32 @@ export function useLogPayment(callerRole: "agent" | "manager" | undefined) {
       // exactly one code path that ever updates a lead's balance -- matching
       // V1's rule that a Management-held login's own payment entries land
       // approved immediately, everyone else's land pending for review.
+      let approved = false;
       if (callerRole === "manager") {
         const { error: approveError } = await sb.rpc("approve_payment", { p_payment_id: inserted.id });
         if (approveError) throw approveError;
+        approved = true;
       }
-      return inserted.id as string;
+      const payment: Payment = {
+        id: inserted.id as string,
+        leadId: input.lead.id,
+        leadName: input.lead.name,
+        agentKey: input.lead.agentKey,
+        clientName: input.lead.name,
+        amount: input.amount,
+        paymentMethod: input.paymentMethod || null,
+        status: approved ? "approved" : "pending",
+        receiptNumber: null,
+        receiptProofPath: null,
+        referenceNumber: input.referenceNumber || null,
+        note: input.note || null,
+        correctionReason: null,
+        decidedByName: null,
+        decidedAt: null,
+        paymentDate: new Date().toISOString().slice(0, 10),
+        createdAt: new Date().toISOString(),
+      };
+      return payment;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["finance-payments"] });

@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ghs } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { CashFlowChart } from "./cash-flow-chart";
+import { ExpenseCategoryBreakdown } from "./expense-category-breakdown";
 import { useFinanceOverview } from "./use-finance-overview";
 
 // Real Overview (Part B.2). Same visual language as dashboard/default's
@@ -51,6 +53,13 @@ export function OverviewPanel() {
           </Card>
         ))}
       </div>
+
+      {data && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+          <CashFlowChart data={data.monthlyTrend} isManager={isManager} />
+          <ExpenseCategoryBreakdown data={data.categoryBreakdown} />
+        </div>
+      )}
     </div>
   );
 }
