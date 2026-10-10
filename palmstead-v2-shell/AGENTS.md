@@ -1,5 +1,7 @@
 # AGENTS.md
 
+**Read [`docs/CONTINUE_HERE.md`](docs/CONTINUE_HERE.md) in full before any other work in this repo.** It covers the project's history, the standing build process, current build state, and what to do next — this file only covers coding conventions.
+
 ## Project overview
 
 Studio Admin is a responsive admin dashboard built with Next.js 16, React 19, TypeScript, Tailwind CSS v4, and shadcn/ui.
