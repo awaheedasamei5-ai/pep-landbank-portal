@@ -490,7 +490,7 @@ function SessionWorkspace({ sessionId, period, sessionName, settings }: { sessio
           total: r.total,
         };
       });
-      const doc = await buildCommissionCalculatorPdf(period, sessionName, settings, rows, computed.poolTotal, reportConfig, profile?.signatureData, profile?.name);
+      const doc = await buildCommissionCalculatorPdf(period, sessionName, rows, reportConfig, profile?.signatureData, profile?.name);
       doc.save(`Commission_Calculation_${period}.pdf`);
     } finally {
       setDownloading(false);

@@ -56,6 +56,9 @@ export function useCommissionBreakdown(month: string) {
 
 export interface CommissionReportConfig {
   companyName: string;
+  companyAddress: string;
+  companyPhone: string;
+  companyEmail: string;
   bankName: string;
   bankAccountName: string;
   bankAccountNumber: string;
@@ -79,12 +82,17 @@ export function useCommissionReportConfig() {
       const sb = requireSupabase();
       const { data, error } = await sb
         .from("app_config")
-        .select("quote_company_name,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code,receipt_logo_image")
+        .select(
+          "quote_company_name,company_address,company_phone,company_email,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code,receipt_logo_image",
+        )
         .limit(1)
         .single();
       if (error) throw error;
       const row = data as {
         quote_company_name: string | null;
+        company_address: string | null;
+        company_phone: string | null;
+        company_email: string | null;
         company_bank_name: string | null;
         company_bank_account_name: string | null;
         company_bank_account_number: string | null;
@@ -94,6 +102,9 @@ export function useCommissionReportConfig() {
       };
       return {
         companyName: row.quote_company_name ?? "Palmstead",
+        companyAddress: row.company_address ?? "",
+        companyPhone: row.company_phone ?? "",
+        companyEmail: row.company_email ?? "",
         bankName: row.company_bank_name ?? "",
         bankAccountName: row.company_bank_account_name ?? "",
         bankAccountNumber: row.company_bank_account_number ?? "",
