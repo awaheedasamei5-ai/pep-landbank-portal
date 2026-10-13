@@ -100,7 +100,7 @@ Seven real staff test accounts exist in the real `sbydzrlzqxcdbudjaube` Supabase
 - Supabase project for this app: `sbydzrlzqxcdbudjaube`. Treat it as real, not staging — schema changes are real changes.
 - Typecheck with `npx tsc -b` (NOT `tsc --noEmit -p .`, which silently no-ops against the root solution tsconfig and always exits 0).
 - RLS testing pattern (no real login needed): `set local role authenticated; set local request.jwt.claims = '{"sub":"<uuid>","role":"authenticated"}';` inside a transaction, then roll back.
-- Deploy: `git push origin rebuild` (routine, does not go live), then `npx vercel deploy --prod --yes --scope dnm-garments` (this one does — only after a verified slice) → `https://palmstead-v2-shell.vercel.app`.
+- Deploy: `git push origin rebuild` (routine, does not go live), then `npx vercel deploy --prod --yes --scope dnm-garments` (this one does — only after a verified slice) → `https://palmstead-v2-shell.vercel.app`. **Read `docs/DEPLOY_INSTRUCTIONS.md` in full before running any deploy command** — it covers the one mistake (pushing to `main`) that would instantly redeploy real V1 production live.
 
 ## 6. Tooling already set up in this repo for any AI tool
 
