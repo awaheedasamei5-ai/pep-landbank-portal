@@ -574,3 +574,9 @@ verification -- tracked below, not blocked on anything further here.
       building an unused push opt-in UI nobody can enable yet would be
       exactly the kind of partial, nothing-really-works feature the
       house rules rule out.
+
+## 2026-10-13 — Operations dashboard quality pass
+
+The company-wide Command Center keeps its existing role split and single-page navigation. Hardened the data-to-screen path without changing schema or widening access: overview reads now use deterministic 1,000-row pages for issues, states, projects, assignees, and profiles, so Supabase/PostgREST response caps do not silently undercount the charts and totals. Recent activity resolves issue rows through an ID map. React Query failures now show an accessible retry state; stale cached data remains visible with a refresh warning when a background refresh fails. The project quick-create form stacks its fields on narrow screens and returns to a compact row at desktop widths. Attention rows stack their issue identity and metadata on phones so date and priority badges do not crowd the title.
+
+Verified read-only with the real staff and management test accounts against the V2 project. Both sessions showed the same live open issue and matching company-wide figures; the management session showed Team workload, while the staff session showed staff quick actions without that panel. At 390 px, neither role produced page-level horizontal overflow; the issue/workload tables scroll inside their own wrappers. At desktop width, the tables and project form fit the content area. No browser console errors were observed. `npx tsc -b` passed. No test records or schema changes were made.
