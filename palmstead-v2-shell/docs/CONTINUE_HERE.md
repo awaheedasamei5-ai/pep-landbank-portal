@@ -12,7 +12,16 @@ This file exists so that **any AI coding tool** working on this repo — Claude 
 
 Never treat `web-next/`'s own implementations as "done" or build on top of them. Never assume the `PALMSTEAD` repo at `C:\Users\USER\Desktop\PALMSTEAD` is production — it isn't; `main` on this repo is.
 
-To read real production's actual logic: `git fetch origin main && git show origin/main:index.html` (don't check it out over this working tree — `rebuild` has an entirely different structure).
+To read real production's actual logic: `git fetch origin main && git show origin/main:index.html` (don't check it out over this working tree — `rebuild` has an entirely different structure under `palmstead-v2-shell/` and `web-next/`).
+
+### CRITICAL — a stale copy of V1 sits in this same working tree
+
+**Verified 2026-10-13, correcting an earlier wrong assumption in this file**: `index.html`, `android/`, and `www/` also exist at this repo's own root **on the `rebuild` branch itself** (a stale mirror of V1, last touched 2026-08-29) — not only on `main`. `supabase_migrations/` at the root is V1-era legacy SQL, not V2's. An agent exploring from the repo root, rather than starting inside `palmstead-v2-shell/`, can easily stumble into and edit real V1 files by mistake, since they sit right alongside the actual project with no visual distinction.
+
+**The rule, absolute, for any agent working in this repo**:
+- Work **only** inside `palmstead-v2-shell/`. Never read or write `index.html`, `android/`, `www/`, or `supabase_migrations/` at the repo root, or anything in `web-next/` unless explicitly told to reference it.
+- Never run `git checkout main` or modify the `main` branch in any way.
+- Only ever use Supabase project `sbydzrlzqxcdbudjaube`. Never `lrahgcnftetnyxunaljs` (V1's real production data) — these are two fully separate Supabase projects with separate credentials, so scope any Supabase access (API keys, MCP tool access) to `sbydzrlzqxcdbudjaube` only before granting it to any agent.
 
 ## 2. What this project actually is
 
