@@ -94,7 +94,7 @@ export function MemorandumScreen() {
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <ResizablePanelGroup orientation="horizontal" className="h-full">
-          <ResizablePanel defaultSize={18} minSize={14} maxSize={28} className="min-h-0">
+          <ResizablePanel defaultSize="18%" minSize="14%" maxSize="28%" className="min-h-0">
             <div className="flex h-full flex-col border-r border-border p-3">
               <Button onClick={() => startCompose()} className="mb-3 justify-start gap-2">
                 <PenSquare className="size-4" />
@@ -129,7 +129,7 @@ export function MemorandumScreen() {
           </ResizablePanel>
           <ResizableHandle />
 
-          <ResizablePanel defaultSize={32} minSize={24} maxSize={45} className="min-h-0">
+          <ResizablePanel defaultSize="32%" minSize="24%" maxSize="45%" className="min-h-0">
             {isLoading ? (
               <div className="space-y-3 p-3">
                 {[...Array(5)].map((_, i) => (
@@ -142,7 +142,7 @@ export function MemorandumScreen() {
           </ResizablePanel>
           <ResizableHandle />
 
-          <ResizablePanel defaultSize={50} minSize={30} className="min-h-0">
+          <ResizablePanel defaultSize="50%" minSize="30%" className="min-h-0">
             <MemoView
               memo={selected}
               canDelete={!!selected && (selected.fromKey === myKey || profile?.role === "manager")}
