@@ -23,6 +23,8 @@ export function LeaveCalendar({
   selectedDates,
   onToggleDate,
   companyClosures = [],
+  secureConflictDates = [],
+  isEmergency = false,
 }: {
   year: number;
   month: number;
@@ -33,11 +35,13 @@ export function LeaveCalendar({
   selectedDates: string[];
   onToggleDate: (iso: string) => void;
   companyClosures?: LeaveHoliday[];
+  secureConflictDates?: string[];
+  isEmergency?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const monthDate = new Date(year, month, 1);
   const myTaken = new Set(requests.filter((r) => r.agentKey === agentKey && leaveIsBlocking(r.status)).flatMap((r) => r.dates || []));
-  const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
+  const otherConflicts = new Set([...leaveConflictDatesFromOthers(requests, agentKey), ...secureConflictDates]);
   const holidays = ghanaHolidayMapForYear(year, config.eidWindows, companyClosuresForYear(companyClosures, year));
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
   const t = today();
@@ -46,9 +50,9 @@ export function LeaveCalendar({
     if (iso < t) return 'Past date';
     if (isWeekendIso(iso)) return 'Weekend';
     const h = holidays.get(iso);
-    if (h && !(h.isEid && observesEid)) return h.name;
+    if (h && !(h.isEid && observesEid) && !isEmergency) return h.name;
     if (myTaken.has(iso)) return 'Already requested';
-    if (otherConflicts.has(iso)) return "Conflicts with a colleague's leave";
+    if (otherConflicts.has(iso) && !isEmergency) return "Conflicts with a colleague's leave";
     return null;
   }
 

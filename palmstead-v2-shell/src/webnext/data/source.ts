@@ -659,17 +659,12 @@ export interface DataSource {
     listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
     decide(templateVersionId: string, status: ContractApprovalStatus, reason: string | null, decidedBy: string, decidedByName: string): Promise<ContractApproval>;
   };
-  // Real table `leave_requests` (confirmed live). Unlike contract_requests,
-  // SELECT RLS here is genuinely open to any authenticated staff member
-  // (not agent/manager-scoped) -- list() is a real unfiltered read in live
-  // mode, matched in demo mode too (no artificial scoping needed). decide()
-  // is manager-only in practice (leave_requests_upd: own row or manager;
-  // approve/decline is gated client-side to manager since a regular agent
-  // deciding their own request makes no sense even though RLS permits self
-  // UPDATE for other real reasons like cancelling your own pending
-  // request -- not built here either).
+  // Real table `leave_requests` (confirmed live). Staff reads are owner-
+  // scoped by RLS; Management sees the company queue. Date-only team
+  // availability is supplied by the matching SECURITY DEFINER RPC.
   leaveRequests: {
     list(): Promise<LeaveRequest[]>;
+    conflictDates(startDate: string, endDate: string, excludeRequestId?: string): Promise<string[]>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
     // Master Spec 12.4: "Management may approve, decline or reschedule
     // with reason". Exact port of v1's own split (index.html:5503-5532):
@@ -687,10 +682,9 @@ export interface DataSource {
     // IS the reschedule, dates are updated in place and it's approved+
     // signed immediately, nothing further needed from the staff member.
     // newDates omitted/empty -- Management just needs different dates from
-    // the staff member; frees the original dates back up (status
-    // 'rescheduled' doesn't block, same as leaveIsBlocking()) without
-    // approving anything yet.
-    reschedule(id: string, note: string | undefined, newDates: string[] | null, decidedBy: string, decidedByName: string, decidedSignature: string | null): Promise<LeaveRequest>;
+    // the staff member while retaining the existing reservation until
+    // replacement dates are submitted on that same request.
+    reschedule(id: string, note: string | undefined, newDates: string[] | null, decidedBy: string, decidedByName: string, decidedSignature: string | null, deductQuota?: boolean): Promise<LeaveRequest>;
     // v1's real "planned -> pending" transition (index.html's
     // sendPlannedLeaveNow) -- a private draft becomes a real request
     // Management can see/act on.
@@ -710,6 +704,7 @@ export interface DataSource {
     // while status is 'planned'; a sent request is never silently
     // editable, it must go through decline/reschedule instead).
     updatePlanned(id: string, patch: { dates: string[]; letterText: string | null }): Promise<LeaveRequest>;
+    updateRescheduledByStaff(id: string, patch: { dates: string[]; letterText: string | null }): Promise<LeaveRequest>;
     // Real table `leave_request_logs` (migration leave_full_app_phase1_schema)
     // -- the full status-change history for one request, written
     // automatically by a trigger. Built in Phase 1, read for the first
@@ -2526,6 +2521,15 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapLeaveRequestRow);
       },
+      async conflictDates(startDate, endDate, excludeRequestId) {
+        const { data, error } = await requireClient().rpc('get_leave_conflict_dates', {
+          p_start_date: startDate,
+          p_end_date: endDate,
+          p_exclude_request_id: excludeRequestId ?? null,
+        });
+        if (error) throw error;
+        return (data ?? []).map((row: { conflict_date: string }) => row.conflict_date);
+      },
       async create(agentKey, agentName, input) {
         const client = requireClient();
         const year = new Date(input.dates[0]).getFullYear();
@@ -2560,11 +2564,11 @@ function createLiveDataSource(): DataSource {
         };
         if (note !== undefined) dbPatch.reschedule_note = note;
         if (deductQuota !== undefined) dbPatch.deduct_quota = deductQuota;
-        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).select().single();
+        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).eq('status', 'pending').select().single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
-      async reschedule(id, note, newDates, decidedBy, decidedByName, decidedSignature) {
+      async reschedule(id, note, newDates, decidedBy, decidedByName, decidedSignature, deductQuota) {
         const dbPatch: Record<string, unknown> =
           newDates && newDates.length
             ? {
@@ -2579,17 +2583,18 @@ function createLiveDataSource(): DataSource {
                 decided_signature: decidedSignature,
               }
             : { status: 'rescheduled', reschedule_note: note ?? null, decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName };
-        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).select().single();
+        if (newDates?.length && deductQuota !== undefined) dbPatch.deduct_quota = deductQuota;
+        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).eq('status', 'pending').select().single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async sendPlanned(id) {
-        const { data, error } = await requireClient().from('leave_requests').update({ status: 'pending' }).eq('id', id).select().single();
+        const { data, error } = await requireClient().from('leave_requests').update({ status: 'pending' }).eq('id', id).eq('status', 'planned').select().single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('leave_requests').delete().eq('id', id);
+        const { error } = await requireClient().from('leave_requests').delete().eq('id', id).eq('status', 'planned').select('id').single();
         if (error) throw error;
       },
       async confirmUsed(id) {
@@ -2603,6 +2608,28 @@ function createLiveDataSource(): DataSource {
           .update({ dates: patch.dates, days_count: patch.dates.length, year: new Date(patch.dates[0]).getFullYear(), letter_text: patch.letterText })
           .eq('id', id)
           .eq('status', 'planned')
+          .select()
+          .single();
+        if (error) throw error;
+        return mapLeaveRequestRow(data);
+      },
+      async updateRescheduledByStaff(id, patch) {
+        const { data, error } = await requireClient()
+          .from('leave_requests')
+          .update({
+            dates: patch.dates,
+            days_count: patch.dates.length,
+            year: new Date(patch.dates[0]).getFullYear(),
+            letter_text: patch.letterText,
+            status: 'pending',
+            decided_at: null,
+            decided_by: null,
+            decided_by_name: null,
+            decided_signature: null,
+            reschedule_note: null,
+          })
+          .eq('id', id)
+          .eq('status', 'rescheduled')
           .select()
           .single();
         if (error) throw error;

@@ -23,9 +23,12 @@ export function useDownloadLeaveLetterPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the letter from generating.
       }
-      const staff = await ds.staff.listAll().catch(() => []);
+      const [staff, config] = await Promise.all([
+        ds.staff.listAll().catch(() => []),
+        ds.config.get(),
+      ]);
       const staffSignature = staff.find((s) => s.key === request.agentKey)?.signatureData ?? null;
-      const doc = buildLeaveLetterPdf(request, staffSignature, logo);
+      const doc = buildLeaveLetterPdf(request, staffSignature, logo, { companyName: config.quoteCompanyName });
       doc.save(leaveLetterFilename(request));
     },
   });

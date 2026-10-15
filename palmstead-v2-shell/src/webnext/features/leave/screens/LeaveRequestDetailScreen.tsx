@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, Pencil, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, FileText, Pencil, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -78,6 +78,14 @@ export function LeaveRequestDetailScreen() {
 
       <div className="grid gap-6 xl:grid-cols-12">
         <div className="grid gap-4 self-start xl:col-span-7">
+          {request.autoSubmittedAt && (
+            <Alert>
+              <AlertDescription>
+                Your saved leave plan was sent to Management automatically on {new Date(request.autoSubmittedAt).toLocaleDateString()}.
+                Management&apos;s decision and any changes will appear here.
+              </AlertDescription>
+            </Alert>
+          )}
           {request.rescheduleNote && (
             <Alert>
               <AlertDescription>
@@ -121,6 +129,14 @@ export function LeaveRequestDetailScreen() {
                       onConfirm={() => remove.mutateAsync(request.id).then(() => router.push('/dashboard/leave/requests'))}
                     />
                   </>
+                )}
+                {isMine && request.status === 'rescheduled' && (
+                  <Button asChild>
+                    <Link href={`/dashboard/leave/requests/${request.id}/edit`}>
+                      <CalendarClock />
+                      Choose replacement dates
+                    </Link>
+                  </Button>
                 )}
               </div>
             </CardContent>

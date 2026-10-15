@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useState } from 'react';
+import { Fragment, useId, useState } from 'react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
-import { useConfirmLeaveUsed, useCreateLeaveRequest, useDeletePlannedLeave, useLeaveRequests, useSendPlannedLeave } from '../hooks/useLeaveRequests';
+import { useConfirmLeaveUsed, useCreateLeaveRequest, useDeletePlannedLeave, useLeaveConflictDates, useLeaveRequests, useSendPlannedLeave } from '../hooks/useLeaveRequests';
 import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
 import { LeaveCalendar } from '../components/LeaveCalendar';
 import { LeaveBalanceRing } from '../components/LeaveBalanceRing';
@@ -23,11 +23,9 @@ const STATUS_CLASS: Record<LeaveRequest['status'], string> = { planned: 'pending
 // submission on a bad date, download the real formal letter, and get
 // nudged (not left to notice on their own) about a forgotten planned
 // draft or an already-passed approved date needing confirmation. Real
-// leave_requests SELECT RLS is company-wide, but this screen filters to
-// the signed-in staff member's OWN requests only -- the company-wide
-// view is Management's own screen (LeaveManagementScreen.tsx), per the
-// standing correction that Staff and Management need genuinely separate
-// experiences, not one shared list with role-conditional buttons.
+// Staff queries are owner-scoped by database policy. Management's company
+// view is a separate screen; date-only availability is provided by a narrow
+// RPC so staff can check collisions without reading colleagues' requests.
 export function LeaveScreen() {
   const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const [view, setView] = useState<'mine' | 'management'>('mine');
@@ -259,6 +257,8 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
   const [month, setMonth] = useState(() => new Date(today()).getMonth());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const conflictQuery = useLeaveConflictDates(year);
+  const conflictDates = conflictQuery.data ?? [];
 
   function toggleDate(iso: string) {
     setSelectedDates((prev) => (prev.includes(iso) ? prev.filter((d) => d !== iso) : [...prev, iso]));
@@ -290,11 +290,15 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
       setError('Pick at least one date first');
       return;
     }
+    if (!conflictQuery.isSuccess) {
+      setError('Team availability could not be checked. Reload Leave and try again before submitting.');
+      return;
+    }
     if (selectedDates.length > (remaining ?? 0)) {
       setError(`That's ${selectedDates.length} day(s), but you only have ${remaining} left for ${year}.`);
       return;
     }
-    const conflict = leaveDatesConflictReason(config, requests, selectedDates, agentKey, year);
+    const conflict = leaveDatesConflictReason(config, requests, selectedDates, agentKey, year, [], new Set(conflictDates));
     if (conflict) {
       setError(`${conflict} Please adjust your selection.`);
       return;
@@ -309,17 +313,19 @@ function NewLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; onDone: 
     <div className={styles.formCard}>
       {config && <LeaveBalanceRing total={config.leaveTotalDays} reserved={reserved} remaining={remaining ?? 0} confirmedUsed={confirmedUsed} year={year} />}
       {config ? (
-        <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={requests} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} />
+        <LeaveCalendar year={year} month={month} onNavMonth={navMonth} requests={requests} agentKey={agentKey} config={config} selectedDates={selectedDates} onToggleDate={toggleDate} secureConflictDates={conflictDates} />
       ) : (
         <p className={styles.hint}>Loading…</p>
       )}
+      {conflictQuery.isPending && <p className={styles.hint}>Checking team availability…</p>}
+      {conflictQuery.isError && <p role="alert" className={styles.error}>Team availability could not be checked. Reload Leave before submitting a request.</p>}
       {selectedDates.length > 0 && <p className={styles.emergencyDaysNote}>A formal leave request letter will be generated for you and sent with this request.</p>}
       {error && <p className={styles.error}>{error}</p>}
       <div className={styles.formActions}>
-        <button type="button" className={styles.draftBtn} disabled={create.isPending || !config} onClick={() => submit(true)}>
+        <button type="button" className={styles.draftBtn} disabled={create.isPending || !config || !conflictQuery.isSuccess} onClick={() => submit(true)}>
           {create.isPending ? 'Saving…' : 'Save as Draft'}
         </button>
-        <button type="button" className={styles.submitBtn} disabled={create.isPending || !config} onClick={() => submit(false)}>
+        <button type="button" className={styles.submitBtn} disabled={create.isPending || !config || !conflictQuery.isSuccess} onClick={() => submit(false)}>
           {create.isPending ? 'Sending…' : 'Send request'}
         </button>
       </div>
@@ -343,6 +349,11 @@ function EmergencyLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; on
   const [toDate, setToDate] = useState(today());
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const fromId = useId();
+  const toId = useId();
+  const reasonId = useId();
+  const year = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
+  const { data: conflictDates = [] } = useLeaveConflictDates(year);
 
   const agentKey = profile?.key ?? '';
   const dates: string[] = [];
@@ -355,8 +366,7 @@ function EmergencyLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; on
       cursor.setDate(cursor.getDate() + 1);
     }
   }
-  const year = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
-  const conflictWarning = config && dates.length > 0 ? leaveDatesConflictReason(config, requests, dates, agentKey, year) : null;
+  const conflictWarning = config && dates.length > 0 ? leaveDatesConflictReason(config, requests, dates, agentKey, year, [], new Set(conflictDates)) : null;
 
   async function submit() {
     setError(null);
@@ -379,17 +389,17 @@ function EmergencyLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; on
       <p className={styles.emergencyHint}>This goes straight to Management for urgent approval, even if it conflicts with a colleague's leave or an entitlement limit — they'll see the conflict and decide.</p>
       <div className={styles.grid2}>
         <div className={styles.field}>
-          <label className={styles.label}>From</label>
-          <input className={styles.input} type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <label htmlFor={fromId} className={styles.label}>From</label>
+          <input id={fromId} className={styles.input} type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>To</label>
-          <input className={styles.input} type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <label htmlFor={toId} className={styles.label}>To</label>
+          <input id={toId} className={styles.input} type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
       </div>
       <div className={styles.field}>
-        <label className={styles.label}>Reason (required)</label>
-        <textarea className={styles.textarea} placeholder="What's the emergency?" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <label htmlFor={reasonId} className={styles.label}>Reason (required)</label>
+        <textarea id={reasonId} className={styles.textarea} placeholder="What's the emergency?" value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
       {dates.length > 0 && <p className={styles.emergencyDaysNote}>{dates.length} working day(s): {dates[0]} to {dates[dates.length - 1]}</p>}
       {conflictWarning && <p className={styles.error}>⚠ {conflictWarning} Management will see this too.</p>}

@@ -1,11 +1,21 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Adapted from Shreyasmark1/leave-management-system's balance-list.tsx
 // (BalanceCard) -- same real progress-bar treatment, simplified to one
-// card since Palmstead has a single pooled annual quota, not multiple
-// leave types. Replaces the earlier hand-rolled LeaveBalanceRing.
-export function LeaveBalanceCard({ total, reserved, remaining, confirmedUsed }: { total: number; reserved: number; remaining: number; confirmedUsed: number }) {
+// card since Palmstead has one annual leave allowance for each staff member,
+// not multiple leave types. Replaces the earlier hand-rolled LeaveBalanceRing.
+export function LeaveBalanceCard({
+  total,
+  reserved,
+  remaining,
+  confirmedUsed,
+}: {
+  total: number;
+  reserved: number;
+  remaining: number;
+  confirmedUsed: number;
+}) {
   const usedPercent = total > 0 ? Math.min(100, Math.round((reserved / total) * 100)) : 0;
 
   return (
@@ -13,7 +23,7 @@ export function LeaveBalanceCard({ total, reserved, remaining, confirmedUsed }: 
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardTitle>Annual leave balance</CardTitle>
-          <Badge variant="outline">POOLED</Badge>
+          <Badge variant="outline">{total} DAYS / YEAR</Badge>
         </div>
       </CardHeader>
       <CardContent className="grid gap-3">

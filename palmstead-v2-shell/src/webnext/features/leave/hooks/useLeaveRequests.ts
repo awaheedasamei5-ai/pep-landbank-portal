@@ -1,49 +1,54 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDataSource, type DataSource } from '../../../data/source';
+import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
 import { fmtLongDate } from '../../../shared/lib/format';
-import type { Config, LeaveRequest, NewLeaveRequest } from '../../../types/domain';
+import type { LeaveRequest, NewLeaveRequest } from '../../../types/domain';
 
 export function useCanDecideLeave(): boolean {
   const profile = useSessionStore((s) => s.profile);
   return profile?.role === 'manager';
 }
 
-// Real table `leave_requests`: SELECT RLS is genuinely open to any
-// signed-in staff member (not agent/manager-scoped) -- V1's own real
-// cross-staff "who's on leave" checks work the same way. A 'planned' row
-// is the one exception: V1's real private draft, filtered out of every
-// other viewer's list client-side (nothing in RLS hides it).
+// Staff request reads are owner-scoped by RLS; Management can read the
+// company queue. Coworker availability comes from a separate RPC that
+// returns dates only, so the calendar never needs another employee's
+// letter, reason, name, or manager note.
 export function useLeaveRequests() {
   const demoMode = useSessionStore((s) => s.demoMode);
-  return useQuery({ queryKey: ['leaveRequests'], queryFn: () => getDataSource(demoMode).leaveRequests.list() });
+  const profileKey = useSessionStore((s) => s.profile?.key);
+  return useQuery({
+    queryKey: ['leaveRequests', profileKey],
+    queryFn: () => getDataSource(demoMode).leaveRequests.list(),
+    refetchInterval: 30_000,
+    enabled: !!profileKey,
+  });
 }
 
-// V1's real rule: Management is notified the moment a request becomes
-// visible to them -- whether that's an immediate pending request or a
-// planned one just sent on via sendPlanned() below. A 'planned' (draft)
-// request is deliberately NOT notified here -- it isn't visible to
-// Management at all until the staff member sends it.
-async function notifyManagementOfLeaveRequest(ds: DataSource, config: Config | undefined, agentKey: string, agentName: string, request: LeaveRequest) {
-  const managers = await ds.staff.listAll().catch(() => []);
-  const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== agentKey);
-  const body = `${agentName} submitted a leave request for ${request.daysCount} day(s) in ${request.year}. Review it in Palmstead.`;
-  if (toManagers.length > 0) {
-    ds.notifications.notify(agentKey, agentName, toManagers.map((m) => m.key), body, 'leave_pending', 'leave_request', request.id).catch(() => {});
-  }
-  const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
-  if (config?.companyPhone) phones.add(config.companyPhone);
-  for (const phone of phones) ds.sms.send(phone, body, 'leave_pending', agentKey).catch(() => {});
+// Date-only team availability is returned by a bounded SECURITY DEFINER RPC.
+// It keeps the staff calendar useful while request reasons, letters, names,
+// and management notes stay private under the Leave row policy.
+export function useLeaveConflictDates(year: number, excludeRequestId?: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profileKey = useSessionStore((s) => s.profile?.key);
+  return useQuery({
+    queryKey: ['leaveConflictDates', profileKey, year, excludeRequestId ?? null],
+    queryFn: () => getDataSource(demoMode).leaveRequests.conflictDates(`${year}-01-01`, `${year}-12-31`, excludeRequestId),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    enabled: !!profileKey,
+  });
 }
 
+// The database commits the request, recipient inbox messages, and SMS outbox
+// together. Keeping notification sends off the client avoids lost messages
+// when a tab closes and duplicates when an action is retried.
 export function useCreateLeaveRequest() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
-  const { data: config } = useConfig();
   const agentKey = profile?.key ?? '';
   const agentName = profile?.name ?? '';
   const queryClient = useQueryClient();
@@ -51,7 +56,6 @@ export function useCreateLeaveRequest() {
     mutationFn: async (input: NewLeaveRequest) => {
       const ds = getDataSource(demoMode);
       const request = await ds.leaveRequests.create(agentKey, agentName, input);
-      if (!input.asDraft) notifyManagementOfLeaveRequest(ds, config, agentKey, agentName, request).catch(() => {});
       return request;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
@@ -59,20 +63,15 @@ export function useCreateLeaveRequest() {
 }
 
 // V1's real "planned -> pending" transition -- a private draft only
-// becomes visible to Management once explicitly sent on, so that's when
-// the notify+SMS fires, same as a fresh pending request.
+// enters the decision queue when explicitly sent or automatically due.
+// Database triggers create the corresponding notifications.
 export function useSendPlannedLeave() {
-  const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
-  const { data: config } = useConfig();
-  const agentKey = profile?.key ?? '';
-  const agentName = profile?.name ?? '';
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const ds = getDataSource(demoMode);
       const request = await ds.leaveRequests.sendPlanned(id);
-      notifyManagementOfLeaveRequest(ds, config, agentKey, agentName, request).catch(() => {});
       return request;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
@@ -131,15 +130,6 @@ export function useDecideLeaveRequest() {
           id,
         )
         .catch(() => {});
-      const staff = await ds.staff.listAll().catch(() => []);
-      const phone = staff.find((s) => s.key === agentKey)?.phone;
-      if (phone) {
-        const msg =
-          outcome === 'approved'
-            ? `Your leave request for ${daysCount} day(s) in ${year} has been approved -- you can view the details in Office > Leave.`
-            : `Your leave request for ${daysCount} day(s) in ${year} was declined${note ? `: ${note}` : ''}. Open Office > Leave for details.`;
-        ds.sms.send(phone, msg, `leave_${outcome}`, profile?.key ?? null).catch(() => {});
-      }
       return result;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
@@ -151,8 +141,8 @@ export function useDecideLeaveRequest() {
 // real data mutation, not a status relabel"): two real outcomes
 // depending on whether Management supplied replacement dates. newDates
 // given -- approves+signs the request in the same action; newDates
-// omitted -- goes to 'rescheduled' (a non-blocking status) and the staff
-// member picks fresh dates themselves via a normal request.
+// omitted -- goes to 'rescheduled', keeps its reserved days, and the staff
+// member supplies replacement dates on the same request.
 export function useRescheduleLeaveRequest() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -162,6 +152,7 @@ export function useRescheduleLeaveRequest() {
       id,
       note,
       newDates,
+      deductQuota,
       agentKey,
       agentName,
       daysCount,
@@ -170,13 +161,14 @@ export function useRescheduleLeaveRequest() {
       id: string;
       note?: string;
       newDates: string[] | null;
+      deductQuota?: boolean;
       agentKey: string;
       agentName: string;
       daysCount: number;
       year: number;
     }) => {
       const ds = getDataSource(demoMode);
-      const result = await ds.leaveRequests.reschedule(id, note, newDates, profile?.key ?? '', profile?.name ?? '', profile?.signatureData ?? null);
+      const result = await ds.leaveRequests.reschedule(id, note, newDates, profile?.key ?? '', profile?.name ?? '', profile?.signatureData ?? null, deductQuota);
       const approvedWithNewDates = !!(newDates && newDates.length);
       ds.audit
         .log(
@@ -190,14 +182,6 @@ export function useRescheduleLeaveRequest() {
           id,
         )
         .catch(() => {});
-      const staff = await ds.staff.listAll().catch(() => []);
-      const phone = staff.find((s) => s.key === agentKey)?.phone;
-      if (phone) {
-        const msg = approvedWithNewDates
-          ? `Management has rescheduled your leave to ${newDates.map(fmtLongDate).join(', ')} and approved it -- you can download the signed letter from Office > Leave.${note ? ` Note: "${note}"` : ''}`
-          : `Management has asked you to reschedule your leave request for ${daysCount} day(s) in ${year}: "${note}" -- open Office > Leave to pick new dates.`;
-        ds.sms.send(phone, msg, approvedWithNewDates ? 'leave_rescheduled_approved' : 'leave_reschedule_requested', profile?.key ?? null).catch(() => {});
-      }
       return result;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
@@ -214,10 +198,11 @@ export function useRescheduleLeaveRequest() {
 // trigger, not by the client.
 export function useLeaveRequestLogs(requestId: string | null) {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const profileKey = useSessionStore((s) => s.profile?.key);
   return useQuery({
-    queryKey: ['leaveRequestLogs', requestId],
+    queryKey: ['leaveRequestLogs', profileKey, requestId],
     queryFn: () => getDataSource(demoMode).leaveRequests.logs(requestId as string),
-    enabled: !!requestId,
+    enabled: !!requestId && !!profileKey,
   });
 }
 
@@ -233,6 +218,29 @@ export function useUpdatePlannedLeave() {
     mutationFn: ({ id, dates }: { id: string; dates: string[] }) => {
       const letterText = profile ? buildLeaveLetterText(profile.name, dates.slice().sort(), new Date(dates[0]).getFullYear(), config?.quoteCompanyName) : null;
       return getDataSource(demoMode).leaveRequests.updatePlanned(id, { dates, letterText });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
+  });
+}
+
+export function useSubmitRescheduledLeave() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profile = useSessionStore((s) => s.profile);
+  const { data: config } = useConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, dates }: { id: string; dates: string[] }) => {
+      if (!profile) throw new Error('Your staff profile could not be loaded. Sign in again and retry.');
+      const ds = getDataSource(demoMode);
+      const sortedDates = [...dates].sort();
+      const letterText = buildLeaveLetterText(
+        profile.name,
+        sortedDates,
+        new Date(sortedDates[0]).getFullYear(),
+        config?.quoteCompanyName,
+      );
+      const request = await ds.leaveRequests.updateRescheduledByStaff(id, { dates: sortedDates, letterText });
+      return request;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
   });

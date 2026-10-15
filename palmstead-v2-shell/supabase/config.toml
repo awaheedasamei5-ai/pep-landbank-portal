@@ -1,0 +1,2 @@
+[functions.process-leave-sms-outbox]
+verify_jwt = false

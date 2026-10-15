@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { AlertTriangle, CalendarClock, FileText, Settings, Siren, Users } from 'lucide-react';
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PageHeader } from '@/components/page-header';
 import { StatCard } from '@/components/stat-card';
 import { SubmitButton } from '@/components/submit-button';
@@ -20,6 +21,7 @@ import { useDecideLeaveRequest, useLeaveRequests, useRescheduleLeaveRequest } fr
 import { useDownloadLeaveLetterPdf } from '../hooks/useLeaveLetterPdf';
 import { LeaveRequestsDataTable } from '../components/LeaveRequestsDataTable';
 import { leaveUpcomingForAll } from '../lib/leaveLogic';
+import { leaveErrorMessage } from '../lib/leaveErrors';
 import { fmtLongDate, today } from '../../../shared/lib/format';
 import type { LeaveRequest } from '../../../types/domain';
 
@@ -49,7 +51,11 @@ export function LeaveManagementScreen() {
   const year = new Date(today()).getFullYear();
   const all = requests ?? [];
   const visible = all.filter((r) => r.status !== 'planned');
-  const pending = visible.filter((r) => r.status === 'pending').sort((a, b) => (a.isEmergency === b.isEmergency ? a.createdAt.localeCompare(b.createdAt) : a.isEmergency ? -1 : 1));
+  const pending = visible.filter((r) => r.status === 'pending').sort((a, b) => {
+    if (a.isEmergency !== b.isEmergency) return a.isEmergency ? -1 : 1;
+    if (Boolean(a.autoSubmittedAt) !== Boolean(b.autoSubmittedAt)) return a.autoSubmittedAt ? -1 : 1;
+    return (a.dates[0] ?? '').localeCompare(b.dates[0] ?? '') || a.createdAt.localeCompare(b.createdAt);
+  });
 
   const upcoming = useMemo(() => leaveUpcomingForAll(visible, today(), 7), [visible]);
   const emergencies = useMemo(
@@ -152,11 +158,12 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
   const downloadLetter = useDownloadLeaveLetterPdf();
   const [pendingAction, setPendingAction] = useState<'decline' | 'reschedule' | null>(null);
   const [note, setNote] = useState('');
-  const [deductQuota, setDeductQuota] = useState(true);
+  const [deductQuota, setDeductQuota] = useState(request.deductQuota);
   const [rescheduleDates, setRescheduleDates] = useState<string[]>([]);
   const [newDateInput, setNewDateInput] = useState('');
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const busy = decide.isPending || reschedule.isPending;
+  const quotaCheckboxId = useId();
 
   function approve() {
     decide.mutate({ id: request.id, outcome: 'approved', agentKey: request.agentKey, agentName: request.agentName, daysCount: request.daysCount, year: request.year, deductQuota });
@@ -169,8 +176,7 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
     setRescheduleError(null);
   }
   function confirmDecline() {
-    decide.mutate({ id: request.id, outcome: 'declined', agentKey: request.agentKey, agentName: request.agentName, daysCount: request.daysCount, year: request.year, note: note.trim() || undefined });
-    cancelPending();
+    decide.mutate({ id: request.id, outcome: 'declined', agentKey: request.agentKey, agentName: request.agentName, daysCount: request.daysCount, year: request.year, note: note.trim() || undefined }, { onSuccess: cancelPending });
   }
   function addRescheduleDate() {
     if (!newDateInput || rescheduleDates.includes(newDateInput)) return;
@@ -182,16 +188,20 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
       setRescheduleError('Please give a reason for the reschedule.');
       return;
     }
+    if (rescheduleDates.length > 0 && rescheduleDates.length !== request.daysCount) {
+      setRescheduleError(`Choose exactly ${request.daysCount} replacement working day(s) to retain the reserved allowance.`);
+      return;
+    }
     reschedule.mutate({
       id: request.id,
       note: note.trim(),
       newDates: rescheduleDates.length ? rescheduleDates : null,
+      deductQuota,
       agentKey: request.agentKey,
       agentName: request.agentName,
       daysCount: request.daysCount,
       year: request.year,
-    });
-    cancelPending();
+    }, { onSuccess: cancelPending });
   }
 
   return (
@@ -199,6 +209,7 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
       <div className="min-w-56 flex-1">
         <div className="flex items-center gap-2 font-medium">
           {request.agentName}
+          {request.autoSubmittedAt && <Badge variant="secondary">Sent from leave plan</Badge>}
           {request.isEmergency && <Badge variant="destructive">Emergency</Badge>}
         </div>
         <div className="mt-1 text-sm text-muted-foreground">
@@ -210,15 +221,22 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
             {downloadLetter.isPending ? 'Preparing…' : 'Leave request letter'}
           </Button>
         )}
+        {(decide.isError || reschedule.isError) && (
+          <Alert variant="destructive" className="mt-3">
+            <AlertTriangle />
+            <AlertTitle>The decision could not be saved</AlertTitle>
+            <AlertDescription>{leaveErrorMessage(decide.error ?? reschedule.error)}</AlertDescription>
+          </Alert>
+        )}
         {request.isEmergency && (
-          <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Checkbox checked={deductQuota} onCheckedChange={(v) => setDeductQuota(v === true)} />
+          <label htmlFor={quotaCheckboxId} className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox id={quotaCheckboxId} checked={deductQuota} onCheckedChange={(v) => setDeductQuota(v === true)} />
             Count against annual quota
           </label>
         )}
         {pendingAction === 'decline' && (
           <div className="mt-3 grid max-w-md gap-2">
-            <Textarea placeholder="Reason for declining (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <Textarea aria-label="Reason for declining" placeholder="Reason for declining (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={cancelPending}>
                 Cancel
@@ -231,9 +249,9 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
         )}
         {pendingAction === 'reschedule' && (
           <div className="mt-3 grid max-w-md gap-2">
-            <Textarea placeholder="Reason for reschedule (required)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <Textarea aria-label="Reason for reschedule" required placeholder="Reason for reschedule (required)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="flex gap-2">
-              <Input type="date" className="flex-1" value={newDateInput} onChange={(e) => setNewDateInput(e.target.value)} />
+              <Input type="date" min={today()} aria-label="Replacement leave date" className="flex-1" value={newDateInput} onChange={(e) => setNewDateInput(e.target.value)} />
               <Button variant="outline" size="sm" onClick={addRescheduleDate} disabled={!newDateInput}>
                 + Add date
               </Button>

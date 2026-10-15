@@ -44,11 +44,11 @@ export function leavePlannedDueSoon(requests: LeaveRequest[], agentKey: string, 
 // their entitlement before any of them are confirmed used. Named
 // "Reserved" everywhere it's shown in the UI, never "Used".
 export function leaveDaysReserved(requests: LeaveRequest[], agentKey: string, year: number): number {
-  return requests.filter((r) => r.agentKey === agentKey && r.year === year && leaveIsBlocking(r.status)).reduce((s, r) => s + (r.daysCount || 0), 0);
+  return requests.filter((r) => r.agentKey === agentKey && r.year === year && r.deductQuota !== false && leaveIsBlocking(r.status)).reduce((s, r) => s + (r.daysCount || 0), 0);
 }
 
 export function leaveDaysRemaining(config: Config, requests: LeaveRequest[], agentKey: string, year: number): number {
-  return Math.max(0, (config.leaveTotalDays || 20) - leaveDaysReserved(requests, agentKey, year));
+  return Math.max(0, (config.leaveTotalDays ?? 20) - leaveDaysReserved(requests, agentKey, year));
 }
 
 // The real "used" concept: approved, every date already in the past, and
@@ -59,7 +59,7 @@ export function leaveIsConfirmedUsed(r: LeaveRequest, todayIso: string): boolean
 }
 
 export function leaveDaysConfirmedUsed(requests: LeaveRequest[], agentKey: string, year: number, todayIso: string): number {
-  return requests.filter((r) => r.agentKey === agentKey && r.year === year && leaveIsConfirmedUsed(r, todayIso)).reduce((s, r) => s + (r.daysCount || 0), 0);
+  return requests.filter((r) => r.agentKey === agentKey && r.year === year && r.deductQuota !== false && leaveIsConfirmedUsed(r, todayIso)).reduce((s, r) => s + (r.daysCount || 0), 0);
 }
 
 // Approved, dates already passed, not yet confirmed -- surfaces the "did
@@ -105,7 +105,15 @@ export function leaveUpcomingForAll(requests: LeaveRequest[], todayIso: string, 
 // could land in between). Emergency leave is the deliberate exception to
 // the colleague-overlap check (Plan Part 1) -- callers skip this check
 // entirely for an emergency request, never call it and ignore the result.
-export function leaveDatesConflictReason(config: Config, requests: LeaveRequest[], dates: string[], agentKey: string, year: number, extraHolidays: GhanaHoliday[] = []): string | null {
+export function leaveDatesConflictReason(
+  config: Config,
+  requests: LeaveRequest[],
+  dates: string[],
+  agentKey: string,
+  year: number,
+  extraHolidays: GhanaHoliday[] = [],
+  secureConflictDates: ReadonlySet<string> = new Set(),
+): string | null {
   const holidays = ghanaHolidayMapForYear(year, config.eidWindows, extraHolidays);
   const observesEid = (config.eidObservingStaff || []).includes(agentKey);
   const otherConflicts = leaveConflictDatesFromOthers(requests, agentKey);
@@ -113,7 +121,7 @@ export function leaveDatesConflictReason(config: Config, requests: LeaveRequest[
     if (isWeekendIso(d)) return `${d} is a weekend — leave can only be taken Monday to Friday.`;
     const h = holidays.get(d);
     if (h && !(h.isEid && observesEid)) return `${d} is a public holiday (${h.name}).`;
-    if (otherConflicts.has(d)) return `${d} conflicts with a colleague's leave.`;
+    if (otherConflicts.has(d) || secureConflictDates.has(d)) return `${d} conflicts with a colleague's leave.`;
   }
   return null;
 }

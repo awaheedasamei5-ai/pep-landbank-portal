@@ -1801,11 +1801,9 @@ export interface ContractApproval {
   decidedAt: string;
 }
 
-// Real table `leave_requests` (confirmed live). Unusually open SELECT RLS
-// (`auth.uid() IS NOT NULL`, not agent/manager-scoped) -- any signed-in
-// staff member sees every request company-wide, matching index.html's own
-// cross-staff "who's on leave" checks elsewhere in the app. UPDATE is own
-// row OR manager. Deliberately the request/decide subset of a much larger
+// Real table `leave_requests` (confirmed live). Staff rows are owner-scoped
+// by RLS; Management sees the company queue. Keep this domain mapper aligned
+// to the Leave privacy migration. Deliberately the request/decide subset of a much larger
 // real feature: the annual-calendar "planned" (private, not yet sent)
 // stage, emergency-leave, deduct-quota toggle, reschedule flow, and
 // quota-remaining tracking (a whole separate calc engine) are all out of
@@ -1827,6 +1825,7 @@ export interface LeaveRequest {
   // directly onto it, ported here under the same name v1 uses.
   status: 'planned' | 'pending' | 'approved' | 'declined' | 'rescheduled';
   createdAt: string;
+  autoSubmittedAt: string | null;
   decidedAt: string | null;
   decidedBy: string | null;
   decidedByName: string | null;

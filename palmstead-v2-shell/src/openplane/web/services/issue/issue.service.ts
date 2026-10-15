@@ -492,21 +492,17 @@ export class IssueService extends APIService {
   ): Promise<{ staffKey: string; staffName: string }[]> {
     if (staffKeys.length === 0) return [];
     const sb = requireSupabase();
-    const { data, error } = await sb
-      .from("leave_requests")
-      .select("agent_key,agent_name,dates,status")
-      .in("agent_key", staffKeys)
-      .in("status", ["planned", "pending", "approved"]);
-    if (error) throw error;
     const rangeStart = startDate ?? targetDate;
     const rangeEnd = targetDate ?? startDate;
     if (!rangeStart || !rangeEnd) return [];
-    const hits: { staffKey: string; staffName: string }[] = [];
-    (data ?? []).forEach((row: { agent_key: string; agent_name: string; dates: string[] | null; status: string }) => {
-      const overlaps = (row.dates ?? []).some((d) => d >= rangeStart && d <= rangeEnd);
-      if (overlaps) hits.push({ staffKey: row.agent_key, staffName: row.agent_name });
+    const { data, error } = await sb.rpc("get_leave_assignee_conflicts", {
+      p_staff_keys: staffKeys,
+      p_start_date: rangeStart,
+      p_end_date: rangeEnd,
     });
-    return hits;
+    if (error) throw error;
+    const conflictKeys = new Set((data ?? []).map((row: { staff_key: string }) => row.staff_key));
+    return staffKeys.filter((staffKey) => conflictKeys.has(staffKey)).map((staffKey) => ({ staffKey, staffName: staffKey }));
   }
 
   async updateIssueDates(

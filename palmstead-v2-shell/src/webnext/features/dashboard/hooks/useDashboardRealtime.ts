@@ -72,6 +72,7 @@ export function useDashboardRealtime() {
     };
     const invalidateLeave = () => {
       queryClient.invalidateQueries({ queryKey: ['leaveRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['leaveConflictDates'] });
       // useColleagueAvailability.ts (Ops Tracker's My Day assign-task flow)
       // reads leave_requests directly but has its own 5-minute staleTime --
       // without this, a leave request approved on one device wouldn't show

@@ -1,5 +1,7 @@
 # Leave — full-stack build plan (database → security → AI → UI)
 
+> **Superseded for execution:** use [the full audit and rebuild plan](10-leave-app-audit-and-rebuild-plan.md). A live RLS audit found that the old claim below that `leave_requests` visibility was already correct is false; do not reuse the broad authenticated-user policy. This document remains as historical context for earlier work.
+
 **Status: PLAN. Written before any code, per the 2026-10-08 standing instruction
 (memory `feedback-standing-layered-app-build-process-2026-10-08`). Execution
 proceeds in the order this doc lays out. Update the checklist at the bottom

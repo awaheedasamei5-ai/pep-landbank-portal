@@ -26,7 +26,8 @@ import { today } from '../../../shared/lib/format';
 // (same stack: Next.js App Router + shadcn/ui); LeaveRequestsDataTable
 // and LeaveBalanceCard are adapted from that same repo's
 // leave-requests-table.tsx / balance-list.tsx to Palmstead's real data
-// shape (a single pooled annual quota, not multiple leave types). Docs:
+// shape (one company-wide annual-days policy applied separately to each
+// staff member, not multiple leave types). Docs:
 // docs/plans/04-leave-full-app-build-plan.md.
 export function LeaveDashboardScreen() {
   const profile = useSessionStore((s) => s.profile);

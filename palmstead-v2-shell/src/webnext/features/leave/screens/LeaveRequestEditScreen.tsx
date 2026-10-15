@@ -1,5 +1,7 @@
 "use client";
 
+import { leaveErrorMessage } from '../lib/leaveErrors';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,7 +13,7 @@ import { SubmitButton } from '@/components/submit-button';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
-import { useLeaveRequests, useUpdatePlannedLeave } from '../hooks/useLeaveRequests';
+import { useLeaveConflictDates, useLeaveRequests, useSubmitRescheduledLeave, useUpdatePlannedLeave } from '../hooks/useLeaveRequests';
 import { LeaveCalendar } from '../components/LeaveCalendar';
 import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
@@ -28,6 +30,7 @@ export function LeaveRequestEditScreen() {
   const { data: requests } = useLeaveRequests();
   const { data: companyClosures } = useLeaveHolidays();
   const update = useUpdatePlannedLeave();
+  const submitReschedule = useSubmitRescheduledLeave();
 
   const request = (requests ?? []).find((r) => r.id === requestId);
   const agentKey = profile?.key ?? '';
@@ -37,11 +40,13 @@ export function LeaveRequestEditScreen() {
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const conflictQuery = useLeaveConflictDates(year, requestId);
+  const conflictDates = conflictQuery.data ?? [];
 
   useEffect(() => {
     if (request && !initialized) {
-      setSelectedDates(request.dates);
-      const first = request.dates[0];
+      setSelectedDates(request.status === 'rescheduled' ? [] : request.dates);
+      const first = request.status === 'rescheduled' ? undefined : request.dates[0];
       if (first) {
         setYear(new Date(first).getFullYear());
         setMonth(new Date(first).getMonth());
@@ -75,12 +80,28 @@ export function LeaveRequestEditScreen() {
       setError('Pick at least one date.');
       return;
     }
-    const conflict = leaveDatesConflictReason(config, (requests ?? []).filter((r) => r.id !== request.id), selectedDates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year));
-    if (conflict) {
+    if (!request.isEmergency && !conflictQuery.isSuccess) {
+      setError('Team availability could not be checked. Reload Leave and try again before sending these dates.');
+      return;
+    }
+    if (request.status === 'rescheduled' && selectedDates.length !== request.daysCount) {
+      setError(`Choose ${request.daysCount} replacement working day${request.daysCount === 1 ? '' : 's'} to keep the reserved allowance unchanged.`);
+      return;
+    }
+    const conflict = leaveDatesConflictReason(config, (requests ?? []).filter((r) => r.id !== request.id), selectedDates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year), new Set(conflictDates));
+    if (conflict && !request.isEmergency) {
       setError(`${conflict} Please adjust your selection.`);
       return;
     }
-    update.mutate({ id: request.id, dates: selectedDates.slice().sort() }, { onSuccess: () => router.push(`/dashboard/leave/requests/${request.id}`) });
+    const callbacks = {
+      onSuccess: () => router.push(`/dashboard/leave/requests/${request.id}`),
+      onError: (error: unknown) => setError(leaveErrorMessage(error)),
+    };
+    if (request.status === 'rescheduled') {
+      submitReschedule.mutate({ id: request.id, dates: selectedDates }, callbacks);
+    } else {
+      update.mutate({ id: request.id, dates: selectedDates.slice().sort() }, callbacks);
+    }
   }
 
   if (!request) {
@@ -90,7 +111,7 @@ export function LeaveRequestEditScreen() {
       </div>
     );
   }
-  if (request.status !== 'planned') {
+  if (request.status !== 'planned' && request.status !== 'rescheduled') {
     return (
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-2">
@@ -112,7 +133,7 @@ export function LeaveRequestEditScreen() {
           Back
         </Link>
       </Button>
-      <PageHeader title="Edit dates" />
+      <PageHeader title={request.status === 'rescheduled' ? 'Choose replacement dates' : 'Edit planned dates'} description={request.status === 'rescheduled' ? `Choose ${request.daysCount} working day${request.daysCount === 1 ? '' : 's'} to send back to Management for a decision.` : 'Update the dates on your saved plan.'} />
       <Card>
         <CardContent>
           {config && (
@@ -126,11 +147,15 @@ export function LeaveRequestEditScreen() {
               selectedDates={selectedDates}
               onToggleDate={toggleDate}
               companyClosures={companyClosures}
+              secureConflictDates={conflictDates}
+              isEmergency={request.isEmergency}
             />
           )}
+          {conflictQuery.isPending && <p className="mt-2 text-sm text-muted-foreground">Checking team availability…</p>}
+          {conflictQuery.isError && <p role="alert" className="mt-2 text-sm text-destructive">Team availability could not be checked. Reload Leave before sending replacement dates.</p>}
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-          <SubmitButton type="button" className="mt-4" loading={update.isPending} onClick={save}>
-            Save changes
+          <SubmitButton type="button" className="mt-4" disabled={!request.isEmergency && !conflictQuery.isSuccess} loading={update.isPending || submitReschedule.isPending} onClick={save}>
+            {request.status === 'rescheduled' ? 'Send dates to Management' : 'Save changes'}
           </SubmitButton>
         </CardContent>
       </Card>

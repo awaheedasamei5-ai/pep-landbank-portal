@@ -414,7 +414,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                 </div>
                 {leaveConflicts.length > 0 && (
                   <p className="mt-1.5 text-xs text-destructive">
-                    {leaveConflicts.map((c) => c.staffName).join(", ")} {leaveConflicts.length === 1 ? "is" : "are"} on leave during this issue's
+                    {leaveConflicts.map((c) => staff.find((person) => person.agent_key === c.staffKey)?.name ?? c.staffName).join(", ")} {leaveConflicts.length === 1 ? "is" : "are"} on leave during this issue's
                     dates.
                   </p>
                 )}

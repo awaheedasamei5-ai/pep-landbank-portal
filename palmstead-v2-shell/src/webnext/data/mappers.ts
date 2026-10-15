@@ -579,6 +579,7 @@ export function mapLeaveRequestRow(r: Record<string, unknown>): LeaveRequest {
     letterText: (r.letter_text as string) ?? null,
     status: (r.status as LeaveRequest['status']) ?? 'pending',
     createdAt: r.created_at as string,
+    autoSubmittedAt: (r.auto_submitted_at as string) ?? null,
     decidedAt: (r.decided_at as string) ?? null,
     decidedBy: (r.decided_by as string) ?? null,
     decidedByName: (r.decided_by_name as string) ?? null,
