@@ -1,0 +1,157 @@
+# Leave reports: architecture, measures, screens and document specification
+
+Date: 2026-10-15. Status: design and implementation in progress, not a shipped reporting release.
+
+This is the reporting continuation of plan 10, not a replacement for the Leave workflow. Read alongside `12-company-report-coverage-contract.md`. The user's latest instruction requires detailed reports for every app and both roles, including comparisons, insights and deliberately designed PDFs. Existing Operations and Accounting exports are initial implementations that still require the coverage audit in that contract.
+
+## 1. Evidence and decisions
+
+The mandatory repository/history/V1 checks found no complete recoverable Leave reporting implementation. The current app has request and calendar screens, a reminder monitor and request letters; these are not a report system. The V1 business rules remain relevant: discrete selected dates, one annual policy applied independently to each employee, reservations before usage, confirmation after all approved dates pass, and rescheduling without releasing reserved days. The user explicitly confirmed the current annual allowance is 20, changeable once in company settings.
+
+Primary research inspected on this date:
+
+- Frappe [balance summary](https://docs.frappe.io/hr/reports/employee-leave-balance-summary): useful separation of balance views from detailed movements and employee/department/status filters. Palmstead will not import Frappe allocation, expiry or carry-forward assumptions.
+- Frappe [ledger](https://docs.frappe.io/hr/leave-ledger-report): useful distinction between transaction history and current balances. Palmstead cannot label its incomplete legacy status log a complete financial-style ledger.
+- BambooHR [Time Off API](https://documentation.bamboohr.com/reference/time-off): requests and balance history are distinct resources. The current Palmstead schema has requests, not a complete allocation history.
+- BambooHR [HR reporting](https://www.bamboohr.com/hr-software/hr-reporting): role-specific reporting and controlled sharing inform permission boundaries, not a copied feature checklist.
+- Plane [analytics](https://docs.plane.so/core-concepts/analytics): workspace/project/personal scopes inform later Operations expansion. They do not justify exposing other employees to Staff.
+- Actual approved OpenHR source `src/pages/Reports.tsx`, Git blob `231d35b343af228f5cdf4e794c2e4fda23518719`, inspected for filter, export and table implementation. Its start-date-only Leave filter and attendance-specific summary are unsuitable as-is. Adapt the real export projection/table structure with attribution and retain MIT license. Use actual selected dates and Leave-specific measures.
+
+Pinterest search was attempted; the existing referenced pin could not be fetched. Do not claim its contents were inspected. Product documentation and actual source are the verified references. Before visual sign-off inspect real rendered screens/documents, not just search descriptions.
+
+## 2. Database inventory and limits
+
+Verified V2 project only: `sbydzrlzqxcdbudjaube`. Never use the V1 project. `leave_requests` has request ID/reference, owner key/name, year, JSON selected dates, declared day count, status, created/decision timestamps, actor, emergency/exemption flags, usage confirmation, auto-submission and letter/signature fields. Profiles have key/name/role/active/department. Company policy is `app_config.leave_total_days`. Logs have request, actor, from/to status, timestamp and free-text note. Private reminder outbox and Manager health entrypoint already exist.
+
+Observed three requests and one legacy log at discovery. There is no reliable employment start/end history, effective-dated annual allowance ledger, immutable department history, submission timestamp for every legacy request, or complete decision cycle history. This matters: a year comparison can compare dated request activity, but cannot reconstruct what an allowance or department was in a prior year. Current policy must be identified as current policy, even when viewing old requests. No invented accrual, leave liability amount, salary cost, utilization target, medical diagnosis, statutory compliance conclusion or performance score.
+
+Introduce a narrow report snapshot contract before UI. Read-only reporting must not update requests or auto-confirm leave. Existing workflow tables remain authoritative. Add reporting migrations only after isolated checks; no destructive backfill to manufacture history. If long-term allocation history is added, record effective dates and actor prospectively and label the legacy period unknown. It needs its own policy semantics, not an inferred value for every past year.
+
+## 3. Snapshot resource and query completeness
+
+The report resource must supply generation timestamp, viewer scope, current annual allowance, authorized roster, available request years, explicit request projection and completeness metadata. Projection excludes letter text, emergency reason, reschedule free text, signature, phone, email, auth identifiers and provider payloads. A request reference supports a permission-checked drill-through into the existing operational screen when the reader needs the underlying letter.
+
+Use one statement/transaction snapshot where possible, with deterministic order. A bounded server response must state total matched rows and returned rows. Exports are disabled if incomplete; never download the first 1,000 requests and describe them as the company total. If growth exceeds the bound, move to a stable server cursor or server report job. A paginated UI is not permission to paginate the export silently. Staff roster projection contains self only; Management roster includes zero-activity employees and historical owners needed to reconcile records. Inactive employees remain separately identifiable.
+
+Annual data needs the selected year and comparison year together. Period controls operate inside these annual datasets; the balance table always uses the whole selected annual dataset. Filtered request/activity totals must not redefine allowance. Current department is explicitly current metadata, not the employee's department at the request date. Orphaned request owners are retained under their stored identity and flagged rather than dropped by an inner join.
+
+## 4. Security and authorization
+
+Database authorization is mandatory even if the client hides Management controls. Reuse existing owner-scoped request RLS. Staff can obtain only their own request projection and own profile, cannot request another employee key, cannot obtain company aggregates that reveal others, and cannot call reminder-health RPC. Management must be checked against the authenticated active profile, not a URL query, client boolean or supplied role. Anonymous execution is denied. Avoid a new broad SECURITY DEFINER view with raw records.
+
+Prefer an invoker report function if all underlying permissions can be honored; otherwise use a tightly guarded definer with fixed search path, explicit auth/profile validation and explicit allowlisted columns. Staff selector spoofing must fail. No service-role key enters a browser bundle. If logs are exposed, authorize through their request owner and exclude note bodies from analytical datasets. A role change clears relevant cached query keys and invalidates loaded snapshots. A stale Manager snapshot must not appear after signing in as Staff.
+
+PDF/CSV use the already authorized projection, not a second broad query. Filenames use safe date/year/report identifiers, not emergency details. PDFs include 'Personal — private' or 'Management — internal' scope. A report is an informational snapshot, never a signed approval, leave letter or proof of delivery. Saving a report locally does not create public sharing. Scheduled email/report distribution is not enabled merely because a PDF export exists.
+
+## 5. Canonical measures
+
+Annual policy: current company-wide configured days, currently 20, independently applied to each employee. Reserved: sum declared days for the employee/year where status is planned, pending, approved or rescheduled and deduction is enabled. Confirmed used: approved, explicit confirmation present, all valid selected dates before snapshot date, and deduction enabled. Used is a subset of reserved; never subtract it twice. Available: max(0, policy minus reserved). Over-reserved: max(0, reserved minus policy), shown separately instead of hidden by clamping.
+
+Quota-exempt requests/days are separate. Emergency is a workflow flag and does not automatically mean exempt. Approved dates in a reporting window count valid distinct selected employee-dates, not the full start/end interval. Requested days and reserved quota are different measures: a declined request still appears in the request register and activity analysis but does not reserve allowance. Multiple employees on the same date count multiple staff-days for workload; unique company dates are a separate measure.
+
+Invalid dates, duplicate dates, empty selections, cross-year data, unknown statuses and declared-day discrepancies produce visible quality exceptions. Preserve recorded declared counts for reconciliation, identify unreliable records and avoid silently repairing source data in selectors. When a record has invalid dates, date-based usage/coverage is unavailable for that record; show why. Do not call missing confirmation 'absent' or imply unauthorized leave.
+
+## 6. Time and comparison semantics
+
+Business dates use Ghana/Accra calendar dates. Date-only parsing must validate actual Gregorian dates and must not depend on the viewer's timezone. Export timestamps include an explicit zone. Reporting windows are inclusive. Leap years, December/January and non-contiguous selections are covered. A request intersects a period when at least one valid selected date falls inside it; creation-date analysis is a different explicitly named view.
+
+Default comparison is the same selected month range in the previous calendar year using actual date bounds for each year. Annual comparisons use January through December for both years, labelled 'full-year scheduled dates' rather than year-to-date if future plans are included. For year-to-date mode, both periods stop at corresponding month/day and February 29 maps to February 28 in a non-leap comparison year. Avoid comparing a partial current month to a complete prior month without saying so.
+
+Show absolute difference and base counts. Percentage change is unavailable when the previous count is zero; 'new activity' is clearer than infinity or 100%. Staff comparisons are personal prior-period comparisons only. Management can compare employee or department activity but must show the cohort and active/inactive scope. No ranking for taking less leave, no productivity inference from emergencies, no normalization by employment days when employment history is missing. Cross-year request activity is valid even when historical allowance comparison is unavailable.
+
+## 7. Report catalog and route architecture
+
+Staff route family: `/dashboard/leave/reports` with Overview, Requests, Trends, Exceptions/History sections. Management route family: `/dashboard/leave/management/reports` with Overview, Balances, Request register, Coverage, Trends, Exceptions, History and Delivery links. Each section has a stable URL/view identifier; do not recreate a single endlessly scrolling dashboard. The first implementation may share one screen composition with section navigation, while distinct report datasets remain separately defined. Mobile navigation must wrap or scroll within its own region without overflowing the body.
+
+Overview answers 'what is reserved, confirmed, available, and awaiting action?' It includes annual policy context, report period, one primary comparison and a short evidence-backed action list. Balances answers 'who has what allowance position?' with all authorized employees, zero activity included. Requests answers 'which records produce these figures?' Coverage answers 'on which actual dates are staff scheduled?' Trends answers 'how does dated activity change?' Exceptions answers 'what requires review or confirmation?' History answers 'which recorded events can explain changes?' Delivery routes to the secured reminder monitor with its independently stated time basis.
+
+Every analytical value must lead to its contributing rows or disclose that it is a current snapshot. Changing report section keeps validated year/employee/month scope. PDF pack selection is explicit; 'current section' and 'full pack' must not produce indistinguishable filenames. Empty reports remain meaningful statements of zero activity and known scope, not failed exports.
+
+## 8. Annual balances and personal statements
+
+Staff statement starts with identity, selected year, current policy caveat, generated timestamp and annual reconciliation. Show planned, pending, approved and rescheduled quota reservations separately, total reserved, confirmed used, approved past dates awaiting confirmation, available and over-reserved. Include exempt days outside quota totals. Explain why approved future leave reduces availability while not yet being used.
+
+Management balance table includes employee, current department/status, policy, planned/pending/approved/rescheduled reservation components, reserved, confirmed used, available, exempt and quality count. On small screens use an accessible horizontally scrollable table with visible employee context, or concise record panels linking to full detail; do not hide key figures with CSS. Sorting must be deterministic. Filters include employee, current department, active/inactive/all and year. A status filter for the request register must not change the annual balance.
+
+Totals for policy/available are labelled summed employee allowances, not a pooled allowance. A seven-person cohort with 20 each is 140 aggregate days but each person still has 20. For incomplete employment history, current roster policy is a planning snapshot and not a historical employment liability. Historical owners without a current eligible profile show policy unavailable rather than silently receiving an allocation. A zero-day configured allowance is valid and must not default back to 20 through truthiness.
+
+## 9. Request register and supporting detail
+
+Columns: reference, employee where authorized, leave type as stored, current status, selected dates, declared total days, days in period, emergency flag, quota treatment, created timestamp, latest decision timestamp/name, auto-submitted timestamp and usage-confirmed timestamp. Long date lists wrap and remain exact. A compact first/last label may be accompanied by 'N selected dates'; it must not imply all dates between endpoints are leave. Expandable rows or a separate detail route expose exact selected dates.
+
+The register offers current status, emergency, exempt and employee filters plus reference/name search within authorized data. Sorting by earliest selected date, reference, created or latest decision must handle missing dates predictably. Pagination applies to display only; the download states all matched records. Detail links preserve role authorization. Free-text reasons and full letter bodies remain in the operational request/letter view and are excluded from routine bulk reports.
+
+Submission-to-decision duration requires a trustworthy submission event for that cycle. `created_at` can represent an earlier saved plan; do not label create-to-decision as approval turnaround. `decided_at` is only the latest decision, not a full approval history. Register PDFs distinguish these timestamps, leave missing values as 'Not recorded', and explain current-state reporting. A pending amended request remains pending even if it has an old decision timestamp.
+
+## 10. Coverage and overlap reporting
+
+Coverage groups valid selected employee-dates by day, showing approved separately from tentative planned/pending/rescheduled. Management can see named employees, request references, status, emergency and current department; Staff only sees own schedule in their report. Existing anonymous date-only colleague availability remains a calendar function and must not be expanded into named colleague reporting for Staff.
+
+Overlap is an operational signal, not automatically an error: emergency leave can intentionally override colleague collision rules. Separate approved overlap, tentative overlap and emergency overlap. Detect overlap by actual dates, never by the bounding date range. Two requests for the same employee/date are a data-quality duplication rather than two absent staff. Distinct employee count is the headcount exposure, request count is supporting evidence. Do not calculate workforce availability percentages without a known denominator for employees expected to work that day.
+
+Month view can be a compact schedule table with date, confirmed approvals, tentative plans and drill-through. PDF coverage appendix prints only dates with matching activity, with explicit empty-period text; printing 365 empty lines is not useful. Holidays/closures appear as context only when authoritative policy data is available. Reports do not repair the known holiday-maintenance gap or infer that every weekday is an expected workday for every person.
+
+## 11. Trends, comparisons and insights
+
+Monthly series provides selected-date staff-days split by current status, approved scheduled days, confirmed-used dated days, exempt days and request counts. Request counts are distinct requests intersecting the month and may appear in multiple months; annual request count must be deduplicated. The chart and underlying table share selectors. Provide a textual/table alternative and labels rather than color-only interpretation.
+
+Comparison rows show current value, prior comparable period value, absolute difference and valid percentage where meaningful. Data may be sparse: three legacy requests cannot support a predictive forecast, seasonal confidence claim or performance conclusion. Show 'insufficient history for trend interpretation' when appropriate. Management employee comparison is a neutral distribution table, not a best/worst leave taker leaderboard. Department comparisons use current department labels and disclose that historical transfers are unknown.
+
+Deterministic insights are actionable and traceable: pending request whose first date has arrived; approved past leave awaiting confirmation; reserved allowance exceeded; reschedule awaiting dates; valid upcoming auto-submission window; duplicates/malformed dates; missing latest decision evidence; failed/uncertain reminders on the Manager monitor. Each insight states count, basis, timestamp and a link to affected records. Do not use an LLM to determine allowance, decline requests, infer illness or assign staff performance scores.
+
+## 12. Exceptions, audit and notification reliability
+
+Exceptions distinguish normal pending action from source-data errors. Show category, reference, employee where authorized, evidence and next step. Invalid historical data does not disappear from totals without an explicit qualification. A detailed quality appendix lists affected IDs/references and the calculation limitation. Staff sees own actionable exceptions; Management sees company review needs.
+
+History is 'recorded workflow events', not a complete leave ledger until completeness is proven. Logs omit free-text note bodies in analytical exports. Include request, timestamp, actor label, from/to state and provenance. The initial legacy count proves incomplete coverage, so every history export carries a coverage statement. New audit capture improvements require transactional server events and immutable old/new schedule snapshots; a client best-effort log is not sufficient evidence for historical reconstruction.
+
+Reminder reports distinguish queued, sending, provider accepted, failed, uncertain and reviewed outcomes. Provider accepted is not handset delivered. Existing monitor totals are all-time and attention rows are bounded; do not merge them into period-filtered report totals without a proper period resource. Report link and scope description are valid initial integration; period-matched delivery analytics require a separate narrow Manager RPC. Phone numbers remain masked and message bodies remain private. Failed retry is an operational action outside the read-only report.
+
+## 13. PDF document architecture
+
+Use existing jsPDF and autoTable, dynamically imported at export, with real provided logo preserving aspect ratio. Adapt OpenHR's actual projection-to-export and table flow; retain MIT notice and record changes. Improve on its mixed attendance summary and start-date filter. Do not use a screenshot of the web page as the report. Build from the same typed authorized snapshot used by selectors.
+
+Personal statement: portrait A4. Company pack: landscape A4 for wide reconciliation/register tables, with an intentional opening summary. Header hierarchy: company mark/name, report title, confidentiality scope; below it year/window, employee/cohort, policy basis and generated date. A slim accent rule is sufficient. Readable body text at approximately 9–11pt, compact tables no smaller than 8pt without a dedicated wide layout. White background, strong grayscale contrast, no decorative gradients or generic KPI card mosaic.
+
+Every page has short running report title, scope, page X of Y and generation/reference footer. Reserve top/bottom margins so table continuation cannot cover headers/footers. Repeat column headers; wrap names/dates; keep totals with table context; allow a long row to flow safely. Never clip details with ellipses in final PDF. Currency-free Leave reports avoid financial liability language. Omit approval signatures entirely: these are reports, not authorization letters. PDF metadata title/subject distinguish personal/company reports without confidential reason text.
+
+## 14. PDF pack contents and export controls
+
+Full pack order: scope and reconciliation; employee balances; request register; monthly comparison; actual-date coverage; exceptions; recorded history and definitions, with only authorized/implemented sections selected. A contents list identifies included sections and limitations. Each section states its unit and date basis. Status/type/emergency/exemption filters appear in the document, including 'All' values when relevant. Annual balances expressly ignore narrow activity-window/status filters.
+
+Full detail register includes exact selected dates, not just a compact date range. Long histories move to an appendix with repeated headers. Current-policy historical-year caveat appears beside balances, not hidden at the final page. Missing historical allocations, incomplete workflow history and unsupported delivery evidence must be clearly marked. Empty sections say 'No matching records' and preserve definitions. A report generated from incomplete fetches must fail visibly rather than create a misleading file.
+
+CSV exports offer the same detail projection, UTF-8 BOM, CRLF rows, correct quote/newline escaping and spreadsheet formula neutralization for text beginning with formula/control prefixes. Use Blob/object URL with cleanup. Dates remain ISO for reliable interchange. Never export signatures, full phones, emergency narrative or auth IDs. Filtered filenames are safe and informative. Export busy/error states prevent repeated clicks and offer a retry; do not show success before the PDF is actually generated.
+
+## 15. Testing and visual acceptance
+
+Pure selector fixtures: 20/changed/zero allowance; all five statuses; same-day multiple employees; same employee duplicate dates; same-length reschedule; exempt/emergency combinations; non-contiguous cross-month dates; invalid dates including February 30; leap day; unsorted dates; future usage confirmation; no confirmation; unknown status; zero-activity roster; inactive/orphan owners; prior-year zero denominator; locale/timezone boundaries. Verify annual totals reconcile independently of period and status filters. Verify all filtered dates are inclusive and chart/register/export totals share one selector.
+
+Database tests: anonymous denied; Staff only self; Staff spoofing rejected; Manager complete authorized scope; inactive identity behavior; explicit projection excludes private columns; caps/completeness; deterministic order; malformed JSON tolerance; logs authorized through owner. Isolated PostgreSQL first, real transactional read/integration checks next. No real SMS during reporting QA. UI tests with supplied Staff/Management accounts, deep links, role switches, filters, no data, errors and stale-cache behavior. Mobile 390px plus desktop and dark theme; keyboard labels/focus and horizontal overflow checks.
+
+PDF fixtures use synthetic records and the real logo: empty personal; populated personal; company pack; long names; 100+ records; all statuses; long date selections; exceptions; multi-page tables and missing history. Run text/numeric assertions, render every page with Poppler, inspect actual page images at readable resolution and correct layout failures. Check header/footer clearance, repeated headings, totals, date lists, page count and no unexpected blank pages. Download through the browser too; a server-side fixture alone does not verify export interaction.
+
+## 16. Implementation order and release ledger
+
+1. Complete research/provenance and this design, then persist cross-app coverage contract.
+2. Implement typed report dataset, pure date/aggregation/quality rules and adversarial fixture checks. This is calculation groundwork, not a shipped UI.
+3. Add guarded snapshot SQL after isolated authorization checks; validate real V2 reads against operational counts. No mutation of existing leave records.
+4. Add Staff/Management report routes, section navigation, filter states, contribution details and role-aware links. Reuse inspected shell components unchanged.
+5. Add designed PDF/CSV exports and synthetic visual QA. Record exact fixtures, pages and limitations.
+6. Test both roles in browser against real current data, production build/typecheck, publish a verified `rebuild` slice, read deployment instructions in full, deploy V2, hard-refresh both roles and exercise downloads.
+7. Audit coverage against every family in this plan. Any remaining item is explicitly partial/not started; no 'complete Leave reports' claim based only on Overview.
+8. Proceed to Attendance reports with its own V1/schema/OSS/research/blueprint. Expand existing Operations and Accounting reports against the company contract in a documented sequence, then integrate remaining apps as their underlying workflows are built.
+
+Approval to build/test/deploy already exists in the conversation. This plan does not introduce a new approval gate. Source data, SMS delivery, historical completeness and legal policy uncertainty must be reported accurately, but routine implementation should continue autonomously.
+
+## Implementation evidence — first report release candidate
+
+- Typed projection and pure selectors implemented, with annual reconciliation independent of activity filters, exact-date overlap, prior-year monthly comparison, exceptions and safe CSV.
+- `get_leave_report_snapshot(integer)` installed in V2 after isolated checks. SECURITY INVOKER, anonymous execution revoked, active authenticated profile required, owner RLS retained, explicit private-field exclusions, bounded complete-response metadata.
+- Isolated PostgreSQL suite: 38 checks including existing Leave security/workflow checks and new report access tests. This is not handset/SMS delivery testing.
+- Real V2 read checks: Adams gets two own requests, one-person roster, zero other-staff rows; Management gets three requests and eight current roster entries, current policy 20. Complete response flags true. No real records changed for reporting QA.
+- Separate Staff/Management routes with seven sections, explicit filters, current snapshot timestamp, PDF/CSV actions, zero-activity employees, exact date lists and quality warnings. Browser-tested company/own balances and Staff request navigation; employee filter selects Adams' 4 reserved / 16 available.
+- Synthetic PDFs: 22-page company pack (90 current-year records from 105 source fixtures), four-page personal statement, three-page empty statement. All 29 page layouts inspected in rendered contact sheets; representative pages inspected at reading size. Exact references, section presence and every page number checked by text assertions. Real browser downloads: Management six pages, Staff four pages; Staff download checked for known colleague-name exclusion and rendered for inspection.
+- Mobile 390px viewport check: no horizontal page overflow; wide table scroll is local. Dark theme checked. Standalone full typecheck and initial production build passed; final source refinements still require the final build/live deployment verification before shipping.
+
+Still partial: department/emergency/exemption report filters; configurable section-specific exports; prospectively complete event/schedule/policy history; verified cycle-level turnaround; charts and richer deterministic explanations; report drill-through links; complete create/submit/confirm timestamps in the printable register; saved URL filter scopes; period-scoped reminder analytics. Current report links to the existing all-time monitor instead of misrepresenting that data as period-filtered. Attendance and other app reporting implementation has not started in this release. Do not mark this entire plan or the company-wide reporting contract complete.

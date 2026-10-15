@@ -78,6 +78,9 @@ export function LeaveDashboardScreen() {
         description={`Your ${thisYear} leave at a glance`}
         action={
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/dashboard/leave/reports">My reports</Link>
+            </Button>
             {isManager && (
               <Button asChild variant="outline">
                 <Link href="/dashboard/leave/management">Management</Link>

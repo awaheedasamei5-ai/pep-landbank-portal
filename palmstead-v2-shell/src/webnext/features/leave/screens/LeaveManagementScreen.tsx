@@ -72,6 +72,9 @@ export function LeaveManagementScreen() {
         action={
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
+              <Link href="/dashboard/leave/management/reports">Reports</Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/dashboard/leave/management/requests">Company-wide requests</Link>
             </Button>
             <Button asChild variant="outline">
