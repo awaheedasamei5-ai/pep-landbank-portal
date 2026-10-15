@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download, RefreshCw } from "lucide-react";
@@ -8,13 +10,26 @@ import { requireSupabase } from "@/lib/supabase.client";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { reportSectionCsv } from "./leaveReportExports";
 import { useSessionStore } from "../../../auth/useSessionStore";
-import { buildLeaveReport, leaveReportCsv, type LeaveReportSnapshot, type ReportFilters } from "./leaveReport";
+import {
+  buildLeaveReport,
+  type LeaveReportSnapshot,
+  type ReportFilters,
+  type ReportQuery,
+  type ReportSection,
+  parseReportFilters,
+  leaveReportUrl,
+} from "./leaveReport";
+
+const LeaveReportCharts = dynamic(() => import("./LeaveReportCharts"), {
+  loading: () => <p className="py-8 text-muted-foreground text-sm">Preparing chart…</p>,
+});
 
 const sections = ["overview", "balances", "requests", "coverage", "trends", "exceptions", "history"] as const;
 const months = Array.from({ length: 12 }, (_, index) => ({
@@ -22,7 +37,15 @@ const months = Array.from({ length: 12 }, (_, index) => ({
   label: new Date(Date.UTC(2026, index, 1)).toLocaleString("en-GB", { month: "short", timeZone: "UTC" }),
 }));
 const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
-function ReportTable({ headers, rows }: { headers: string[]; rows: (string | number | null)[][] }) {
+function ReportTable({
+  headers,
+  rows,
+  rowLinks,
+}: {
+  headers: string[];
+  rows: (string | number | null)[][];
+  rowLinks?: string[];
+}) {
   return rows.length ? (
     <Table>
       <TableHeader>
@@ -33,11 +56,17 @@ function ReportTable({ headers, rows }: { headers: string[]; rows: (string | num
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <TableRow key={row.join("|")}>
             {row.map((value, cell) => (
               <TableCell key={headers[cell]} className="max-w-80 whitespace-normal align-top">
-                {value ?? "Not recorded"}
+                {cell === 0 && rowLinks?.[index] ? (
+                  <Link className="font-medium underline underline-offset-4" href={rowLinks[index]}>
+                    {value ?? "Open request"}
+                  </Link>
+                ) : (
+                  (value ?? "Not recorded")
+                )}
               </TableCell>
             ))}
           </TableRow>
@@ -90,17 +119,36 @@ function saveBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function LeaveReportsScreen({ management = false, view = "overview" }: { management?: boolean; view?: string }) {
+export function LeaveReportsScreen({
+  management = false,
+  view = "overview",
+  queryParams = {},
+}: {
+  management?: boolean;
+  view?: string;
+  queryParams?: ReportQuery;
+}) {
   const profile = useSessionStore((state) => state.profile);
   const currentYear = new Date().getUTCFullYear();
-  const [filters, setFilters] = useState<ReportFilters>({
-    year: currentYear,
-    fromMonth: 1,
-    toMonth: 12,
-    employee: "all",
-    status: "all",
-    cohort: "all",
-  });
+  const filters = useMemo(
+    () => parseReportFilters(queryParams, currentYear, management),
+    [queryParams, currentYear, management],
+  );
+  const router = useRouter();
+  const [changingScope, startScopeChange] = useTransition();
+  const setFilters = (change: (previous: ReportFilters) => ReportFilters) => {
+    startScopeChange(() =>
+      router.replace(
+        leaveReportUrl(
+          management ? "/dashboard/leave/management/reports" : "/dashboard/leave/reports",
+          change(filters),
+          view,
+        ),
+        { scroll: false },
+      ),
+    );
+  };
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const permitted = !!profile && (!management || profile.role === "manager");
@@ -148,7 +196,7 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
   const pageCount = Math.max(1, Math.ceil(searched.length / 25));
   const currentPage = Math.min(page, pageCount - 1);
   const visible = searched.slice(currentPage * 25, (currentPage + 1) * 25);
-  async function downloadPdf() {
+  async function downloadPdf(exportSection: "full" | ReportSection = "full") {
     if (!report) return;
     setExporting(true);
     setExportError("");
@@ -163,8 +211,8 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
         reader.onerror = () => reject(new Error("Logo could not be read."));
         reader.readAsDataURL(blob);
       });
-      createLeaveReportPdf(report, logo).save(
-        `leave-${management ? "company" : "personal"}-${filters.year}-full-pack.pdf`,
+      createLeaveReportPdf(report, logo, exportSection).save(
+        `leave-${management ? "company" : "personal"}-${filters.year}-${String(filters.fromMonth).padStart(2, "0")}-${String(filters.toMonth).padStart(2, "0")}-${exportSection}.pdf`,
       );
     } catch (error) {
       setExportError(error instanceof Error ? error.message : "The PDF could not be generated.");
@@ -203,22 +251,29 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                 <RefreshCw />
                 Refresh
               </Button>
-              <Button disabled={!report || exporting} onClick={downloadPdf}>
+              <Button disabled={!report || exporting || changingScope} onClick={() => downloadPdf()}>
                 <Download />
                 {exporting ? "Preparing PDF…" : "Download full PDF pack"}
               </Button>
               <Button
                 variant="outline"
-                disabled={!report}
+                disabled={!report || changingScope}
                 onClick={() =>
                   report &&
                   saveBlob(
-                    new Blob([leaveReportCsv(report)], { type: "text/csv;charset=utf-8" }),
-                    `leave-requests-${filters.year}.csv`,
+                    new Blob([reportSectionCsv(report, selected as ReportSection)], { type: "text/csv;charset=utf-8" }),
+                    `leave-${selected}-${filters.year}-${filters.fromMonth}-${filters.toMonth}.csv`,
                   )
                 }
               >
-                Request CSV
+                Current section CSV
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!report || exporting || changingScope}
+                onClick={() => downloadPdf(selected as ReportSection)}
+              >
+                Current section PDF
               </Button>
             </div>
           }
@@ -227,7 +282,10 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
       <nav aria-label="Leave report sections" className="flex flex-wrap gap-1 border-b pb-3">
         {sections.map((section) => (
           <Button key={section} asChild size="sm" variant={selected === section ? "secondary" : "ghost"}>
-            <Link href={`${base}?view=${section}`} aria-current={selected === section ? "page" : undefined}>
+            <Link
+              href={leaveReportUrl(base, filters, section)}
+              aria-current={selected === section ? "page" : undefined}
+            >
               {label(section)}
             </Link>
           </Button>
@@ -236,80 +294,174 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
       <Card>
         <CardHeader>
           <CardTitle>Report scope</CardTitle>
+          <CardAction>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-expanded={filtersOpen}
+              aria-controls="leave-report-filter-controls"
+              onClick={() => setFiltersOpen((previous) => !previous)}
+            >
+              {filtersOpen ? "Hide filters" : "Edit filters"}
+            </Button>
+          </CardAction>
           <CardDescription>
-            Annual balances always cover the full selected year. Month and status filters apply to activity tables and
-            comparisons.
+            Annual balances always cover the full selected year. Month, status, emergency and quota filters apply to
+            activity tables and comparisons. Annual balances, exceptions and history retain the full-year
+            employee/department cohort.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <Picker
-            id="leave-report-year"
-            title="Year"
-            value={String(filters.year)}
-            onChange={(value) => update("year", Number(value))}
-            options={[
-              ...new Set([currentYear + 1, currentYear, currentYear - 1, ...(query.data?.availableYears ?? [])]),
-            ]
-              .sort((a, b) => b - a)
-              .map((year) => ({ value: String(year), label: String(year) }))}
-          />
-          <Picker
-            id="leave-report-from"
-            title="From month"
-            value={String(filters.fromMonth)}
-            onChange={(value) =>
-              setFilters((previous) => ({
-                ...previous,
-                fromMonth: Number(value),
-                toMonth: Math.max(Number(value), previous.toMonth),
-              }))
-            }
-            options={months.map((month) => ({ value: String(month.value), label: month.label }))}
-          />
-          <Picker
-            id="leave-report-to"
-            title="To month"
-            value={String(filters.toMonth)}
-            onChange={(value) =>
-              setFilters((previous) => ({
-                ...previous,
-                toMonth: Number(value),
-                fromMonth: Math.min(Number(value), previous.fromMonth),
-              }))
-            }
-            options={months.map((month) => ({ value: String(month.value), label: month.label }))}
-          />
-          {management && (
-            <>
+        <CardContent>
+          <p className="mb-3 text-muted-foreground text-sm">
+            {filters.year} · months {filters.fromMonth}–{filters.toMonth} ·{" "}
+            {management
+              ? filters.employee === "all"
+                ? "All authorized employees"
+                : (query.data?.roster.find((person) => person.key === filters.employee)?.name ?? filters.employee)
+              : "Your own records"}{" "}
+            · status {filters.status} · emergency {filters.emergency ?? "all"} · quota {filters.quota ?? "all"} ·{" "}
+            {filters.comparisonMode === "previous_period" ? "Previous equal month period" : "Same months last year"}
+          </p>
+          <div id="leave-report-filter-controls" hidden={!filtersOpen}>
+            <fieldset
+              disabled={changingScope}
+              aria-busy={changingScope}
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+            >
               <Picker
-                id="leave-report-employee"
-                title="Employee"
-                value={filters.employee}
-                onChange={(value) => update("employee", value)}
+                id="leave-report-year"
+                title="Year"
+                value={String(filters.year)}
+                onChange={(value) => update("year", Number(value))}
                 options={[
-                  { value: "all", label: "All authorized employees" },
-                  ...(query.data?.roster ?? []).map((person) => ({ value: person.key, label: person.name })),
+                  ...new Set([
+                    filters.year,
+                    currentYear + 1,
+                    currentYear,
+                    currentYear - 1,
+                    ...(query.data?.availableYears ?? []),
+                  ]),
+                ]
+                  .sort((a, b) => b - a)
+                  .map((year) => ({ value: String(year), label: String(year) }))}
+              />
+              <Picker
+                id="leave-report-from"
+                title="From month"
+                value={String(filters.fromMonth)}
+                onChange={(value) =>
+                  setFilters((previous) => ({
+                    ...previous,
+                    fromMonth: Number(value),
+                    toMonth: Math.max(Number(value), previous.toMonth),
+                  }))
+                }
+                options={months.map((month) => ({ value: String(month.value), label: month.label }))}
+              />
+              <Picker
+                id="leave-report-to"
+                title="To month"
+                value={String(filters.toMonth)}
+                onChange={(value) =>
+                  setFilters((previous) => ({
+                    ...previous,
+                    toMonth: Number(value),
+                    fromMonth: Math.min(Number(value), previous.fromMonth),
+                  }))
+                }
+                options={months.map((month) => ({ value: String(month.value), label: month.label }))}
+              />
+              {management && (
+                <>
+                  <Picker
+                    id="leave-report-employee"
+                    title="Employee"
+                    value={filters.employee}
+                    onChange={(value) => update("employee", value)}
+                    options={[
+                      { value: "all", label: "All authorized employees" },
+                      ...(query.data?.roster ?? []).map((person) => ({ value: person.key, label: person.name })),
+                    ]}
+                  />
+                  <Picker
+                    id="leave-report-cohort"
+                    title="Employee status"
+                    value={filters.cohort}
+                    onChange={(value) => update("cohort", value as ReportFilters["cohort"])}
+                    options={["all", "active", "inactive"].map((value) => ({ value, label: label(value) }))}
+                  />
+                </>
+              )}
+              {management && (
+                <Picker
+                  id="leave-report-department"
+                  title="Current department"
+                  value={filters.department ?? "all"}
+                  onChange={(value) => update("department", value)}
+                  options={[
+                    { value: "all", label: "All departments" },
+                    { value: "missing", label: "Not recorded" },
+                    ...[
+                      ...new Set(
+                        (query.data?.roster ?? [])
+                          .map((person) => person.department)
+                          .filter((value): value is string => !!value),
+                      ),
+                    ]
+                      .sort()
+                      .map((value) => ({ value: `department:${value}`, label: value })),
+                  ]}
+                />
+              )}
+              <Picker
+                id="leave-report-emergency"
+                title="Emergency activity"
+                value={filters.emergency ?? "all"}
+                onChange={(value) => update("emergency", value as ReportFilters["emergency"])}
+                options={[
+                  { value: "all", label: "All requests" },
+                  { value: "yes", label: "Emergency only" },
+                  { value: "no", label: "Standard only" },
                 ]}
               />
               <Picker
-                id="leave-report-cohort"
-                title="Employee status"
-                value={filters.cohort}
-                onChange={(value) => update("cohort", value as ReportFilters["cohort"])}
-                options={["all", "active", "inactive"].map((value) => ({ value, label: label(value) }))}
+                id="leave-report-quota"
+                title="Quota activity"
+                value={filters.quota ?? "all"}
+                onChange={(value) => update("quota", value as ReportFilters["quota"])}
+                options={[
+                  { value: "all", label: "All quota treatments" },
+                  { value: "deducting", label: "Deducting only" },
+                  { value: "exempt", label: "Exempt only" },
+                ]}
               />
-            </>
+              <Picker
+                id="leave-report-compare"
+                title="Compare with"
+                value={filters.comparisonMode ?? "previous_year"}
+                onChange={(value) => update("comparisonMode", value as ReportFilters["comparisonMode"])}
+                options={[
+                  { value: "previous_year", label: "Same months last year" },
+                  { value: "previous_period", label: "Previous equal month period" },
+                ]}
+              />
+              <Picker
+                id="leave-report-status"
+                title="Activity status"
+                value={filters.status}
+                onChange={(value) => update("status", value)}
+                options={["all", "planned", "pending", "approved", "declined", "rescheduled"].map((value) => ({
+                  value,
+                  label: label(value),
+                }))}
+              />
+            </fieldset>
+          </div>
+          {changingScope && (
+            <p className="mt-3 text-muted-foreground text-sm" role="status">
+              Updating report scope…
+            </p>
           )}
-          <Picker
-            id="leave-report-status"
-            title="Activity status"
-            value={filters.status}
-            onChange={(value) => update("status", value)}
-            options={["all", "planned", "pending", "approved", "declined", "rescheduled"].map((value) => ({
-              value,
-              label: label(value),
-            }))}
-          />
         </CardContent>
       </Card>
       {(query.isError || result.error || exportError) && (
@@ -333,11 +485,14 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
             <CardHeader>
               <CardTitle>{label(selected)}</CardTitle>
               <CardDescription>
-                {selected === "overview"
-                  ? "A reconciled annual position, followed by evidence that needs review."
-                  : selected === "history"
-                    ? "Available recorded events only. Legacy history is incomplete; private note bodies are excluded."
-                    : "The PDF pack contains every report section. Request CSV contains all activity-filtered requests; the table search below is for browsing only."}
+                {(
+                  {
+                    overview: "A reconciled annual position, followed by evidence that needs review.",
+                    history:
+                      "Available recorded events only. Legacy history is incomplete; private note bodies are excluded.",
+                  } as Record<string, string>
+                )[selected] ??
+                  "Export the full PDF pack or just this section as PDF/CSV. Exports use the selected report filters; table search is for browsing only. Annual sections retain the full-year employee/department cohort."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -358,18 +513,31 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                     />
                     <p className="mt-4 text-sm">
                       Approved scheduled employee-dates: <strong>{report.approvedComparison.current}</strong>, compared
-                      with {report.approvedComparison.previous} in the same month range of {filters.year - 1} (
+                      with {report.approvedComparison.previous} in {report.prior.start} to {report.prior.end} (
                       {report.approvedComparison.difference >= 0 ? "+" : ""}
                       {report.approvedComparison.difference} days).
                     </p>
                   </div>
                   <div className="space-y-3 border-l pl-4">
-                    <h3 className="font-medium">Review actions</h3>
+                    <h3 className="font-medium">Insights and review actions</h3>
+                    <ul className="space-y-4">
+                      {report.insights.map((insight) => (
+                        <li key={insight.key}>
+                          <Link
+                            className="font-medium text-sm underline underline-offset-4"
+                            href={leaveReportUrl(base, filters, insight.section)}
+                          >
+                            {insight.title}
+                          </Link>
+                          <p className="mt-1 text-muted-foreground text-xs">{insight.detail}</p>
+                        </li>
+                      ))}
+                    </ul>
                     <p className="text-sm">
                       {report.exceptions.length} annual review items · {report.qualityCount} records with data issues.
                     </p>
                     <Button asChild variant="outline">
-                      <Link href={`${base}?view=exceptions`}>Review contributing records</Link>
+                      <Link href={leaveReportUrl(base, filters, "exceptions")}>Review contributing records</Link>
                     </Button>
                     {management && (
                       <Button asChild variant="outline">
@@ -427,6 +595,7 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                     />
                   </div>
                   <ReportTable
+                    rowLinks={visible.map((row) => `/dashboard/leave/requests/${row.id}`)}
                     headers={[
                       "Reference / employee",
                       "Status",
@@ -436,6 +605,9 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                       "Quota",
                       "Emergency",
                       "Latest decision",
+                      "Created",
+                      "Auto submitted",
+                      "Usage confirmed",
                     ]}
                     rows={visible.map((row) => [
                       `${row.requestNo ?? row.id} / ${row.agentName}`,
@@ -446,6 +618,9 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                       row.deductQuota === false ? "Exempt" : "Deducting",
                       row.isEmergency ? "Yes" : "No",
                       row.decidedAt,
+                      row.createdAt,
+                      row.autoSubmittedAt,
+                      row.usedConfirmedAt,
                     ])}
                   />
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
@@ -487,14 +662,24 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
               )}
               {selected === "trends" && (
                 <>
+                  <LeaveReportCharts report={report} />
                   <p className="mb-4 text-muted-foreground text-sm">
-                    Approved scheduled employee-dates; current status, same complete month range in each year. Future
-                    dates may be included. No percentage is shown without a prior-year base.
+                    {report.comparisonLabel}: {report.prior.start} to {report.prior.end}. Approved scheduled
+                    employee-dates use current statuses. Future dates may be included. No percentage is shown without a
+                    comparison base.
                   </p>
                   <ReportTable
-                    headers={["Month", String(filters.year), String(filters.year - 1), "Change (days)", "Change (%)"]}
+                    headers={[
+                      "Current month",
+                      "Comparison month",
+                      "Current days",
+                      "Comparison days",
+                      "Change (days)",
+                      "Change (%)",
+                    ]}
                     rows={report.months.map((row) => [
-                      months[row.month - 1].label,
+                      `${filters.year}-${String(row.month).padStart(2, "0")}`,
+                      row.previousMonth,
                       row.current,
                       row.previous,
                       row.difference,
@@ -505,6 +690,7 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
               )}
               {selected === "exceptions" && (
                 <ReportTable
+                  rowLinks={report.exceptions.map((row) => `/dashboard/leave/requests/${row.requestId}`)}
                   headers={["Reference", "Employee", "Review item"]}
                   rows={report.exceptions.map((row) => [row.reference, row.employee, row.message])}
                 />
@@ -518,6 +704,7 @@ export function LeaveReportsScreen({ management = false, view = "overview" }: { 
                     This does not establish a complete historical ledger.
                   </p>
                   <ReportTable
+                    rowLinks={report.events.map((row) => `/dashboard/leave/requests/${row.requestId}`)}
                     headers={["Request", "Timestamp", "Actor key", "From", "To"]}
                     rows={report.events.map((event) => [
                       report.snapshot.requests.find((request) => request.id === event.requestId)?.requestNo ??

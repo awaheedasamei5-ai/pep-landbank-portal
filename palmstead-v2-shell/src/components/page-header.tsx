@@ -11,11 +11,11 @@ interface PageHeaderProps {
 export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      <div className="min-w-0 flex-1 basis-64">
+        <h1 className="font-heading font-semibold text-2xl tracking-tight">{title}</h1>
+        {description && <p className="mt-1 text-muted-foreground text-sm">{description}</p>}
       </div>
-      {action}
+      {action && <div className="min-w-0 max-w-full shrink-0">{action}</div>}
     </div>
   );
 }

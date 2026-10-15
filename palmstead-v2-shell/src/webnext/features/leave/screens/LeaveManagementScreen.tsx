@@ -212,8 +212,8 @@ function PendingRequestRow({ request }: { request: LeaveRequest }) {
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 rounded-lg border p-4">
-      <div className="min-w-56 flex-1">
-        <div className="flex items-center gap-2 font-medium">
+      <div className="min-w-0 basis-56 flex-1">
+        <div className="flex flex-wrap items-center gap-2 break-words font-medium">
           {request.agentName}
           {request.autoSubmittedAt && <Badge variant="secondary">Sent from leave plan</Badge>}
           {request.isEmergency && <Badge variant="destructive">Emergency</Badge>}

@@ -55,16 +55,16 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
               "[html[data-navbar-style=sticky]_&]:sticky [html[data-navbar-style=sticky]_&]:top-0 [html[data-navbar-style=sticky]_&]:z-50 [html[data-navbar-style=sticky]_&]:overflow-hidden [html[data-navbar-style=sticky]_&]:rounded-t-[inherit] [html[data-navbar-style=sticky]_&]:bg-background/50 [html[data-navbar-style=sticky]_&]:backdrop-blur-md",
             )}
           >
-            <div className="flex w-full items-center justify-between px-4 lg:px-6">
+            <div className="flex w-full min-w-0 items-center justify-between px-3 sm:px-4 lg:px-6">
               <div className="flex items-center gap-1 lg:gap-2">
                 <SidebarTrigger className="-ml-1" />
                 <Separator
                   orientation="vertical"
-                  className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center"
+                  className="mx-2 hidden data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center sm:block"
                 />
                 <SearchDialog />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                 <AnnouncementsBell />
                 <LayoutControls />
                 <ThemeSwitcher />
@@ -79,7 +79,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
                 tokens -- scoped here (not globally) so this shell's own
                 Home dashboard/sidebar chrome keeps its existing Tailwind
                 look. See app/layout.tsx's tokens.css import. */}
-            <div className="webnext-theme">
+            <div className="webnext-theme dashboard-workspace">
               <PageTransition>{children}</PageTransition>
             </div>
           </div>

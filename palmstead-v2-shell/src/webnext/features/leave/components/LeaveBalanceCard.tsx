@@ -21,7 +21,7 @@ export function LeaveBalanceCard({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>Annual leave balance</CardTitle>
           <Badge variant="outline">{total} DAYS / YEAR</Badge>
         </div>
@@ -36,7 +36,7 @@ export function LeaveBalanceCard({
             <div className="h-full rounded-full bg-primary" style={{ width: `${usedPercent}%` }} />
           </div>
         )}
-        <div className="flex gap-4 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
           <span>Reserved: {reserved}</span>
           <span>Confirmed used: {confirmedUsed}</span>
         </div>

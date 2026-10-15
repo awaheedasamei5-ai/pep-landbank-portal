@@ -38,9 +38,9 @@ export function LeaveRequestsDataTable({ requests, showAgent = false, actionSlot
             const label = showAgent ? request.agentName : request.requestNo ?? "Leave request";
             return (
               <div key={request.id} className="grid gap-3 rounded-lg border p-4">
-                <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:justify-between">
                   <div className="min-w-0">
-                    <Link href={`/dashboard/leave/requests/${request.id}`} className="font-medium hover:underline">
+                    <Link href={`/dashboard/leave/requests/${request.id}`} className="break-words font-medium hover:underline">
                       {label}
                     </Link>
                     {request.isEmergency && <Badge variant="destructive" className="ml-2">Emergency</Badge>}
@@ -51,9 +51,9 @@ export function LeaveRequestsDataTable({ requests, showAgent = false, actionSlot
                   </div>
                   <StatusBadge status={request.status} />
                 </div>
-                <div className="flex items-center justify-between gap-3 border-t pt-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm">
                   <span className="text-muted-foreground">{request.daysCount} working day{request.daysCount === 1 ? "" : "s"}</span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1">
                     {actionSlot?.(request)}
                     {!hasActions && (
                       <Button asChild variant="outline" size="sm">

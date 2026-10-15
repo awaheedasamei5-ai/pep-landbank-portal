@@ -12,11 +12,11 @@ export function StatCard({ label, value, icon: Icon }: StatCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
+        <CardTitle className="text-muted-foreground text-sm">{label}</CardTitle>
       </CardHeader>
       <CardContent className="flex items-center gap-2">
-        <span className="font-heading text-3xl font-semibold">{value}</span>
-        {Icon && <Icon className="ml-auto size-5 text-muted-foreground" />}
+        <span className="min-w-0 break-words font-heading font-semibold text-3xl tabular-nums">{value}</span>
+        {Icon && <Icon className="ml-auto size-5 shrink-0 text-muted-foreground" />}
       </CardContent>
     </Card>
   );

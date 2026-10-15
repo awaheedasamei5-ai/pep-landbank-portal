@@ -155,12 +155,13 @@ export function SearchDialog() {
     <>
       <Button
         onClick={() => handleOpenChange(true)}
+        aria-label="Search"
         variant="link"
-        className="px-0! font-normal text-muted-foreground hover:no-underline"
+        className="size-8 px-0! font-normal text-muted-foreground hover:no-underline sm:w-auto"
       >
         <Search data-icon="inline-start" />
-        Search
-        <kbd className="inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-medium text-[10px]">
+        <span className="hidden sm:inline">Search</span>
+        <kbd className="hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-medium text-[10px] sm:inline-flex">
           <span className="text-xs">⌘</span>J
         </kbd>
       </Button>
@@ -183,7 +184,7 @@ export function SearchDialog() {
                     >
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate font-medium">{lead.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{lead.contact}</span>
+                        <span className="truncate text-muted-foreground text-xs">{lead.contact}</span>
                       </span>
                     </CommandItem>
                   ))}

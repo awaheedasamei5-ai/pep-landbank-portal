@@ -55,6 +55,61 @@ export interface ReportFilters {
   employee: string;
   status: string;
   cohort: "active" | "inactive" | "all";
+  department?: string;
+  emergency?: "all" | "yes" | "no";
+  quota?: "all" | "deducting" | "exempt";
+  comparisonMode?: "previous_year" | "previous_period";
+}
+
+export type ReportQuery = Record<string, string | string[] | undefined>;
+export const reportSections = [
+  "overview",
+  "balances",
+  "requests",
+  "coverage",
+  "trends",
+  "exceptions",
+  "history",
+] as const;
+export type ReportSection = (typeof reportSections)[number];
+export function parseReportFilters(query: ReportQuery, currentYear: number, management: boolean): ReportFilters {
+  const one = (key: string) => (typeof query[key] === "string" ? String(query[key]) : "");
+  const integer = (key: string, fallback: number, min: number, max: number) => {
+    const value = one(key);
+    return /^\d+$/.test(value) && Number(value) >= min && Number(value) <= max ? Number(value) : fallback;
+  };
+  const fromMonth = integer("from", 1, 1, 12);
+  const toMonth = Math.max(fromMonth, integer("to", 12, 1, 12));
+  const choice = <T extends string>(key: string, choices: readonly T[], fallback: T): T =>
+    choices.find((value) => value === one(key)) ?? fallback;
+  return {
+    year: integer("year", currentYear, 1901, 2199),
+    fromMonth,
+    toMonth,
+    employee: management ? one("employee").slice(0, 120) || "all" : "all",
+    cohort: management ? choice("cohort", ["active", "inactive", "all"], "all") : "all",
+    department: management ? one("department").slice(0, 150) || "all" : "all",
+    status: choice("status", ["all", ...statuses], "all"),
+    emergency: choice("emergency", ["all", "yes", "no"] as const, "all"),
+    quota: choice("quota", ["all", "deducting", "exempt"] as const, "all"),
+    comparisonMode: choice("compare", ["previous_year", "previous_period"] as const, "previous_year"),
+  };
+}
+export function leaveReportUrl(base: string, filters: ReportFilters, view: string) {
+  const params = new URLSearchParams({
+    view,
+    year: String(filters.year),
+    from: String(filters.fromMonth),
+    to: String(filters.toMonth),
+    employee: filters.employee,
+    cohort: filters.cohort,
+    status: filters.status,
+    department: filters.department ?? "all",
+    emergency: filters.emergency ?? "all",
+    quota: filters.quota ?? "all",
+    compare: filters.comparisonMode ?? "previous_year",
+  });
+  return `${base}?${params.toString()}`;
 }
 
 const statuses = ["planned", "pending", "approved", "declined", "rescheduled"] as const;
@@ -88,7 +143,7 @@ function isBlocking(status: string) {
 export function periodBounds(year: number, fromMonth: number, toMonth: number) {
   if (
     !Number.isInteger(year) ||
-    year < 1901 ||
+    year < 1900 ||
     year > 2199 ||
     !Number.isInteger(fromMonth) ||
     !Number.isInteger(toMonth) ||
@@ -116,7 +171,14 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     throw new Error("The report dataset is incomplete. Refresh or narrow the server report scope before exporting.");
   if (filters.year !== snapshot.year) throw new Error("The selected year does not match the loaded report.");
   const bounds = periodBounds(filters.year, filters.fromMonth, filters.toMonth);
-  const prior = periodBounds(filters.year - 1, filters.fromMonth, filters.toMonth);
+  const monthCount = filters.toMonth - filters.fromMonth + 1;
+  const comparisonMonth =
+    filters.comparisonMode === "previous_period" ? filters.fromMonth - 1 - monthCount : filters.fromMonth - 13;
+  const previousStart = new Date(Date.UTC(filters.year, comparisonMonth, 1));
+  const previousEnd = new Date(Date.UTC(filters.year, comparisonMonth + monthCount, 0));
+  const prior = { start: previousStart.toISOString().slice(0, 10), end: previousEnd.toISOString().slice(0, 10) };
+  const comparisonLabel =
+    filters.comparisonMode === "previous_period" ? "Previous equal month period" : "Same months last year";
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Accra",
     year: "numeric",
@@ -138,6 +200,9 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     .filter(
       (person) =>
         (filters.employee === "all" || person.key === filters.employee) &&
+        (!filters.department ||
+          filters.department === "all" ||
+          filters.department === (person.department ? `department:${person.department}` : "missing")) &&
         (filters.cohort === "all" || (filters.cohort === "active" ? person.active : !person.active)),
     )
     .sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
@@ -179,7 +244,14 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
       qualityIssues: requests.filter((request) => !request.reliable).length,
     };
   });
-  const statusMatches = (request: ReportRequest) => filters.status === "all" || request.status === filters.status;
+  const statusMatches = (request: ReportRequest) =>
+    (filters.status === "all" || request.status === filters.status) &&
+    (!filters.emergency ||
+      filters.emergency === "all" ||
+      (filters.emergency === "yes" ? request.isEmergency : !request.isEmergency)) &&
+    (!filters.quota ||
+      filters.quota === "all" ||
+      (filters.quota === "exempt" ? request.deductQuota === false : request.deductQuota !== false));
   const windowDates = (request: (typeof scoped)[number], start: string, end: string) =>
     request.dates.filter((date) => date >= start && date <= end);
   const register = annual
@@ -245,21 +317,24 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
       tentative: row.tentative.size,
       overlap: row.employees.size > 1,
     }));
-  const dateCount = (year: number, start: string, end: string, approvedOnly: boolean) =>
+  const dateCount = (_year: number, start: string, end: string, approvedOnly: boolean) =>
     new Set(
       scoped
-        .filter(
-          (request) =>
-            request.year === year && statusMatches(request) && (!approvedOnly || request.status === "approved"),
-        )
+        .filter((request) => statusMatches(request) && (!approvedOnly || request.status === "approved"))
         .flatMap((request) => windowDates(request, start, end).map((date) => `${request.agentKey}:${date}`)),
     ).size;
   const months = Array.from({ length: filters.toMonth - filters.fromMonth + 1 }, (_, index) => {
     const month = filters.fromMonth + index;
     const current = periodBounds(filters.year, month, month);
-    const previous = periodBounds(filters.year - 1, month, month);
+    const previousDate = new Date(Date.UTC(filters.year, comparisonMonth + index, 1));
+    const previous = periodBounds(
+      previousDate.getUTCFullYear(),
+      previousDate.getUTCMonth() + 1,
+      previousDate.getUTCMonth() + 1,
+    );
     return {
       month,
+      previousMonth: previous.start.slice(0, 7),
       ...comparison(
         dateCount(filters.year, current.start, current.end, true),
         dateCount(filters.year - 1, previous.start, previous.end, true),
@@ -271,11 +346,68 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     dateCount(filters.year - 1, prior.start, prior.end, true),
   );
   const annualIds = new Set(annual.map((request) => request.id));
+  const distribution = statuses.map((status) => ({
+    status,
+    requests: register.filter((row) => row.status === status).length,
+  }));
+  const insights: { key: string; title: string; detail: string; section: ReportSection }[] = [];
+  const over = balances.filter((row) => (row.overReserved ?? 0) > 0);
+  if (over.length)
+    insights.push({
+      key: "over",
+      title: `${over.length} employee balances exceed the current allowance`,
+      detail:
+        "Annual reserved counts exceed the current company policy. Review source requests and any approved quota exemptions.",
+      section: "balances",
+    });
+  const quality = annual.filter((row) => !row.reliable).length;
+  if (quality)
+    insights.push({
+      key: "quality",
+      title: `${quality} records need data review`,
+      detail:
+        "Declared counts or selected dates do not reconcile. Date-based activity may differ from annual recorded reservations.",
+      section: "exceptions",
+    });
+  const awaiting = annual.filter(
+    (row) => row.reliable && row.status === "approved" && !row.usedConfirmedAt && (row.dates.at(-1) ?? today) < today,
+  ).length;
+  if (awaiting)
+    insights.push({
+      key: "confirmation",
+      title: `${awaiting} past approvals await usage confirmation`,
+      detail: "These remain reserved but are not confirmed used. Open the source request to review or confirm usage.",
+      section: "exceptions",
+    });
+  const reschedules = annual.filter((row) => row.status === "rescheduled").length;
+  if (reschedules)
+    insights.push({
+      key: "reschedule",
+      title: `${reschedules} rescheduled requests await action`,
+      detail: "Reserved days are retained while replacement dates are resolved.",
+      section: "exceptions",
+    });
+  const overlaps = coverage.filter((row) => row.overlap).length;
+  if (overlaps)
+    insights.push({
+      key: "coverage",
+      title: `${overlaps} dates have overlapping staff schedules`,
+      detail:
+        "Actual selected dates overlap within the current activity filters. Emergency overrides can be intentional; review the underlying requests.",
+      section: "coverage",
+    });
+  insights.push({
+    key: "comparison",
+    title: `${approvedComparison.current} approved employee-dates in the activity period`,
+    detail: `${comparisonLabel} (${prior.start} to ${prior.end}) has ${approvedComparison.previous}. Change: ${approvedComparison.difference >= 0 ? "+" : ""}${approvedComparison.difference} days. Current statuses apply; this is scheduled activity, not a performance score.`,
+    section: "trends",
+  });
   return {
     snapshot,
     filters,
     bounds,
     prior,
+    comparisonLabel,
     people,
     balances,
     register,
@@ -283,6 +415,8 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     coverage,
     months,
     approvedComparison,
+    distribution,
+    insights,
     events: snapshot.events.filter((event) => annualIds.has(event.requestId)),
     totalReserved: balances.reduce((sum, row) => sum + row.reserved, 0),
     totalConfirmed: balances.reduce((sum, row) => sum + row.confirmedUsed, 0),
@@ -290,9 +424,9 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     definitions: [
       "Current company policy is applied independently to each eligible employee. Historical policy allocations are not recorded.",
       "Reserved includes quota-deducting planned, pending, approved and rescheduled requests. Confirmed used is a subset, never deducted twice.",
-      "Annual balances use the full selected year, regardless of activity-month or status filters. Declared counts are retained; data issues are flagged.",
+      "Annual balances use the full selected year and selected employee/department cohort, regardless of activity-month, status, emergency or quota filters. Annual exceptions and history follow that annual cohort. Declared counts are retained; data issues are flagged.",
       "Activity uses valid distinct selected employee-dates. Non-contiguous dates do not imply a continuous absence. Current statuses and departments apply.",
-      "Comparison is the same complete month range in the previous year; future scheduled dates may be included. This is not a productivity score.",
+      `Comparison: ${comparisonLabel}, ${prior.start} to ${prior.end}. Complete month ranges and current statuses apply; future scheduled dates may be included. This is not a productivity score.`,
       "Recorded workflow history is incomplete for legacy records. Latest decision timestamps do not establish submission-to-decision turnaround.",
     ],
   };

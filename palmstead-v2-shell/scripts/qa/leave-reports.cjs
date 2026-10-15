@@ -9,7 +9,7 @@ require.extensions[".ts"] = (module, filename) =>
     }).outputText,
     filename,
   );
-const { buildLeaveReport, comparison, periodBounds, leaveReportCsv } = require(
+const { buildLeaveReport, comparison, periodBounds, leaveReportCsv, parseReportFilters, leaveReportUrl } = require(
   path.resolve(__dirname, "../../src/webnext/features/leave/reports/leaveReport.ts"),
 );
 const req = (id, patch = {}) => ({
@@ -112,6 +112,115 @@ assert.ok(csv.includes("'=HYPERLINK"));
 assert.ok(csv.includes("'\t=private"));
 assert.ok(!csv.includes("SECRET REASON"));
 assert.ok(csv.includes("\r\n"));
+const emergencyOnly = report([req("standard"), req("emergency", { isEmergency: true, deductQuota: false })], {
+  emergency: "yes",
+  quota: "exempt",
+});
+assert.equal(emergencyOnly.register.length, 1);
+assert.equal(emergencyOnly.register[0].id, "emergency");
+assert.equal(emergencyOnly.balances[0].reserved, 2, "Activity filters do not shrink annual reservations");
+assert.equal(emergencyOnly.distribution.find((row) => row.status === "approved").requests, 1);
+assert.equal(report([req("a"), req("b", { agentKey: "b" })], { department: "department:Ops" }).people.length, 1);
+assert.equal(report([], { department: "missing" }).people[0].key, "b");
+assert.equal(
+  report([req("x", { daysCount: 25 })]).insights.some((row) => row.key === "over"),
+  true,
+);
+assert.equal(
+  report([req("x", { status: "rescheduled" })]).insights.some((row) => row.key === "reschedule"),
+  true,
+);
+const malformed = parseReportFilters(
+  {
+    year: "bad",
+    from: "13",
+    to: ["2"],
+    status: "forged",
+    employee: "other",
+    cohort: "inactive",
+    department: "department:Private",
+    emergency: "maybe",
+    quota: "wrong",
+  },
+  2026,
+  false,
+);
+assert.deepEqual(malformed, {
+  year: 2026,
+  fromMonth: 1,
+  toMonth: 12,
+  status: "all",
+  employee: "all",
+  cohort: "all",
+  department: "all",
+  emergency: "all",
+  quota: "all",
+  comparisonMode: "previous_year",
+});
+const remembered = parseReportFilters(
+  {
+    year: "2025",
+    from: "8",
+    to: "9",
+    employee: "a",
+    cohort: "active",
+    department: "department:Ops",
+    emergency: "yes",
+    quota: "exempt",
+    status: "approved",
+  },
+  2026,
+  true,
+);
+const url = leaveReportUrl("/dashboard/leave/management/reports", remembered, "trends");
+assert.deepEqual(
+  parseReportFilters(Object.fromEntries(new URLSearchParams(url.split("?")[1])), 2026, true),
+  remembered,
+);
+assert.equal(periodBounds(1900, 2, 2).end, "1900-02-28");
+assert.equal(buildLeaveReport(snapshot([], { year: 1901 }), { ...filter, year: 1901 }).prior.start, "1900-02-01");
+const { reportSectionCsv, reportSectionData } = require(
+  path.resolve(__dirname, "../../src/webnext/features/leave/reports/leaveReportExports.ts"),
+);
+const periodReport = report(
+  [req("oct", { dates: ["2026-10-02"], daysCount: 1 }), req("sept", { dates: ["2026-09-02"], daysCount: 1 })],
+  { fromMonth: 10, toMonth: 10, comparisonMode: "previous_period" },
+);
+assert.equal(periodReport.prior.start, "2026-09-01");
+assert.equal(periodReport.prior.end, "2026-09-30");
+assert.equal(periodReport.months[0].previousMonth, "2026-09");
+assert.equal(periodReport.approvedComparison.previous, 1);
+const boundary = report([req("prior-q4", { year: 2025, dates: ["2025-12-01"], daysCount: 1 })], {
+  fromMonth: 1,
+  toMonth: 3,
+  comparisonMode: "previous_period",
+});
+assert.equal(boundary.prior.start, "2025-10-01");
+assert.equal(boundary.prior.end, "2025-12-31");
+assert.equal(boundary.approvedComparison.previous, 1);
+for (const section of ["overview", "balances", "requests", "coverage", "trends", "exceptions", "history"]) {
+  const data = reportSectionData(periodReport, section);
+  const csv = reportSectionCsv(periodReport, section);
+  assert.ok(data.headers.length);
+  assert.ok(csv.startsWith("\uFEFF"));
+  assert.ok(!csv.includes("SECRET REASON"));
+  assert.ok(csv.includes('"Report section"'));
+  if (data.rows.length) assert.ok(csv.includes('"' + section + '"'));
+}
+assert.equal(reportSectionData(periodReport, "trends").rows[0][1], "2026-09");
+const negativeComparison = {
+  ...periodReport,
+  months: periodReport.months.map((row) => ({ ...row, difference: -1, percentage: -50 })),
+};
+assert.ok(
+  reportSectionCsv(negativeComparison, "trends").includes('"-1","-50"'),
+  "Numeric changes stay numeric; formula neutralization applies to text only",
+);
+assert.throws(
+  () => reportSectionCsv({ ...periodReport, snapshot: { ...periodReport.snapshot, eventsComplete: false } }, "history"),
+  /incomplete/,
+);
+assert.ok(reportSectionCsv(report([req("=formula", { agentName: "@unsafe" })]), "requests").includes("'@unsafe"));
 console.log(
   "Leave report fixtures passed: balances, overlap periods, comparison, malformed data, role-cohort filtering, completeness and safe CSV.",
 );

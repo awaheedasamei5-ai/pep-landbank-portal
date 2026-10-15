@@ -70,7 +70,7 @@ export function LayoutControls() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="icon">
+        <Button size="icon" aria-label="Appearance and layout">
           <Settings />
         </Button>
       </PopoverTrigger>
@@ -82,9 +82,11 @@ export function LayoutControls() {
           </div>
           <div className="space-y-3 **:data-[slot=toggle-group]:w-full **:data-[slot=toggle-group-item]:flex-1 **:data-[slot=toggle-group-item]:text-xs">
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Theme Preset</Label>
+              <Label htmlFor="dashboard-theme-preset" className="font-medium text-xs">
+                Theme Preset
+              </Label>
               <Select value={themePreset} onValueChange={onThemePresetChange}>
-                <SelectTrigger size="sm" className="w-full text-xs">
+                <SelectTrigger id="dashboard-theme-preset" size="sm" className="w-full text-xs">
                   <SelectValue placeholder="Preset" />
                 </SelectTrigger>
                 <SelectContent>
@@ -106,9 +108,11 @@ export function LayoutControls() {
             </div>
 
             <div className="space-y-1">
-              <Label className="font-medium text-xs">Fonts</Label>
+              <Label htmlFor="dashboard-font" className="font-medium text-xs">
+                Fonts
+              </Label>
               <Select value={font} onValueChange={onFontChange}>
-                <SelectTrigger size="sm" className="w-full text-xs">
+                <SelectTrigger id="dashboard-font" size="sm" className="w-full text-xs">
                   <SelectValue placeholder="Select font" />
                 </SelectTrigger>
                 <SelectContent>
