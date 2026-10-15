@@ -181,7 +181,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "memorandum",
 				title: "Memorandum",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/memorandum",
 				icon: FileText,
 			},
 			{
