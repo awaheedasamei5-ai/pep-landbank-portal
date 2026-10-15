@@ -38,7 +38,7 @@ export function LeaveReminderHealthScreen() {
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-2"><Link href="/dashboard/leave/management"><ArrowLeft />Management</Link></Button>
         <PageHeader title="Leave reminders" description="Check planned-leave reminders and resolve failed texts. Times are shown in Ghana time."
-          action={<Button variant="outline" disabled={health.isFetching} onClick={() => health.refetch()}><RefreshCw />{health.isFetching ? 'Refreshing…' : 'Refresh'}</Button>} />
+          action={<div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/dashboard/leave/management/reports/reminders">Period reports</Link></Button><Button variant="outline" disabled={health.isFetching} onClick={() => health.refetch()}><RefreshCw />{health.isFetching ? 'Refreshing…' : 'Refresh'}</Button></div>} />
       </div>
       {health.isError && <Alert variant="destructive"><AlertTitle>Reminder records could not be refreshed</AlertTitle><AlertDescription>{leaveErrorMessage(health.error)} Use Refresh to try again.</AlertDescription></Alert>}
       {retry.isError && <Alert variant="destructive"><AlertTitle>The text could not be queued</AlertTitle><AlertDescription>{leaveErrorMessage(retry.error)}</AlertDescription></Alert>}

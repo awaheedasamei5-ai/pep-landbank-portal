@@ -290,6 +290,15 @@ export function LeaveReportsScreen({
             </Link>
           </Button>
         ))}
+        {management && report && (
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={`/dashboard/leave/management/reports/reminders?${new URLSearchParams({ from: report.bounds.start, to: report.bounds.end, employee: filters.employee })}`}
+            >
+              Reminder period reports
+            </Link>
+          </Button>
+        )}
       </nav>
       <Card>
         <CardHeader>

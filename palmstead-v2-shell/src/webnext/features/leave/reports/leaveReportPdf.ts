@@ -324,7 +324,7 @@ export function createLeaveReportPdf(
   section("08 / Definitions and limitations", "Read these together with the figures and source records.");
   for (const definition of report.definitions) text(definition, 8.5);
   text(
-    "Reminder dispatch reliability is available to Management in Leave > Management > Reminders. Its all-time totals are separate from this activity window. Provider acceptance does not prove delivery to a handset.",
+    "Reminder period reports are available separately under Leave > Management > Reports > Reminder period reports. They use queue creation dates, not leave activity dates. The operational monitor remains all-time. Provider acceptance does not prove delivery to a handset.",
     8.5,
   );
   const pages = doc.getNumberOfPages();
