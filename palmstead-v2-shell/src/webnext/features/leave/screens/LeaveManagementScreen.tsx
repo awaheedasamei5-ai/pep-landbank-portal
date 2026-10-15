@@ -78,6 +78,9 @@ export function LeaveManagementScreen() {
               <Link href="/dashboard/leave/management/calendar">Team calendar</Link>
             </Button>
             <Button asChild variant="outline">
+              <Link href="/dashboard/leave/management/reminders">Reminders</Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/dashboard/leave/management/settings">
                 <Settings />
                 Settings

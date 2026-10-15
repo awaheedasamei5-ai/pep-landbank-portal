@@ -16,6 +16,7 @@ import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { useLeaveConflictDates, useLeaveRequests, useSubmitRescheduledLeave, useUpdatePlannedLeave } from '../hooks/useLeaveRequests';
 import { LeaveCalendar } from '../components/LeaveCalendar';
 import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
+import { leaveSelectionYear } from '../lib/leaveDates';
 import { today } from '../../../shared/lib/format';
 
 // Edit a still-'planned' draft's dates -- only ever reachable from the
@@ -42,6 +43,8 @@ export function LeaveRequestEditScreen() {
   const [initialized, setInitialized] = useState(false);
   const conflictQuery = useLeaveConflictDates(year, requestId);
   const conflictDates = conflictQuery.data ?? [];
+  const selectionYear = leaveSelectionYear(selectedDates) ?? year;
+  const selectedAvailability = useLeaveConflictDates(selectionYear, requestId);
 
   useEffect(() => {
     if (request && !initialized) {
@@ -56,6 +59,10 @@ export function LeaveRequestEditScreen() {
   }, [request, initialized]);
 
   function toggleDate(iso: string) {
+    if (!selectedDates.includes(iso) && leaveSelectionYear([...selectedDates, iso]) === null) {
+      setError('Choose replacement dates from one calendar year. Clear your selection before choosing another year.');
+      return;
+    }
     setSelectedDates((prev) => (prev.includes(iso) ? prev.filter((d) => d !== iso) : [...prev, iso]));
     setError(null);
   }
@@ -80,7 +87,11 @@ export function LeaveRequestEditScreen() {
       setError('Pick at least one date.');
       return;
     }
-    if (!request.isEmergency && !conflictQuery.isSuccess) {
+    if (leaveSelectionYear(selectedDates) === null) {
+      setError('Each request must contain valid dates from one calendar year.');
+      return;
+    }
+    if (!request.isEmergency && !selectedAvailability.isSuccess) {
       setError('Team availability could not be checked. Reload Leave and try again before sending these dates.');
       return;
     }
@@ -88,7 +99,7 @@ export function LeaveRequestEditScreen() {
       setError(`Choose ${request.daysCount} replacement working day${request.daysCount === 1 ? '' : 's'} to keep the reserved allowance unchanged.`);
       return;
     }
-    const conflict = leaveDatesConflictReason(config, (requests ?? []).filter((r) => r.id !== request.id), selectedDates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year), new Set(conflictDates));
+    const conflict = leaveDatesConflictReason(config, (requests ?? []).filter((r) => r.id !== request.id), selectedDates, agentKey, selectionYear, companyClosuresForYear(companyClosures ?? [], selectionYear), new Set(selectedAvailability.data ?? []));
     if (conflict && !request.isEmergency) {
       setError(`${conflict} Please adjust your selection.`);
       return;
@@ -136,6 +147,7 @@ export function LeaveRequestEditScreen() {
       <PageHeader title={request.status === 'rescheduled' ? 'Choose replacement dates' : 'Edit planned dates'} description={request.status === 'rescheduled' ? `Choose ${request.daysCount} working day${request.daysCount === 1 ? '' : 's'} to send back to Management for a decision.` : 'Update the dates on your saved plan.'} />
       <Card>
         <CardContent>
+          {request.status === 'rescheduled' && <p className="mb-4 text-sm text-muted-foreground">Your original letter and emergency reason are retained. Replacement dates are sent as a separate schedule for Management to review.</p>}
           {config && (
             <LeaveCalendar
               year={year}
@@ -153,8 +165,8 @@ export function LeaveRequestEditScreen() {
           )}
           {conflictQuery.isPending && <p className="mt-2 text-sm text-muted-foreground">Checking team availability…</p>}
           {conflictQuery.isError && <p role="alert" className="mt-2 text-sm text-destructive">Team availability could not be checked. Reload Leave before sending replacement dates.</p>}
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-          <SubmitButton type="button" className="mt-4" disabled={!request.isEmergency && !conflictQuery.isSuccess} loading={update.isPending || submitReschedule.isPending} onClick={save}>
+          {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+          <SubmitButton type="button" className="mt-4" disabled={!request.isEmergency && !selectedAvailability.isSuccess} loading={update.isPending || submitReschedule.isPending} onClick={save}>
             {request.status === 'rescheduled' ? 'Send dates to Management' : 'Save changes'}
           </SubmitButton>
         </CardContent>

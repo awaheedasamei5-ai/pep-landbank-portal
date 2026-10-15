@@ -5,6 +5,7 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
+import { requireLeaveSelectionYear } from '../lib/leaveDates';
 import { fmtLongDate } from '../../../shared/lib/format';
 import type { LeaveRequest, NewLeaveRequest } from '../../../types/domain';
 
@@ -216,7 +217,7 @@ export function useUpdatePlannedLeave() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, dates }: { id: string; dates: string[] }) => {
-      const letterText = profile ? buildLeaveLetterText(profile.name, dates.slice().sort(), new Date(dates[0]).getFullYear(), config?.quoteCompanyName) : null;
+      const letterText = profile ? buildLeaveLetterText(profile.name, dates.slice().sort(), requireLeaveSelectionYear(dates), config?.quoteCompanyName) : null;
       return getDataSource(demoMode).leaveRequests.updatePlanned(id, { dates, letterText });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),
@@ -226,20 +227,15 @@ export function useUpdatePlannedLeave() {
 export function useSubmitRescheduledLeave() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
-  const { data: config } = useConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, dates }: { id: string; dates: string[] }) => {
       if (!profile) throw new Error('Your staff profile could not be loaded. Sign in again and retry.');
       const ds = getDataSource(demoMode);
       const sortedDates = [...dates].sort();
-      const letterText = buildLeaveLetterText(
-        profile.name,
-        sortedDates,
-        new Date(sortedDates[0]).getFullYear(),
-        config?.quoteCompanyName,
-      );
-      const request = await ds.leaveRequests.updateRescheduledByStaff(id, { dates: sortedDates, letterText });
+      // Replacement dates amend the schedule, not the applicant's original
+      // letter. Retain emergency reasons and any reviewed staff wording.
+      const request = await ds.leaveRequests.updateRescheduledByStaff(id, { dates: sortedDates });
       return request;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leaveRequests'] }),

@@ -17,7 +17,8 @@ import { useCreateLeaveRequest, useLeaveConflictDates, useLeaveRequests } from '
 import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
 import { companyClosuresForYear, leaveDatesConflictReason } from '../lib/leaveLogic';
-import { isWeekendIso } from '../../../shared/lib/ghanaHolidays';
+import { leaveSelectionYear, leaveWeekdaysInRange } from '../lib/leaveDates';
+import { today } from '../../../shared/lib/format';
 
 // Extracted from LeaveScreen.tsx's real EmergencyLeaveForm, rebuilt on
 // the shell's real shadcn Card/FormItem (Shreyasmark1/leave-management-
@@ -40,17 +41,8 @@ export function LeaveEmergencyForm() {
 
   const all = requests ?? [];
   const agentKey = profile?.key ?? '';
-  const dates: string[] = [];
-  if (fromDate && toDate && toDate >= fromDate) {
-    const cursor = new Date(`${fromDate}T00:00:00`);
-    const end = new Date(`${toDate}T00:00:00`);
-    while (cursor <= end) {
-      const iso = cursor.toISOString().slice(0, 10);
-      if (!isWeekendIso(iso)) dates.push(iso);
-      cursor.setDate(cursor.getDate() + 1);
-    }
-  }
-  const year = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
+  const dates = leaveWeekdaysInRange(fromDate, toDate);
+  const year = leaveSelectionYear([fromDate]) ?? new Date(today()).getFullYear();
   const { data: conflictDates = [] } = useLeaveConflictDates(year);
   const generatedLetter = profile && dates.length
     ? `${buildLeaveLetterText(profile.name, dates, year, config?.quoteCompanyName)}\n\n(Emergency leave — ${reason.trim()})`
@@ -65,6 +57,14 @@ export function LeaveEmergencyForm() {
     setError(null);
     if (!reason.trim()) {
       setError('Please give a reason for the emergency leave.');
+      return;
+    }
+    if (leaveSelectionYear([fromDate, toDate]) === null) {
+      setError('Choose valid dates within one calendar year. Submit a separate request for another year.');
+      return;
+    }
+    if (fromDate < today()) {
+      setError('Choose today or a future leave date.');
       return;
     }
     if (dates.length === 0) {
@@ -92,10 +92,10 @@ export function LeaveEmergencyForm() {
       <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-4">
           <FormItem label="From" htmlFor={`${letterReviewId}-from`}>
-            <Input id={`${letterReviewId}-from`} type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <Input id={`${letterReviewId}-from`} type="date" min={today()} value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           </FormItem>
           <FormItem label="To" htmlFor={`${letterReviewId}-to`}>
-            <Input id={`${letterReviewId}-to`} type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <Input id={`${letterReviewId}-to`} type="date" min={fromDate || today()} max={/^\d{4}-/.test(fromDate) ? `${fromDate.slice(0, 4)}-12-31` : undefined} value={toDate} onChange={(e) => setToDate(e.target.value)} />
           </FormItem>
         </div>
         <FormItem label="Reason (required)" htmlFor={`${letterReviewId}-reason`}>
@@ -125,8 +125,8 @@ export function LeaveEmergencyForm() {
             />
           </div>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <SubmitButton type="button" variant="destructive" loading={create.isPending} onClick={submit}>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <SubmitButton type="button" variant="destructive" disabled={!config || !profile} loading={create.isPending} onClick={submit}>
           Send emergency request
         </SubmitButton>
       </CardContent>

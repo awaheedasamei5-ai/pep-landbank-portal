@@ -53,6 +53,8 @@ export function LeaveDashboardScreen() {
   const myPending = mine.filter((r) => r.status === 'pending').length;
 
   const myMonthApproved = mine.filter((r) => r.status === 'approved');
+  const viewedMonth = `${year}-${String(month + 1).padStart(2, '0')}-`;
+  const approvedDaysInView = new Set(myMonthApproved.flatMap((request) => request.dates.filter((date) => date.startsWith(viewedMonth)))).size;
   const companyUpcoming = isManager ? leaveUpcomingForAll(all.filter((r) => r.status !== 'planned'), today(), 7) : [];
 
   function navMonth(delta: number) {
@@ -103,7 +105,7 @@ export function LeaveDashboardScreen() {
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Days remaining" value={myRemaining} icon={CalendarDays} />
         <StatCard label="Pending requests" value={myPending} icon={Hourglass} />
-        <StatCard label="Confirmed used (all time)" value={myConfirmedUsed} icon={CalendarClock} />
+        <StatCard label={`Confirmed used (${thisYear})`} value={myConfirmedUsed} icon={CalendarClock} />
       </div>
 
       <div className="mb-6">
@@ -125,7 +127,7 @@ export function LeaveDashboardScreen() {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Calendar</CardTitle>
-            <CardDescription>{myMonthApproved.length} approved day(s) this view</CardDescription>
+            <CardDescription>{approvedDaysInView} approved day(s) this month</CardDescription>
           </CardHeader>
           <CardContent>
             {config ? (

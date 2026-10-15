@@ -203,7 +203,7 @@ export function buildLeaveLetterPdf(
   const lines = letterBody.split(/\r?\n/).map((line) => line.trim());
   const submittedDateLines = lines.filter((line) => line.startsWith('- '));
   const approvedDateLines = [...request.dates].sort().map((date) => `- ${fmtLongDate(date)}`);
-  const changedDates = request.status === 'approved'
+  const changedDates = (request.status === 'approved' || request.status === 'pending')
     && (submittedDateLines.length !== approvedDateLines.length
       || submittedDateLines.some((line, index) => line !== approvedDateLines[index]));
 
@@ -293,10 +293,12 @@ export function buildLeaveLetterPdf(
   y += Math.max(staffHeight, managerHeight) + 5;
 
   if (hasDecisionAddendum) {
-    section(request.status === 'approved' ? 'Management-approved schedule' : 'Management decision');
+    section(request.status === 'approved' ? 'Management-approved schedule' : request.status === 'pending' ? 'Current schedule awaiting review' : 'Management decision');
     paragraph(`${STATUS_LABEL[request.status]}${request.decidedAt ? ` - ${decisionDate}` : ''}`, { bold: true, size: 10 });
     if (changedDates) {
-      paragraph('The current approved dates are recorded below. The applicant letter above is retained as submitted.', { size: 10 });
+      paragraph(request.status === 'approved'
+        ? 'The current approved dates are recorded below. The applicant letter above is retained as submitted.'
+        : 'The current requested dates are listed below and await Management approval. The applicant letter above is retained as submitted.', { size: 10 });
       dateList(approvedDateLines);
     }
     if (request.rescheduleNote?.trim()) paragraph(request.rescheduleNote, { size: 10 });

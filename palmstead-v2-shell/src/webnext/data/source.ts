@@ -1,6 +1,8 @@
 import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
+import { requireLeaveSelectionYear } from '../features/leave/lib/leaveDates';
+import type { LeaveReminderHealth } from '../features/leave/lib/leaveReminderTypes';
 import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
@@ -663,6 +665,8 @@ export interface DataSource {
   // scoped by RLS; Management sees the company queue. Date-only team
   // availability is supplied by the matching SECURITY DEFINER RPC.
   leaveRequests: {
+    reminderHealth(): Promise<LeaveReminderHealth>;
+    retryFailedReminder(id: string): Promise<void>;
     list(): Promise<LeaveRequest[]>;
     conflictDates(startDate: string, endDate: string, excludeRequestId?: string): Promise<string[]>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
@@ -704,7 +708,7 @@ export interface DataSource {
     // while status is 'planned'; a sent request is never silently
     // editable, it must go through decline/reschedule instead).
     updatePlanned(id: string, patch: { dates: string[]; letterText: string | null }): Promise<LeaveRequest>;
-    updateRescheduledByStaff(id: string, patch: { dates: string[]; letterText: string | null }): Promise<LeaveRequest>;
+    updateRescheduledByStaff(id: string, patch: { dates: string[] }): Promise<LeaveRequest>;
     // Real table `leave_request_logs` (migration leave_full_app_phase1_schema)
     // -- the full status-change history for one request, written
     // automatically by a trigger. Built in Phase 1, read for the first
@@ -2516,6 +2520,15 @@ function createLiveDataSource(): DataSource {
       },
     },
     leaveRequests: {
+      async reminderHealth() {
+        const { data, error } = await requireClient().rpc('get_leave_reminder_health');
+        if (error) throw error;
+        return data as LeaveReminderHealth;
+      },
+      async retryFailedReminder(id) {
+        const { error } = await requireClient().rpc('retry_failed_leave_sms', { p_message_id: id });
+        if (error) throw error;
+      },
       async list() {
         const { data, error } = await requireClient().from('leave_requests').select('*').order('created_at', { ascending: false });
         if (error) throw error;
@@ -2532,7 +2545,7 @@ function createLiveDataSource(): DataSource {
       },
       async create(agentKey, agentName, input) {
         const client = requireClient();
-        const year = new Date(input.dates[0]).getFullYear();
+        const year = requireLeaveSelectionYear(input.dates);
         const { data: requestNo, error: rpcError } = await client.rpc('next_leave_request_no');
         if (rpcError) throw rpcError;
         const { data, error } = await client
@@ -2575,7 +2588,7 @@ function createLiveDataSource(): DataSource {
                 status: 'approved',
                 dates: newDates,
                 days_count: newDates.length,
-                year: new Date(newDates[0]).getFullYear(),
+                year: requireLeaveSelectionYear(newDates),
                 reschedule_note: note ?? null,
                 decided_at: new Date().toISOString(),
                 decided_by: decidedBy,
@@ -2605,7 +2618,7 @@ function createLiveDataSource(): DataSource {
       async updatePlanned(id, patch) {
         const { data, error } = await requireClient()
           .from('leave_requests')
-          .update({ dates: patch.dates, days_count: patch.dates.length, year: new Date(patch.dates[0]).getFullYear(), letter_text: patch.letterText })
+          .update({ dates: patch.dates, days_count: patch.dates.length, year: requireLeaveSelectionYear(patch.dates), letter_text: patch.letterText })
           .eq('id', id)
           .eq('status', 'planned')
           .select()
@@ -2619,8 +2632,7 @@ function createLiveDataSource(): DataSource {
           .update({
             dates: patch.dates,
             days_count: patch.dates.length,
-            year: new Date(patch.dates[0]).getFullYear(),
-            letter_text: patch.letterText,
+            year: requireLeaveSelectionYear(patch.dates),
             status: 'pending',
             decided_at: null,
             decided_by: null,

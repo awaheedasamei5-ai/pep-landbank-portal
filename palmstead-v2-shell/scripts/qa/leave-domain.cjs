@@ -15,6 +15,18 @@ require.extensions['.ts'] = (module, filename) => {
 const root = path.resolve(__dirname, '../..');
 const {leaveDaysRemaining,leaveDaysReserved,leaveDaysConfirmedUsed,leaveIsBlocking} = require(path.join(root, 'src/webnext/features/leave/lib/leaveLogic.ts'));
 const {classifyProviderResponse} = require(path.join(root, 'supabase/functions/process-leave-sms-outbox/delivery.ts'));
+const {leaveSelectionYear,requireLeaveSelectionYear,leaveWeekdaysInRange} = require(path.join(root, 'src/webnext/features/leave/lib/leaveDates.ts'));
+
+assert.equal(leaveSelectionYear(['2027-01-01','2027-12-31']),2027);
+assert.equal(leaveSelectionYear(['2026-12-31','2027-01-01']),null,'Do not pool two annual allowances in one request');
+assert.equal(leaveSelectionYear(['2026-02-30']),null,'Reject impossible dates');
+assert.equal(leaveSelectionYear(['2028-02-29']),2028,'Leap days are valid');
+assert.throws(()=>requireLeaveSelectionYear([]),/one calendar year/);
+assert.deepEqual(leaveWeekdaysInRange('2026-10-16','2026-10-19'),['2026-10-16','2026-10-19']);
+assert.deepEqual(leaveWeekdaysInRange('2026-12-31','2027-01-04'),[]);
+assert.deepEqual(leaveWeekdaysInRange('2026-10-19','2026-10-16'),[]);
+assert.deepEqual(leaveWeekdaysInRange('invalid','2026-10-16'),[]);
+assert.ok(leaveWeekdaysInRange('2028-01-01','2028-12-31').length <= 262,'Emergency range calculation is bounded to one year');
 
 const request = (patch = {}) => ({agentKey:'staff-a',year:2026,status:'planned',dates:['2026-10-01'],daysCount:3,deductQuota:true,usedConfirmedAt:null,...patch});
 const records = [

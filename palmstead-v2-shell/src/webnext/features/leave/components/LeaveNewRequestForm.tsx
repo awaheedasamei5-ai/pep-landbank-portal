@@ -15,6 +15,7 @@ import { useLeaveHolidays } from '../hooks/useLeaveHolidays';
 import { LeaveCalendar } from './LeaveCalendar';
 import { LeaveBalanceCard } from './LeaveBalanceCard';
 import { buildLeaveLetterText } from '../lib/leaveLetterPdf';
+import { leaveSelectionYear } from '../lib/leaveDates';
 import { companyClosuresForYear, leaveDatesConflictReason, leaveDaysConfirmedUsed, leaveDaysRemaining, leaveDaysReserved } from '../lib/leaveLogic';
 import { today } from '../../../shared/lib/format';
 
@@ -34,8 +35,8 @@ export function LeaveNewRequestForm() {
   const { data: companyClosures } = useLeaveHolidays();
   const monthParam = searchParams.get('month');
   const yearParam = searchParams.get('year');
-  const [year, setYear] = useState(() => (yearParam ? Number(yearParam) : new Date(today()).getFullYear()));
-  const [month, setMonth] = useState(() => (monthParam ? Number(monthParam) : new Date(today()).getMonth()));
+  const [year, setYear] = useState(() => (yearParam && /^\d{4}$/.test(yearParam) && Number(yearParam) > 0 ? Number(yearParam) : new Date(today()).getFullYear()));
+  const [month, setMonth] = useState(() => (monthParam && Number.isInteger(Number(monthParam)) && Number(monthParam) >= 0 && Number(monthParam) < 12 ? Number(monthParam) : new Date(today()).getMonth()));
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [letterText, setLetterText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +44,15 @@ export function LeaveNewRequestForm() {
   const all = requests ?? [];
   const conflictQuery = useLeaveConflictDates(year);
   const conflictDates = conflictQuery.data ?? [];
-  const secureConflicts = new Set(conflictDates);
+  const selectionYear = leaveSelectionYear(selectedDates) ?? year;
+  const selectedAvailability = useLeaveConflictDates(selectionYear);
+  const secureConflicts = new Set(selectedAvailability.data ?? []);
 
   function toggleDate(iso: string) {
+    if (!selectedDates.includes(iso) && leaveSelectionYear([...selectedDates, iso]) === null) {
+      setError('Choose dates from one calendar year. Clear your selected dates before planning another year.');
+      return;
+    }
     setSelectedDates((prev) => (prev.includes(iso) ? prev.filter((d) => d !== iso) : [...prev, iso]));
     setError(null);
   }
@@ -65,12 +72,12 @@ export function LeaveNewRequestForm() {
   }
 
   const agentKey = profile?.key ?? '';
-  const remaining = config ? leaveDaysRemaining(config, all, agentKey, year) : null;
-  const reserved = config ? leaveDaysReserved(all, agentKey, year) : 0;
-  const confirmedUsed = leaveDaysConfirmedUsed(all, agentKey, year, today());
+  const remaining = config ? leaveDaysRemaining(config, all, agentKey, selectionYear) : null;
+  const reserved = config ? leaveDaysReserved(all, agentKey, selectionYear) : 0;
+  const confirmedUsed = leaveDaysConfirmedUsed(all, agentKey, selectionYear, today());
   const sortedDates = selectedDates.slice().sort();
   const generatedLetter = profile && sortedDates.length
-    ? buildLeaveLetterText(profile.name, sortedDates, new Date(sortedDates[0]).getFullYear(), config?.quoteCompanyName)
+    ? buildLeaveLetterText(profile.name, sortedDates, selectionYear, config?.quoteCompanyName)
     : '';
 
   useEffect(() => {
@@ -83,15 +90,19 @@ export function LeaveNewRequestForm() {
       setError('Pick at least one date first');
       return;
     }
-    if (!conflictQuery.isSuccess) {
+    if (leaveSelectionYear(selectedDates) === null) {
+      setError('Each request must contain valid dates from one calendar year.');
+      return;
+    }
+    if (!selectedAvailability.isSuccess) {
       setError('Team availability could not be checked. Reload Leave and try again before submitting.');
       return;
     }
     if (selectedDates.length > (remaining ?? 0)) {
-      setError(`That's ${selectedDates.length} day(s), but you only have ${remaining} left for ${year}.`);
+      setError(`That's ${selectedDates.length} day(s), but you only have ${remaining} left for ${selectionYear}.`);
       return;
     }
-    const conflict = leaveDatesConflictReason(config, all, selectedDates, agentKey, year, companyClosuresForYear(companyClosures ?? [], year), secureConflicts);
+    const conflict = leaveDatesConflictReason(config, all, selectedDates, agentKey, selectionYear, companyClosuresForYear(companyClosures ?? [], selectionYear), secureConflicts);
     if (conflict) {
       setError(`${conflict} Please adjust your selection.`);
       return;
@@ -107,6 +118,7 @@ export function LeaveNewRequestForm() {
 
   return (
     <div className="grid gap-4">
+      <p className="text-sm text-muted-foreground">Annual allowance for {selectionYear}. Submit separate requests for different calendar years.</p>
       {config && <LeaveBalanceCard total={config.leaveTotalDays} reserved={reserved} remaining={remaining ?? 0} confirmedUsed={confirmedUsed} />}
       <Card>
         <CardContent>
@@ -133,12 +145,12 @@ export function LeaveNewRequestForm() {
               <p id={`${letterReviewId}-help`} className="sr-only">This is your generated leave request letter. You can edit it before submitting.</p>
             </div>
           )}
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-          <div className="mt-4 flex gap-2">
-            <Button variant="outline" disabled={create.isPending || !config || !conflictQuery.isSuccess} onClick={() => submit(true)}>
+          {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="outline" disabled={create.isPending || !config || !selectedAvailability.isSuccess} onClick={() => submit(true)}>
               Save as Draft
             </Button>
-            <SubmitButton type="button" loading={create.isPending} disabled={!config || !conflictQuery.isSuccess} onClick={() => submit(false)}>
+            <SubmitButton type="button" loading={create.isPending} disabled={!config || !selectedAvailability.isSuccess} onClick={() => submit(false)}>
               Send request
             </SubmitButton>
           </div>
