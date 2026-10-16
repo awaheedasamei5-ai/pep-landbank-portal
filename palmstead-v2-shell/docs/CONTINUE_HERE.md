@@ -1,5 +1,9 @@
 # Continue Here — Handoff for Any AI Tool
 
+## Latest active request — 2026-10-16
+
+The user now prioritizes Management test-data reset/recovery, permitted Staff edit/update/delete and missing Back controls across apps; then Operations reports/completion; then Accounting workflows/reports/all PDFs. Follow `docs/plans/14-management-reset-actions-navigation-and-app-completion.md` for the current order. The first Operations reset slice is in progress; its exact implementation, applied V2 migration and test/release evidence are in `docs/plans/14a-operations-reset-verification.md`. No live data reset was performed. Do not mistake the earlier “next” ordering below or a completed Leave slice for completion of this programme. Preserve concurrent Notes/Memorandum/Chat work and stay within V2/rebuild.
+
 This file exists so that **any AI coding tool** working on this repo — Claude Code, Codex, GitHub Copilot, or a model routed through OmniRoute — picks up the same standing rules and project context that governed every prior decision here. Claude Code also keeps a private, session-spanning memory store outside this repo; this file is the durable, repo-committed subset of that memory a different tool actually needs. Read this in full before writing any code.
 
 ## 1. Three things named "Palmstead" — do not confuse them

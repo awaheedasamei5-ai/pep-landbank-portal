@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireSupabase } from "@/lib/supabase.client";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { MyScheduleScreen } from "./my-schedule-screen";
 import { OperationsAuditLog } from "./operations-audit-log";
@@ -42,6 +43,7 @@ export const OperationsTrackerScreen = observer(
 		const [newIdentifier, setNewIdentifier] = useState("");
 		const [creating, setCreating] = useState(false);
 		const projectStore = store.projectRoot.project;
+		const canResetData = useAuthStore((state) => state.profile?.role === "manager" && state.profile.active);
 
 		useEffect(() => {
 			store.router.setQuery({ workspaceSlug: WORKSPACE_SLUG });
@@ -92,6 +94,7 @@ export const OperationsTrackerScreen = observer(
 
 		return (
 			<div>
+				{canResetData && <div className="mb-3 flex justify-end"><Button variant="outline" size="sm" asChild><Link href="/dashboard/operations/settings/data">Reset test data</Link></Button></div>}
 				<PageHeader
 					title="Operations Tracker"
 					description="Company-wide view across every real project."
