@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/page-header";
+import { PortalBackLink } from "../../../_components/portal-navigation";
 import { requireSupabase } from "@/lib/supabase.client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -208,6 +209,7 @@ export function AttendanceCorrectionsScreen() {
 
   return (
     <div>
+      <PortalBackLink fallback="/dashboard/attendance" className="mb-3" />
       <PageHeader
         title="Attendance Corrections"
         description="Dispute a wrong clock-in or clock-out from your attendance history."

@@ -16,6 +16,7 @@ import { LayoutControls } from "./_components/header/layout-controls";
 import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
 import { PageTransition } from "./_components/page-transition";
+import { PortalNavigationProvider } from "./_components/portal-navigation";
 import { RealtimeBridge } from "./_components/realtime-bridge";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
@@ -80,7 +81,9 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
                 Home dashboard/sidebar chrome keeps its existing Tailwind
                 look. See app/layout.tsx's tokens.css import. */}
             <div className="webnext-theme dashboard-workspace">
-              <PageTransition>{children}</PageTransition>
+              <PortalNavigationProvider>
+                <PageTransition>{children}</PageTransition>
+              </PortalNavigationProvider>
             </div>
           </div>
         </SidebarInset>

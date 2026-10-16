@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import Link from "next/link";
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, History, RotateCcw, ShieldCheck } from "lucide-react";
+import { History, RotateCcw, ShieldCheck } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -24,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { PortalBackLink } from "../../_components/portal-navigation";
 import {
   executeOperationsReset,
   impactLabels,
@@ -124,12 +123,7 @@ export function OperationsResetScreen() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <Button variant="ghost" size="sm" className="-ml-2" asChild>
-        <Link href="/dashboard/operations">
-          <ArrowLeft aria-hidden="true" />
-          Back to Operations
-        </Link>
-      </Button>
+      <PortalBackLink fallback="/dashboard/operations" className="-ml-2" />
       <PageHeader
         title="Reset Operations test data"
         description="Management controls · preview, clear selected work and recover a reset."

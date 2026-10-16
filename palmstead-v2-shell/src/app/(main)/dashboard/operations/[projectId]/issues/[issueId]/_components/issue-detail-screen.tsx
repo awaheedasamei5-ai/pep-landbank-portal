@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { PortalBackLink } from "../../../../../_components/portal-navigation";
 import { observer } from "mobx-react";
-import { ArrowLeft, ArrowUp } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -175,8 +175,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
         </div>
       </div>
     );
-  if (error && !issue) return <p className="text-sm text-destructive">{error}</p>;
-  if (!issue) return <p className="text-sm text-muted-foreground">Issue not found.</p>;
+  if (!issue) return <div className="flex flex-col gap-3"><PortalBackLink fallback={`/dashboard/operations/${projectId}`} /><p role="status">{error ?? "Work item not found."}</p></div>;
 
   const states = stateStore.getProjectStates(projectId) ?? [];
   const labels = labelStore.getProjectLabels(projectId) ?? [];
@@ -184,12 +183,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
 
   return (
     <div>
-      <Button asChild variant="ghost" size="sm" className="mb-2">
-        <Link href={`/dashboard/operations/${projectId}`}>
-          <ArrowLeft />
-          {project?.name ?? "Project"}
-        </Link>
-      </Button>
+      <PortalBackLink fallback={`/dashboard/operations/${projectId}`} className="mb-2" />
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 

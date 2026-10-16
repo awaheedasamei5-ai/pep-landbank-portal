@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import Link from "next/link";
+import { PortalForwardLink } from "../../../_components/portal-navigation";
 import { CollisionPriority } from "@dnd-kit/abstract";
 import { move } from "@dnd-kit/helpers";
 import { DragDropProvider, type DragEndEvent, type DragOverEvent, type DragStartEvent, useDroppable } from "@dnd-kit/react";
@@ -56,20 +56,20 @@ function IssueCard({ id, index, stateId, projectId, projectIdentifier }: { id: s
       <Card ref={handleRef} className="cursor-grab active:cursor-grabbing">
         <CardContent className="grid gap-2 p-3">
           <div className="flex items-center justify-between gap-2">
-            <Link
+            <PortalForwardLink
               href={`/dashboard/operations/${projectId}/issues/${id}`}
               className="font-mono text-xs text-muted-foreground hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
               {projectIdentifier}-{issue.sequence_id}
-            </Link>
+            </PortalForwardLink>
             <Badge variant={PRIORITY_VARIANT[issue.priority ?? "none"]} className="h-5 px-1.5 text-[10px] capitalize">
               {issue.priority ?? "none"}
             </Badge>
           </div>
-          <Link href={`/dashboard/operations/${projectId}/issues/${id}`} className="text-sm hover:underline" onClick={(e) => e.stopPropagation()}>
+          <PortalForwardLink href={`/dashboard/operations/${projectId}/issues/${id}`} className="text-sm hover:underline" onClick={(e) => e.stopPropagation()}>
             {issue.name}
-          </Link>
+          </PortalForwardLink>
         </CardContent>
       </Card>
     </div>

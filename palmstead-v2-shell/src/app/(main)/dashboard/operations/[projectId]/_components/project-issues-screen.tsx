@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { PortalBackLink, PortalForwardLink, usePortalTab } from "../../../_components/portal-navigation";
 import { observer } from "mobx-react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +38,7 @@ const PRIORITY_VARIANT: Record<string, "outline" | "default" | "destructive"> = 
 };
 
 export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"list" | "board" | "cycles" | "modules" | "views" | "settings">("list");
+  const [view, setView] = usePortalTab("view", ["list", "board", "cycles", "modules", "views", "settings"] as const, "list");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newIssueName, setNewIssueName] = useState("");
@@ -114,19 +114,14 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
 
   return (
     <div>
-      <Button asChild variant="ghost" size="sm" className="mb-2">
-        <Link href="/dashboard/operations">
-          <ArrowLeft />
-          Operations Tracker
-        </Link>
-      </Button>
+      <PortalBackLink fallback="/dashboard/operations" className="mb-2" />
 
       <PageHeader
         title={project?.name ?? "Project"}
         description={project ? `${project.identifier} · real op_issues rows` : undefined}
         action={
-          <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board" | "cycles" | "modules" | "views" | "settings")}>
-            <TabsList>
+          <Tabs value={view} onValueChange={setView} className="min-w-0 max-w-full overflow-x-auto pb-2">
+            <TabsList aria-label="Project sections">
               <TabsTrigger value="list">List</TabsTrigger>
               <TabsTrigger value="board">Board</TabsTrigger>
               <TabsTrigger value="cycles">Cycles</TabsTrigger>
@@ -232,7 +227,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
                 if (!issue) return null;
                 const state = issue.state_id ? stateStore.stateMap?.[issue.state_id] : undefined;
                 return (
-                  <Link
+                  <PortalForwardLink
                     key={id}
                     href={`/dashboard/operations/${projectId}/issues/${id}`}
                     className="flex items-center justify-between gap-3 border-b py-2 last:border-0 hover:bg-muted/50"
@@ -253,7 +248,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
                         {issue.priority ?? "none"}
                       </Badge>
                     </div>
-                  </Link>
+                  </PortalForwardLink>
                 );
               })}
           </CardContent>

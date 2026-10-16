@@ -4,7 +4,7 @@ import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { store } from "@openplane-web/lib/store-context";
 import { Plus } from "lucide-react";
 import { observer } from "mobx-react";
-import Link from "next/link";
+import { PortalBackLink, PortalForwardLink, usePortalTab } from "../../_components/portal-navigation";
 import { useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
@@ -33,9 +33,7 @@ const WORKSPACE_SLUG = "palmstead";
 
 export const OperationsTrackerScreen = observer(
 	function OperationsTrackerScreen() {
-		const [view, setView] = useState<
-			"overview" | "schedule" | "queue" | "audit"
-		>("overview");
+		const [view, setView] = usePortalTab("view", ["overview", "schedule", "queue", "audit"] as const, "overview");
 		const [loading, setLoading] = useState(true);
 		const [error, setError] = useState<string | null>(null);
 		const [showNewProject, setShowNewProject] = useState(false);
@@ -94,13 +92,14 @@ export const OperationsTrackerScreen = observer(
 
 		return (
 			<div>
-				{canResetData && <div className="mb-3 flex justify-end"><Button variant="outline" size="sm" asChild><Link href="/dashboard/operations/settings/data">Reset test data</Link></Button></div>}
+				<PortalBackLink fallback="/dashboard/default" className="mb-3" />
+				{canResetData && <div className="mb-3 flex justify-end"><Button variant="outline" size="sm" asChild><PortalForwardLink href="/dashboard/operations/settings/data">Reset test data</PortalForwardLink></Button></div>}
 				<PageHeader
 					title="Operations Tracker"
 					description="Company-wide view across every real project."
 					action={
-						<Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-							<TabsList>
+						<Tabs value={view} onValueChange={setView} className="min-w-0 max-w-full overflow-x-auto pb-2">
+							<TabsList aria-label="Operations sections">
 								<TabsTrigger value="overview">Overview</TabsTrigger>
 								<TabsTrigger value="schedule">My Schedule</TabsTrigger>
 								<TabsTrigger value="queue">Work Queue</TabsTrigger>
@@ -188,7 +187,7 @@ export const OperationsTrackerScreen = observer(
 									const project = projectStore.getProjectById(id);
 									if (!project) return null;
 									return (
-										<Link
+										<PortalForwardLink
 											key={id}
 											href={`/dashboard/operations/${id}`}
 											className="xl:col-span-4"
@@ -206,7 +205,7 @@ export const OperationsTrackerScreen = observer(
 													{project.description || "No description."}
 												</CardContent>
 											</Card>
-										</Link>
+										</PortalForwardLink>
 									);
 								})}
 							</div>

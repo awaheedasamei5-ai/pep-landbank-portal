@@ -30,6 +30,7 @@ export function OperationsDataBoundary({ children }: { children: React.ReactNode
     let checking = false;
     let changed = false;
     let resolved = false;
+    let activeRequest: AbortController | null = null;
     generation.current = observedVersions.get(profileKey) ?? null;
     setOpened(false);
     setStatus("loading");
@@ -53,19 +54,26 @@ export function OperationsDataBoundary({ children }: { children: React.ReactNode
       }
     }
     async function check() {
-      if (checking || stopped || document.visibilityState === "hidden") return;
+      // First entry must finish even in a background tab. Only skip later polls.
+      if (checking || stopped || (resolved && document.visibilityState === "hidden")) return;
       checking = true;
+      const request = new AbortController();
+      activeRequest = request;
+      const deadline = window.setTimeout(() => request.abort(), 15000);
       try {
         const { data, error } = await client
           .from("app_data_versions")
           .select("generation")
           .eq("app_key", "operations")
+          .abortSignal(request.signal)
           .single();
         if (error) throw error;
         accept(data.generation);
       } catch {
         if (!stopped && !resolved && !changed) setStatus("error");
       } finally {
+        window.clearTimeout(deadline);
+        if (activeRequest === request) activeRequest = null;
         checking = false;
       }
     }
@@ -91,6 +99,7 @@ export function OperationsDataBoundary({ children }: { children: React.ReactNode
     document.addEventListener("visibilitychange", recheck);
     return () => {
       stopped = true;
+      activeRequest?.abort();
       window.clearInterval(timer);
       window.removeEventListener("focus", recheck);
       window.removeEventListener("online", recheck);

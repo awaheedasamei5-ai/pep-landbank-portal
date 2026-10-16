@@ -7,6 +7,7 @@ import { Download, FileText, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
+import { PortalBackLink } from "../../../_components/portal-navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -505,6 +506,7 @@ export function OperationsReportsScreen() {
 	if (!profile) return <Skeleton className="h-48 w-full" />;
 	return (
 		<div className="space-y-5">
+			<PortalBackLink fallback="/dashboard/operations" />
 			<PageHeader
 				title="Operations reports"
 				description={

@@ -10,6 +10,9 @@ import {
   useRouter,
 } from "next/navigation";
 
+import { usePortalNavigation } from "@/app/(main)/dashboard/_components/portal-navigation";
+import { emptyPortalTrail, resolvePortalReturn } from "@/lib/palmstead/portal-navigation";
+
 // Mechanical routing adapter -- the real web-next screens copied verbatim
 // into src/webnext/ import from the 'react-router' package (aliased to
 // this file in next.config.mjs's turbopack.resolveAlias); this shim
@@ -34,10 +37,16 @@ let pendingState: unknown = null;
 
 export function useNavigate() {
   const router = useRouter();
+  const pathname = usePathname();
+  const search = useNextSearchParams().toString();
+  const navigation = usePortalNavigation();
+  const current = search ? `${pathname}?${search}` : pathname;
   return (to: string | number, opts?: { replace?: boolean; state?: unknown }) => {
     if (typeof to === "number") {
-      if (to === -1) router.back();
-      else if (to === 1) router.forward();
+      if (to === -1) {
+        if (navigation) navigation.back(current);
+        else router.push(resolvePortalReturn(current, emptyPortalTrail()).href);
+      } else if (to === 1) router.forward();
       return;
     }
     pendingState = opts?.state ?? null;
@@ -65,15 +74,17 @@ export function useLocation() {
   return { pathname, search: search ? `?${search}` : "", hash: "", state, key: pathname };
 }
 
-export function useSearchParams(): [URLSearchParams, (next: URLSearchParams) => void] {
+export function useSearchParams(): [URLSearchParams, (next: URLSearchParams, options?: { replace?: boolean }) => void] {
   const searchParams = useNextSearchParams();
-  // Real usage in the copied screens only ever reads the first tuple
-  // element (see this shim's own comment above) -- the setter is a
-  // deliberate no-op, not an incomplete implementation.
-  const noopSetter = () => {
-    /* real call sites never invoke this */
+  const pathname = usePathname();
+  const router = useRouter();
+  const set = (next: URLSearchParams, options?: { replace?: boolean }) => {
+    const query = next.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (options?.replace === false) router.push(href, { scroll: false });
+    else router.replace(href, { scroll: false });
   };
-  return [new URLSearchParams(searchParams.toString()), noopSetter];
+  return [new URLSearchParams(searchParams.toString()), set];
 }
 
 export function Link({ to, children, ...rest }: { to: string } & Omit<ComponentPropsWithoutRef<"a">, "href">) {

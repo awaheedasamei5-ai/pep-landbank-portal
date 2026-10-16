@@ -1,6 +1,8 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/page-header";
+import { TabsContent } from "@/components/ui/tabs";
 
+import { PortalBackLink } from "../_components/portal-navigation";
+import { AccountingTabs } from "./_components/accounting-tabs";
 import { CommissionPanel } from "./_components/commission-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { OverviewPanel } from "./_components/overview-panel";
@@ -17,19 +19,12 @@ import { SettingsPanel } from "./_components/settings-panel";
 export default function Page() {
   return (
     <div className="flex flex-col gap-4">
+      <div>
+        <PortalBackLink fallback="/dashboard/default" />
+      </div>
       <PageHeader title="Accounting" description="Payments, expenses, commission and payroll in one place." />
 
-      <Tabs defaultValue="overview" className="flex flex-col gap-4">
-        <TabsList variant="line">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="commission">Commission</TabsTrigger>
-          <TabsTrigger value="payroll">Payroll</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-
+      <AccountingTabs>
         <TabsContent value="overview">
           <OverviewPanel />
         </TabsContent>
@@ -57,7 +52,7 @@ export default function Page() {
         <TabsContent value="settings">
           <SettingsPanel />
         </TabsContent>
-      </Tabs>
+      </AccountingTabs>
     </div>
   );
 }
