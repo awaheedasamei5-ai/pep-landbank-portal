@@ -7,6 +7,7 @@ import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
 import { requireSupabase } from "@/lib/supabase.client";
+import { OPERATION_COMMENT_TEXT_LIMIT, operationCommentTextToHtml } from "@/lib/palmstead/operations-comment-html";
+import { OperationCommentBody } from "./operation-comment-body";
 import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { E_SORT_ORDER } from "@plane/constants";
 import { IssueService } from "@openplane-web/services/issue";
@@ -151,7 +154,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
     if (!newComment.trim()) return;
     setPostingComment(true);
     try {
-      await detail.comment.createComment(WORKSPACE_SLUG, projectId, issueId, { comment_html: `<p>${newComment.trim()}</p>` });
+      await detail.comment.createComment(WORKSPACE_SLUG, projectId, issueId, { comment_html: operationCommentTextToHtml(newComment) });
       setNewComment("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to post comment.");
@@ -264,7 +267,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                   return (
                     <div key={item.id} className="border-l-2 pl-3 text-sm">
                       <span className="font-medium">{comment.actor_detail.display_name}</span>{" "}
-                      <span dangerouslySetInnerHTML={{ __html: comment.comment_html }} />
+                      <OperationCommentBody html={comment.comment_html} />
                       <div className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</div>
                     </div>
                   );
@@ -297,18 +300,29 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                   </div>
                 );
               })}
-              <div className="flex gap-2 pt-2">
-                <Textarea
-                  placeholder="Add a comment…"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={2}
-                  className="flex-1"
-                />
-                <SubmitButton type="button" loading={postingComment} onClick={postComment}>
-                  Comment
-                </SubmitButton>
-              </div>
+              <FieldGroup className="pt-2">
+                <Field data-disabled={postingComment}>
+                  <FieldLabel htmlFor="operation-comment">Comment</FieldLabel>
+                  <Textarea
+                    id="operation-comment"
+                    placeholder="Add a comment…"
+                    value={newComment}
+                    maxLength={OPERATION_COMMENT_TEXT_LIMIT}
+                    aria-describedby="operation-comment-count"
+                    disabled={postingComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    rows={3}
+                  />
+                  <FieldDescription id="operation-comment-count">
+                    {newComment.length.toLocaleString()} / {OPERATION_COMMENT_TEXT_LIMIT.toLocaleString()} characters
+                  </FieldDescription>
+                  <div className="flex justify-end">
+                    <SubmitButton type="button" loading={postingComment} disabled={!newComment.trim()} onClick={postComment} className="w-full sm:w-auto">
+                      Post comment
+                    </SubmitButton>
+                  </div>
+                </Field>
+              </FieldGroup>
             </CardContent>
           </Card>
         </div>
