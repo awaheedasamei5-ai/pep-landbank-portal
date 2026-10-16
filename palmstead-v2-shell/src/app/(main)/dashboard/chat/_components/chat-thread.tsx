@@ -82,7 +82,7 @@ function lastSeenLabel(iso: string | null): string {
   return `Last seen ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
 }
 
-function useVoiceRecorder() {
+export function useVoiceRecorder() {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);

@@ -1,22 +1,24 @@
 // Real WhatsApp-style group chat thread (15-chat-whatsapp-full-replica.md).
 // Shares the exact same messages table, attachment columns, reactions
 // table and realtime wiring as 1:1 chat (chat-thread.tsx) -- this is a
-// trimmed sibling view, not a parallel pipeline. Text + emoji + reactions
-// are real here; attachments and voice/video calls in groups are a real,
-// named next phase, not silently dropped (group calls specifically need
-// an SFU this project doesn't have infrastructure for yet).
+// trimmed sibling view, not a parallel pipeline. Attachments/voice notes/
+// location are real here too now, via a distinct Storage path prefix
+// ("group/...") so the RLS policy sets for 1:1 vs group attachments stay
+// mutually exclusive. Group voice/video calls remain a real, named gap --
+// they need an SFU this project doesn't have infrastructure for.
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "cn";
-import { ArrowLeft, Search, Send, Smile, Star, Users } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, MapPin, Mic, Paperclip, Search, Send, Smile, Square, Star, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bubble, BubbleContent, BubbleGroup, BubbleReactions } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Message, MessageAvatar, MessageContent } from "@/components/ui/message";
 import {
@@ -31,10 +33,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
 
+import { ChatAttachmentBubble } from "./chat-attachment-bubble";
 import { ForwardDialog, ForwardedLabel, MessageActionsTrigger, QuotedSnippet, ReplyPreviewBar, type ForwardTarget } from "./chat-message-actions";
 import { useMyHiddenMessageIds, useMyStarredMessageIds } from "./use-chat-message-actions";
 import { QUICK_REACTIONS, useMessageReactions, useSetReaction } from "./use-chat-reactions";
 import { useSendGroupMessage, type GroupThread } from "./use-chat-groups";
+import { useVoiceRecorder } from "./chat-thread";
 import type { ChatMessage } from "./use-chat";
 
 interface GroupThreadViewProps {
@@ -57,8 +61,12 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+  const [sendingAttachment, setSendingAttachment] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const sendMessage = useSendGroupMessage(myKey, myName);
+  const voice = useVoiceRecorder();
 
   const messageIds = useMemo(() => groupThread?.messages.map((m) => m.id) ?? [], [groupThread?.messages]);
   const reactionsByMessage = useMessageReactions(myKey, messageIds);
@@ -103,6 +111,40 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the message");
     }
+  }
+
+  async function sendAttachment(file: File, durationSeconds?: number) {
+    setSendingAttachment(true);
+    try {
+      await sendMessage.mutateAsync({ groupId: group.id, body: "", attachmentFile: file, attachmentDurationSeconds: durationSeconds });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the attachment");
+    } finally {
+      setSendingAttachment(false);
+    }
+  }
+
+  async function shareLocation() {
+    if (!navigator.geolocation) {
+      toast.error("Location isn't available in this browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await sendMessage.mutateAsync({ groupId: group.id, body: "", location: { lat: pos.coords.latitude, lng: pos.coords.longitude, label: null } });
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Could not share your location");
+        }
+      },
+      () => toast.error("Location permission was denied."),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
+  async function stopAndSendVoiceNote() {
+    const result = await voice.finish();
+    if (result) void sendAttachment(result.file, result.durationSeconds);
   }
 
   return (
@@ -181,6 +223,7 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
                                 {!isOutbound && <span className="font-medium text-[#1DA851] text-xs dark:text-[#00A884]">{m.senderName}</span>}
                                 {m.forwarded && <ForwardedLabel />}
                                 <QuotedSnippet quoted={quoted} />
+                                <ChatAttachmentBubble message={m} />
                                 <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
                                   {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
                                   <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
@@ -256,60 +299,119 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
       <div className="px-2">
         {replyingTo && <ReplyPreviewBar message={replyingTo} onCancel={() => setReplyingTo(null)} />}
         {canSend ? (
-          <form
-            className="w-full"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send();
-            }}
-          >
-            <InputGroup className="rounded-md border">
-              <InputGroupTextarea
-                ref={textareaRef}
-                placeholder={`Message ${group.name}…`}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void send();
-                  }
+          <>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void sendAttachment(file);
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void sendAttachment(file);
+              }}
+            />
+            {voice.recording ? (
+              <div className="flex h-14 items-center gap-3 rounded-md border bg-background px-3">
+                <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />
+                <span className="flex-1 text-sm tabular-nums">
+                  {Math.floor(voice.seconds / 60)}:{(voice.seconds % 60).toString().padStart(2, "0")}
+                </span>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Cancel recording" onClick={voice.cancel}>
+                  <X />
+                </Button>
+                <Button type="button" variant="default" size="icon-sm" aria-label="Send voice note" onClick={stopAndSendVoiceNote}>
+                  <Square className="size-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <form
+                className="w-full"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void send();
                 }}
-                className="min-h-14 px-3 py-2.5 text-sm ring-0 focus-visible:ring-0"
-              />
-              <InputGroupAddon align="block-end" className="gap-0.5">
-                <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
-                  <PopoverTrigger asChild>
-                    <InputGroupButton type="button" variant="ghost" size="icon-sm" aria-label="Insert emoji">
-                      <Smile />
+              >
+                <InputGroup className="rounded-md border">
+                  <InputGroupTextarea
+                    ref={textareaRef}
+                    placeholder={`Message ${group.name}…`}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                    className="min-h-14 px-3 py-2.5 text-sm ring-0 focus-visible:ring-0"
+                  />
+                  <InputGroupAddon align="block-end" className="gap-0.5">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <InputGroupButton type="button" variant="ghost" size="icon-sm" disabled={sendingAttachment} aria-label="Attach">
+                          <Paperclip />
+                        </InputGroupButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => photoInputRef.current?.click()}>
+                          <ImageIcon /> Photo or video
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                          <Paperclip /> Document
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => void shareLocation()}>
+                          <MapPin /> Location
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+                      <PopoverTrigger asChild>
+                        <InputGroupButton type="button" variant="ghost" size="icon-sm" aria-label="Insert emoji">
+                          <Smile />
+                        </InputGroupButton>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-auto border-none p-0 pointer-events-auto">
+                        <EmojiPicker
+                          theme={EmojiTheme.AUTO}
+                          emojiStyle={EmojiStyle.NATIVE}
+                          skinTonesDisabled
+                          onEmojiClick={(emoji) => {
+                            setDraft((d) => d + emoji.emoji);
+                            setEmojiOpen(false);
+                            textareaRef.current?.focus();
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <InputGroupButton type="button" variant="ghost" size="icon-sm" disabled={sendingAttachment} aria-label="Record voice note" onClick={() => void voice.start()}>
+                      <Mic />
                     </InputGroupButton>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto border-none p-0 pointer-events-auto">
-                    <EmojiPicker
-                      theme={EmojiTheme.AUTO}
-                      emojiStyle={EmojiStyle.NATIVE}
-                      skinTonesDisabled
-                      onEmojiClick={(emoji) => {
-                        setDraft((d) => d + emoji.emoji);
-                        setEmojiOpen(false);
-                        textareaRef.current?.focus();
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <InputGroupButton
-                  type="submit"
-                  variant="default"
-                  size="icon-sm"
-                  className="ml-auto bg-[#25D366] text-white hover:bg-[#25D366]/90 dark:bg-[#00A884] dark:hover:bg-[#00A884]/90"
-                  disabled={!draft.trim() || sendMessage.isPending}
-                >
-                  <Send />
-                  <span className="sr-only">Send</span>
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-          </form>
+                    <InputGroupButton
+                      type="submit"
+                      variant="default"
+                      size="icon-sm"
+                      className="ml-auto bg-[#25D366] text-white hover:bg-[#25D366]/90 dark:bg-[#00A884] dark:hover:bg-[#00A884]/90"
+                      disabled={!draft.trim() || sendMessage.isPending}
+                    >
+                      <Send />
+                      <span className="sr-only">Send</span>
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+              </form>
+            )}
+          </>
         ) : (
           <div className="rounded-md border bg-muted px-3 py-2.5 text-center text-muted-foreground text-sm">Only admins can send messages in this group</div>
         )}

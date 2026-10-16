@@ -168,12 +168,76 @@ export function useCreateGroup(myKey: string | undefined, myName: string | undef
   });
 }
 
+// Group attachments share the chat-attachments Storage bucket with 1:1
+// chat -- a distinct path prefix ("group/...") keeps the two RLS policy
+// sets mutually exclusive (see the chat_attachments_group_storage_* migration).
+function groupAttachmentPath(groupId: string, myKey: string, filename: string): string {
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `group/${groupId}/${myKey}/${crypto.randomUUID()}-${safeName}`;
+}
+
+function attachmentKindFromMime(mime: string): "image" | "video" | "audio" | "file" {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "file";
+}
+
+interface SendGroupMessageInput {
+  groupId: string;
+  body: string;
+  replyToId?: string | null;
+  attachmentFile?: File;
+  attachmentDurationSeconds?: number;
+  location?: { lat: number; lng: number; label: string | null };
+}
+
 export function useSendGroupMessage(myKey: string | undefined, myName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { groupId: string; body: string; replyToId?: string | null }) => {
+    mutationFn: async (input: SendGroupMessageInput) => {
       if (!myKey) throw new Error("Not signed in.");
       const sb = requireSupabase();
+
+      if (input.location) {
+        const { error } = await sb.from("messages").insert({
+          sender_key: myKey,
+          sender_name: myName,
+          group_id: input.groupId,
+          body: input.body,
+          read: true,
+          reply_to_id: input.replyToId ?? null,
+          kind: "location",
+          location_lat: input.location.lat,
+          location_lng: input.location.lng,
+          location_label: input.location.label,
+        });
+        if (error) throw error;
+        return;
+      }
+
+      if (input.attachmentFile) {
+        const path = groupAttachmentPath(input.groupId, myKey, input.attachmentFile.name);
+        const { error: upErr } = await sb.storage.from("chat-attachments").upload(path, input.attachmentFile, { contentType: input.attachmentFile.type || undefined });
+        if (upErr) throw upErr;
+        const { error } = await sb.from("messages").insert({
+          sender_key: myKey,
+          sender_name: myName,
+          group_id: input.groupId,
+          body: input.body,
+          read: true,
+          reply_to_id: input.replyToId ?? null,
+          kind: attachmentKindFromMime(input.attachmentFile.type),
+          attachment_url: path,
+          attachment_name: input.attachmentFile.name,
+          attachment_type: input.attachmentFile.type || null,
+          attachment_size_bytes: input.attachmentFile.size,
+          attachment_duration_seconds: input.attachmentDurationSeconds ?? null,
+        });
+        if (error) throw error;
+        return;
+      }
+
       const { error } = await sb
         .from("messages")
         .insert({ sender_key: myKey, sender_name: myName, group_id: input.groupId, body: input.body, read: true, reply_to_id: input.replyToId ?? null });
