@@ -214,7 +214,7 @@ export const sidebarItems: NavGroup[] = [
 				url: "/dashboard/leave",
 				icon: CalendarClock,
 			},
-			{ id: "notes", title: "Notes", url: NOT_BUILT_YET, icon: StickyNote },
+			{ id: "notes", title: "Notes", url: "/dashboard/notes", icon: StickyNote },
 			{
 				id: "banner-tracking",
 				title: "Banner Tracking",

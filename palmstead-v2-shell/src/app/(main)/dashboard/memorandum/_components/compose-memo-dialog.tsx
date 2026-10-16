@@ -30,6 +30,13 @@ export interface ComposeSeed {
   editingMemo?: Memo | null;
   replyTo?: { toKey: string; toName: string; subject: string } | null;
   parentId?: string | null;
+  /**
+   * Seeds subject+body from a Note (Notes' "Save as Draft" / "Send as Memo").
+   * memos.to_key is NOT NULL even for drafts, so a recipient still has to be
+   * picked here -- both Notes actions open this same pre-filled dialog, the
+   * difference is only which footer button the user is being pointed at.
+   */
+  fromNote?: { title: string; bodyHtml: string } | null;
 }
 
 interface ComposeMemoDialogProps {
@@ -71,6 +78,12 @@ export function ComposeMemoDialog({ open, onOpenChange, myKey, myName, seed }: C
       setToInput(replyStaff?.name ?? seed.replyTo.toName);
       setSubject(seed.replyTo.subject.startsWith("Re: ") ? seed.replyTo.subject : `Re: ${seed.replyTo.subject}`);
       setBodyHtml("");
+      setCc([]);
+    } else if (seed?.fromNote) {
+      setToStaff(null);
+      setToInput("");
+      setSubject(seed.fromNote.title);
+      setBodyHtml(seed.fromNote.bodyHtml);
       setCc([]);
     } else {
       setToStaff(null);
