@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "cn";
-import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Send, Sparkles, Smile, Square, Video, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Search, Send, Sparkles, Smile, Square, Star, Video, X } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
@@ -49,9 +49,11 @@ import { getInitials } from "@/lib/utils";
 import type { DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
 import { ChatAttachmentBubble } from "./chat-attachment-bubble";
+import { ForwardDialog, ForwardedLabel, MessageActionsTrigger, QuotedSnippet, ReplyPreviewBar, type ForwardTarget } from "./chat-message-actions";
+import { useMyHiddenMessageIds, useMyStarredMessageIds } from "./use-chat-message-actions";
 import { QUICK_REACTIONS, useMessageReactions, useSetReaction } from "./use-chat-reactions";
 import { useSuggestReply } from "./use-chat-smart-reply";
-import { useSendMessage, useTypingBroadcast, useTypingStatus, type ChatThread as Thread } from "./use-chat";
+import { useSendMessage, useTypingBroadcast, useTypingStatus, type ChatMessage, type ChatThread as Thread } from "./use-chat";
 
 interface ChatThreadProps {
   thread: Thread | null;
@@ -61,6 +63,7 @@ interface ChatThreadProps {
   showBackButton?: boolean;
   onBack?: () => void;
   onStartCall?: (kind: "audio" | "video") => void;
+  forwardTargets: ForwardTarget[];
   className?: string;
 }
 
@@ -144,10 +147,12 @@ function useVoiceRecorder() {
   return { recording, seconds, start, cancel, finish };
 }
 
-export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackButton, onBack, onStartCall, className }: ChatThreadProps) {
+export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackButton, onBack, onStartCall, forwardTargets, className }: ChatThreadProps) {
   const [draft, setDraft] = useState("");
   const [sendingAttachment, setSendingAttachment] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const sendMessage = useSendMessage(myKey, myName);
   const voice = useVoiceRecorder();
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -161,9 +166,22 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
   const messageIds = useMemo(() => thread?.messages.map((m) => m.id) ?? [], [thread?.messages]);
   const reactionsByMessage = useMessageReactions(myKey, messageIds);
   const setReaction = useSetReaction(myKey, myName);
+  const { data: starredIds } = useMyStarredMessageIds(myKey);
+  const { data: hiddenIds } = useMyHiddenMessageIds(myKey);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const messageById = useMemo(() => new Map((thread?.messages ?? []).map((m) => [m.id, m])), [thread?.messages]);
+  const visibleMessages = useMemo(() => {
+    const notHidden = (thread?.messages ?? []).filter((m) => !hiddenIds?.has(m.id));
+    const q = searchQuery.trim().toLowerCase();
+    return q ? notHidden.filter((m) => m.body.toLowerCase().includes(q)) : notHidden;
+  }, [thread?.messages, hiddenIds, searchQuery]);
 
   useEffect(() => {
     setDraft("");
+    setReplyingTo(null);
+    setSearchOpen(false);
+    setSearchQuery("");
   }, [thread?.partnerKey]);
 
   if (!thread) {
@@ -197,8 +215,10 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
     const body = draft.trim();
     if (!body || !thread) return;
     setDraft("");
+    const replyToId = replyingTo?.id ?? null;
+    setReplyingTo(null);
     try {
-      await sendMessage.mutateAsync({ recipientKey: thread.partnerKey, body });
+      await sendMessage.mutateAsync({ recipientKey: thread.partnerKey, body, replyToId });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the message");
     }
@@ -265,6 +285,9 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
             <div className="truncate font-medium text-sm">{thread.partnerName}</div>
             <div className={cn("truncate text-xs", isPartnerTyping ? "text-[#1DA851] dark:text-[#00A884]" : "text-muted-foreground")}>{statusLine}</div>
           </div>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Search this chat" onClick={() => setSearchOpen((v) => !v)}>
+            <Search />
+          </Button>
           <Button type="button" variant="ghost" size="icon-sm" aria-label="Start voice call" onClick={() => onStartCall?.("audio")}>
             <Phone />
           </Button>
@@ -272,6 +295,19 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
             <Video />
           </Button>
         </div>
+        {searchOpen && (
+          <div className="px-2">
+            <InputGroup className="rounded-md border">
+              <InputGroupTextarea
+                placeholder="Search in this chat…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                rows={1}
+                className="min-h-9 resize-none px-3 py-2 text-sm ring-0 focus-visible:ring-0"
+              />
+            </InputGroup>
+          </div>
+        )}
         <Separator />
       </div>
 
@@ -279,10 +315,12 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
         <MessageScroller className="min-h-0 flex-1 bg-[#ECE5DD] dark:bg-[#0B141A]">
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-4 px-2 py-6">
-              {thread.messages.map((m) => {
+              {visibleMessages.map((m) => {
                 const isOutbound = m.senderKey === myKey;
                 const align = isOutbound ? "end" : "start";
                 const reactions = reactionsByMessage.get(m.id) ?? [];
+                const isStarred = starredIds?.has(m.id) ?? false;
+                const quoted = m.replyToId ? messageById.get(m.replyToId) : undefined;
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={align === "end"}>
                     <Message align={align}>
@@ -308,10 +346,13 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                               )}
                             >
                               <BubbleContent className="flex flex-col gap-1">
+                                {m.forwarded && <ForwardedLabel />}
+                                <QuotedSnippet quoted={quoted} />
                                 <ChatAttachmentBubble message={m} />
                                 <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
                                   {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
                                   <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
+                                    {isStarred && <Star className="size-3 fill-current text-amber-500" />}
                                     {timeLabel(m.createdAt)}
                                     {isOutbound &&
                                       !m.pending &&
@@ -364,6 +405,16 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                                 </PopoverContent>
                               </Popover>
                             )}
+                            {!m.pending && (
+                              <MessageActionsTrigger
+                                message={m}
+                                myKey={myKey}
+                                myName={myName}
+                                starred={isStarred}
+                                onReply={() => setReplyingTo(m)}
+                                onForward={() => setForwardingMessage(m)}
+                              />
+                            )}
                           </div>
                         </BubbleGroup>
                       </MessageContent>
@@ -378,6 +429,7 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
       </MessageScrollerProvider>
 
       <div className="px-2">
+        {replyingTo && <ReplyPreviewBar message={replyingTo} onCancel={() => setReplyingTo(null)} />}
         <input
           ref={photoInputRef}
           type="file"
@@ -502,6 +554,15 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
           </form>
         )}
       </div>
+
+      <ForwardDialog
+        open={Boolean(forwardingMessage)}
+        onOpenChange={(v) => !v && setForwardingMessage(null)}
+        message={forwardingMessage}
+        myKey={myKey}
+        myName={myName}
+        targets={forwardTargets}
+      />
     </div>
   );
 }

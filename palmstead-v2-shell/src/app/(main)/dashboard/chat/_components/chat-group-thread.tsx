@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "cn";
-import { ArrowLeft, Send, Smile, Users } from "lucide-react";
+import { ArrowLeft, Search, Send, Smile, Star, Users } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
@@ -31,8 +31,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
 
+import { ForwardDialog, ForwardedLabel, MessageActionsTrigger, QuotedSnippet, ReplyPreviewBar, type ForwardTarget } from "./chat-message-actions";
+import { useMyHiddenMessageIds, useMyStarredMessageIds } from "./use-chat-message-actions";
 import { QUICK_REACTIONS, useMessageReactions, useSetReaction } from "./use-chat-reactions";
 import { useSendGroupMessage, type GroupThread } from "./use-chat-groups";
+import type { ChatMessage } from "./use-chat";
 
 interface GroupThreadViewProps {
   groupThread: GroupThread | null;
@@ -41,6 +44,7 @@ interface GroupThreadViewProps {
   showBackButton?: boolean;
   onBack?: () => void;
   onOpenInfo?: () => void;
+  forwardTargets: ForwardTarget[];
   className?: string;
 }
 
@@ -48,18 +52,33 @@ function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-export function GroupThreadView({ groupThread, myKey, myName, showBackButton, onBack, onOpenInfo, className }: GroupThreadViewProps) {
+export function GroupThreadView({ groupThread, myKey, myName, showBackButton, onBack, onOpenInfo, forwardTargets, className }: GroupThreadViewProps) {
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useSendGroupMessage(myKey, myName);
 
   const messageIds = useMemo(() => groupThread?.messages.map((m) => m.id) ?? [], [groupThread?.messages]);
   const reactionsByMessage = useMessageReactions(myKey, messageIds);
   const setReaction = useSetReaction(myKey, myName);
+  const { data: starredIds } = useMyStarredMessageIds(myKey);
+  const { data: hiddenIds } = useMyHiddenMessageIds(myKey);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const messageById = useMemo(() => new Map((groupThread?.messages ?? []).map((m) => [m.id, m])), [groupThread?.messages]);
+  const visibleMessages = useMemo(() => {
+    const notHidden = (groupThread?.messages ?? []).filter((m) => !hiddenIds?.has(m.id));
+    const q = searchQuery.trim().toLowerCase();
+    return q ? notHidden.filter((m) => m.body.toLowerCase().includes(q)) : notHidden;
+  }, [groupThread?.messages, hiddenIds, searchQuery]);
 
   useEffect(() => {
     setDraft("");
+    setReplyingTo(null);
+    setSearchOpen(false);
+    setSearchQuery("");
   }, [groupThread?.group.id]);
 
   if (!groupThread) {
@@ -77,8 +96,10 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
     const body = draft.trim();
     if (!body) return;
     setDraft("");
+    const replyToId = replyingTo?.id ?? null;
+    setReplyingTo(null);
     try {
-      await sendMessage.mutateAsync({ groupId: group.id, body });
+      await sendMessage.mutateAsync({ groupId: group.id, body, replyToId });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the message");
     }
@@ -87,31 +108,40 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
   return (
     <div className={cn("flex h-full flex-col py-3", className)}>
       <div className="flex flex-col gap-3">
-        <button type="button" onClick={onOpenInfo} className="flex items-center gap-3 px-2 text-left">
+        <div className="flex items-center gap-3 px-2">
           {showBackButton && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="md:hidden"
-              aria-label="Back to conversations"
-              onClick={(e) => {
-                e.stopPropagation();
-                onBack?.();
-              }}
-            >
+            <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Back to conversations" onClick={onBack}>
               <ArrowLeft />
             </Button>
           )}
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-background text-foreground">
-              <Users className="size-4" />
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-sm">{group.name}</div>
-            <div className="truncate text-muted-foreground text-xs">{group.members.map((m) => m.staffName.split(" ")[0]).join(", ")}</div>
+          <button type="button" onClick={onOpenInfo} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+            <Avatar className="size-8">
+              <AvatarFallback className="bg-background text-foreground">
+                <Users className="size-4" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium text-sm">{group.name}</div>
+              <div className="truncate text-muted-foreground text-xs">{group.members.map((m) => m.staffName.split(" ")[0]).join(", ")}</div>
+            </div>
+          </button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Search this chat" onClick={() => setSearchOpen((v) => !v)}>
+            <Search />
+          </Button>
+        </div>
+        {searchOpen && (
+          <div className="px-2">
+            <InputGroup className="rounded-md border">
+              <InputGroupTextarea
+                placeholder="Search in this chat…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                rows={1}
+                className="min-h-9 resize-none px-3 py-2 text-sm ring-0 focus-visible:ring-0"
+              />
+            </InputGroup>
           </div>
-        </button>
+        )}
         <Separator />
       </div>
 
@@ -119,10 +149,12 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
         <MessageScroller className="min-h-0 flex-1 bg-[#ECE5DD] dark:bg-[#0B141A]">
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-4 px-2 py-6">
-              {groupThread.messages.map((m) => {
+              {visibleMessages.map((m) => {
                 const isOutbound = m.senderKey === myKey;
                 const align = isOutbound ? "end" : "start";
                 const reactions = reactionsByMessage.get(m.id) ?? [];
+                const isStarred = starredIds?.has(m.id) ?? false;
+                const quoted = m.replyToId ? messageById.get(m.replyToId) : undefined;
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={align === "end"}>
                     <Message align={align}>
@@ -147,9 +179,14 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
                             >
                               <BubbleContent className="flex flex-col gap-1">
                                 {!isOutbound && <span className="font-medium text-[#1DA851] text-xs dark:text-[#00A884]">{m.senderName}</span>}
+                                {m.forwarded && <ForwardedLabel />}
+                                <QuotedSnippet quoted={quoted} />
                                 <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
                                   {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
-                                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">{timeLabel(m.createdAt)}</span>
+                                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
+                                    {isStarred && <Star className="size-3 fill-current text-amber-500" />}
+                                    {timeLabel(m.createdAt)}
+                                  </span>
                                 </div>
                               </BubbleContent>
                               {reactions.length > 0 && (
@@ -195,6 +232,14 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
                                 })}
                               </PopoverContent>
                             </Popover>
+                            <MessageActionsTrigger
+                              message={m}
+                              myKey={myKey}
+                              myName={myName}
+                              starred={isStarred}
+                              onReply={() => setReplyingTo(m)}
+                              onForward={() => setForwardingMessage(m)}
+                            />
                           </div>
                         </BubbleGroup>
                       </MessageContent>
@@ -209,6 +254,7 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
       </MessageScrollerProvider>
 
       <div className="px-2">
+        {replyingTo && <ReplyPreviewBar message={replyingTo} onCancel={() => setReplyingTo(null)} />}
         {canSend ? (
           <form
             className="w-full"
@@ -268,6 +314,15 @@ export function GroupThreadView({ groupThread, myKey, myName, showBackButton, on
           <div className="rounded-md border bg-muted px-3 py-2.5 text-center text-muted-foreground text-sm">Only admins can send messages in this group</div>
         )}
       </div>
+
+      <ForwardDialog
+        open={Boolean(forwardingMessage)}
+        onOpenChange={(v) => !v && setForwardingMessage(null)}
+        message={forwardingMessage}
+        myKey={myKey}
+        myName={myName}
+        targets={forwardTargets}
+      />
     </div>
   );
 }

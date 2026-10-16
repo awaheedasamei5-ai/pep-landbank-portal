@@ -34,6 +34,8 @@ export interface ChatMessage {
   locationLat: number | null;
   locationLng: number | null;
   locationLabel: string | null;
+  replyToId: string | null;
+  forwarded: boolean;
   /** Client-only: true while an optimistically-inserted send hasn't been confirmed by the server yet. */
   pending?: boolean;
 }
@@ -56,6 +58,8 @@ type RawMessage = {
   location_lat: number | null;
   location_lng: number | null;
   location_label: string | null;
+  reply_to_id: string | null;
+  forwarded: boolean;
 };
 
 const ATTACHMENT_KINDS = new Set(["image", "video", "audio", "file", "location"]);
@@ -79,6 +83,8 @@ function mapMessage(r: RawMessage): ChatMessage {
     locationLat: r.location_lat,
     locationLng: r.location_lng,
     locationLabel: r.location_label,
+    replyToId: r.reply_to_id,
+    forwarded: r.forwarded,
   };
 }
 
@@ -215,6 +221,7 @@ interface SendMessageInput {
   attachmentFile?: File;
   attachmentDurationSeconds?: number;
   location?: { lat: number; lng: number; label: string | null };
+  replyToId?: string | null;
 }
 
 // Root cause of "takes a long time to show after you type": every send used
@@ -243,6 +250,7 @@ export function useSendMessage(myKey: string | undefined, myName: string | undef
             location_lat: input.location.lat,
             location_lng: input.location.lng,
             location_label: input.location.label,
+            reply_to_id: input.replyToId ?? null,
           })
           .select("*")
           .single();
@@ -266,6 +274,7 @@ export function useSendMessage(myKey: string | undefined, myName: string | undef
             attachment_type: input.attachmentFile.type || null,
             attachment_size_bytes: sizeBytes,
             attachment_duration_seconds: input.attachmentDurationSeconds ?? null,
+            reply_to_id: input.replyToId ?? null,
           })
           .select("*")
           .single();
@@ -275,7 +284,7 @@ export function useSendMessage(myKey: string | undefined, myName: string | undef
 
       const { data, error } = await sb
         .from("messages")
-        .insert({ sender_key: myKey, sender_name: myName, recipient_key: input.recipientKey, body: input.body, read: false })
+        .insert({ sender_key: myKey, sender_name: myName, recipient_key: input.recipientKey, body: input.body, read: false, reply_to_id: input.replyToId ?? null })
         .select("*")
         .single();
       if (error) throw error;
@@ -302,6 +311,8 @@ export function useSendMessage(myKey: string | undefined, myName: string | undef
         locationLat: null,
         locationLng: null,
         locationLabel: null,
+        replyToId: input.replyToId ?? null,
+        forwarded: false,
         pending: true,
       };
       patchMessages(qc, myKey, (prev) => [...prev, optimistic]);

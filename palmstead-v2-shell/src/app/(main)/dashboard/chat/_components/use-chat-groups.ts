@@ -56,6 +56,8 @@ function mapMessageRow(r: Record<string, unknown>): ChatMessage {
     locationLat: r.location_lat as number | null,
     locationLng: r.location_lng as number | null,
     locationLabel: r.location_label as string | null,
+    replyToId: r.reply_to_id as string | null,
+    forwarded: Boolean(r.forwarded),
   };
 }
 
@@ -169,10 +171,12 @@ export function useCreateGroup(myKey: string | undefined, myName: string | undef
 export function useSendGroupMessage(myKey: string | undefined, myName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { groupId: string; body: string }) => {
+    mutationFn: async (input: { groupId: string; body: string; replyToId?: string | null }) => {
       if (!myKey) throw new Error("Not signed in.");
       const sb = requireSupabase();
-      const { error } = await sb.from("messages").insert({ sender_key: myKey, sender_name: myName, group_id: input.groupId, body: input.body, read: true });
+      const { error } = await sb
+        .from("messages")
+        .insert({ sender_key: myKey, sender_name: myName, group_id: input.groupId, body: input.body, read: true, reply_to_id: input.replyToId ?? null });
       if (error) throw error;
     },
     onSuccess: (_void, input) => {

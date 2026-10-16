@@ -28,11 +28,13 @@ import { useChatCall } from "@/app/(main)/dashboard/_components/call-provider";
 
 import { ChatConversationList, type ConversationEntry } from "./chat-conversation-list";
 import { GroupInfoDialog, NewGroupDialog } from "./chat-group-dialogs";
+import type { ForwardTarget } from "./chat-message-actions";
 import { GroupThreadView } from "./chat-group-thread";
 import { ChatStatusPanel } from "./chat-status-panel";
 import { ChatThreadView } from "./chat-thread";
 import { useChatRealtime, useChatThreads, useMarkThreadRead, type ChatThread } from "./use-chat";
 import { useGroupThreads } from "./use-chat-groups";
+import { useConversationSettingsMap, useSetConversationSetting } from "./use-chat-message-actions";
 import { useStatusGroups } from "./use-status";
 
 const isSameStaff = (a: DirectoryStaff, b: DirectoryStaff) => a.agentKey === b.agentKey;
@@ -53,6 +55,8 @@ export function ChatScreen() {
   const { groupThreads, isLoading: groupsLoading } = useGroupThreads(myKey);
   const markRead = useMarkThreadRead(myKey);
   const call = useChatCall();
+  const { data: conversationSettings } = useConversationSettingsMap(myKey);
+  const setConversationSetting = useSetConversationSetting(myKey);
 
   const [selection, setSelection] = useState<Selection>(null);
   const [showThread, setShowThread] = useState(false);
@@ -85,6 +89,14 @@ export function ChatScreen() {
     }));
     return [...dmEntries, ...groupEntries].sort((a, b) => (b.lastCreatedAt ?? "").localeCompare(a.lastCreatedAt ?? ""));
   }, [threads, groupThreads]);
+
+  // Forwarding targets real WhatsApp lets you reach anyone, not just chats
+  // you already have history with.
+  const forwardTargets = useMemo((): ForwardTarget[] => {
+    const dmTargets: ForwardTarget[] = others.map((s) => ({ key: s.agentKey, name: s.name, kind: "dm" as const }));
+    const groupTargets: ForwardTarget[] = groupThreads.map((g) => ({ key: g.group.id, name: g.group.name, kind: "group" as const }));
+    return [...dmTargets, ...groupTargets];
+  }, [others, groupThreads]);
 
   // A brand-new conversation (picked via "New chat") has no messages yet, so
   // it has no real ChatThread to find -- threads are derived from messages,
@@ -169,6 +181,8 @@ export function ChatScreen() {
               myKey={myKey}
               activeKey={selection?.key ?? null}
               staffByKey={staffByKey}
+              settingsMap={conversationSettings ?? new Map()}
+              onSetSetting={(conversationKey, patch) => setConversationSetting.mutate({ conversationKey, patch })}
               onSelectEntry={selectEntry}
               onNewChat={() => setNewChatOpen(true)}
               onNewGroup={() => setNewGroupOpen(true)}
@@ -185,6 +199,7 @@ export function ChatScreen() {
             showBackButton={isMobile}
             onBack={() => setShowThread(false)}
             onOpenInfo={() => setGroupInfoOpen(true)}
+            forwardTargets={forwardTargets}
             className={cn(
               "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
               showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
@@ -201,6 +216,7 @@ export function ChatScreen() {
             onStartCall={(kind) => {
               if (selection?.kind === "dm") void call.startCall(selection.key, directoryByKey.get(selection.key) ?? selection.key, kind);
             }}
+            forwardTargets={forwardTargets}
             className={cn(
               "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
               showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
