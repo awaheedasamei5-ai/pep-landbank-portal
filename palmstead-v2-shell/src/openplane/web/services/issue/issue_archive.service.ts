@@ -4,10 +4,11 @@
  * See the LICENSE file for details.
  */
 
+import { APIService } from "@openplane-web/services/api.service";
 import { API_BASE_URL } from "@plane/constants";
 import type { TIssue, TIssueServiceType } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
-import { APIService } from "@openplane-web/services/api.service";
+
 import { requireSupabase } from "@/lib/supabase.client";
 // types
 // constants
@@ -43,15 +44,23 @@ export class IssueArchiveService extends APIService {
     archived_at: string;
   }> {
     const sb = requireSupabase();
-    const archivedAt = new Date().toISOString();
-    const { error } = await sb.from("op_issues").update({ archived_at: archivedAt }).eq("id", issueId);
-    if (error) throw error;
-    return { archived_at: archivedAt };
+    const { data: current, error: currentError } = await sb
+      .from("op_issues")
+      .select("updated_at")
+      .eq("id", issueId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("Work item not found.");
+    const { data, error } = await sb.rpc("archive_operation_issue", {
+      p_issue_id: issueId,
+      p_expected_updated_at: current.updated_at,
+    });
+    if (error || !data?.archived_at) throw error ?? new Error("Work item archive returned no record.");
+    return { archived_at: data.archived_at };
   }
 
   async restoreIssue(_workspaceSlug: string, _projectId: string, issueId: string): Promise<void> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_issues").update({ archived_at: null }).eq("id", issueId);
+    const { error } = await sb.rpc("restore_operation_issue", { p_issue_id: issueId });
     if (error) throw error;
   }
 
@@ -70,3 +79,4 @@ export class IssueArchiveService extends APIService {
       });
   }
 }
+

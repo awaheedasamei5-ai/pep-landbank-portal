@@ -576,7 +576,11 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       } as TIssue);
 
       // call API to update the issue
-      await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+      const response = await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+      // Keep the server-issued updated_at in the client store so the next
+      // optimistic edit uses the correct concurrency token.
+      this.rootIssueStore.issues.updateIssue(issueId, response);
+      this.updateIssueList(response, { ...issueBeforeUpdate, ...data } as TIssue);
 
       // call fetch Parent Stats
       this.fetchParentStats(workspaceSlug, projectId);
@@ -1977,3 +1981,4 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     );
   };
 }
+
