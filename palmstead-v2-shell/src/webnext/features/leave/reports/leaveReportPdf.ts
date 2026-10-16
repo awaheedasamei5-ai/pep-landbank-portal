@@ -329,6 +329,11 @@ export function createLeaveReportPdf(
           ],
         ],
       );
+      // Keep the change-table heading and its first evidence row together.
+      if (cursor > height - 65) {
+        doc.addPage();
+        cursor = 61;
+      }
       table(
         [
           "Event / request / stored owner",
