@@ -62,7 +62,7 @@ function ReportTable({
             {row.map((value, cell) => (
               <TableCell key={headers[cell]} className="max-w-80 whitespace-normal align-top">
                 {cell === 0 && rowLinks?.[index] ? (
-                  <Link className="font-medium underline underline-offset-4" href={rowLinks[index]}>
+                  <Link className="block break-all font-medium underline underline-offset-4" href={rowLinks[index]}>
                     {value ?? "Open request"}
                   </Link>
                 ) : (

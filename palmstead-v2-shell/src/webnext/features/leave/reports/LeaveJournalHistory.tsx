@@ -89,7 +89,7 @@ export function LeaveJournalHistory({ report }: { report: LeaveReport }) {
                   <TableCell className="min-w-40 max-w-64 whitespace-normal break-words">
                     {event.requestExists ? (
                       <Link
-                        className="font-medium underline underline-offset-4"
+                        className="block break-all font-medium underline underline-offset-4"
                         href={`/dashboard/leave/requests/${event.requestId}`}
                       >
                         {event.reference}
