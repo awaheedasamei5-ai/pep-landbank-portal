@@ -148,55 +148,63 @@ export const ProjectSettingsPanel = observer(function ProjectSettingsPanel({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">States</CardTitle>
+          {!canManageProject && (
+            <p className="text-sm text-muted-foreground">Project states are read-only for your role.</p>
+          )}
         </CardHeader>
         <CardContent className="grid gap-3">
           {states.map((s) => (
-            <div key={s.id} className="flex items-center gap-2 border-b pb-2 last:border-0">
+            <div key={s.id} className="grid min-w-0 gap-2 border-b pb-3 last:border-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto_auto] sm:items-center">
               <Input
                 type="color"
                 defaultValue={s.color}
                 className="h-8 w-10 p-1"
+                disabled={!canManageProject}
                 onBlur={(e) => e.target.value !== s.color && stateStore.updateState(workspaceSlug, projectId, s.id, { color: e.target.value })}
               />
               <Input
                 defaultValue={s.name}
-                className="h-8 flex-1"
+                className="h-8 min-w-0"
+                disabled={!canManageProject}
                 onBlur={(e) => e.target.value.trim() && e.target.value !== s.name && stateStore.updateState(workspaceSlug, projectId, s.id, { name: e.target.value.trim() })}
               />
-              <Badge variant="outline" className="shrink-0">
+              <Badge variant="outline" className="w-fit">
                 {GROUP_LABEL[s.group as (typeof GROUPS)[number]] ?? s.group}
               </Badge>
-              {s.default ? (
-                <Star className="size-4 shrink-0 fill-amber-400 text-amber-400" />
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Set as default"
-                  onClick={() => stateStore.markStateAsDefault(workspaceSlug, projectId, s.id)}
-                >
-                  <Star className="size-4" />
-                </Button>
-              )}
-              <ConfirmDialog
-                trigger={
-                  <Button type="button" variant="ghost" size="icon-sm" disabled={states.length <= 1}>
-                    <Trash2 className="size-4" />
+              {canManageProject &&
+                (s.default ? (
+                  <Star className="size-4 shrink-0 fill-amber-400 text-amber-400" />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Set as default"
+                    onClick={() => stateStore.markStateAsDefault(workspaceSlug, projectId, s.id)}
+                  >
+                    <Star />
                   </Button>
-                }
-                title={`Delete "${s.name}"?`}
-                description="Issues in this state keep their state_id pointing nowhere valid -- move them first."
-                confirmLabel="Delete"
-                onConfirm={() => stateStore.deleteState(workspaceSlug, projectId, s.id)}
-              />
+                ))}
+              {canManageProject && (
+                <ConfirmDialog
+                  trigger={
+                    <Button type="button" variant="ghost" size="icon-sm" disabled={states.length <= 1}>
+                      <Trash2 />
+                    </Button>
+                  }
+                  title={`Delete "${s.name}"?`}
+                  description="Issues in this state keep their state_id pointing nowhere valid -- move them first."
+                  confirmLabel="Delete"
+                  onConfirm={() => stateStore.deleteState(workspaceSlug, projectId, s.id)}
+                />
+              )}
             </div>
           ))}
-          <div className="flex items-end gap-2 pt-2">
+          {canManageProject && <div className="grid gap-2 pt-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_9rem_auto] sm:items-end">
             <Input type="color" value={newStateColor} onChange={(e) => setNewStateColor(e.target.value)} className="h-9 w-10 p-1" />
             <Input placeholder="New state name" value={newStateName} onChange={(e) => setNewStateName(e.target.value)} className="flex-1" />
             <Select value={newStateGroup} onValueChange={(v) => setNewStateGroup(v as (typeof GROUPS)[number])}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -210,51 +218,57 @@ export const ProjectSettingsPanel = observer(function ProjectSettingsPanel({
             <SubmitButton type="button" loading={creatingState} onClick={createState}>
               <Plus />
             </SubmitButton>
-          </div>
+          </div>}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Labels</CardTitle>
+          {!canManageProject && (
+            <p className="text-sm text-muted-foreground">Project labels are read-only for your role.</p>
+          )}
         </CardHeader>
         <CardContent className="grid gap-3">
           {labels.length === 0 && <p className="text-sm text-muted-foreground">No labels yet.</p>}
           {labels.map((l) => (
-            <div key={l.id} className="flex items-center gap-2 border-b pb-2 last:border-0">
+            <div key={l.id} className="grid min-w-0 gap-2 border-b pb-3 last:border-0 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-center">
               <Input
                 type="color"
                 defaultValue={l.color}
                 className="h-8 w-10 p-1"
+                disabled={!canManageProject}
                 onBlur={(e) => e.target.value !== l.color && labelStore.updateLabel(workspaceSlug, projectId, l.id, { color: e.target.value })}
               />
               <Input
                 defaultValue={l.name}
-                className="h-8 flex-1"
+                className="h-8 min-w-0"
+                disabled={!canManageProject}
                 onBlur={(e) => e.target.value.trim() && e.target.value !== l.name && labelStore.updateLabel(workspaceSlug, projectId, l.id, { name: e.target.value.trim() })}
               />
-              <ConfirmDialog
+              {canManageProject && <ConfirmDialog
                 trigger={
                   <Button type="button" variant="ghost" size="icon-sm">
-                    <Trash2 className="size-4" />
+                    <Trash2 />
                   </Button>
                 }
                 title={`Delete "${l.name}"?`}
                 description="Removes this label from every issue it's on."
                 confirmLabel="Delete"
                 onConfirm={() => labelStore.deleteLabel(workspaceSlug, projectId, l.id)}
-              />
+              />}
             </div>
           ))}
-          <div className="flex items-end gap-2 pt-2">
+          {canManageProject && <div className="grid gap-2 pt-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:items-end">
             <Input type="color" value={newLabelColor} onChange={(e) => setNewLabelColor(e.target.value)} className="h-9 w-10 p-1" />
             <Input placeholder="New label name" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} className="flex-1" />
             <SubmitButton type="button" loading={creatingLabel} onClick={createLabel}>
               <Plus />
             </SubmitButton>
-          </div>
+          </div>}
         </CardContent>
       </Card>
     </div>
   );
 });
+
