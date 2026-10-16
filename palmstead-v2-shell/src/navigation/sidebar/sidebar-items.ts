@@ -251,7 +251,7 @@ export const sidebarItems: NavGroup[] = [
 				url: NOT_BUILT_YET,
 				icon: Bell,
 			},
-			{ id: "chat", title: "Chat", url: NOT_BUILT_YET, icon: MessageSquare },
+			{ id: "chat", title: "Chat", url: "/dashboard/chat", icon: MessageSquare },
 		],
 	},
 	{
