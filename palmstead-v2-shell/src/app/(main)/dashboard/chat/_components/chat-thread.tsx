@@ -22,7 +22,7 @@
 // whatever happens to cascade down.
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "cn";
 import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Send, Sparkles, Smile, Square, Video, X } from "lucide-react";
@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble";
+import { Bubble, BubbleContent, BubbleGroup, BubbleReactions } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
@@ -49,6 +49,7 @@ import { getInitials } from "@/lib/utils";
 import type { DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
 import { ChatAttachmentBubble } from "./chat-attachment-bubble";
+import { QUICK_REACTIONS, useMessageReactions, useSetReaction } from "./use-chat-reactions";
 import { useSuggestReply } from "./use-chat-smart-reply";
 import { useSendMessage, useTypingBroadcast, useTypingStatus, type ChatThread as Thread } from "./use-chat";
 
@@ -157,6 +158,9 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
   const { notifyTyping } = useTypingBroadcast(myKey, thread?.partnerKey);
   const isPartnerTyping = useTypingStatus(myKey, thread?.partnerKey);
   const suggestReply = useSuggestReply(myKey, thread?.partnerName);
+  const messageIds = useMemo(() => thread?.messages.map((m) => m.id) ?? [], [thread?.messages]);
+  const reactionsByMessage = useMessageReactions(myKey, messageIds);
+  const setReaction = useSetReaction(myKey, myName);
 
   useEffect(() => {
     setDraft("");
@@ -278,6 +282,7 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
               {thread.messages.map((m) => {
                 const isOutbound = m.senderKey === myKey;
                 const align = isOutbound ? "end" : "start";
+                const reactions = reactionsByMessage.get(m.id) ?? [];
                 return (
                   <MessageScrollerItem key={m.id} messageId={m.id} scrollAnchor={align === "end"}>
                     <Message align={align}>
@@ -290,24 +295,70 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                       </MessageAvatar>
                       <MessageContent>
                         <BubbleGroup>
-                          <Bubble
-                            variant={isOutbound ? "tinted" : "muted"}
-                            align={align}
-                            className={cn(isOutbound ? "text-foreground" : "*:data-[slot=bubble-content]:text-foreground", m.pending && "opacity-70")}
-                          >
-                            <BubbleContent className="flex flex-col gap-1">
-                              <ChatAttachmentBubble message={m} />
-                              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
-                                {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
-                                <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
-                                  {timeLabel(m.createdAt)}
-                                  {isOutbound &&
-                                    !m.pending &&
-                                    (m.read ? <CheckCheck className="size-3.5 text-sky-500" /> : <Check className="size-3.5" />)}
-                                </span>
-                              </div>
-                            </BubbleContent>
-                          </Bubble>
+                          <div className="group/bubble-wrap relative flex items-center gap-1 data-[align=end]:flex-row-reverse" data-align={align}>
+                            <Bubble
+                              variant={isOutbound ? "tinted" : "muted"}
+                              align={align}
+                              className={cn(isOutbound ? "text-foreground" : "*:data-[slot=bubble-content]:text-foreground", m.pending && "opacity-70")}
+                            >
+                              <BubbleContent className="flex flex-col gap-1">
+                                <ChatAttachmentBubble message={m} />
+                                <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
+                                  {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
+                                  <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
+                                    {timeLabel(m.createdAt)}
+                                    {isOutbound &&
+                                      !m.pending &&
+                                      (m.read ? <CheckCheck className="size-3.5 text-sky-500" /> : <Check className="size-3.5" />)}
+                                  </span>
+                                </div>
+                              </BubbleContent>
+                              {reactions.length > 0 && (
+                                <BubbleReactions side="bottom" align={align === "end" ? "end" : "start"}>
+                                  {reactions.map((r) => (
+                                    <button
+                                      key={r.emoji}
+                                      type="button"
+                                      title={r.staffNames.join(", ")}
+                                      className={cn("rounded-full px-1", r.mine && "bg-primary/20")}
+                                      onClick={() => setReaction.mutate({ messageId: m.id, emoji: r.emoji, alreadyMine: r.mine })}
+                                    >
+                                      {r.emoji}
+                                      {r.count > 1 ? ` ${r.count}` : ""}
+                                    </button>
+                                  ))}
+                                </BubbleReactions>
+                              )}
+                            </Bubble>
+                            {!m.pending && (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="React to message"
+                                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover/bubble-wrap:opacity-100"
+                                  >
+                                    <Smile className="size-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent align={align === "end" ? "end" : "start"} className="flex w-auto gap-1 p-1.5">
+                                  {QUICK_REACTIONS.map((emoji) => {
+                                    const mine = reactions.find((r) => r.emoji === emoji)?.mine;
+                                    return (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        className={cn("rounded-full p-1 text-lg hover:bg-muted", mine && "bg-primary/20")}
+                                        onClick={() => setReaction.mutate({ messageId: m.id, emoji, alreadyMine: Boolean(mine) })}
+                                      >
+                                        {emoji}
+                                      </button>
+                                    );
+                                  })}
+                                </PopoverContent>
+                              </Popover>
+                            )}
+                          </div>
                         </BubbleGroup>
                       </MessageContent>
                     </Message>
