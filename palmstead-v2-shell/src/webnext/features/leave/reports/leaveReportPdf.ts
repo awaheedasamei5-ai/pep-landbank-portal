@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { LeaveReport, ReportSection } from "./leaveReport";
+import { changedFieldLabels, journalDates, journalElapsed, journalKindLabels } from "./leaveJournal";
 
 // Export projection and autoTable flow adapted from OpenHRApp Reports.tsx,
 // blob 231d35b343af228f5cdf4e794c2e4fda23518719, MIT (see notices).
@@ -23,6 +24,8 @@ export function createLeaveReportPdf(
   const annualContext = include("overview") || include("balances");
   if (!report.snapshot.eventsComplete && include("history"))
     throw new Error("The workflow event response is incomplete. A full PDF pack cannot be generated.");
+  if (!report.journal.complete && include("history"))
+    throw new Error("The captured change history is incomplete. Refresh or narrow the server history scope.");
   const management = report.snapshot.scope === "management";
   const doc = new jsPDF({
     orientation: management ? "landscape" : "portrait",
@@ -56,8 +59,8 @@ export function createLeaveReportPdf(
     }
     cursor += 3;
   };
-  const section = (name: string, description: string) => {
-    if (cursor > height - 58) {
+  const section = (name: string, description: string, reserve = 58) => {
+    if (cursor > height - reserve) {
       doc.addPage();
       cursor = 61;
     }
@@ -304,8 +307,74 @@ export function createLeaveReportPdf(
     );
   }
   if (include("history")) {
+    if (report.journal.available) {
+      section(
+        "07 / Captured request changes",
+        `Prospective capture began ${report.journal.startedAt}. Baselines observe existing state at installation; earlier history is unknown. Deleted records remain in this request-year cohort.`,
+      );
+      text(report.journal.definition, 8.5);
+      table(
+        [
+          "Captured records",
+          "Decisions with captured cycles",
+          "Median captured calendar time",
+          "Captured decisions without timing",
+        ],
+        [
+          [
+            report.journal.events.length,
+            report.journal.timed.length,
+            journalElapsed(report.journal.medianSeconds),
+            report.journal.untimedDecisions,
+          ],
+        ],
+      );
+      table(
+        [
+          "Event / request / stored owner",
+          "Recorded Ghana UTC / actor",
+          "Change / fields",
+          "Before / after status",
+          "Captured cycle",
+        ],
+        report.journal.events.map((event) => [
+          `${event.eventId} / ${event.reference}\n${event.ownerName}${event.requestExists ? "" : "\nSource deleted or unavailable"}`,
+          `${event.capturedAt}\n${event.actorName}`,
+          `${journalKindLabels[event.kind] ?? event.kind}\n${changedFieldLabels(event)}`,
+          `${event.beforeState?.status ?? "Not applicable"} -> ${event.afterState?.status ?? "Not applicable"}`,
+          report.journal.timedIds.has(event.eventId)
+            ? `${journalElapsed(event.cycleSeconds)}\nSubmitted ${event.cycleSubmittedAt}\nSubmission event ${event.submissionEventId}`
+            : "Timing unavailable / not a completed cycle",
+        ]),
+      );
+      section(
+        "Schedule and confirmation evidence",
+        "Exact selected dates are shown, including gaps. Declared counts are recorded values, not repaired calculations. No private applicant wording, notes or signatures are included.",
+        110,
+      );
+      table(
+        [
+          "Event / request",
+          "Before: year / selected dates / days",
+          "After: year / selected dates / days",
+          "Before -> after quota / emergency",
+          "Before -> after confirmation / decision / auto-submission",
+        ],
+        report.journal.events.map((event) => [
+          `${event.eventId} / ${event.reference}`,
+          event.beforeState
+            ? `${event.beforeState.year}\n${journalDates(event.beforeState)}\n${event.beforeState.days} declared days`
+            : "Not applicable",
+          event.afterState
+            ? `${event.afterState.year}\n${journalDates(event.afterState)}\n${event.afterState.days} declared days`
+            : "Not applicable",
+          `${event.beforeState?.deductQuota ?? "N/A"} -> ${event.afterState?.deductQuota ?? "N/A"} deduct quota\n${event.beforeState?.isEmergency ?? "N/A"} -> ${event.afterState?.isEmergency ?? "N/A"} emergency`,
+          `Used: ${event.beforeState?.usedConfirmedAt ?? "Not recorded"} -> ${event.afterState?.usedConfirmedAt ?? "Not recorded"}\nDecision: ${event.beforeState?.decidedAt ?? "Not recorded"} -> ${event.afterState?.decidedAt ?? "Not recorded"}\nAuto: ${event.beforeState?.autoSubmittedAt ?? "Not recorded"} -> ${event.afterState?.autoSubmittedAt ?? "Not recorded"}`,
+        ]),
+      );
+    }
     section(
-      "07 / Recorded workflow history",
+      "07 / Recorded workflow history — legacy status records",
       "Legacy event coverage is incomplete. These are available recorded events, not a complete leave ledger. Private notes are excluded.",
     );
     if (!report.snapshot.eventsComplete)
@@ -321,7 +390,7 @@ export function createLeaveReportPdf(
       ]),
     );
   }
-  section("08 / Definitions and limitations", "Read these together with the figures and source records.");
+  section("08 / Definitions and limitations", "Read these together with the figures and source records.", 115);
   for (const definition of report.definitions) text(definition, 8.5);
   text(
     "Reminder period reports are available separately under Leave > Management > Reports > Reminder period reports. They use queue creation dates, not leave activity dates. The operational monitor remains all-time. Provider acceptance does not prove delivery to a handset.",

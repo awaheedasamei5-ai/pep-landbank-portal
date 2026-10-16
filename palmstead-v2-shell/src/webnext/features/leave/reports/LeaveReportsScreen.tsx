@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { reportSectionCsv } from "./leaveReportExports";
+import { LeaveJournalHistory } from "./LeaveJournalHistory";
 import { useSessionStore } from "../../../auth/useSessionStore";
 import {
   buildLeaveReport,
@@ -167,6 +168,12 @@ export function LeaveReportsScreen({
         snapshot.roster = snapshot.roster.filter((row) => row.key === profile?.key);
         const ids = new Set(snapshot.requests.map((row) => row.id));
         snapshot.events = snapshot.events.filter((row) => ids.has(row.requestId));
+        if (snapshot.journalEvents) {
+          snapshot.journalEvents = snapshot.journalEvents.filter(
+            (row) => row.ownerKey === profile?.key && row.kind !== "ownership_changed",
+          );
+          snapshot.journalTotal = snapshot.journalEvents.length;
+        }
         // Do not relabel a bounded/incomplete company response as complete.
         snapshot.totalRequests = snapshot.requests.length;
       }
@@ -251,13 +258,22 @@ export function LeaveReportsScreen({
                 <RefreshCw />
                 Refresh
               </Button>
-              <Button disabled={!report || exporting || changingScope} onClick={() => downloadPdf()}>
+              <Button
+                disabled={
+                  !report || exporting || changingScope || !report.journal.complete || !report.snapshot.eventsComplete
+                }
+                onClick={() => downloadPdf()}
+              >
                 <Download />
                 {exporting ? "Preparing PDF…" : "Download full PDF pack"}
               </Button>
               <Button
                 variant="outline"
-                disabled={!report || changingScope}
+                disabled={
+                  !report ||
+                  changingScope ||
+                  (selected === "history" && (!report.journal.complete || !report.snapshot.eventsComplete))
+                }
                 onClick={() =>
                   report &&
                   saveBlob(
@@ -270,7 +286,12 @@ export function LeaveReportsScreen({
               </Button>
               <Button
                 variant="outline"
-                disabled={!report || exporting || changingScope}
+                disabled={
+                  !report ||
+                  exporting ||
+                  changingScope ||
+                  (selected === "history" && (!report.journal.complete || !report.snapshot.eventsComplete))
+                }
                 onClick={() => downloadPdf(selected as ReportSection)}
               >
                 Current section PDF
@@ -706,11 +727,17 @@ export function LeaveReportsScreen({
               )}
               {selected === "history" && (
                 <>
+                  <LeaveJournalHistory
+                    key={`${filters.year}:${filters.employee}:${filters.department}:${filters.cohort}`}
+                    report={report}
+                  />
+                  <h3 className="mb-2 font-semibold text-base">Legacy status records</h3>
                   <p className="mb-4 text-muted-foreground text-sm">
                     {report.snapshot.eventsComplete
                       ? "All available matching recorded events loaded."
                       : "Event response is incomplete. Narrower history export is required."}{" "}
-                    This does not establish a complete historical ledger.
+                    These pre-capture status records have no immutable schedule snapshots and do not establish a
+                    complete historical ledger or submission-to-decision time.
                   </p>
                   <ReportTable
                     rowLinks={report.events.map((row) => `/dashboard/leave/requests/${row.requestId}`)}

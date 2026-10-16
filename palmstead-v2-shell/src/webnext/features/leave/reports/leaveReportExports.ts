@@ -1,4 +1,5 @@
 import type { LeaveReport, ReportSection } from "./leaveReport";
+import { changedFieldLabels, journalDates, journalKindLabels } from "./leaveJournal";
 
 export function reportSectionData(
   report: LeaveReport,
@@ -108,17 +109,88 @@ export function reportSectionData(
       rows: report.exceptions.map((row) => [row.reference, row.employee, row.message]),
     };
   if (section === "history") {
-    if (!report.snapshot.eventsComplete)
+    if (!report.snapshot.eventsComplete || !report.journal.complete)
       throw new Error("Recorded history is incomplete. Refresh or narrow the server history scope before exporting.");
     return {
-      headers: ["Reference", "Recorded timestamp", "Actor key", "From status", "To status"],
-      rows: report.events.map((event) => [
-        report.snapshot.requests.find((row) => row.id === event.requestId)?.requestNo ?? event.requestId,
-        event.createdAt,
-        event.actorKey,
-        event.fromStatus,
-        event.toStatus,
-      ]),
+      headers: [
+        "Evidence source",
+        "Event reference",
+        "Request reference",
+        "Stored owner",
+        "Recorded timestamp",
+        "Actor",
+        "Change",
+        "Changed fields",
+        "Before status",
+        "After status",
+        "Before year",
+        "After year",
+        "Before selected dates",
+        "After selected dates",
+        "Before declared days",
+        "After declared days",
+        "Before quota deduction",
+        "After quota deduction",
+        "Before emergency",
+        "After emergency",
+        "Before decision timestamp",
+        "After decision timestamp",
+        "Before automatic submission",
+        "After automatic submission",
+        "Before usage confirmation",
+        "After usage confirmation",
+        "Submission event",
+        "Cycle submitted",
+        "Cycle calendar seconds",
+      ],
+      rows: [
+        ...report.journal.events.map((event) => [
+          event.kind === "baseline"
+            ? "Installation observation; earlier history unknown"
+            : "Transactional change journal",
+          event.eventId,
+          event.reference,
+          event.ownerName,
+          event.capturedAt,
+          event.actorName,
+          journalKindLabels[event.kind] ?? event.kind,
+          changedFieldLabels(event),
+          event.beforeState?.status,
+          event.afterState?.status,
+          event.beforeState?.year,
+          event.afterState?.year,
+          journalDates(event.beforeState),
+          journalDates(event.afterState),
+          event.beforeState?.days,
+          event.afterState?.days,
+          event.beforeState?.deductQuota,
+          event.afterState?.deductQuota,
+          event.beforeState?.isEmergency,
+          event.afterState?.isEmergency,
+          event.beforeState?.decidedAt,
+          event.afterState?.decidedAt,
+          event.beforeState?.autoSubmittedAt,
+          event.afterState?.autoSubmittedAt,
+          event.beforeState?.usedConfirmedAt,
+          event.afterState?.usedConfirmedAt,
+          event.submissionEventId,
+          event.cycleSubmittedAt,
+          report.journal.timedIds.has(event.eventId) ? event.cycleSeconds : null,
+        ]),
+        ...report.events.map((event) => [
+          "Legacy status log; no schedule snapshot",
+          null,
+          report.snapshot.requests.find((row) => row.id === event.requestId)?.requestNo ?? event.requestId,
+          report.snapshot.requests.find((row) => row.id === event.requestId)?.agentName,
+          event.createdAt,
+          event.actorKey,
+          "Legacy status change",
+          null,
+          event.fromStatus,
+          event.toStatus,
+          ...Array.from({ length: 19 }, () => null),
+        ]),
+      ],
     };
   }
   return {

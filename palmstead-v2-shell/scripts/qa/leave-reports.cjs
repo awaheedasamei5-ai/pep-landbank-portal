@@ -224,3 +224,103 @@ assert.ok(reportSectionCsv(report([req("=formula", { agentName: "@unsafe" })]), 
 console.log(
   "Leave report fixtures passed: balances, overlap periods, comparison, malformed data, role-cohort filtering, completeness and safe CSV.",
 );
+
+const state = {
+  year: 2026,
+  dates: ["2026-02-02"],
+  days: 1,
+  status: "pending",
+  isEmergency: false,
+  deductQuota: true,
+  decidedAt: null,
+  autoSubmittedAt: null,
+  usedConfirmedAt: null,
+};
+const journalRow = (eventId, patch = {}) => ({
+  eventId,
+  requestId: "removed-request",
+  reference: "=QA-REMOVED",
+  ownerKey: "former",
+  ownerName: "Former employee",
+  actorName: "Management",
+  actorKind: "authenticated",
+  kind: "baseline",
+  capturedAt: "2026-10-15T10:00:00Z",
+  beforeState: null,
+  afterState: state,
+  changedFields: ["baseline"],
+  submissionEventId: null,
+  cycleSubmittedAt: null,
+  cycleSeconds: null,
+  requestExists: false,
+  ...patch,
+});
+const journalRows = [
+  journalRow("1"),
+  journalRow("2", {
+    kind: "decision",
+    beforeState: state,
+    afterState: { ...state, status: "approved" },
+    submissionEventId: "10",
+    cycleSubmittedAt: "2026-10-15T09:00:00Z",
+    cycleSeconds: 3600,
+  }),
+  journalRow("3", { kind: "decision", cycleSeconds: null }),
+  journalRow("4", { ownerKey: "a", ownerName: "Alice", kind: "deleted", beforeState: state, afterState: null }),
+];
+const journalSnapshot = {
+  journalStartedAt: "2026-10-15T08:00:00Z",
+  journalEvents: journalRows,
+  journalTotal: 4,
+  journalComplete: true,
+};
+const journalReport = report([], {}, journalSnapshot);
+assert.equal(journalReport.journal.events.length, 4);
+assert.equal(journalReport.journal.timed.length, 1);
+assert.equal(journalReport.journal.medianSeconds, 3600);
+assert.equal(journalReport.journal.untimedDecisions, 1);
+assert.equal(journalReport.people.find((person) => person.key === "former").policyEligible, false);
+assert.equal(report([], { employee: "a" }, journalSnapshot).journal.events.length, 1);
+assert.equal(
+  report([], { fromMonth: 12, toMonth: 12, status: "declined" }, journalSnapshot).journal.events.length,
+  4,
+  "Annual history is independent of activity filters",
+);
+const historyData = reportSectionData(journalReport, "history");
+assert.ok(historyData.rows.every((row) => row.length === historyData.headers.length));
+assert.ok(reportSectionCsv(journalReport, "history").includes("'=QA-REMOVED"));
+assert.ok(reportSectionCsv(journalReport, "history").includes("3600"));
+const incompleteJournal = report([], {}, { ...journalSnapshot, journalComplete: false });
+assert.equal(incompleteJournal.journal.timed.length, 0);
+assert.throws(() => reportSectionCsv(incompleteJournal, "history"), /incomplete/);
+const malformedCycle = report(
+  [],
+  {},
+  {
+    ...journalSnapshot,
+    journalEvents: [
+      journalRow("5", {
+        kind: "decision",
+        cycleSeconds: -3,
+        cycleSubmittedAt: "2026-10-16T09:00:00Z",
+        submissionEventId: "4",
+      }),
+    ],
+    journalTotal: 1,
+  },
+);
+assert.equal(malformedCycle.journal.timed.length, 0);
+const mixedLegacy = report(
+  [req("legacy")],
+  {},
+  {
+    ...journalSnapshot,
+    events: [
+      { requestId: "legacy", createdAt: "2026-01-01T10:00:00Z", actorKey: "a", fromStatus: null, toStatus: "planned" },
+    ],
+  },
+);
+assert.ok(reportSectionData(mixedLegacy, "history").rows.every((row) => row.length === historyData.headers.length));
+console.log(
+  "Journal fixtures passed: deleted owners, exact snapshots, timing provenance, annual scope, completeness and safe rectangular history CSV.",
+);

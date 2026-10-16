@@ -1,5 +1,6 @@
 import { leaveSelectionYear } from "../lib/leaveDates";
 import { leaveIsBlocking } from "../lib/leaveLogic";
+import { buildJournalEvidence, type JournalDataset } from "./leaveJournal";
 
 // Reporting intentionally has no letter, reason, signature, phone or auth ID.
 export interface ReportRequest {
@@ -28,7 +29,7 @@ export interface ReportPerson {
   policyEligible: boolean;
 }
 
-export interface LeaveReportSnapshot {
+export interface LeaveReportSnapshot extends JournalDataset {
   generatedAt: string;
   scope: "personal" | "management";
   annualDays: number;
@@ -191,6 +192,16 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
       known.set(request.agentKey, {
         key: request.agentKey,
         name: request.agentName || request.agentKey,
+        department: null,
+        active: false,
+        policyEligible: false,
+      });
+  }
+  for (const event of snapshot.journalEvents ?? []) {
+    if (!known.has(event.ownerKey))
+      known.set(event.ownerKey, {
+        key: event.ownerKey,
+        name: event.ownerName,
         department: null,
         active: false,
         policyEligible: false,
@@ -417,6 +428,7 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
     approvedComparison,
     distribution,
     insights,
+    journal: buildJournalEvidence(snapshot, keys),
     events: snapshot.events.filter((event) => annualIds.has(event.requestId)),
     totalReserved: balances.reduce((sum, row) => sum + row.reserved, 0),
     totalConfirmed: balances.reduce((sum, row) => sum + row.confirmedUsed, 0),
@@ -427,7 +439,7 @@ export function buildLeaveReport(snapshot: LeaveReportSnapshot, filters: ReportF
       "Annual balances use the full selected year and selected employee/department cohort, regardless of activity-month, status, emergency or quota filters. Annual exceptions and history follow that annual cohort. Declared counts are retained; data issues are flagged.",
       "Activity uses valid distinct selected employee-dates. Non-contiguous dates do not imply a continuous absence. Current statuses and departments apply.",
       `Comparison: ${comparisonLabel}, ${prior.start} to ${prior.end}. Complete month ranges and current statuses apply; future scheduled dates may be included. This is not a productivity score.`,
-      "Recorded workflow history is incomplete for legacy records. Latest decision timestamps do not establish submission-to-decision turnaround.",
+      "Legacy workflow history is incomplete. Latest decision timestamps alone do not establish turnaround; separately captured journal cycles use server-observed submission and decision times. Historical company policy allocations remain unavailable.",
     ],
   };
 }
