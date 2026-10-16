@@ -143,14 +143,25 @@ export function ComposeMemoDialog({ open, onOpenChange, myKey, myName, seed }: C
                 inputValue={toInput}
                 onInputValueChange={setToInput}
                 value={toStaff}
-                onValueChange={(v) => setToStaff(v as DirectoryStaff | null)}
+                onValueChange={(v) => {
+                  const next = v as DirectoryStaff | null;
+                  setToStaff(next);
+                  setToInput(next?.name ?? "");
+                }}
               >
                 <ComboboxInput placeholder="Choose a recipient…" showTrigger={false} />
                 <ComboboxContent>
                   <ComboboxEmpty>No staff found</ComboboxEmpty>
                   <ComboboxList>
                     {(item: DirectoryStaff) => (
-                      <ComboboxItem key={item.agentKey} value={item}>
+                      <ComboboxItem
+                        key={item.agentKey}
+                        value={item}
+                        onClick={() => {
+                          setToStaff(item);
+                          setToInput(item.name);
+                        }}
+                      >
                         {item.name}
                       </ComboboxItem>
                     )}
@@ -185,7 +196,13 @@ export function ComposeMemoDialog({ open, onOpenChange, myKey, myName, seed }: C
                   <ComboboxEmpty>No matches</ComboboxEmpty>
                   <ComboboxList>
                     {(item: DirectoryStaff) => (
-                      <ComboboxItem key={item.agentKey} value={item}>
+                      <ComboboxItem
+                        key={item.agentKey}
+                        value={item}
+                        onClick={() => {
+                          setCc((prev) => (prev.some((c) => c.agentKey === item.agentKey) ? prev : [...prev, item]));
+                        }}
+                      >
                         {item.name}
                       </ComboboxItem>
                     )}
