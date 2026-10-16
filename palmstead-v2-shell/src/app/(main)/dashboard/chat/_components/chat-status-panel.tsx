@@ -181,7 +181,7 @@ export function ChatStatusPanel({ myKey, myName, className }: { myKey: string; m
             }}
           >
             <div className="relative shrink-0">
-              <Avatar className={cn("size-12", myGroup && "ring-2 ring-emerald-500 ring-offset-2 ring-offset-sidebar")}>
+              <Avatar className={cn("size-12", myGroup && "ring-2 ring-[#25D366] dark:ring-[#00A884] ring-offset-2 ring-offset-sidebar")}>
                 <AvatarFallback className="bg-muted text-foreground">{getInitials(myName ?? "Me")}</AvatarFallback>
               </Avatar>
               <span className="absolute right-0 bottom-0 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
@@ -220,7 +220,7 @@ export function ChatStatusPanel({ myKey, myName, className }: { myKey: string; m
                     className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left hover:bg-muted/75"
                     onClick={() => setViewingGroup(group)}
                   >
-                    <Avatar className={cn("size-12", unviewed ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-sidebar" : "opacity-70")}>
+                    <Avatar className={cn("size-12", unviewed ? "ring-2 ring-[#25D366] dark:ring-[#00A884] ring-offset-2 ring-offset-sidebar" : "opacity-70")}>
                       <AvatarFallback className="bg-muted text-foreground">{getInitials(group.authorName)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">

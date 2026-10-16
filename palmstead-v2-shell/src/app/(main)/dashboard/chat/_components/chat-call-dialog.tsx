@@ -78,7 +78,7 @@ export function ChatCallDialog({ call }: { call: CallState }) {
               <Button type="button" size="icon" variant="destructive" className="size-14 rounded-full" aria-label="Decline call" onClick={call.rejectCall}>
                 <PhoneOff />
               </Button>
-              <Button type="button" size="icon" className="size-14 rounded-full bg-emerald-600 text-white hover:bg-emerald-600/90" aria-label="Accept call" onClick={() => void call.acceptCall()}>
+              <Button type="button" size="icon" className="size-14 rounded-full bg-[#25D366] text-white hover:bg-[#25D366]/90 dark:bg-[#00A884] dark:hover:bg-[#00A884]/90" aria-label="Accept call" onClick={() => void call.acceptCall()}>
                 <Phone />
               </Button>
             </>

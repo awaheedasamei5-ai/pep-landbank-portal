@@ -81,7 +81,7 @@ export function ChatConversationList({ threads, myKey, activePartnerKey, staffBy
                         <Avatar>
                           <AvatarFallback className={cn("text-foreground text-xs", isSelected && "bg-background/50")}>{getInitials(t.partnerName)}</AvatarFallback>
                         </Avatar>
-                        {isOnline && <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" />}
+                        {isOnline && <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-[#25D366] ring-2 ring-sidebar dark:bg-[#00A884]" />}
                       </div>
                       <div className="w-0 flex-1 overflow-hidden">
                         <div className="flex w-full items-center justify-between gap-2">
@@ -96,7 +96,7 @@ export function ChatConversationList({ threads, myKey, activePartnerKey, staffBy
                             </div>
                           </div>
                           {t.unreadCount > 0 && (
-                            <div className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/90 text-primary-foreground text-xs">{t.unreadCount}</div>
+                            <div className="grid size-5 shrink-0 place-items-center rounded-full bg-[#25D366] text-white text-xs dark:bg-[#00A884]">{t.unreadCount}</div>
                           )}
                         </div>
                       </div>

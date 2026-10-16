@@ -109,7 +109,7 @@ export function ChatScreen() {
               onClick={() => setActiveTab("chats")}
               className={cn(
                 "border-b-2 px-2 py-2 font-medium text-sm transition-colors",
-                activeTab === "chats" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                activeTab === "chats" ? "border-[#25D366] text-foreground dark:border-[#00A884]" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               Chats
@@ -119,11 +119,11 @@ export function ChatScreen() {
               onClick={() => setActiveTab("status")}
               className={cn(
                 "flex items-center gap-1.5 border-b-2 px-2 py-2 font-medium text-sm transition-colors",
-                activeTab === "status" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                activeTab === "status" ? "border-[#25D366] text-foreground dark:border-[#00A884]" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               Status
-              {hasAnyStatus && <span className="size-1.5 rounded-full bg-emerald-500" />}
+              {hasAnyStatus && <span className="size-1.5 rounded-full bg-[#25D366] dark:bg-[#00A884]" />}
             </button>
           </div>
 

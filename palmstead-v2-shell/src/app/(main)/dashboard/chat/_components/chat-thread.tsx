@@ -259,11 +259,11 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
             <Avatar className="size-8">
               <AvatarFallback className="bg-background text-foreground">{getInitials(thread.partnerName)}</AvatarFallback>
             </Avatar>
-            {partnerStaff?.isOnline && <span className="absolute right-0 bottom-0 size-2 rounded-full bg-emerald-500 ring-2 ring-card" />}
+            {partnerStaff?.isOnline && <span className="absolute right-0 bottom-0 size-2 rounded-full bg-[#25D366] ring-2 ring-card" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-sm">{thread.partnerName}</div>
-            <div className={cn("truncate text-xs", isPartnerTyping ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{statusLine}</div>
+            <div className={cn("truncate text-xs", isPartnerTyping ? "text-[#1DA851] dark:text-[#00A884]" : "text-muted-foreground")}>{statusLine}</div>
           </div>
           <Button type="button" variant="ghost" size="icon-sm" aria-label="Start voice call" onClick={() => onStartCall?.("audio")}>
             <Phone />
@@ -276,7 +276,7 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
       </div>
 
       <MessageScrollerProvider autoScroll>
-        <MessageScroller className="min-h-0 flex-1">
+        <MessageScroller className="min-h-0 flex-1 bg-[#ECE5DD] dark:bg-[#0B141A]">
           <MessageScrollerViewport>
             <MessageScrollerContent className="gap-4 px-2 py-6">
               {thread.messages.map((m) => {
@@ -299,7 +299,13 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                             <Bubble
                               variant={isOutbound ? "tinted" : "muted"}
                               align={align}
-                              className={cn(isOutbound ? "text-foreground" : "*:data-[slot=bubble-content]:text-foreground", m.pending && "opacity-70")}
+                              className={cn(
+                                "*:data-[slot=bubble-content]:shadow-sm",
+                                isOutbound
+                                  ? "text-foreground *:data-[slot=bubble-content]:bg-[#D9FDD3] dark:*:data-[slot=bubble-content]:bg-[#005C4B]"
+                                  : "*:data-[slot=bubble-content]:text-foreground *:data-[slot=bubble-content]:bg-white dark:*:data-[slot=bubble-content]:bg-[#202C33]",
+                                m.pending && "opacity-70",
+                              )}
                             >
                               <BubbleContent className="flex flex-col gap-1">
                                 <ChatAttachmentBubble message={m} />
@@ -481,7 +487,13 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                 <InputGroupButton type="button" variant="ghost" size="icon-sm" disabled={sendingAttachment} aria-label="Record voice note" onClick={() => void voice.start()}>
                   <Mic />
                 </InputGroupButton>
-                <InputGroupButton type="submit" variant="default" size="icon-sm" className="ml-auto" disabled={!draft.trim() || sendMessage.isPending}>
+                <InputGroupButton
+                  type="submit"
+                  variant="default"
+                  size="icon-sm"
+                  className="ml-auto bg-[#25D366] text-white hover:bg-[#25D366]/90 dark:bg-[#00A884] dark:hover:bg-[#00A884]/90"
+                  disabled={!draft.trim() || sendMessage.isPending}
+                >
                   <Send />
                   <span className="sr-only">Send</span>
                 </InputGroupButton>
