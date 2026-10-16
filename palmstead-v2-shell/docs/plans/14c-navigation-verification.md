@@ -45,7 +45,15 @@ Temporary viewport override was reset. Keyboard and full overlay/dirty-form veri
 
 ## Release
 
-Awaiting source commit, scoped V2 deployment and fresh production verification. Read DEPLOY_INSTRUCTIONS in full before deploying. Update this section with exact source/deployment evidence after completion. No reset, restore, approval, SMS, financial record or business-data edit was executed during these checks.
+**Published and deployed.** Source commit `926b2f1ab841360eb351fdce1c615bafb8210b2e`, Git tree `d6c1f9a24fbf37f84edd8f2430703e380e42176b`. Local backup `codex/navigation-local-20261016` retains the identical-tree local commit `ac778c6`. The GitHub rebuild update used an expected-head lease, and the local branch was aligned only after identical-tree verification; concurrent uncommitted Chat sources were preserved.
+
+Exact isolated release contained **1,958 committed V2 files**; **1,893 application files** were verified against the source of the built/role-tested review app. No .env, node_modules or .next was uploaded from the local review server. DEPLOY_INSTRUCTIONS was read in full again, project/org IDs checked, then the authorized scoped V2 command was run from the release's palmstead-v2-shell folder.
+
+Vercel deployment **`dpl_6DZQXce2iSqJz3ddTsjQmpTtMyAk`**, created **16 October 2026 11:59:39 UTC**, returned **READY** and assigned `https://palmstead-v2-shell.vercel.app`. Deployment URL: `https://palmstead-v2-shell-duql5t1td-dnm-garments.vercel.app`. Vercel's own build, TypeScript and 87-page generation also passed. Scoped inspect confirmed the production alias.
+
+Production was refreshed and fresh actual-role sessions checked. Management: new Operations Back/reset controls; Work Queue → Reset → Back returned to `view=queue` selected=true; Accounting Reports retained `tab=reports` selected=true after reload. Staff: Adams agent identity, reset entry count=0, assigned-work Reports only, Reports Back retained `view=queue` selected=true. Management was signed back in and Operations reports opened afterward. A stalled initial production browser sign-in was recovered by closing only the agent-created stale tab and using a fresh normal sign-in. No account credentials, browser security or environment values were changed. Do not describe that recovery as proof of a general auth-resilience fix.
+
+A bounded 15-minute/20-entry error-level query for this exact deployment returned no captured logs. That is not a full monitoring audit. No reset, restore, approval, SMS, financial record or business-data edit was executed during these checks.
 
 ## Next work
 
