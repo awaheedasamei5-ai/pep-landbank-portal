@@ -27,8 +27,10 @@ import { useDirectory, type DirectoryStaff } from "@/app/(main)/dashboard/direct
 import { useChatCall } from "@/app/(main)/dashboard/_components/call-provider";
 
 import { ChatConversationList } from "./chat-conversation-list";
+import { ChatStatusPanel } from "./chat-status-panel";
 import { ChatThreadView } from "./chat-thread";
 import { useChatRealtime, useChatThreads, useMarkThreadRead, type ChatThread } from "./use-chat";
+import { useStatusGroups } from "./use-status";
 
 const isSameStaff = (a: DirectoryStaff, b: DirectoryStaff) => a.agentKey === b.agentKey;
 
@@ -50,7 +52,10 @@ export function ChatScreen() {
   const [showThread, setShowThread] = useState(false);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatStaff, setNewChatStaff] = useState<DirectoryStaff | null>(null);
+  const [activeTab, setActiveTab] = useState<"chats" | "status">("chats");
   const isMobile = useIsMobile();
+  const { groups: statusGroups } = useStatusGroups(myKey);
+  const hasAnyStatus = statusGroups.length > 0;
 
   const others = useMemo(() => (staff ?? []).filter((s) => s.agentKey !== myKey), [staff, myKey]);
 
@@ -92,26 +97,56 @@ export function ChatScreen() {
       <div
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden transition-[grid-template-columns] duration-300 ease-out *:min-h-0 *:min-w-0 md:grid-cols-[22.5rem_minmax(0,1fr)] md:*:first:border-r"
       >
-        {isLoading ? (
-          <div className="space-y-3 p-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
+            showThread && "max-md:pointer-events-none max-md:-translate-x-full",
+          )}
+        >
+          <div className="flex shrink-0 gap-1 border-b px-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("chats")}
+              className={cn(
+                "border-b-2 px-2 py-2 font-medium text-sm transition-colors",
+                activeTab === "chats" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Chats
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("status")}
+              className={cn(
+                "flex items-center gap-1.5 border-b-2 px-2 py-2 font-medium text-sm transition-colors",
+                activeTab === "status" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Status
+              {hasAnyStatus && <span className="size-1.5 rounded-full bg-emerald-500" />}
+            </button>
           </div>
-        ) : (
-          <ChatConversationList
-            threads={threads}
-            myKey={myKey}
-            activePartnerKey={activePartner}
-            staffByKey={staffByKey}
-            onSelectThread={selectThread}
-            onNewChat={() => setNewChatOpen(true)}
-            className={cn(
-              "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
-              showThread && "max-md:pointer-events-none max-md:-translate-x-full",
-            )}
-          />
-        )}
+
+          {activeTab === "status" ? (
+            <ChatStatusPanel myKey={myKey} myName={myName} className="min-h-0 flex-1" />
+          ) : isLoading ? (
+            <div className="space-y-3 p-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : (
+            <ChatConversationList
+              threads={threads}
+              myKey={myKey}
+              activePartnerKey={activePartner}
+              staffByKey={staffByKey}
+              onSelectThread={selectThread}
+              onNewChat={() => setNewChatOpen(true)}
+              className="min-h-0 flex-1"
+            />
+          )}
+        </div>
         <ChatThreadView
           thread={activeThread ?? null}
           myKey={myKey}

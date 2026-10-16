@@ -25,7 +25,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "cn";
-import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Send, Smile, Square, Video, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Send, Sparkles, Smile, Square, Video, X } from "lucide-react";
 import { toast } from "sonner";
 import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
@@ -49,6 +49,7 @@ import { getInitials } from "@/lib/utils";
 import type { DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
 import { ChatAttachmentBubble } from "./chat-attachment-bubble";
+import { useSuggestReply } from "./use-chat-smart-reply";
 import { useSendMessage, useTypingBroadcast, useTypingStatus, type ChatThread as Thread } from "./use-chat";
 
 interface ChatThreadProps {
@@ -155,6 +156,7 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
 
   const { notifyTyping } = useTypingBroadcast(myKey, thread?.partnerKey);
   const isPartnerTyping = useTypingStatus(myKey, thread?.partnerKey);
+  const suggestReply = useSuggestReply(myKey, thread?.partnerName);
 
   useEffect(() => {
     setDraft("");
@@ -174,6 +176,16 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
     if (now - lastTypingSentAtRef.current > 1500) {
       lastTypingSentAtRef.current = now;
       notifyTyping();
+    }
+  }
+
+  async function requestSuggestion() {
+    if (!thread || thread.messages.length === 0) return;
+    try {
+      const suggestion = await suggestReply.mutateAsync(thread.messages);
+      if (suggestion) handleDraftChange(suggestion);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not get a reply suggestion");
     }
   }
 
@@ -405,6 +417,16 @@ export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackBu
                     />
                   </PopoverContent>
                 </Popover>
+                <InputGroupButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={suggestReply.isPending || thread.messages.length === 0}
+                  aria-label="Suggest a reply"
+                  onClick={() => void requestSuggestion()}
+                >
+                  <Sparkles className={cn(suggestReply.isPending && "animate-pulse")} />
+                </InputGroupButton>
                 <InputGroupButton type="button" variant="ghost" size="icon-sm" disabled={sendingAttachment} aria-label="Record voice note" onClick={() => void voice.start()}>
                   <Mic />
                 </InputGroupButton>
