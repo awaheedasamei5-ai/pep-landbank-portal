@@ -5,7 +5,7 @@
 // an internal staff DM, unlike that example's external-contact use case).
 "use client";
 
-import { type CSSProperties, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { cn } from "cn";
 
@@ -26,13 +26,18 @@ import { useDirectory, type DirectoryStaff } from "@/app/(main)/dashboard/direct
 
 import { useChatCall } from "@/app/(main)/dashboard/_components/call-provider";
 
-import { ChatConversationList } from "./chat-conversation-list";
+import { ChatConversationList, type ConversationEntry } from "./chat-conversation-list";
+import { GroupInfoDialog, NewGroupDialog } from "./chat-group-dialogs";
+import { GroupThreadView } from "./chat-group-thread";
 import { ChatStatusPanel } from "./chat-status-panel";
 import { ChatThreadView } from "./chat-thread";
 import { useChatRealtime, useChatThreads, useMarkThreadRead, type ChatThread } from "./use-chat";
+import { useGroupThreads } from "./use-chat-groups";
 import { useStatusGroups } from "./use-status";
 
 const isSameStaff = (a: DirectoryStaff, b: DirectoryStaff) => a.agentKey === b.agentKey;
+
+type Selection = { kind: "dm"; key: string } | { kind: "group"; key: string } | null;
 
 export function ChatScreen() {
   const profile = useAuthStore((s) => s.profile);
@@ -45,13 +50,16 @@ export function ChatScreen() {
 
   useChatRealtime(myKey);
   const { threads, isLoading } = useChatThreads(myKey, directoryByKey);
+  const { groupThreads, isLoading: groupsLoading } = useGroupThreads(myKey);
   const markRead = useMarkThreadRead(myKey);
   const call = useChatCall();
 
-  const [activePartner, setActivePartner] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection>(null);
   const [showThread, setShowThread] = useState(false);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatStaff, setNewChatStaff] = useState<DirectoryStaff | null>(null);
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chats" | "status">("chats");
   const isMobile = useIsMobile();
   const { groups: statusGroups } = useStatusGroups(myKey);
@@ -59,32 +67,52 @@ export function ChatScreen() {
 
   const others = useMemo(() => (staff ?? []).filter((s) => s.agentKey !== myKey), [staff, myKey]);
 
+  // Real WhatsApp interleaves 1:1 DMs and groups in one list by recency.
+  const entries = useMemo((): ConversationEntry[] => {
+    const dmEntries: ConversationEntry[] = threads.map((t) => ({
+      kind: "dm",
+      key: t.partnerKey,
+      name: t.partnerName,
+      lastCreatedAt: t.lastMessage?.createdAt ?? null,
+      thread: t,
+    }));
+    const groupEntries: ConversationEntry[] = groupThreads.map((g) => ({
+      kind: "group",
+      key: g.group.id,
+      name: g.group.name,
+      lastCreatedAt: g.lastMessage?.createdAt ?? null,
+      groupThread: g,
+    }));
+    return [...dmEntries, ...groupEntries].sort((a, b) => (b.lastCreatedAt ?? "").localeCompare(a.lastCreatedAt ?? ""));
+  }, [threads, groupThreads]);
+
   // A brand-new conversation (picked via "New chat") has no messages yet, so
   // it has no real ChatThread to find -- threads are derived from messages,
   // not stored. Without this, starting a chat with someone you've never
   // messaged before would silently fall back to the empty-state pane instead
   // of opening a composer, which defeats the point of "New chat" existing.
   const activeThread: ChatThread | undefined =
-    threads.find((t) => t.partnerKey === activePartner) ??
-    (activePartner
-      ? {
-          partnerKey: activePartner,
-          partnerName: directoryByKey.get(activePartner) ?? activePartner,
+    selection?.kind === "dm"
+      ? (threads.find((t) => t.partnerKey === selection.key) ?? {
+          partnerKey: selection.key,
+          partnerName: directoryByKey.get(selection.key) ?? selection.key,
           messages: [],
           lastMessage: undefined,
           unreadCount: 0,
-        }
-      : undefined);
+        })
+      : undefined;
 
-  function selectThread(thread: ChatThread) {
-    setActivePartner(thread.partnerKey);
+  const activeGroupThread = selection?.kind === "group" ? (groupThreads.find((g) => g.group.id === selection.key) ?? null) : null;
+
+  function selectEntry(entry: ConversationEntry) {
+    setSelection({ kind: entry.kind, key: entry.key });
     setShowThread(true);
-    if (thread.unreadCount > 0 && myKey) markRead.mutate(thread.partnerKey);
+    if (entry.kind === "dm" && entry.thread.unreadCount > 0 && myKey) markRead.mutate(entry.thread.partnerKey);
   }
 
   function startNewChat() {
     if (!newChatStaff) return;
-    setActivePartner(newChatStaff.agentKey);
+    setSelection({ kind: "dm", key: newChatStaff.agentKey });
     setShowThread(true);
     setNewChatOpen(false);
     setNewChatStaff(null);
@@ -129,7 +157,7 @@ export function ChatScreen() {
 
           {activeTab === "status" ? (
             <ChatStatusPanel myKey={myKey} myName={myName} className="min-h-0 flex-1" />
-          ) : isLoading ? (
+          ) : isLoading || groupsLoading ? (
             <div className="space-y-3 p-3">
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-14 w-full" />
@@ -137,31 +165,48 @@ export function ChatScreen() {
             </div>
           ) : (
             <ChatConversationList
-              threads={threads}
+              entries={entries}
               myKey={myKey}
-              activePartnerKey={activePartner}
+              activeKey={selection?.key ?? null}
               staffByKey={staffByKey}
-              onSelectThread={selectThread}
+              onSelectEntry={selectEntry}
               onNewChat={() => setNewChatOpen(true)}
+              onNewGroup={() => setNewGroupOpen(true)}
               className="min-h-0 flex-1"
             />
           )}
         </div>
-        <ChatThreadView
-          thread={activeThread ?? null}
-          myKey={myKey}
-          myName={myName}
-          partnerStaff={activePartner ? staffByKey.get(activePartner) : undefined}
-          showBackButton={isMobile}
-          onBack={() => setShowThread(false)}
-          onStartCall={(kind) => {
-            if (activePartner) void call.startCall(activePartner, directoryByKey.get(activePartner) ?? activePartner, kind);
-          }}
-          className={cn(
-            "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
-            showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
-          )}
-        />
+
+        {selection?.kind === "group" ? (
+          <GroupThreadView
+            groupThread={activeGroupThread}
+            myKey={myKey}
+            myName={myName}
+            showBackButton={isMobile}
+            onBack={() => setShowThread(false)}
+            onOpenInfo={() => setGroupInfoOpen(true)}
+            className={cn(
+              "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
+              showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
+            )}
+          />
+        ) : (
+          <ChatThreadView
+            thread={activeThread ?? null}
+            myKey={myKey}
+            myName={myName}
+            partnerStaff={selection?.kind === "dm" ? staffByKey.get(selection.key) : undefined}
+            showBackButton={isMobile}
+            onBack={() => setShowThread(false)}
+            onStartCall={(kind) => {
+              if (selection?.kind === "dm") void call.startCall(selection.key, directoryByKey.get(selection.key) ?? selection.key, kind);
+            }}
+            className={cn(
+              "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
+              showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
+            )}
+          />
+        )}
       </div>
 
       <Dialog open={newChatOpen} onOpenChange={setNewChatOpen}>
@@ -199,6 +244,30 @@ export function ChatScreen() {
           </Button>
         </DialogContent>
       </Dialog>
+
+      <NewGroupDialog
+        open={newGroupOpen}
+        onOpenChange={setNewGroupOpen}
+        myKey={myKey}
+        myName={myName}
+        staff={staff ?? []}
+        onCreated={(groupId) => {
+          setSelection({ kind: "group", key: groupId });
+          setShowThread(true);
+        }}
+      />
+
+      <GroupInfoDialog
+        open={groupInfoOpen}
+        onOpenChange={setGroupInfoOpen}
+        group={activeGroupThread?.group ?? null}
+        myKey={myKey}
+        staff={staff ?? []}
+        onLeft={() => {
+          setSelection(null);
+          setShowThread(false);
+        }}
+      />
     </div>
   );
 }
