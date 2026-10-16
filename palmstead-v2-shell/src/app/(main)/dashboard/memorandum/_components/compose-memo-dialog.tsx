@@ -150,7 +150,7 @@ export function ComposeMemoDialog({ open, onOpenChange, myKey, myName, seed }: C
                 }}
               >
                 <ComboboxInput placeholder="Choose a recipient…" showTrigger={false} />
-                <ComboboxContent>
+                <ComboboxContent className="pointer-events-auto">
                   <ComboboxEmpty>No staff found</ComboboxEmpty>
                   <ComboboxList>
                     {(item: DirectoryStaff) => (
@@ -192,7 +192,7 @@ export function ComposeMemoDialog({ open, onOpenChange, myKey, myName, seed }: C
                   ))}
                   <ComboboxChipsInput placeholder={cc.length ? "" : "Type a name to add…"} />
                 </ComboboxChips>
-                <ComboboxContent anchor={ccAnchor}>
+                <ComboboxContent anchor={ccAnchor} className="pointer-events-auto">
                   <ComboboxEmpty>No matches</ComboboxEmpty>
                   <ComboboxList>
                     {(item: DirectoryStaff) => (
