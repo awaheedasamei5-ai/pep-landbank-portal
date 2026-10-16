@@ -1,29 +1,40 @@
 // Cloned from src/app/(main)/chat/_components/chat-thread.tsx (this repo's
 // own real chat example), using the same real Message/Bubble/MessageScroller
 // primitives, and edited for real DM data instead of the demo Contact/
-// Message shape. Dropped: Call/Tag/Snooze/Block/copy-email actions,
-// reactions, and the Reply/Internal-note tab split -- all demo-only UI with
-// no real backing state in this schema. Per the standing rule against fake
+// Message shape. Dropped: Tag/Snooze/Block/copy-email actions, reactions,
+// and the Reply/Internal-note tab split -- all demo-only UI with no real
+// backing state in this schema. Per the standing rule against fake
 // interactive controls, they're left out rather than wired to nothing.
+// Call buttons ARE wired (13-chat-whatsapp-grade-rebuild.md), unlike those.
 //
 // Attachments (12-chat-attachments-plan.md): photo/video/document pickers,
 // a real MediaRecorder-based voice note, and a real navigator.geolocation
 // location share -- all upload for real to the chat-attachments Storage
 // bucket (or send real coordinates) before the message row is inserted.
+//
+// Bubbles switched from "default" (solid primary) to the shared primitive's
+// own "tinted" variant for outbound -- it already pairs text-foreground with
+// its tint in both themes (bubble.tsx isn't ours to edit, but this variant
+// already existed there), which is also the fix for the reported
+// sometimes-unreadable text: the old "muted" incoming bubble set a
+// background with no paired text color and relied on inheritance; both
+// variants now carry an explicit className here so neither depends on
+// whatever happens to cascade down.
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "cn";
-import { ArrowLeft, Image as ImageIcon, Mic, MapPin, Paperclip, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, Image as ImageIcon, Mic, MapPin, Paperclip, Phone, Send, Smile, Square, Video, X } from "lucide-react";
 import { toast } from "sonner";
+import EmojiPicker, { EmojiStyle, Theme as EmojiTheme } from "emoji-picker-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bubble, BubbleContent, BubbleGroup } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
-import { Message, MessageAvatar, MessageContent, MessageFooter } from "@/components/ui/message";
+import { Message, MessageAvatar, MessageContent } from "@/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -32,23 +43,38 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
+import type { DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
 import { ChatAttachmentBubble } from "./chat-attachment-bubble";
-import { useSendMessage, type ChatThread as Thread } from "./use-chat";
+import { useSendMessage, useTypingBroadcast, useTypingStatus, type ChatThread as Thread } from "./use-chat";
 
 interface ChatThreadProps {
   thread: Thread | null;
   myKey: string;
   myName: string | undefined;
+  partnerStaff?: DirectoryStaff;
   showBackButton?: boolean;
   onBack?: () => void;
+  onStartCall?: (kind: "audio" | "video") => void;
   className?: string;
 }
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function lastSeenLabel(iso: string | null): string {
+  if (!iso) return "Offline";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Last seen just now";
+  if (mins < 60) return `Last seen ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Last seen ${hrs}h ago`;
+  return `Last seen ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
 }
 
 function useVoiceRecorder() {
@@ -116,13 +142,23 @@ function useVoiceRecorder() {
   return { recording, seconds, start, cancel, finish };
 }
 
-export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, className }: ChatThreadProps) {
+export function ChatThreadView({ thread, myKey, myName, partnerStaff, showBackButton, onBack, onStartCall, className }: ChatThreadProps) {
   const [draft, setDraft] = useState("");
   const [sendingAttachment, setSendingAttachment] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const sendMessage = useSendMessage(myKey, myName);
   const voice = useVoiceRecorder();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastTypingSentAtRef = useRef(0);
+
+  const { notifyTyping } = useTypingBroadcast(myKey, thread?.partnerKey);
+  const isPartnerTyping = useTypingStatus(myKey, thread?.partnerKey);
+
+  useEffect(() => {
+    setDraft("");
+  }, [thread?.partnerKey]);
 
   if (!thread) {
     return (
@@ -132,12 +168,21 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
     );
   }
 
+  function handleDraftChange(value: string) {
+    setDraft(value);
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current > 1500) {
+      lastTypingSentAtRef.current = now;
+      notifyTyping();
+    }
+  }
+
   async function send() {
     const body = draft.trim();
     if (!body || !thread) return;
+    setDraft("");
     try {
       await sendMessage.mutateAsync({ recipientKey: thread.partnerKey, body });
-      setDraft("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the message");
     }
@@ -183,6 +228,8 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
     if (result) void sendAttachment(result.file, result.durationSeconds);
   }
 
+  const statusLine = isPartnerTyping ? "typing…" : partnerStaff?.isOnline ? "Online" : lastSeenLabel(partnerStaff?.lastSeenAt ?? null);
+
   return (
     <div className={cn("flex h-full flex-col py-3", className)}>
       <div className="flex flex-col gap-3">
@@ -192,10 +239,22 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
               <ArrowLeft />
             </Button>
           )}
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-background text-foreground">{getInitials(thread.partnerName)}</AvatarFallback>
-          </Avatar>
-          <div className="font-medium text-sm">{thread.partnerName}</div>
+          <div className="relative shrink-0">
+            <Avatar className="size-8">
+              <AvatarFallback className="bg-background text-foreground">{getInitials(thread.partnerName)}</AvatarFallback>
+            </Avatar>
+            {partnerStaff?.isOnline && <span className="absolute right-0 bottom-0 size-2 rounded-full bg-emerald-500 ring-2 ring-card" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium text-sm">{thread.partnerName}</div>
+            <div className={cn("truncate text-xs", isPartnerTyping ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>{statusLine}</div>
+          </div>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Start voice call" onClick={() => onStartCall?.("audio")}>
+            <Phone />
+          </Button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Start video call" onClick={() => onStartCall?.("video")}>
+            <Video />
+          </Button>
         </div>
         <Separator />
       </div>
@@ -219,14 +278,25 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
                       </MessageAvatar>
                       <MessageContent>
                         <BubbleGroup>
-                          <Bubble variant={isOutbound ? "default" : "muted"} align={align}>
-                            <BubbleContent className="flex flex-col gap-1.5">
+                          <Bubble
+                            variant={isOutbound ? "tinted" : "muted"}
+                            align={align}
+                            className={cn(isOutbound ? "text-foreground" : "*:data-[slot=bubble-content]:text-foreground", m.pending && "opacity-70")}
+                          >
+                            <BubbleContent className="flex flex-col gap-1">
                               <ChatAttachmentBubble message={m} />
-                              {m.body ? <span>{m.body}</span> : null}
+                              <div className="flex flex-wrap items-end justify-end gap-x-2 gap-y-0.5">
+                                {m.body ? <span className="min-w-0 whitespace-pre-wrap wrap-break-word">{m.body}</span> : null}
+                                <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground leading-none">
+                                  {timeLabel(m.createdAt)}
+                                  {isOutbound &&
+                                    !m.pending &&
+                                    (m.read ? <CheckCheck className="size-3.5 text-sky-500" /> : <Check className="size-3.5" />)}
+                                </span>
+                              </div>
                             </BubbleContent>
                           </Bubble>
                         </BubbleGroup>
-                        <MessageFooter>{timeLabel(m.createdAt)}</MessageFooter>
                       </MessageContent>
                     </Message>
                   </MessageScrollerItem>
@@ -284,9 +354,10 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
           >
             <InputGroup className="rounded-md border">
               <InputGroupTextarea
+                ref={textareaRef}
                 placeholder={`Message ${thread.partnerName}…`}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => handleDraftChange(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -314,6 +385,26 @@ export function ChatThreadView({ thread, myKey, myName, showBackButton, onBack, 
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+                  <PopoverTrigger asChild>
+                    <InputGroupButton type="button" variant="ghost" size="icon-sm" aria-label="Insert emoji">
+                      <Smile />
+                    </InputGroupButton>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto border-none p-0 pointer-events-auto">
+                    <EmojiPicker
+                      theme={EmojiTheme.AUTO}
+                      emojiStyle={EmojiStyle.NATIVE}
+                      searchDisabled={false}
+                      skinTonesDisabled
+                      onEmojiClick={(emoji) => {
+                        handleDraftChange(draft + emoji.emoji);
+                        setEmojiOpen(false);
+                        textareaRef.current?.focus();
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
                 <InputGroupButton type="button" variant="ghost" size="icon-sm" disabled={sendingAttachment} aria-label="Record voice note" onClick={() => void voice.start()}>
                   <Mic />
                 </InputGroupButton>

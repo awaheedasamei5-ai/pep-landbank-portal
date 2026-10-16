@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
 
-// Real Chat (11-chat-plan.md) + full attachments (12-chat-attachments-plan.md).
+// Real Chat (11-chat-plan.md) + full attachments (12-chat-attachments-plan.md)
+// + WhatsApp-grade real-time/presence/calls (13-chat-whatsapp-grade-rebuild.md).
 // The messages table + RLS already existed live in sbydzrlzqxcdbudjaube before
 // this app was built (same real DM backend V1's own Chat and cross-app
 // notification sends already use). Legacy rows store attachments as base64 in
@@ -33,6 +34,8 @@ export interface ChatMessage {
   locationLat: number | null;
   locationLng: number | null;
   locationLabel: string | null;
+  /** Client-only: true while an optimistically-inserted send hasn't been confirmed by the server yet. */
+  pending?: boolean;
 }
 
 type RawMessage = {
@@ -79,13 +82,19 @@ function mapMessage(r: RawMessage): ChatMessage {
   };
 }
 
+const messagesKey = (myKey: string | undefined) => ["chat-messages", myKey] as const;
+
+function patchMessages(qc: QueryClient, myKey: string | undefined, patch: (prev: ChatMessage[]) => ChatMessage[]) {
+  qc.setQueryData<ChatMessage[]>(messagesKey(myKey), (prev) => patch(prev ?? []));
+}
+
 // RLS already restricts every row to {sender_key = me} OR {recipient_key = me} --
 // this one query returns every DM the signed-in user is party to, then we
 // group it client-side into per-partner threads (the security boundary is
 // the RLS policy, this grouping is presentation only).
 export function useAllMyMessages(myKey: string | undefined) {
   return useQuery({
-    queryKey: ["chat-messages", myKey],
+    queryKey: messagesKey(myKey),
     enabled: Boolean(myKey),
     queryFn: async (): Promise<ChatMessage[]> => {
       const sb = requireSupabase();
@@ -208,6 +217,12 @@ interface SendMessageInput {
   location?: { lat: number; lng: number; label: string | null };
 }
 
+// Root cause of "takes a long time to show after you type": every send used
+// to call invalidateQueries on the whole cross-thread message list (up to
+// 1000 rows), so one message meant a full refetch+reparse before the UI
+// moved. A plain-text send now appends straight to the cache -- the sender
+// sees it instantly, no round trip -- and every mutation here patches the
+// cache directly instead of invalidating it.
 export function useSendMessage(myKey: string | undefined, myName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
@@ -216,50 +231,92 @@ export function useSendMessage(myKey: string | undefined, myName: string | undef
       const sb = requireSupabase();
 
       if (input.location) {
-        const { error } = await sb.from("messages").insert({
-          sender_key: myKey,
-          sender_name: myName,
-          recipient_key: input.recipientKey,
-          body: input.body,
-          read: false,
-          kind: "location",
-          location_lat: input.location.lat,
-          location_lng: input.location.lng,
-          location_label: input.location.label,
-        });
+        const { data, error } = await sb
+          .from("messages")
+          .insert({
+            sender_key: myKey,
+            sender_name: myName,
+            recipient_key: input.recipientKey,
+            body: input.body,
+            read: false,
+            kind: "location",
+            location_lat: input.location.lat,
+            location_lng: input.location.lng,
+            location_label: input.location.label,
+          })
+          .select("*")
+          .single();
         if (error) throw error;
-        return;
+        return mapMessage(data as RawMessage);
       }
 
       if (input.attachmentFile) {
         const { path, sizeBytes } = await uploadChatAttachment(myKey, input.recipientKey, input.attachmentFile);
-        const { error } = await sb.from("messages").insert({
-          sender_key: myKey,
-          sender_name: myName,
-          recipient_key: input.recipientKey,
-          body: input.body,
-          read: false,
-          kind: attachmentKindFromMime(input.attachmentFile.type),
-          attachment_url: path,
-          attachment_name: input.attachmentFile.name,
-          attachment_type: input.attachmentFile.type || null,
-          attachment_size_bytes: sizeBytes,
-          attachment_duration_seconds: input.attachmentDurationSeconds ?? null,
-        });
+        const { data, error } = await sb
+          .from("messages")
+          .insert({
+            sender_key: myKey,
+            sender_name: myName,
+            recipient_key: input.recipientKey,
+            body: input.body,
+            read: false,
+            kind: attachmentKindFromMime(input.attachmentFile.type),
+            attachment_url: path,
+            attachment_name: input.attachmentFile.name,
+            attachment_type: input.attachmentFile.type || null,
+            attachment_size_bytes: sizeBytes,
+            attachment_duration_seconds: input.attachmentDurationSeconds ?? null,
+          })
+          .select("*")
+          .single();
         if (error) throw error;
-        return;
+        return mapMessage(data as RawMessage);
       }
 
-      const { error } = await sb.from("messages").insert({
-        sender_key: myKey,
-        sender_name: myName,
-        recipient_key: input.recipientKey,
-        body: input.body,
-        read: false,
-      });
+      const { data, error } = await sb
+        .from("messages")
+        .insert({ sender_key: myKey, sender_name: myName, recipient_key: input.recipientKey, body: input.body, read: false })
+        .select("*")
+        .single();
       if (error) throw error;
+      return mapMessage(data as RawMessage);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages", myKey] }),
+    onMutate: async (input) => {
+      if (!myKey || input.attachmentFile || input.location) return undefined;
+      const tempId = `pending-${crypto.randomUUID()}`;
+      const optimistic: ChatMessage = {
+        id: tempId,
+        senderKey: myKey,
+        senderName: myName ?? "",
+        recipientKey: input.recipientKey,
+        body: input.body,
+        createdAt: new Date().toISOString(),
+        read: false,
+        kind: null,
+        attachmentData: null,
+        attachmentType: null,
+        attachmentName: null,
+        attachmentUrl: null,
+        attachmentSizeBytes: null,
+        attachmentDurationSeconds: null,
+        locationLat: null,
+        locationLng: null,
+        locationLabel: null,
+        pending: true,
+      };
+      patchMessages(qc, myKey, (prev) => [...prev, optimistic]);
+      return { tempId };
+    },
+    onSuccess: (real, _input, ctx) => {
+      patchMessages(qc, myKey, (prev) => {
+        const withoutTemp = ctx?.tempId ? prev.filter((m) => m.id !== ctx.tempId) : prev;
+        if (withoutTemp.some((m) => m.id === real.id)) return withoutTemp;
+        return [...withoutTemp, real];
+      });
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.tempId) patchMessages(qc, myKey, (prev) => prev.filter((m) => m.id !== ctx.tempId));
+    },
   });
 }
 
@@ -270,8 +327,11 @@ export function useMarkThreadRead(myKey: string | undefined) {
       const sb = requireSupabase();
       const { error } = await sb.from("messages").update({ read: true }).eq("sender_key", partnerKey).eq("recipient_key", myKey as string).eq("read", false);
       if (error) throw error;
+      return partnerKey;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages", myKey] }),
+    onSuccess: (partnerKey) => {
+      patchMessages(qc, myKey, (prev) => prev.map((m) => (m.senderKey === partnerKey && m.recipientKey === myKey ? { ...m, read: true } : m)));
+    },
   });
 }
 
@@ -285,29 +345,132 @@ export function useDeleteMessage(myKey: string | undefined) {
       if (message.attachmentUrl) {
         await sb.storage.from("chat-attachments").remove([message.attachmentUrl]);
       }
+      return message.id;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat-messages", myKey] }),
+    onSuccess: (id) => {
+      patchMessages(qc, myKey, (prev) => prev.filter((m) => m.id !== id));
+    },
   });
 }
 
-// Real Supabase Realtime subscription, matching V1's own subscribeToChat --
-// new messages and read-state changes refresh the open thread/thread list
-// without a reload.
+// Real Supabase Realtime subscription, matching V1's own subscribeToChat.
+// Root cause of "doesn't sync in real time" was twofold: no reconnect/
+// backoff on a dropped socket (console showed the join itself failing),
+// and every event invalidated the whole 1000-row query instead of patching
+// it -- mirrors the exact capped-backoff pattern already proven for
+// Attendance/Leave's own realtime bridge (src/openhr/services/realtime.ts).
+const REALTIME_BACKOFF_CAP_MS = 15000;
+
 export function useChatRealtime(myKey: string | undefined) {
   const qc = useQueryClient();
   useEffect(() => {
     if (!myKey) return;
     const sb = requireSupabase();
-    const channel = sb
-      .channel(`chat-${myKey}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        qc.invalidateQueries({ queryKey: ["chat-messages", myKey] });
-      })
-      .subscribe();
+    let attempt = 0;
+    let channel: ReturnType<typeof sb.channel> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    function connect() {
+      if (stopped) return;
+      if (channel) sb.removeChannel(channel);
+      attempt += 1;
+      const ch = sb.channel(`chat-messages-${myKey}-${attempt}`).on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const incoming = mapMessage(payload.new as RawMessage);
+            patchMessages(qc, myKey, (prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
+          } else if (payload.eventType === "UPDATE") {
+            const updated = mapMessage(payload.new as RawMessage);
+            patchMessages(qc, myKey, (prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+          } else if (payload.eventType === "DELETE") {
+            const oldId = (payload.old as { id?: string })?.id;
+            if (oldId) patchMessages(qc, myKey, (prev) => prev.filter((m) => m.id !== oldId));
+          }
+        },
+      );
+      ch.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          attempt = 0;
+          return;
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          const delay = Math.min(2000 * Math.max(attempt, 1), REALTIME_BACKOFF_CAP_MS);
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(connect, delay);
+        }
+      });
+      channel = ch;
+    }
+
+    connect();
     return () => {
-      sb.removeChannel(channel);
+      stopped = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (channel) sb.removeChannel(channel);
     };
   }, [myKey, qc]);
+}
+
+// Real Supabase Broadcast typing indicator -- ephemeral, never written to
+// the database. Each side broadcasts on a channel keyed by the sorted pair
+// of participant keys, so both parties land on the exact same channel name
+// regardless of who's "me" in each session.
+function typingChannelName(a: string, b: string): string {
+  return `chat-typing-${[a, b].sort().join("-")}`;
+}
+
+export function useTypingBroadcast(myKey: string | undefined, partnerKey: string | undefined) {
+  const channelRef = useRef<ReturnType<ReturnType<typeof requireSupabase>["channel"]> | null>(null);
+  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!myKey || !partnerKey) return;
+    const sb = requireSupabase();
+    const ch = sb.channel(typingChannelName(myKey, partnerKey));
+    ch.subscribe();
+    channelRef.current = ch;
+    return () => {
+      sb.removeChannel(ch);
+      channelRef.current = null;
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    };
+  }, [myKey, partnerKey]);
+
+  function notifyTyping() {
+    if (!myKey || !channelRef.current) return;
+    channelRef.current.send({ type: "broadcast", event: "typing", payload: { senderKey: myKey } });
+  }
+
+  return { notifyTyping };
+}
+
+export function useTypingStatus(myKey: string | undefined, partnerKey: string | undefined) {
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setIsPartnerTyping(false);
+    if (!myKey || !partnerKey) return;
+    const sb = requireSupabase();
+    const ch = sb.channel(typingChannelName(myKey, partnerKey));
+    ch.on("broadcast", { event: "typing" }, (payload) => {
+      const senderKey = (payload.payload as { senderKey?: string })?.senderKey;
+      if (senderKey !== partnerKey) return;
+      setIsPartnerTyping(true);
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = setTimeout(() => setIsPartnerTyping(false), 3000);
+    });
+    ch.subscribe();
+    return () => {
+      sb.removeChannel(ch);
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    };
+  }, [myKey, partnerKey]);
+
+  return isPartnerTyping;
 }
 
 export { previewText };

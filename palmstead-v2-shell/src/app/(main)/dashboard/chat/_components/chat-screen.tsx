@@ -25,8 +25,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { useDirectory, type DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
+import { ChatCallDialog } from "./chat-call-dialog";
 import { ChatConversationList } from "./chat-conversation-list";
 import { ChatThreadView } from "./chat-thread";
+import { useCallSignaling } from "./use-call";
 import { useChatRealtime, useChatThreads, useMarkThreadRead, type ChatThread } from "./use-chat";
 
 const isSameStaff = (a: DirectoryStaff, b: DirectoryStaff) => a.agentKey === b.agentKey;
@@ -38,10 +40,12 @@ export function ChatScreen() {
 
   const { data: staff } = useDirectory();
   const directoryByKey = useMemo(() => new Map((staff ?? []).map((s) => [s.agentKey, s.name])), [staff]);
+  const staffByKey = useMemo(() => new Map((staff ?? []).map((s) => [s.agentKey, s])), [staff]);
 
   useChatRealtime(myKey);
   const { threads, isLoading } = useChatThreads(myKey, directoryByKey);
   const markRead = useMarkThreadRead(myKey);
+  const call = useCallSignaling(myKey, myName);
 
   const [activePartner, setActivePartner] = useState<string | null>(null);
   const [showThread, setShowThread] = useState(false);
@@ -104,6 +108,7 @@ export function ChatScreen() {
             threads={threads}
             myKey={myKey}
             activePartnerKey={activePartner}
+            staffByKey={staffByKey}
             onSelectThread={selectThread}
             onNewChat={() => setNewChatOpen(true)}
             className={cn(
@@ -116,8 +121,12 @@ export function ChatScreen() {
           thread={activeThread ?? null}
           myKey={myKey}
           myName={myName}
+          partnerStaff={activePartner ? staffByKey.get(activePartner) : undefined}
           showBackButton={isMobile}
           onBack={() => setShowThread(false)}
+          onStartCall={(kind) => {
+            if (activePartner) void call.startCall(activePartner, directoryByKey.get(activePartner) ?? activePartner, kind);
+          }}
           className={cn(
             "transition-transform duration-300 ease-out will-change-transform max-md:col-start-1 max-md:row-start-1",
             showThread ? "max-md:translate-x-0" : "max-md:pointer-events-none max-md:translate-x-full",
@@ -160,6 +169,8 @@ export function ChatScreen() {
           </Button>
         </DialogContent>
       </Dialog>
+
+      <ChatCallDialog call={call} />
     </div>
   );
 }

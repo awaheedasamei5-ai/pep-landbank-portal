@@ -21,6 +21,7 @@ export interface DirectoryStaff {
   avatar: string | null;
   role: string;
   isOnline: boolean;
+  lastSeenAt: string | null;
 }
 
 async function fetchDirectory(): Promise<DirectoryStaff[]> {
@@ -45,6 +46,7 @@ async function fetchDirectory(): Promise<DirectoryStaff[]> {
     avatar: p.avatar,
     role: p.role,
     isOnline: Boolean(p.last_seen_at && new Date(p.last_seen_at).getTime() > cutoff),
+    lastSeenAt: p.last_seen_at,
   }));
 }
 

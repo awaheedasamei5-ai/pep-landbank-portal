@@ -1,8 +1,9 @@
 // Cloned from src/app/(main)/chat/_components/chat-conversation-list.tsx (this
 // repo's own real chat example) and edited for Chat: Conversation -> real
-// ChatThread (derived from the live messages table), isOnline badge removed
-// (no presence data wired for chat yet -- it exists for Directory via
-// use-presence-heartbeat, a real future hookup, not invented here).
+// ChatThread (derived from the live messages table). isOnline now wired to
+// the real presence heartbeat (use-presence-heartbeat.ts writes
+// profiles.last_seen_at, Directory's useDirectory() already derives
+// isOnline from it) -- the same real infrastructure, not a new fake one.
 // Open/Snoozed/Closed tabs, Pin, and Filter were demo-only UI with no real
 // backing state in this schema -- per the standing rule against fake
 // interactive controls, they're left out rather than wired to nothing.
@@ -17,12 +18,15 @@ import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
 import { MessageSquarePlus } from "lucide-react";
 
+import type { DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
+
 import { previewText, type ChatThread } from "./use-chat";
 
 interface ChatConversationListProps {
   threads: ChatThread[];
   myKey: string;
   activePartnerKey: string | null;
+  staffByKey: Map<string, DirectoryStaff>;
   onSelectThread: (thread: ChatThread) => void;
   onNewChat: () => void;
   className?: string;
@@ -38,7 +42,7 @@ function threadTime(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-export function ChatConversationList({ threads, myKey, activePartnerKey, onSelectThread, onNewChat, className }: ChatConversationListProps) {
+export function ChatConversationList({ threads, myKey, activePartnerKey, staffByKey, onSelectThread, onNewChat, className }: ChatConversationListProps) {
   return (
     <div className={cn("flex h-full flex-col gap-3 pt-3", className)}>
       <div className="flex items-center justify-between gap-4 px-3 py-0.5">
@@ -58,6 +62,7 @@ export function ChatConversationList({ threads, myKey, activePartnerKey, onSelec
             <div className="flex flex-col gap-1 px-2">
               {threads.map((t) => {
                 const isSelected = activePartnerKey === t.partnerKey;
+                const isOnline = staffByKey.get(t.partnerKey)?.isOnline ?? false;
                 return (
                   <button
                     key={t.partnerKey}
@@ -72,9 +77,12 @@ export function ChatConversationList({ threads, myKey, activePartnerKey, onSelec
                     }}
                   >
                     <div className="flex min-w-0 items-start gap-2.5">
-                      <Avatar className="shrink-0">
-                        <AvatarFallback className={cn("text-foreground text-xs", isSelected && "bg-background/50")}>{getInitials(t.partnerName)}</AvatarFallback>
-                      </Avatar>
+                      <div className="relative shrink-0">
+                        <Avatar>
+                          <AvatarFallback className={cn("text-foreground text-xs", isSelected && "bg-background/50")}>{getInitials(t.partnerName)}</AvatarFallback>
+                        </Avatar>
+                        {isOnline && <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-sidebar" />}
+                      </div>
                       <div className="w-0 flex-1 overflow-hidden">
                         <div className="flex w-full items-center justify-between gap-2">
                           <div className="truncate font-medium text-sm leading-5">{t.partnerName}</div>
