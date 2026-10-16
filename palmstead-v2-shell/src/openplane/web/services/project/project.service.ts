@@ -19,7 +19,7 @@ import type { TProject, TPartialProject } from "@plane/types";
 // services
 import { APIService } from "@openplane-web/services/api.service";
 import { requireSupabase } from "@/lib/supabase.client";
-import { toPlaneProject, currentStaffKey, type OpProjectRow } from "@openplane-web/lib/palmstead-adapters";
+import { toPlaneProject, type OpProjectRow } from "@openplane-web/lib/palmstead-adapters";
 
 async function getWorkspaceIdBySlug(workspaceSlug: string): Promise<string> {
   const sb = requireSupabase();
@@ -41,47 +41,13 @@ export class ProjectService extends APIService {
    */
   async createProject(workspaceSlug: string, data: Partial<TProject>): Promise<TProject> {
     const sb = requireSupabase();
-    const workspaceId = await getWorkspaceIdBySlug(workspaceSlug);
-    const staffKey = currentStaffKey();
-    const { data: row, error } = await sb
-      .from("op_projects")
-      .insert({
-        workspace_id: workspaceId,
-        name: data.name,
-        identifier: data.identifier,
-        description: data.description ?? null,
-        logo_props: data.logo_props ?? { emoji: { value: "📁" } },
-        network: data.network ?? 2,
-        project_lead_key: typeof data.project_lead === "string" ? data.project_lead : staffKey,
-        created_by: staffKey,
-        updated_by: staffKey,
-      })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_project", {
+      p_workspace_slug: workspaceSlug,
+      p_name: data.name,
+      p_identifier: data.identifier,
+      p_description: data.description ?? null,
+    });
     if (error) throw error;
-
-    // Real plane backend behaviour: a new project is seeded with its 5
-    // default states (one per state group), Backlog marked default --
-    // without this, new issues have nowhere valid to live and the kanban
-    // board would always be empty.
-    const defaultStates = [
-      { name: "Backlog", group: "backlog", color: "#60646C", sequence: 15000, order: 0, default: true },
-      { name: "Todo", group: "unstarted", color: "#3A3A3A", sequence: 25000, order: 1, default: false },
-      { name: "In Progress", group: "started", color: "#F59E0B", sequence: 35000, order: 2, default: false },
-      { name: "Done", group: "completed", color: "#16A34A", sequence: 45000, order: 3, default: false },
-      { name: "Cancelled", group: "cancelled", color: "#EF4444", sequence: 55000, order: 4, default: false },
-    ];
-    const { data: states, error: statesError } = await sb
-      .from("op_states")
-      .insert(defaultStates.map((s) => ({ workspace_id: workspaceId, project_id: row.id, ...s })))
-      .select("id,default");
-    if (statesError) throw statesError;
-    const backlogState = states?.find((s) => s.default);
-    if (backlogState) {
-      await sb.from("op_projects").update({ default_state_id: backlogState.id }).eq("id", row.id);
-      row.default_state_id = backlogState.id;
-    }
-
     return toPlaneProject(row as OpProjectRow) as TProject;
   }
 
@@ -148,15 +114,22 @@ export class ProjectService extends APIService {
     if (data.page_view !== undefined) patch.page_view = data.page_view;
     if (data.inbox_view !== undefined) patch.inbox_view = data.inbox_view;
     if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
-    patch.updated_by = currentStaffKey();
-    const { data: row, error } = await sb.from("op_projects").update(patch).eq("id", projectId).select("*").single();
+    const { data: current, error: currentError } = await sb.from("op_projects").select("updated_at").eq("id", projectId).single();
+    if (currentError || !current) throw currentError ?? new Error("Project not found.");
+    const { data: row, error } = await sb.rpc("update_operation_project", {
+      p_project_id: projectId,
+      p_expected_updated_at: current.updated_at,
+      p_patch: patch,
+    });
     if (error) throw error;
     return toPlaneProject(row as OpProjectRow) as TProject;
   }
 
   async deleteProject(_workspaceSlug: string, projectId: string): Promise<any> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_projects").delete().eq("id", projectId);
+    const { data: current, error: currentError } = await sb.from("op_projects").select("updated_at").eq("id", projectId).single();
+    if (currentError || !current) throw currentError ?? new Error("Project not found.");
+    const { error } = await sb.rpc("archive_operation_project", { p_project_id: projectId, p_expected_updated_at: current.updated_at });
     if (error) throw error;
     return { success: true };
   }

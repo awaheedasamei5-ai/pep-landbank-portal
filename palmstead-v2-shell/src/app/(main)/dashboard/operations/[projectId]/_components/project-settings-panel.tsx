@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { observer } from "mobx-react";
 import { Plus, Trash2, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
 import { store } from "@openplane-web/lib/store-context";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 // Phase 6 settings slice: the data layer (project-state.service.ts /
 // issue_label.service.ts) was already real since Phase 4b -- this is the
@@ -42,11 +44,28 @@ export const ProjectSettingsPanel = observer(function ProjectSettingsPanel({
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#60646C");
   const [creatingLabel, setCreatingLabel] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const router = useRouter();
+  const profile = useAuthStore((state) => state.profile);
 
   const stateStore = store.state;
   const labelStore = store.label;
+  const projectStore = store.projectRoot.project;
+  const project = projectStore.getProjectById(projectId);
+  const [projectName, setProjectName] = useState(project?.name ?? "");
+  const [projectIdentifier, setProjectIdentifier] = useState(project?.identifier ?? "");
+  const [projectDescription, setProjectDescription] = useState(project?.description ?? "");
+  const canManageProject = profile?.role === "manager" || profile?.key === project?.created_by || profile?.key === project?.project_lead;
+  const canArchiveProject = profile?.role === "manager";
   const states = (stateStore.getProjectStates(projectId) ?? []).slice().sort((a, b) => a.sequence - b.sequence);
   const labels = labelStore.getProjectLabels(projectId) ?? [];
+
+  useEffect(() => {
+    if (!project) return;
+    setProjectName(project.name);
+    setProjectIdentifier(project.identifier);
+    setProjectDescription(project.description ?? "");
+  }, [project?.description, project?.identifier, project?.name]);
 
   async function createState() {
     if (!newStateName.trim()) return;
@@ -74,9 +93,57 @@ export const ProjectSettingsPanel = observer(function ProjectSettingsPanel({
     }
   }
 
+  async function saveProject() {
+    if (!projectName.trim() || !projectIdentifier.trim()) return;
+    setSavingProject(true);
+    setError(null);
+    try {
+      await projectStore.updateProject(workspaceSlug, projectId, {
+        name: projectName.trim(),
+        identifier: projectIdentifier.trim().toUpperCase(),
+        description: projectDescription.trim(),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update project.");
+    } finally {
+      setSavingProject(false);
+    }
+  }
+
+  async function archiveProject() {
+    setError(null);
+    try {
+      await projectStore.deleteProject(workspaceSlug, projectId);
+      router.push("/dashboard/operations");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete project.");
+      throw err;
+    }
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       {error && <p className="text-sm text-destructive xl:col-span-2">{error}</p>}
+
+      <Card className="xl:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Project details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(12rem,0.35fr)]">
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Name</span><Input value={projectName} onChange={(e) => setProjectName(e.target.value)} disabled={!canManageProject} /></label>
+            <label className="grid gap-1.5 text-sm"><span className="font-medium">Identifier</span><Input value={projectIdentifier} onChange={(e) => setProjectIdentifier(e.target.value.toUpperCase())} disabled={!canManageProject} maxLength={12} /></label>
+          </div>
+          <label className="grid gap-1.5 text-sm"><span className="font-medium">Description</span><Input value={projectDescription} onChange={(e) => setProjectDescription(e.target.value)} disabled={!canManageProject} /></label>
+          <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">Deleting a project moves it to a recoverable archive with its work intact.</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {canArchiveProject && <ConfirmDialog trigger={<Button type="button" variant="destructive">Delete project</Button>} title={`Delete ${project?.name ?? "this project"}?`} description="This removes the project from active Operations views. Management can restore it later with all work items intact." confirmLabel="Move to archive" onConfirm={archiveProject} />}
+              {canManageProject && <SubmitButton type="button" loading={savingProject} onClick={saveProject}>Save project</SubmitButton>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
