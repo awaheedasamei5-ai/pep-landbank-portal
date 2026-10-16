@@ -355,12 +355,10 @@ export class IssueService extends APIService {
       });
   }
 
-  /** Phase 6: real update of op_issues (+ reconciling the assignee/label join tables when provided). */
+  /** Atomic, permission-checked work-item update through the reviewed V2 RPC. */
   async patchIssue(_workspaceSlug: string, _projectId: string, issueId: string, data: Partial<TIssue>): Promise<TIssue> {
     const sb = requireSupabase();
-    const staffKey = currentStaffKey();
-    const { data: before } = await sb.from("op_issues").select("state_id,priority,name,target_date").eq("id", issueId).single();
-    const patch: Record<string, unknown> = { updated_by: staffKey };
+    const patch: Record<string, unknown> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.description_html !== undefined) patch.description_html = data.description_html;
     if (data.state_id !== undefined) patch.state_id = data.state_id;
@@ -369,64 +367,47 @@ export class IssueService extends APIService {
     if (data.cycle_id !== undefined) patch.cycle_id = data.cycle_id;
     if (data.start_date !== undefined) patch.start_date = data.start_date;
     if (data.target_date !== undefined) patch.target_date = data.target_date;
-    if (data.completed_at !== undefined) patch.completed_at = data.completed_at;
     if (data.is_draft !== undefined) patch.is_draft = data.is_draft;
     if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
-    const { data: row, error } = await sb.from("op_issues").update(patch).eq("id", issueId).select("*").single();
-    if (error) throw error;
-    if (data.assignee_ids !== undefined) {
-      await sb.from("op_issue_assignees").delete().eq("issue_id", issueId);
-      if (data.assignee_ids.length) {
-        await sb
-          .from("op_issue_assignees")
-          .insert(data.assignee_ids.map((assigneeKey) => ({ issue_id: issueId, assignee_key: assigneeKey })));
-      }
-    }
-    if (data.label_ids !== undefined) {
-      await sb.from("op_issue_labels").delete().eq("issue_id", issueId);
-      if (data.label_ids.length) {
-        await sb.from("op_issue_labels").insert(data.label_ids.map((labelId) => ({ issue_id: issueId, label_id: labelId })));
-      }
-    }
-    if (data.module_ids !== undefined && data.module_ids !== null) {
-      await sb.from("op_issue_modules").delete().eq("issue_id", issueId);
-      if (data.module_ids.length) {
-        await sb.from("op_issue_modules").insert(data.module_ids.map((moduleId) => ({ issue_id: issueId, module_id: moduleId })));
-      }
+    if (data.assignee_ids !== undefined) patch.assignee_ids = data.assignee_ids;
+    if (data.label_ids !== undefined) patch.label_ids = data.label_ids;
+    if (data.module_ids !== undefined && data.module_ids !== null) patch.module_ids = data.module_ids;
+
+    let expectedUpdatedAt = data.updated_at;
+    if (!expectedUpdatedAt) {
+      const { data: current, error: currentError } = await sb
+        .from("op_issues")
+        .select("updated_at")
+        .eq("id", issueId)
+        .single();
+      if (currentError || !current) throw currentError ?? new Error("Work item not found.");
+      expectedUpdatedAt = current.updated_at;
     }
 
-    // Real audit trail: one op_issue_activity row per field that actually
-    // changed, old_value -> new_value -- this is the escalation/history
-    // record the Operations Tracker needs, not a cosmetic log.
-    if (before) {
-      const diffs: { field: string; old_value: string | null; new_value: string | null }[] = [];
-      if (data.state_id !== undefined && data.state_id !== before.state_id) {
-        diffs.push({ field: "state", old_value: before.state_id, new_value: data.state_id });
-      }
-      if (data.priority !== undefined && data.priority !== before.priority) {
-        diffs.push({ field: "priority", old_value: before.priority, new_value: data.priority });
-      }
-      if (data.name !== undefined && data.name !== before.name) {
-        diffs.push({ field: "name", old_value: before.name, new_value: data.name });
-      }
-      if (data.target_date !== undefined && data.target_date !== before.target_date) {
-        diffs.push({ field: "target_date", old_value: before.target_date, new_value: data.target_date });
-      }
-      if (diffs.length) {
-        await sb
-          .from("op_issue_activity")
-          .insert(diffs.map((d) => ({ issue_id: issueId, actor_key: staffKey, verb: "updated", ...d })));
-      }
-    }
+    const { data: row, error } = await sb.rpc("update_operation_issue", {
+      p_issue_id: issueId,
+      p_expected_updated_at: expectedUpdatedAt,
+      p_patch: patch,
+    });
+    if (error || !row) throw error ?? new Error("Work item update returned no record.");
 
     const [hydrated] = await hydrateIssues([row as OpIssueRow]);
     return hydrated;
   }
 
-  /** Phase 6: real delete from op_issues (join rows cascade via the real FKs). */
+  /** Recoverable removal: the active list hides the archived work item. */
   async deleteIssue(_workspaceSlug: string, _projectId: string, issuesId: string): Promise<{ success: true }> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_issues").delete().eq("id", issuesId);
+    const { data: current, error: currentError } = await sb
+      .from("op_issues")
+      .select("updated_at")
+      .eq("id", issuesId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("Work item not found.");
+    const { error } = await sb.rpc("archive_operation_issue", {
+      p_issue_id: issuesId,
+      p_expected_updated_at: current.updated_at,
+    });
     if (error) throw error;
     return { success: true };
   }
@@ -723,3 +704,4 @@ export class IssueService extends APIService {
       });
   }
 }
+
