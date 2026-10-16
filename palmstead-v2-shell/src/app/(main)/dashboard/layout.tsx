@@ -15,6 +15,7 @@ import { AnnouncementsBell } from "./_components/header/announcements-bell";
 import { LayoutControls } from "./_components/header/layout-controls";
 import { SearchDialog } from "./_components/header/search-dialog";
 import { ThemeSwitcher } from "./_components/header/theme-switcher";
+import { CallProvider } from "./_components/call-provider";
 import { PageTransition } from "./_components/page-transition";
 import { PortalNavigationProvider } from "./_components/portal-navigation";
 import { RealtimeBridge } from "./_components/realtime-bridge";
@@ -30,6 +31,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
   return (
     <AuthGate>
       <RealtimeBridge />
+      <CallProvider>
       <SidebarProvider
         defaultOpen={defaultOpen}
         style={
@@ -88,6 +90,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
           </div>
         </SidebarInset>
       </SidebarProvider>
+      </CallProvider>
     </AuthGate>
   );
 }

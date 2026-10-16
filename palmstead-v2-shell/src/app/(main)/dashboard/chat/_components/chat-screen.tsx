@@ -20,15 +20,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/page-header";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { useDirectory, type DirectoryStaff } from "@/app/(main)/dashboard/directory/_components/use-directory";
 
-import { ChatCallDialog } from "./chat-call-dialog";
+import { useChatCall } from "@/app/(main)/dashboard/_components/call-provider";
+
 import { ChatConversationList } from "./chat-conversation-list";
 import { ChatThreadView } from "./chat-thread";
-import { useCallSignaling } from "./use-call";
 import { useChatRealtime, useChatThreads, useMarkThreadRead, type ChatThread } from "./use-chat";
 
 const isSameStaff = (a: DirectoryStaff, b: DirectoryStaff) => a.agentKey === b.agentKey;
@@ -45,7 +44,7 @@ export function ChatScreen() {
   useChatRealtime(myKey);
   const { threads, isLoading } = useChatThreads(myKey, directoryByKey);
   const markRead = useMarkThreadRead(myKey);
-  const call = useCallSignaling(myKey, myName);
+  const call = useChatCall();
 
   const [activePartner, setActivePartner] = useState<string | null>(null);
   const [showThread, setShowThread] = useState(false);
@@ -90,10 +89,6 @@ export function ChatScreen() {
 
   return (
     <div className="flex h-[calc(100dvh-var(--dashboard-header-height))] min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b border-border px-4 py-3 lg:px-6">
-        <PageHeader title="Chat" description="Direct messages between staff." />
-      </div>
-
       <div
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden transition-[grid-template-columns] duration-300 ease-out *:min-h-0 *:min-w-0 md:grid-cols-[22.5rem_minmax(0,1fr)] md:*:first:border-r"
       >
@@ -169,8 +164,6 @@ export function ChatScreen() {
           </Button>
         </DialogContent>
       </Dialog>
-
-      <ChatCallDialog call={call} />
     </div>
   );
 }
