@@ -49,8 +49,24 @@ export function ChatScreen() {
   const [newChatStaff, setNewChatStaff] = useState<DirectoryStaff | null>(null);
   const isMobile = useIsMobile();
 
-  const activeThread: ChatThread | undefined = threads.find((t) => t.partnerKey === activePartner);
   const others = useMemo(() => (staff ?? []).filter((s) => s.agentKey !== myKey), [staff, myKey]);
+
+  // A brand-new conversation (picked via "New chat") has no messages yet, so
+  // it has no real ChatThread to find -- threads are derived from messages,
+  // not stored. Without this, starting a chat with someone you've never
+  // messaged before would silently fall back to the empty-state pane instead
+  // of opening a composer, which defeats the point of "New chat" existing.
+  const activeThread: ChatThread | undefined =
+    threads.find((t) => t.partnerKey === activePartner) ??
+    (activePartner
+      ? {
+          partnerKey: activePartner,
+          partnerName: directoryByKey.get(activePartner) ?? activePartner,
+          messages: [],
+          lastMessage: undefined,
+          unreadCount: 0,
+        }
+      : undefined);
 
   function selectThread(thread: ChatThread) {
     setActivePartner(thread.partnerKey);

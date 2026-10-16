@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
 import { MessageSquarePlus } from "lucide-react";
 
-import type { ChatThread } from "./use-chat";
+import { previewText, type ChatThread } from "./use-chat";
 
 interface ChatConversationListProps {
   threads: ChatThread[];
@@ -78,13 +78,13 @@ export function ChatConversationList({ threads, myKey, activePartnerKey, onSelec
                       <div className="w-0 flex-1 overflow-hidden">
                         <div className="flex w-full items-center justify-between gap-2">
                           <div className="truncate font-medium text-sm leading-5">{t.partnerName}</div>
-                          <span className="text-nowrap text-muted-foreground text-xs leading-5">{threadTime(t.lastMessage.createdAt)}</span>
+                          {t.lastMessage && <span className="text-nowrap text-muted-foreground text-xs leading-5">{threadTime(t.lastMessage.createdAt)}</span>}
                         </div>
                         <div className="flex min-w-0 items-end gap-2">
                           <div className="w-0 flex-1 overflow-hidden">
                             <div className="truncate text-muted-foreground text-xs leading-4">
-                              {t.lastMessage.senderKey === myKey ? "You: " : ""}
-                              {t.lastMessage.body}
+                              {t.lastMessage && (t.lastMessage.senderKey === myKey ? "You: " : "")}
+                              {t.lastMessage ? previewText(t.lastMessage) : ""}
                             </div>
                           </div>
                           {t.unreadCount > 0 && (
