@@ -4681,7 +4681,7 @@ async function apiDeleteComplaint(id){ if(DEMO_MODE){ const d=await demoLoad(); 
 // DELETE on site_visits was silently rejected by Postgres the moment any
 // of that existed, which read as "the delete icon doesn't work" once a
 // visit had been activated and reviewed. delete_site_visit_full (SECURITY
-// DEFINER, same own/manager/elias+emmanuel+elizabeth gate as site_visits_del)
+// DEFINER, same own/manager/is_ops_staff() gate as site_visits_del)
 // explicitly clears the submission, the invite, and any legacy
 // site_visit_feedback row before deleting the visit itself, so deleting a
 // visit really does remove every trace of its Site Visit Experience data.
@@ -7043,6 +7043,15 @@ async function apiSetAgentActive(key,newActive){
   if(DEMO_MODE){ const d=await demoLoad(); d.overrides=d.overrides||{}; d.overrides[key]=newActive; await demoSave(); return; }
   const {error}=await sb.from('profiles').update({active:newActive}).eq('agent_key',key); if(error) throw error;
 }
+// Real, grantable replacement for what used to be a hardcoded elias/emmanuel/
+// elizabeth name list baked into both the UI and every RLS policy/function
+// gating company-wide data -- see is_ops_staff() and profiles.ops_access.
+// Granting this here is the actual fix going forward: the next new hire gets
+// company-wide visibility from Staff Settings, not from another code deploy.
+async function apiSetOpsAccess(key,newOpsAccess){
+  if(DEMO_MODE){ const d=await demoLoad(); d.opsAccessOverrides=d.opsAccessOverrides||{}; d.opsAccessOverrides[key]=newOpsAccess; await demoSave(); return; }
+  const {error}=await sb.from('profiles').update({ops_access:newOpsAccess}).eq('agent_key',key); if(error) throw error;
+}
 async function apiLoadFullRoster(){
   if(DEMO_MODE){
     const d=await demoLoad();
@@ -7288,7 +7297,7 @@ async function doLogin(){
   const btn=document.getElementById('signBtn'); btn.disabled=true; btn.textContent=LOGIN_MODE==='pin'?'Unlocking…':'Signing in…';
   if(DEMO_MODE){
     if(!demoActive(pickStaff.key)){ err.textContent='This account has been deactivated. Contact management.'; btn.disabled=false; btn.textContent='Sign in'; return; }
-    PROFILE={name:pickStaff.name,email:pickStaff.email,role:pickStaff.role,agent_key:pickStaff.key,key:pickStaff.key,toolAccess:demoToolAccess(pickStaff.key),unlockedSkins:demoUnlockedSkins(pickStaff.key)};
+    PROFILE={name:pickStaff.name,email:pickStaff.email,role:pickStaff.role,agent_key:pickStaff.key,key:pickStaff.key,toolAccess:demoToolAccess(pickStaff.key),unlockedSkins:demoUnlockedSkins(pickStaff.key),ops_access:demoOpsAccess(pickStaff.key)};
     await enterApp(); return;
   }
   if(LOGIN_MODE==='pin'){
@@ -11284,11 +11293,22 @@ function plotBlockOf(plotNumber){ const m=String(plotNumber||'').match(/^([A-Za-
 // off the same single source of truth instead of a second hand-kept copy.
 function canManagePlots(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elias' || p.key==='emmanuel'; }
 function canManagePayments(p){ p=p||PROFILE; return p.role==='manager' || p.key==='elias'; }
-function canViewClientDatabase(p){ p=p||PROFILE; return p.role==='manager' || ['elias','emmanuel','elizabeth'].includes(p.key); }
-// Mirrors the referrals_upd_staff RLS policy exactly -- a plain agent's own UPDATE
-// attempt on a referral would be silently rejected by RLS, so the UI has to know
-// this in advance rather than let them click a button that's guaranteed to fail.
-function canClearReferrals(){ return PROFILE.role==='manager' || ['elias','emmanuel','elizabeth'].includes(PROFILE.key); }
+// Root cause of "staff I just gave access to see an empty app": this used to
+// hardcode a literal 3-name list (elias/emmanuel/elizabeth) as the only staff
+// who could ever see company-wide data -- anyone hired after that list was
+// written was invisible to it, with no way to grant them the same access
+// short of a code change. Now backed by a real, data-driven profiles.ops_access
+// column (same real column the RLS policies below the database layer check via
+// is_ops_staff()) -- Management can grant or revoke it per person in Staff
+// Settings' Tool Access editor instead of needing another deploy. See the
+// 2026-10-16 migration on the lrahgcnftetnyxunaljs project for the matching
+// RLS-side fix (27 policies across 12 tables shared this exact hardcoded list).
+function canViewClientDatabase(p){ p=p||PROFILE; return p.role==='manager' || !!p.ops_access; }
+// Mirrors the referrals_sel_staff/referrals_upd_staff RLS policies exactly --
+// a plain agent's own UPDATE attempt on a referral would be silently rejected
+// by RLS, so the UI has to know this in advance rather than let them click a
+// button that's guaranteed to fail.
+function canClearReferrals(){ return PROFILE.role==='manager' || !!PROFILE.ops_access; }
 const DOC_STAGES=[
   {key:'allocation',label:'Allocation'},
   {key:'picking',label:'Picking'},
@@ -21153,6 +21173,7 @@ function armViewOnlyObserver(toolKey){
   VIEWONLY_OBSERVER.observe(V,{childList:true,subtree:true});
 }
 function demoToolAccess(key){ return (demoMem&&demoMem.toolAccessOverrides&&demoMem.toolAccessOverrides[key])||{}; }
+function demoOpsAccess(key){ return !!(demoMem&&demoMem.opsAccessOverrides&&demoMem.opsAccessOverrides[key]); }
 async function apiSaveStaffToolAccess(agentKey,toolAccess){
   if(DEMO_MODE){ const d=await demoLoad(); d.toolAccessOverrides=d.toolAccessOverrides||{}; d.toolAccessOverrides[agentKey]=toolAccess; await demoSave(); return; }
   const {error}=await sb.from('profiles').update({tool_access:toolAccess}).eq('agent_key',agentKey); if(error) throw error;
@@ -21413,8 +21434,9 @@ function mgrStaffSettingsHtml(){
   <div class="formwrap" style="padding:6px 15px 15px">
   <p class="mini" style="margin:0 0 12px">Every tool starts on its intelligent default — "Full" for a basic tool everyone gets, or whatever that person's role already earns them for something like Log Payment or Contract of Sale, marked "default" below. Pick a different level to override it for just that person; "No access" hides that tool from their Sales/Office/More menus and blocks it outright if they try to open it directly, "View only" still shows it but disables every input and save/delete/send action inside it. Takes effect next time they open the app.</p>
   ${agentStaff.map(s=>{
-    const access=((DB.profiles||[]).find(x=>x.agent_key===s.key)||{}).tool_access||{};
-    const staffProfile={key:s.key,role:'agent'};
+    const dbProfile=(DB.profiles||[]).find(x=>x.agent_key===s.key)||{};
+    const access=dbProfile.tool_access||{};
+    const staffProfile={key:s.key,role:'agent',ops_access:dbProfile.ops_access};
     const effectiveLevel=t=>access[t.key]!=null?access[t.key]:defaultToolAccessLevel(t.key,staffProfile);
     const restricted=ALL_GRANTABLE_TOOLS.filter(t=>effectiveLevel(t)!=='full').length;
     return `<details class="vaultCard" data-toolaccessagent="${esc(s.key)}">
@@ -21424,6 +21446,10 @@ function mgrStaffSettingsHtml(){
         <svg class="vaultChevron" width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </summary>
       <div class="vaultFormContents">
+        <label class="toolAccessRow" style="cursor:pointer">
+          <span class="toolAccessLabel">Operations access<span class="mini" style="color:var(--muted);font-weight:400;display:block">Sees every agent's leads, site visits, referrals and contracts company-wide — not just their own. Grant this to staff who need company-wide oversight, same as Elias, Emmanuel and Elizabeth already have.</span></span>
+          <input type="checkbox" class="opsAccessChk" data-opsaccess="${esc(s.key)}" ${dbProfile.ops_access?'checked':''}/>
+        </label>
         <div class="toolAccessGrid">${ALL_GRANTABLE_TOOLS.map(t=>{
           const lvl=effectiveLevel(t), isDefault=access[t.key]==null;
           return `<div class="toolAccessRow"><span class="toolAccessLabel">${esc(t.label)}${isDefault?'<span class="mini" style="color:var(--muted);font-weight:400"> · default</span>':''}</span>
@@ -21485,10 +21511,12 @@ function bindStaffSettingsCtrls(){
       // win over defaultToolAccessLevel()'s guess, in both directions.
       const access={};
       container.querySelectorAll('.toolAccessSel').forEach(sel=>{ access[sel.dataset.toolkey]=sel.value; });
+      const opsChk=container.querySelector('.opsAccessChk');
+      const newOpsAccess=!!(opsChk&&opsChk.checked);
       b.disabled=true; b.textContent='Saving…';
       try{
-        await apiSaveStaffToolAccess(key,access);
-        const prof=(DB.profiles||[]).find(x=>x.agent_key===key); if(prof) prof.tool_access=access;
+        await Promise.all([apiSaveStaffToolAccess(key,access),apiSetOpsAccess(key,newOpsAccess)]);
+        const prof=(DB.profiles||[]).find(x=>x.agent_key===key); if(prof){ prof.tool_access=access; prof.ops_access=newOpsAccess; }
         toast('Tool access updated');
         managerView();
       }catch(e){ toast('Failed: '+(friendlyErr(e))); b.disabled=false; b.textContent='Save access'; }
