@@ -1796,7 +1796,15 @@ select.assign{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px
   }
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Pinned to an exact version 2026-10-18 -- this was the one unversioned
+     CDN tag in the app (every other script below is already pinned). A
+     floating "@2" tag means jsdelivr can silently serve a new point
+     release to every visitor at any moment, with zero code change on our
+     side to blame -- a real, live risk for the one form in this app that
+     absolutely cannot be allowed to randomly break (the public Site Visit
+     Experience review link texted to clients). Bump deliberately, never
+     let this float again. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
 </head>
@@ -26458,13 +26466,32 @@ function renderSiteVisitExperienceForm(token){
       handlingFeedback:val('handlingFeedback'),siteDescriptionRating:val('siteDescriptionRating'),belowExpectationReason:val('belowExpectationReason'),
       overallRating:+val('overallRating'),npsScore:+val('npsScore'),improvementSuggestions:val('improvementSuggestions'),
       purchaseIntent:val('purchaseIntent'),additionalComments:val('additionalComments')};
+    // Fixed 2026-10-18: this used to go through sb.functions.invoke(), which
+    // first requires the Supabase JS SDK (a floating-version CDN script) to
+    // have loaded and tryInitClient() to have succeeded -- a real client
+    // reported filling this out and submitting with nothing ever reaching
+    // the database, and a real submission was later confirmed to land fine
+    // once retried. A plain fetch() straight to the edge function needs
+    // none of that: no SDK, no client object, nothing that can silently
+    // leave `sb` null on a flaky mobile connection. One automatic retry on
+    // a network-level failure (not a real rejection from the server, which
+    // still surfaces immediately) covers the single most likely failure
+    // mode for someone opening an SMS link on mobile data.
+    async function postSubmission(){
+      const res=await fetch(SUPABASE_URL+'/functions/v1/site-visit-experience-submit',{
+        method:'POST',
+        headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+SUPABASE_ANON_KEY},
+        body:JSON.stringify(payload)
+      });
+      let data=null; try{ data=await res.json(); }catch(e2){}
+      return {status:res.status,data};
+    }
     try{
-      if(!sb) throwFriendly('offline');
-      let {data,error}=await sb.functions.invoke('site-visit-experience-submit',{body:payload});
-      if(error && error.context && typeof error.context.json==='function'){
-        try{ data=await error.context.json(); }catch(e2){}
-      }
-      if(error||!data||!data.ok){
+      let result;
+      try{ result=await postSubmission(); }
+      catch(networkErr){ result=await postSubmission(); } // one retry, network-level failure only
+      const {data}=result;
+      if(!data||!data.ok){
         const reason=data&&data.reason;
         errBox.textContent = reason==='already_submitted' ? "It looks like you've already submitted a review for this visit — thank you again!"
           : reason==='invalid_token' ? 'This review link is no longer valid.'
