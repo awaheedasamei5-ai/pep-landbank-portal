@@ -15324,12 +15324,31 @@ async function viewSiteVisitAuth(weekStartArg,dayArg){
   V.innerHTML=`${back('officedesk')}<div class="pagehead"><div><div class="eyebrow">Daily logistics</div><h2>Site Visit Authorization</h2><p>Pick a day, estimate and reconcile that day's site-visit costs, then get Management's approval.</p></div></div>
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     <button class="chip ${SVA_MAIN_TAB==='logistics'?'on':''}" data-svamaintab="logistics">Logistics</button>
-    <button class="chip ${SVA_MAIN_TAB==='experience'?'on':''}" data-svamaintab="experience">Site Visit Experience</button>
+    <button class="chip ${SVA_MAIN_TAB==='experience'?'on':''}" data-svamaintab="experience">Site Visit Experience<span id="sveAwaitingBadge"></span></button>
   </div>
   <div id="svaMainBody"><div style="padding:40px 0"><div class="skel" style="height:80px;border-radius:16px"></div></div></div>`;
   V.querySelectorAll('[data-svamaintab]').forEach(b=>b.onclick=()=>{ SVA_MAIN_TAB=b.dataset.svamaintab; viewSiteVisitAuth(SVA_WEEK_START,SVA_SELECTED_DAY); });
+  // Fixed 2026-10-18: a client could submit their review and staff would
+  // have no way to know one was overdue without clicking into Experience ->
+  // Invites and scanning every day by hand. This surfaces "sent but not yet
+  // reviewed" the moment this screen opens, on whichever sub-tab staff land
+  // on first -- a real follow-up signal, not just a per-day status tag
+  // buried three clicks deep. Fetched separately and non-blocking so a slow
+  // invites load never delays the rest of the screen.
+  refreshSveAwaitingBadge();
   if(SVA_MAIN_TAB==='experience') await paintSiteVisitExperienceBody();
   else await paintSiteVisitAuthBody();
+}
+async function refreshSveAwaitingBadge(){
+  const badge=document.getElementById('sveAwaitingBadge'); if(!badge) return;
+  try{
+    const invites=await apiLoadSiteVisitExperienceInvites();
+    const awaiting=invites.filter(i=>i.sentAt&&!i.submittedAt);
+    const el=document.getElementById('sveAwaitingBadge'); if(!el) return; // view may have changed while this was loading
+    el.textContent = awaiting.length ? ' · '+awaiting.length+' awaiting review' : '';
+    el.className = awaiting.length ? 'mini' : '';
+    el.style.color = awaiting.length ? 'var(--warn)' : '';
+  }catch(e){ /* a badge failing to load must never block the real screen */ }
 }
 async function paintSiteVisitAuthBody(){
   const body=document.getElementById('svaMainBody'); if(!body) return;
