@@ -35,15 +35,14 @@ export class IssueCommentService extends APIService {
     return rows.map((row) => toPlaneComment(row, ctx));
   }
 
-  /** Phase 6: real insert into op_issue_comments. */
+  /** Create an Operations comment through the server-enforced action boundary. */
   async createIssueComment(_workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssueComment>): Promise<TIssueComment> {
     const sb = requireSupabase();
     const staffKey = currentStaffKey();
-    const { data: row, error } = await sb
-      .from("op_issue_comments")
-      .insert({ issue_id: issueId, comment_html: data.comment_html ?? "", actor_key: staffKey })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_issue_comment", {
+      p_issue_id: issueId,
+      p_comment_html: data.comment_html ?? "",
+    });
     if (error) throw error;
     const ctx = await buildActivityContext(sb, projectId, issueId, [staffKey]);
     return toPlaneComment(row as OpIssueCommentRow, ctx);
@@ -58,21 +57,31 @@ export class IssueCommentService extends APIService {
     data: Partial<TIssueComment>
   ): Promise<TIssueComment> {
     const sb = requireSupabase();
-    const { data: row, error } = await sb
-      .from("op_issue_comments")
-      .update({ comment_html: data.comment_html })
-      .eq("id", commentId)
-      .select("*")
-      .single();
+    if (!data.updated_at) throw new Error("Reload the comment before editing it.");
+    const { data: row, error } = await sb.rpc("update_operation_issue_comment", {
+      p_comment_id: commentId,
+      p_expected_updated_at: data.updated_at,
+      p_comment_html: data.comment_html ?? "",
+    });
     if (error) throw error;
     const ctx = await buildActivityContext(sb, projectId, issueId, [row.actor_key]);
     return toPlaneComment(row as OpIssueCommentRow, ctx);
   }
 
   /** Phase 6: real delete from op_issue_comments. */
-  async deleteIssueComment(_workspaceSlug: string, _projectId: string, _issueId: string, commentId: string): Promise<void> {
+  async deleteIssueComment(
+    _workspaceSlug: string,
+    _projectId: string,
+    _issueId: string,
+    commentId: string,
+    expectedUpdatedAt?: string,
+  ): Promise<void> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_issue_comments").delete().eq("id", commentId);
+    if (!expectedUpdatedAt) throw new Error("Reload the comment before deleting it.");
+    const { error } = await sb.rpc("delete_operation_issue_comment", {
+      p_comment_id: commentId,
+      p_expected_updated_at: expectedUpdatedAt,
+    });
     if (error) throw error;
   }
 }
