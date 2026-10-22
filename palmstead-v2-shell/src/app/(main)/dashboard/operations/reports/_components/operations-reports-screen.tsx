@@ -582,7 +582,15 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			doc.text(filterLines, 12, y);
 			y += filterLines.length * 4 + 4;
 			const includeSection = (section: ReportExportSection) => exportSection === "all" || exportSection === section;
+			const preparePdfSection = () => {
+				const contentBottom = doc.internal.pageSize.getHeight() - 20;
+				if (y + 38 > contentBottom) {
+					doc.addPage();
+					y = 18;
+				}
+			};
 			if (includeSection("summary")) {
+				preparePdfSection();
 				y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Report summary");
 				const summaryHeaders = manager
 					? ["Issues in view", "Currently open", "Overdue now", "Completed in range", "Unassigned"]
@@ -594,6 +602,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("comparison")) {
+				preparePdfSection();
 				y = pdfSectionTitle(
 					doc,
 					y,
@@ -614,6 +623,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("trend")) {
+				preparePdfSection();
 				y = pdfSectionTitle(
 					doc,
 					y,
@@ -633,6 +643,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (manager && personKey === "all" && includeSection("workload")) {
+				preparePdfSection();
 				y = pdfSectionTitle(
 					doc,
 					y,
@@ -650,6 +661,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("register")) {
+				preparePdfSection();
 				y = pdfSectionTitle(
 					doc,
 					y,
