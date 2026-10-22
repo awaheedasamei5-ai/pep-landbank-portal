@@ -2,6 +2,71 @@ export type DateRange = { start: string; end: string };
 export type ComparisonMode = "previous-period" | "previous-year";
 export type TrendBucket = "day" | "week" | "month";
 
+export type OperationsReportType = "work-summary" | "completed" | "created" | "due" | "open-overdue";
+export type OperationsReportFilters = {
+	report: OperationsReportType;
+	project: string;
+	person: string;
+	status: string;
+	priority: string;
+	from: string;
+	to: string;
+	compare: ComparisonMode;
+};
+
+const reportTypes = new Set<OperationsReportType>(["work-summary", "completed", "created", "due", "open-overdue"]);
+const statusGroups = new Set(["backlog", "unstarted", "started", "completed", "cancelled"]);
+const priorities = new Set(["urgent", "high", "medium", "low", "none"]);
+
+function isDateOnly(value: string | null): value is string {
+	if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const [year, month, day] = value.split("-").map(Number);
+	const date = new Date(year, month - 1, day);
+	return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+/** Reads only allow-listed report parameters; manager-only dimensions are discarded for Staff. */
+export function parseReportFilters(params: URLSearchParams, defaults: Pick<OperationsReportFilters, "from" | "to">, manager: boolean): OperationsReportFilters {
+	const one = (key: string) => {
+		const values = params.getAll(key);
+		return values.length === 1 ? values[0] : null;
+	};
+	const reportValue = one("report");
+	const statusValue = one("status");
+	const priorityValue = one("priority");
+	const compareValue = one("compare");
+	const fromValue = one("from");
+	const toValue = one("to");
+	const from = isDateOnly(fromValue) ? fromValue : defaults.from;
+	const to = isDateOnly(toValue) ? toValue : defaults.to;
+	const rangeValid = from <= to;
+	return {
+		report: reportValue && reportTypes.has(reportValue as OperationsReportType) ? reportValue as OperationsReportType : "work-summary",
+		project: manager ? (one("project")?.slice(0, 100) || "all") : "all",
+		person: manager ? (one("person")?.slice(0, 100) || "all") : "all",
+		status: statusValue && statusGroups.has(statusValue) ? statusValue : "all",
+		priority: priorityValue && priorities.has(priorityValue) ? priorityValue : "all",
+		from: rangeValid ? from : defaults.from,
+		to: rangeValid ? to : defaults.to,
+		compare: compareValue === "previous-year" ? "previous-year" : "previous-period",
+	};
+}
+
+/** Replaces only this report's allow-listed filters and preserves other portal context. */
+export function writeReportFilters(params: URLSearchParams, filters: OperationsReportFilters, manager: boolean): URLSearchParams {
+	const next = new URLSearchParams(params);
+	for (const key of ["report", "project", "person", "status", "priority", "from", "to", "compare"]) next.delete(key);
+	if (filters.report !== "work-summary") next.set("report", filters.report);
+	if (manager && filters.project !== "all") next.set("project", filters.project);
+	if (manager && filters.person !== "all") next.set("person", filters.person);
+	if (filters.status !== "all") next.set("status", filters.status);
+	if (filters.priority !== "all") next.set("priority", filters.priority);
+	next.set("from", filters.from);
+	next.set("to", filters.to);
+	if (filters.compare !== "previous-period") next.set("compare", filters.compare);
+	return next;
+}
+
 export type ReportRecord = {
 	created_at: string;
 	completed_at: string | null;
