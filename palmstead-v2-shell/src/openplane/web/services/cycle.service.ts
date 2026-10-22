@@ -17,14 +17,7 @@ import type {
 } from "@plane/types";
 import { APIService } from "@openplane-web/services/api.service";
 import { requireSupabase } from "@/lib/supabase.client";
-import { currentStaffKey, toPlaneCycle, type OpCycleRow, type CycleProgressCounts } from "@openplane-web/lib/palmstead-adapters";
-
-async function getWorkspaceIdBySlug(workspaceSlug: string): Promise<string> {
-  const sb = requireSupabase();
-  const { data, error } = await sb.from("op_workspaces").select("id").eq("slug", workspaceSlug).single();
-  if (error || !data) throw error ?? new Error(`Workspace '${workspaceSlug}' not found`);
-  return data.id;
-}
+import { toPlaneCycle, type OpCycleRow, type CycleProgressCounts } from "@openplane-web/lib/palmstead-adapters";
 
 /** Real counts of each cycle's issues by state group, in one grouped query for the whole list. */
 async function getCycleProgressCounts(cycleIds: string[]): Promise<CycleProgressCounts> {
@@ -127,25 +120,16 @@ export class CycleService extends APIService {
       });
   }
 
-  /** Phase 6: real insert into op_cycles. */
-  async createCycle(workspaceSlug: string, projectId: string, data: Partial<ICycle>): Promise<ICycle> {
+  /** Permission-checked, audited cycle creation through the V2 server boundary. */
+  async createCycle(_workspaceSlug: string, projectId: string, data: Partial<ICycle>): Promise<ICycle> {
     const sb = requireSupabase();
-    const workspaceId = await getWorkspaceIdBySlug(workspaceSlug);
-    const staffKey = currentStaffKey();
-    const { data: row, error } = await sb
-      .from("op_cycles")
-      .insert({
-        workspace_id: workspaceId,
-        project_id: projectId,
-        name: data.name,
-        description: data.description ?? null,
-        start_date: data.start_date ?? null,
-        end_date: data.end_date ?? null,
-        owned_by_key: staffKey,
-        created_by: staffKey,
-      })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_cycle", {
+      p_project_id: projectId,
+      p_name: data.name ?? "",
+      p_description: data.description ?? null,
+      p_start_date: data.start_date ?? null,
+      p_end_date: data.end_date ?? null,
+    });
     if (error) throw error;
     return toPlaneCycle(row as OpCycleRow, undefined);
   }
@@ -193,7 +177,7 @@ export class CycleService extends APIService {
       });
   }
 
-  /** Phase 6: real update of op_cycles. */
+  /** Permission-checked, stale-write guarded cycle update. */
   async patchCycle(_workspaceSlug: string, _projectId: string, cycleId: string, data: Partial<ICycle>): Promise<ICycle> {
     const sb = requireSupabase();
     const patch: Record<string, unknown> = {};
@@ -202,22 +186,30 @@ export class CycleService extends APIService {
     if (data.start_date !== undefined) patch.start_date = data.start_date;
     if (data.end_date !== undefined) patch.end_date = data.end_date;
     if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
-    const { data: row, error } = await sb.from("op_cycles").update(patch).eq("id", cycleId).select("*").single();
+    const { data: row, error } = await sb.rpc("update_operation_cycle", {
+      p_project_id: _projectId,
+      p_cycle_id: cycleId,
+      p_expected_updated_at: data.updated_at,
+      p_patch: patch,
+    });
     if (error) throw error;
     const counts = await getCycleProgressCounts([cycleId]);
     return toPlaneCycle(row as OpCycleRow, counts[cycleId]);
   }
 
-  /**
-   * Phase 6: real delete from op_cycles. op_issues.cycle_id has no ON
-   * DELETE behaviour in the schema (plain FK), so issues assigned to this
-   * cycle are unassigned first -- otherwise the delete would fail outright
-   * on the real foreign key constraint.
-   */
-  async deleteCycle(_workspaceSlug: string, _projectId: string, cycleId: string): Promise<{ success: true }> {
+  /** Audited permanent deletion; the server atomically unassigns linked work items. */
+  async deleteCycle(
+    _workspaceSlug: string,
+    _projectId: string,
+    cycleId: string,
+    expectedUpdatedAt: string
+  ): Promise<{ success: true }> {
     const sb = requireSupabase();
-    await sb.from("op_issues").update({ cycle_id: null }).eq("cycle_id", cycleId);
-    const { error } = await sb.from("op_cycles").delete().eq("id", cycleId);
+    const { error } = await sb.rpc("delete_operation_cycle", {
+      p_project_id: _projectId,
+      p_cycle_id: cycleId,
+      p_expected_updated_at: expectedUpdatedAt,
+    });
     if (error) throw error;
     return { success: true };
   }
@@ -267,3 +259,4 @@ export class CycleService extends APIService {
       });
   }
 }
+
