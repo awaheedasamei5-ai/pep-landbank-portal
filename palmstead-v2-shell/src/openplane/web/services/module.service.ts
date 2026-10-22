@@ -10,7 +10,7 @@ import type { IModule, ILinkDetails, ModuleLink, TIssuesResponse } from "@plane/
 // services
 import { APIService } from "@openplane-web/services/api.service";
 import { requireSupabase } from "@/lib/supabase.client";
-import { currentStaffKey, toPlaneModule, type OpModuleRow, type ModuleProgressCounts } from "@openplane-web/lib/palmstead-adapters";
+import { toPlaneModule, type OpModuleRow, type ModuleProgressCounts } from "@openplane-web/lib/palmstead-adapters";
 
 async function getModuleMemberIds(moduleIds: string[]): Promise<Record<string, string[]>> {
   const map: Record<string, string[]> = {};
@@ -81,30 +81,20 @@ export class ModuleService extends APIService {
     return rows.map((row) => toPlaneModule(row, members[row.id] ?? [], counts[row.id]));
   }
 
-  /** Phase 6: real insert into op_modules. */
-  async createModule(workspaceSlug: string, projectId: string, data: Partial<IModule>): Promise<IModule> {
+  /** Permission-checked, atomic module and membership creation. */
+  async createModule(_workspaceSlug: string, projectId: string, data: Partial<IModule>): Promise<IModule> {
     const sb = requireSupabase();
-    const workspaceId = (await sb.from("op_projects").select("workspace_id").eq("id", projectId).single()).data?.workspace_id;
-    const staffKey = currentStaffKey();
-    const { data: row, error } = await sb
-      .from("op_modules")
-      .insert({
-        workspace_id: workspaceId,
-        project_id: projectId,
-        name: data.name,
-        description: data.description ?? null,
-        lead_key: typeof data.lead_id === "string" ? data.lead_id : staffKey,
-        status: data.status ?? "planned",
-        start_date: data.start_date ?? null,
-        target_date: data.target_date ?? null,
-        created_by: staffKey,
-      })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_module", {
+      p_project_id: projectId,
+      p_name: data.name ?? "",
+      p_description: data.description ?? null,
+      p_lead_key: typeof data.lead_id === "string" ? data.lead_id : null,
+      p_status: data.status ?? "planned",
+      p_start_date: data.start_date ?? null,
+      p_target_date: data.target_date ?? null,
+      p_member_keys: data.member_ids ?? [],
+    });
     if (error) throw error;
-    if (data.member_ids?.length) {
-      await sb.from("op_module_members").insert(data.member_ids.map((memberKey) => ({ module_id: row.id, member_key: memberKey })));
-    }
     return toPlaneModule(row as OpModuleRow, data.member_ids ?? [], undefined);
   }
 
@@ -124,7 +114,7 @@ export class ModuleService extends APIService {
     return toPlaneModule(data as OpModuleRow, members[moduleId] ?? [], counts[moduleId]);
   }
 
-  /** Phase 6: real update of op_modules (+ reconciling op_module_members when member_ids is provided). */
+  /** Permission-checked, stale-write guarded module and membership update. */
   async patchModule(
     _workspaceSlug: string,
     _projectId: string,
@@ -135,29 +125,37 @@ export class ModuleService extends APIService {
     const patch: Record<string, unknown> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.description !== undefined) patch.description = data.description;
+    if (data.description_html !== undefined) patch.description_html = data.description_html;
+    if (data.lead_id !== undefined) patch.lead_key = data.lead_id;
     if (data.status !== undefined) patch.status = data.status;
     if (data.start_date !== undefined) patch.start_date = data.start_date;
     if (data.target_date !== undefined) patch.target_date = data.target_date;
     if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
-    const { data: row, error } = await sb.from("op_modules").update(patch).eq("id", moduleId).select("*").single();
+    if (data.member_ids !== undefined) patch.member_ids = data.member_ids;
+    const { data: row, error } = await sb.rpc("update_operation_module", {
+      p_project_id: _projectId,
+      p_module_id: moduleId,
+      p_expected_updated_at: data.updated_at,
+      p_patch: patch,
+    });
     if (error) throw error;
-    if (data.member_ids !== undefined) {
-      await sb.from("op_module_members").delete().eq("module_id", moduleId);
-      if (data.member_ids.length) {
-        await sb.from("op_module_members").insert(data.member_ids.map((memberKey) => ({ module_id: moduleId, member_key: memberKey })));
-      }
-    }
     const [counts, members] = await Promise.all([getModuleProgressCounts([moduleId]), getModuleMemberIds([moduleId])]);
     return toPlaneModule(row as OpModuleRow, members[moduleId] ?? data.member_ids ?? [], counts[moduleId]);
   }
 
-  /**
-   * Phase 6: real delete from op_modules. op_issue_modules/op_module_members
-   * both cascade on delete (real FKs, `on delete cascade` in the schema).
-   */
-  async deleteModule(_workspaceSlug: string, _projectId: string, moduleId: string): Promise<{ success: true }> {
+  /** Audited permanent deletion; relationship cleanup is one server transaction. */
+  async deleteModule(
+    _workspaceSlug: string,
+    _projectId: string,
+    moduleId: string,
+    expectedUpdatedAt: string
+  ): Promise<{ success: true }> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_modules").delete().eq("id", moduleId);
+    const { error } = await sb.rpc("delete_operation_module", {
+      p_project_id: _projectId,
+      p_module_id: moduleId,
+      p_expected_updated_at: expectedUpdatedAt,
+    });
     if (error) throw error;
     return { success: true };
   }
@@ -183,67 +181,67 @@ export class ModuleService extends APIService {
   }
 
   async addIssuesToModule(
-    workspaceSlug: string,
+    _workspaceSlug: string,
     projectId: string,
     moduleId: string,
     data: { issues: string[] }
   ): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/modules/${moduleId}/issues/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const { error } = await sb.rpc("change_operation_module_issues", {
+      p_project_id: projectId,
+      p_module_id: moduleId,
+      p_issue_ids: data.issues,
+      p_add: true,
+    });
+    if (error) throw error;
   }
 
   async addModulesToIssue(
-    workspaceSlug: string,
+    _workspaceSlug: string,
     projectId: string,
     issueId: string,
     data: { modules: string[]; removed_modules?: string[] }
   ): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/modules/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const { error } = await sb.rpc("change_operation_issue_modules", {
+      p_project_id: projectId,
+      p_issue_id: issueId,
+      p_add_module_ids: data.modules,
+      p_remove_module_ids: data.removed_modules ?? [],
+    });
+    if (error) throw error;
   }
 
   async removeIssuesFromModuleBulk(
-    workspaceSlug: string,
+    _workspaceSlug: string,
     projectId: string,
     moduleId: string,
     issueIds: string[]
   ): Promise<void> {
-    const promiseDataUrls: any = [];
-    issueIds.forEach((issueId) => {
-      promiseDataUrls.push(
-        this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/modules/${moduleId}/issues/${issueId}/`)
-      );
+    const sb = requireSupabase();
+    const { error } = await sb.rpc("change_operation_module_issues", {
+      p_project_id: projectId,
+      p_module_id: moduleId,
+      p_issue_ids: issueIds,
+      p_add: false,
     });
-    await Promise.all(promiseDataUrls)
-      .then((response) => response)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    if (error) throw error;
   }
 
   async removeModulesFromIssueBulk(
-    workspaceSlug: string,
+    _workspaceSlug: string,
     projectId: string,
     issueId: string,
     moduleIds: string[]
   ): Promise<void> {
-    const promiseDataUrls: any = [];
-    moduleIds.forEach((moduleId) => {
-      promiseDataUrls.push(
-        this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/modules/${moduleId}/issues/${issueId}/`)
-      );
+    const sb = requireSupabase();
+    const { error } = await sb.rpc("change_operation_issue_modules", {
+      p_project_id: projectId,
+      p_issue_id: issueId,
+      p_add_module_ids: [],
+      p_remove_module_ids: moduleIds,
     });
-    await Promise.all(promiseDataUrls)
-      .then((response) => response)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    if (error) throw error;
   }
 
   async createModuleLink(
@@ -308,3 +306,4 @@ export class ModuleService extends APIService {
       });
   }
 }
+
