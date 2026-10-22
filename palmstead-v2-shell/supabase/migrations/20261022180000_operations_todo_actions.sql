@@ -12,6 +12,7 @@ as $$
 declare
   v_actor public.profiles%rowtype := app_operations_private.current_actor();
   v_before public.op_todos%rowtype;
+  v_original public.op_todos%rowtype;
   v_after public.op_todos%rowtype;
   v_expected jsonb;
   v_patch jsonb;
@@ -65,6 +66,7 @@ begin
     v_title := btrim(coalesce(p_payload->>'title',''));
     v_notes := nullif(btrim(p_payload->>'notes'),'');
     v_contact := nullif(btrim(p_payload->>'contact'),'');
+    if jsonb_typeof(p_payload->'dates') <> 'array' then raise exception 'Repeat dates are required.' using errcode='22023'; end if;
     v_freq := p_payload->>'freq';
     v_interval := coalesce(nullif(p_payload->>'interval','')::integer,1);
     v_until := nullif(p_payload->>'until','')::date;
@@ -155,7 +157,7 @@ begin
     if p_payload->'expected' is distinct from v_expected then raise exception 'This to-do changed after you opened it. Reload and try again.' using errcode='40001'; end if;
     v_patch := p_payload->'patch';
     if v_patch is null or jsonb_typeof(v_patch)<>'object' or v_patch='{}'::jsonb then raise exception 'Choose at least one to-do field to update.' using errcode='22023'; end if;
-    if not (array(select jsonb_object_keys(v_patch)) <@ array['title','notes','contact','date','startTime','endTime']) then
+    if not (array(select jsonb_object_keys(v_patch)) <@ array['title','notes','contact','date','startTime','endTime']::text[]) then
       raise exception 'The update contains an unsupported field.' using errcode='22023';
     end if;
     v_title := case when v_patch?'title' then btrim(v_patch->>'title') else v_before.title end;
@@ -205,6 +207,7 @@ begin
     v_start := nullif(p_payload->>'startTime','')::time;
     v_end := nullif(p_payload->>'endTime','')::time;
     if v_start is not null and v_end is not null and v_end <= v_start then raise exception 'End time must be after start time.' using errcode='22023'; end if;
+    v_original := v_before;
     if v_before.recurs_parent_id is null and exists(select 1 from public.op_todos c where c.recurs_parent_id=v_before.id and c.status='open') then
       -- The series anchor moves with its future occurrences; their links are repointed atomically below.
       null;
@@ -222,7 +225,7 @@ begin
     update public.op_todos set status='rescheduled',rescheduled_to_id=v_after.id where id=v_before.id returning * into v_before;
     insert into public.audit_events(category,event_type,actor_key,actor_name,entity_type,entity_id,summary,detail,source)
     values('operations','todo_rescheduled',v_actor.agent_key,v_actor.name,'operations_todo',v_before.id::text,
-      'Rescheduled to-do '||v_before.title,jsonb_build_object('before',to_jsonb(v_before),'replacement',to_jsonb(v_after)),'server');
+      'Rescheduled to-do '||v_before.title,jsonb_build_object('before',to_jsonb(v_original),'replacement',to_jsonb(v_after)),'server');
     return to_jsonb(v_after);
   end if;
 
