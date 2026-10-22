@@ -793,7 +793,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 						: "Track your assigned work and completed tasks."
 				}
 				action={
-					<div className="flex gap-2">
+					<div className="flex flex-wrap gap-2">
 						<Button
 							variant="outline"
 							onClick={downloadSummaryCsv}
