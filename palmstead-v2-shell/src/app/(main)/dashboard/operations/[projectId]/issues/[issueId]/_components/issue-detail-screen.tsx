@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { OPERATION_COMMENT_TEXT_LIMIT, operationCommentTextToHtml } from "@/lib/palmstead/operations-comment-html";
+import { OPERATION_COMMENT_TEXT_LIMIT, operationCommentTextToHtml, safeOperationCommentHtml } from "@/lib/palmstead/operations-comment-html";
 import { requireSupabase } from "@/lib/supabase.client";
 
 import { PortalBackLink } from "../../../../../_components/portal-navigation";
@@ -47,6 +47,15 @@ type IssueCapabilities = {
 };
 
 const FIELD_LABEL: Record<string, string> = { state: "status", priority: "priority", name: "title", target_date: "due date" };
+
+function operationCommentHtmlToDraft(html: string) {
+  const safe = safeOperationCommentHtml(html)
+    .replace(/<br\\s*\\/?>/gi, "\\n")
+    .replace(/<\\/(?:p|li|blockquote)>/gi, "\\n");
+  const container = document.createElement("div");
+  container.innerHTML = safe;
+  return (container.textContent ?? "").replace(/\\n{3,}/g, "\\n\\n").trim();
+}
 
 const issueService = new IssueService();
 
@@ -393,7 +402,7 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                               disabled={savingCommentId === comment.id || deletingCommentId === comment.id}
                               onClick={() => {
                                 setEditingCommentId(comment.id);
-                                setEditingCommentDraft(comment.comment_stripped ?? "");
+                                setEditingCommentDraft(operationCommentHtmlToDraft(comment.comment_html));
                               }}
                             >
                               <Pencil aria-hidden="true" />
@@ -463,7 +472,6 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                       )}
                       <div className="mt-1 text-xs text-muted-foreground">
                         {new Date(comment.created_at).toLocaleString()}
-                        {comment.updated_at !== comment.created_at && <span className="ml-2">Edited</span>}
                       </div>
                     </div>
                   );
