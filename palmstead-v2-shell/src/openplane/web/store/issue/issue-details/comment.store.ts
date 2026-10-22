@@ -35,7 +35,7 @@ export interface IIssueCommentStoreActions {
     commentId: string,
     data: Partial<TIssueComment>
   ) => Promise<any>;
-  removeComment: (workspaceSlug: string, projectId: string, issueId: string, commentId: string) => Promise<any>;
+  removeComment: (workspaceSlug: string, projectId: string, issueId: string, commentId: string, expectedUpdatedAt?: string) => Promise<any>;
 }
 
 export interface IIssueCommentStore extends IIssueCommentStoreActions {
@@ -170,8 +170,8 @@ export class IssueCommentStore implements IIssueCommentStore {
     }
   };
 
-  removeComment = async (workspaceSlug: string, projectId: string, issueId: string, commentId: string) => {
-    const response = await this.issueCommentService.deleteIssueComment(workspaceSlug, projectId, issueId, commentId);
+  removeComment = async (workspaceSlug: string, projectId: string, issueId: string, commentId: string, expectedUpdatedAt?: string) => {
+    const response = await this.issueCommentService.deleteIssueComment(workspaceSlug, projectId, issueId, commentId, expectedUpdatedAt);
 
     runInAction(() => {
       pull(this.comments[issueId], commentId);
