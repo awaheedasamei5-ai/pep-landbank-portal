@@ -596,11 +596,15 @@ export class CycleStore implements ICycleStore {
    * @returns
    */
   updateCycleDetails = async (workspaceSlug: string, projectId: string, cycleId: string, data: Partial<ICycle>) => {
+    const originalCycle = this.getCycleById(cycleId);
     try {
       runInAction(() => {
         set(this.cycleMap, [cycleId], { ...this.cycleMap?.[cycleId], ...data });
       });
-      const response = await this.cycleService.patchCycle(workspaceSlug, projectId, cycleId, data);
+      const response = await this.cycleService.patchCycle(workspaceSlug, projectId, cycleId, {
+        ...data,
+        updated_at: originalCycle?.updated_at,
+      });
       this.fetchCycleDetails(workspaceSlug, projectId, cycleId);
       return response;
     } catch (error) {
@@ -617,14 +621,18 @@ export class CycleStore implements ICycleStore {
    * @param projectId
    * @param cycleId
    */
-  deleteCycle = async (workspaceSlug: string, projectId: string, cycleId: string) =>
-    await this.cycleService.deleteCycle(workspaceSlug, projectId, cycleId).then(() => {
+  deleteCycle = async (workspaceSlug: string, projectId: string, cycleId: string) => {
+    const cycle = this.getCycleById(cycleId);
+    if (!cycle) return;
+    if (!cycle.updated_at) throw new Error("Reload this cycle before deleting it.");
+    await this.cycleService.deleteCycle(workspaceSlug, projectId, cycleId, cycle.updated_at).then(() => {
       runInAction(() => {
         delete this.cycleMap[cycleId];
         delete this.activeCycleIdMap[cycleId];
         if (this.rootStore.favorite.entityMap[cycleId]) this.rootStore.favorite.removeFavoriteFromStore(cycleId);
       });
     });
+  };
 
   /**
    * @description adds a cycle to favorites
@@ -689,7 +697,7 @@ export class CycleStore implements ICycleStore {
     const cycleDetails = this.getCycleById(cycleId);
     if (cycleDetails?.archived_at) return;
     await this.cycleArchiveService
-      .archiveCycle(workspaceSlug, projectId, cycleId)
+      .archiveCycle(workspaceSlug, projectId, cycleId, cycleDetails?.updated_at)
       .then((response) => {
         runInAction(() => {
           set(this.cycleMap, [cycleId, "archived_at"], response.archived_at);
@@ -712,7 +720,7 @@ export class CycleStore implements ICycleStore {
     const cycleDetails = this.getCycleById(cycleId);
     if (!cycleDetails?.archived_at) return;
     await this.cycleArchiveService
-      .restoreCycle(workspaceSlug, projectId, cycleId)
+      .restoreCycle(workspaceSlug, projectId, cycleId, cycleDetails?.updated_at)
       .then(() => {
         runInAction(() => {
           set(this.cycleMap, [cycleId, "archived_at"], null);
@@ -723,3 +731,4 @@ export class CycleStore implements ICycleStore {
       });
   };
 }
+
