@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { jsPDF } from "jspdf";
@@ -51,7 +51,7 @@ import {
 	pdfSectionTitle,
 } from "@/webnext/shared/lib/pdfReport";
 
-import { PortalBackLink } from "../../../_components/portal-navigation";
+import { PortalBackLink, PortalForwardLink } from "../../../_components/portal-navigation";
 import {
 	buildTrend,
 	type ComparisonMode,
@@ -59,6 +59,9 @@ import {
 	displayDate,
 	formatDelta,
 	isCurrentOpen,
+	parseReportFilters,
+	type OperationsReportFilters,
+	writeReportFilters,
 } from "./operations-report-model";
 
 type RawIssue = {
@@ -204,15 +207,55 @@ function endMonth(date: Date) {
 export function OperationsReportsScreen() {
 	const profile = useAuthStore((state) => state.profile);
 	const manager = profile?.role === "manager";
-	const [reportType, setReportType] = useState("work-summary");
-	const [projectId, setProjectId] = useState("all");
-	const [personKey, setPersonKey] = useState("all");
-	const [statusGroup, setStatusGroup] = useState("all");
-	const [priority, setPriority] = useState("all");
-	const [start, setStart] = useState(() => startMonth(new Date()));
-	const [end, setEnd] = useState(() => endMonth(new Date()));
-	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("previous-period");
+	const [initialFilters] = useState(() => {
+		const now = new Date();
+		const defaults = { from: startMonth(now), to: endMonth(now) };
+		const params = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
+		return parseReportFilters(params, defaults, true);
+	});
+	const [reportType, setReportType] = useState(initialFilters.report);
+	const [projectId, setProjectId] = useState(initialFilters.project);
+	const [personKey, setPersonKey] = useState(initialFilters.person);
+	const [statusGroup, setStatusGroup] = useState(initialFilters.status);
+	const [priority, setPriority] = useState(initialFilters.priority);
+	const [start, setStart] = useState(initialFilters.from);
+	const [end, setEnd] = useState(initialFilters.to);
+	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>(initialFilters.compare);
 	const [exporting, setExporting] = useState(false);
+	useEffect(() => {
+		if (!profile) return;
+		const filters: OperationsReportFilters = {
+			report: reportType as OperationsReportFilters["report"],
+			project: projectId,
+			person: personKey,
+			status: statusGroup,
+			priority,
+			from: start,
+			to: end,
+			compare: comparisonMode,
+		};
+		const params = writeReportFilters(new URLSearchParams(window.location.search), filters, manager);
+		const queryString = params.toString();
+		const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+		const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+		if (nextUrl !== currentUrl) window.history.replaceState(window.history.state, "", nextUrl);
+	}, [profile, manager, reportType, projectId, personKey, statusGroup, priority, start, end, comparisonMode]);
+	useEffect(() => {
+		const restoreFilters = () => {
+			const now = new Date();
+			const filters = parseReportFilters(new URLSearchParams(window.location.search), { from: startMonth(now), to: endMonth(now) }, manager);
+			setReportType(filters.report);
+			setProjectId(filters.project);
+			setPersonKey(filters.person);
+			setStatusGroup(filters.status);
+			setPriority(filters.priority);
+			setStart(filters.from);
+			setEnd(filters.to);
+			setComparisonMode(filters.compare);
+		};
+		window.addEventListener("popstate", restoreFilters);
+		return () => window.removeEventListener("popstate", restoreFilters);
+	}, [manager]);
 	const profileKey = profile?.key;
 	const query = useQuery({
 		queryKey: ["operationsReports", profileKey, manager],
@@ -662,7 +705,7 @@ export function OperationsReportsScreen() {
 				<CardContent className="flex flex-wrap items-end gap-3 py-4">
 					<div className="space-y-1.5">
 						<Label>Report</Label>
-						<Select value={reportType} onValueChange={setReportType}>
+						<Select value={reportType} onValueChange={(value) => setReportType(value as OperationsReportFilters["report"])}>
 							<SelectTrigger className="w-48">
 								<SelectValue />
 							</SelectTrigger>
@@ -929,7 +972,7 @@ export function OperationsReportsScreen() {
 												<TableCell>
 													<div className="font-medium">{issue.name}</div>
 													<div className="text-muted-foreground text-xs">
-														{issueCode(issue)}
+					<PortalForwardLink href={`/dashboard/operations/${issue.project_id}/issues/${issue.id}`} className="rounded-sm underline-offset-4 hover:underline focus-visible:underline">{issueCode(issue)}</PortalForwardLink>
 													</div>
 												</TableCell>
 												<TableCell>{issue.project}</TableCell>
