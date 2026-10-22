@@ -2,7 +2,10 @@ import {
   buildTrend,
   comparePeriods,
   displayDate,
+  isCurrentOpen,
+  parseReportFilters,
   previousDateRange,
+  writeReportFilters,
 } from "../src/app/(main)/dashboard/operations/reports/_components/operations-report-model.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -68,3 +71,46 @@ test("date-only values are stable and invalid timestamps do not enter reports", 
   assert.equal(displayDate("not-a-dateTxx"), "");
 });
 
+
+test("open snapshot excludes completed and cancelled groups", () => {
+  assert.equal(isCurrentOpen("started"), true);
+  assert.equal(isCurrentOpen("backlog"), true);
+  assert.equal(isCurrentOpen("completed"), false);
+  assert.equal(isCurrentOpen("cancelled"), false);
+});
+
+test("report filters round trip through a URL while preserving portal return context", () => {
+  const params = new URLSearchParams("returnTo=%2Fdashboard%2Foperations%3Fview%3Dqueue&report=completed&project=project-1&person=staff-1&status=started&priority=high&from=2026-05-01&to=2026-05-31&compare=previous-year");
+  const filters = parseReportFilters(params, { from: "2026-10-01", to: "2026-10-31" }, true);
+  assert.deepEqual(filters, {
+    report: "completed",
+    project: "project-1",
+    person: "staff-1",
+    status: "started",
+    priority: "high",
+    from: "2026-05-01",
+    to: "2026-05-31",
+    compare: "previous-year",
+  });
+  const next = writeReportFilters(new URLSearchParams("returnTo=%2Fdashboard%2Foperations%3Fview%3Dqueue&keep=1"), filters, true);
+  assert.equal(next.get("returnTo"), "/dashboard/operations?view=queue");
+  assert.equal(next.get("keep"), "1");
+  assert.deepEqual(parseReportFilters(next, { from: "2026-10-01", to: "2026-10-31" }, true), filters);
+});
+
+test("report URL parsing rejects ambiguous and invalid filters and drops staff-only dimensions", () => {
+  const defaults = { from: "2026-10-01", to: "2026-10-31" };
+  const params = new URLSearchParams("report=unknown&project=a&person=colleague&status=forged&priority=extreme&from=2026-02-30&to=2026-02-01&compare=anything");
+  assert.deepEqual(parseReportFilters(params, defaults, false), {
+    report: "work-summary",
+    project: "all",
+    person: "all",
+    status: "all",
+    priority: "all",
+    from: defaults.from,
+    to: defaults.to,
+    compare: "previous-period",
+  });
+  params.append("report", "created");
+  assert.equal(parseReportFilters(params, defaults, true).report, "work-summary");
+});
