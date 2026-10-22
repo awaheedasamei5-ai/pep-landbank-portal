@@ -143,31 +143,19 @@ export class IssueCommentStore implements IIssueCommentStore {
     commentId: string,
     data: Partial<TIssueComment>
   ) => {
-    try {
-      runInAction(() => {
-        Object.keys(data).forEach((key) => {
-          set(this.commentMap, [commentId, key], data[key as keyof TIssueComment]);
-        });
-      });
+    const response = await this.issueCommentService.patchIssueComment(
+      workspaceSlug,
+      projectId,
+      issueId,
+      commentId,
+      data
+    );
 
-      const response = await this.issueCommentService.patchIssueComment(
-        workspaceSlug,
-        projectId,
-        issueId,
-        commentId,
-        data
-      );
+    runInAction(() => {
+      set(this.commentMap, commentId, response);
+    });
 
-      runInAction(() => {
-        set(this.commentMap, [commentId, "updated_at"], response.updated_at);
-        set(this.commentMap, [commentId, "edited_at"], response.edited_at);
-      });
-
-      return response;
-    } catch (error) {
-      this.rootIssueDetail.activity.fetchActivities(workspaceSlug, projectId, issueId);
-      throw error;
-    }
+    return response;
   };
 
   removeComment = async (workspaceSlug: string, projectId: string, issueId: string, commentId: string, expectedUpdatedAt?: string) => {
