@@ -58,6 +58,7 @@ import {
 	comparePeriods,
 	displayDate,
 	formatDelta,
+	isCurrentOpen,
 } from "./operations-report-model";
 
 type RawIssue = {
@@ -181,8 +182,7 @@ async function loadReportData(
 	};
 }
 
-const isOpen = (issue: Issue) =>
-	issue.stateGroup !== "completed" && issue.stateGroup !== "cancelled";
+const isOpen = (issue: Issue) => isCurrentOpen(issue.stateGroup);
 const dateInRange = (date: string | null, start: string, end: string) =>
 	!!date && displayDate(date) >= start && displayDate(date) <= end;
 const issueCode = (issue: Issue) => `${issue.identifier}-${issue.sequence_id}`;
@@ -271,6 +271,7 @@ export function OperationsReportsScreen() {
 	const filtered = useMemo(
 		() =>
 			facetFiltered.filter((issue) => {
+				if (reportType === "open-overdue" && !isOpen(issue)) return false;
 				if (reportType === "completed" && !dateInRange(issue.completed_at, start, end)) return false;
 				if (reportType === "created" && !dateInRange(issue.created_at, start, end)) return false;
 				if (reportType === "due" && !dateInRange(issue.target_date, start, end)) return false;
@@ -328,20 +329,34 @@ export function OperationsReportsScreen() {
 				.sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
 		[data?.staff, filtered, start, end],
 	);
-	const summaryCards = manager
-		? [
-				{ label: "Issues in view", value: summary.total },
-				{ label: "Currently open", value: summary.open },
-				{ label: "Overdue now", value: summary.overdue },
-				{ label: "Completed in period", value: summary.completedInRange },
-				{ label: "Unassigned open", value: summary.unassigned },
-			]
-		: [
-				{ label: "My issues", value: summary.total },
-				{ label: "Currently open", value: summary.open },
-				{ label: "Overdue now", value: summary.overdue },
-				{ label: "Completed in period", value: summary.completedInRange },
-			];
+	let summaryCards: { label: string; value: number }[];
+	if (reportType === "open-overdue" && manager) {
+		summaryCards = [
+			{ label: "Open issues", value: summary.total },
+			{ label: "Overdue now", value: summary.overdue },
+			{ label: "Unassigned open", value: summary.unassigned },
+		];
+	} else if (reportType === "open-overdue") {
+		summaryCards = [
+			{ label: "My open issues", value: summary.total },
+			{ label: "Overdue now", value: summary.overdue },
+		];
+	} else if (manager) {
+		summaryCards = [
+			{ label: "Issues in view", value: summary.total },
+			{ label: "Currently open", value: summary.open },
+			{ label: "Overdue now", value: summary.overdue },
+			{ label: "Completed in period", value: summary.completedInRange },
+			{ label: "Unassigned open", value: summary.unassigned },
+		];
+	} else {
+		summaryCards = [
+			{ label: "My issues", value: summary.total },
+			{ label: "Currently open", value: summary.open },
+			{ label: "Overdue now", value: summary.overdue },
+			{ label: "Completed in period", value: summary.completedInRange },
+		];
+	}
 	const displayIssues: FilteredIssue[] = filtered
 		.filter((issue) => {
 			if (reportType === "open-overdue") return isOpen(issue);
@@ -402,7 +417,9 @@ export function OperationsReportsScreen() {
 		);
 		const anchor = document.createElement("a");
 		anchor.href = url;
-		anchor.download = `operations-${reportType}-${start}-${end}.csv`;
+		anchor.download = reportType === "open-overdue"
+			? `operations-open-work-as-of-${todayIso()}.csv`
+			: `operations-${reportType}-${start}-${end}.csv`;
 		anchor.click();
 		URL.revokeObjectURL(url);
 	}
@@ -446,7 +463,9 @@ export function OperationsReportsScreen() {
 			let y = pdfBrandedHeader(
 				doc,
 				"Operations report",
-				`${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
+				reportType === "open-overdue"
+					? `Current open work snapshot · ${todayIso()}`
+					: `${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
 				[`${scopeLabel}`, `Generated ${today()}`],
 				null,
 			);
@@ -767,9 +786,9 @@ export function OperationsReportsScreen() {
 				</CardContent>
 			</Card>
 			<p className="text-muted-foreground text-xs">
-				Date range applies to the selected report type. Overdue means open work
-				past its due date today. Company totals count each issue once; staff
-				workload counts it for each assignee.
+				Open work and overdue are current snapshots. Date ranges apply to created,
+				completed and due reports, and to the created/completed trend and comparison.
+				Company totals count each issue once; staff workload counts it for each assignee.
 			</p>
 			{!error && (
 				<div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
