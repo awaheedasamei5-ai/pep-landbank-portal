@@ -204,13 +204,13 @@ function endMonth(date: Date) {
 	return isoDateOnly(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 }
 
-export function OperationsReportsScreen() {
+export function OperationsReportsScreen({ initialSearchParams }: { initialSearchParams: string }) {
 	const profile = useAuthStore((state) => state.profile);
 	const manager = profile?.role === "manager";
 	const [initialFilters] = useState(() => {
 		const now = new Date();
 		const defaults = { from: startMonth(now), to: endMonth(now) };
-		const params = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
+		const params = new URLSearchParams(initialSearchParams);
 		return parseReportFilters(params, defaults, true);
 	});
 	const [reportType, setReportType] = useState(initialFilters.report);
@@ -223,7 +223,19 @@ export function OperationsReportsScreen() {
 	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>(initialFilters.compare);
 	const [exporting, setExporting] = useState(false);
 	useEffect(() => {
-		if (!profile) return;
+		const now = new Date();
+		const filters = parseReportFilters(new URLSearchParams(initialSearchParams), { from: startMonth(now), to: endMonth(now) }, true);
+		setReportType(filters.report);
+		setProjectId(filters.project);
+		setPersonKey(filters.person);
+		setStatusGroup(filters.status);
+		setPriority(filters.priority);
+		setStart(filters.from);
+		setEnd(filters.to);
+		setComparisonMode(filters.compare);
+	}, [initialSearchParams]);
+	useEffect(() => {
+		if (!profile || start > end) return;
 		const filters: OperationsReportFilters = {
 			report: reportType as OperationsReportFilters["report"],
 			project: projectId,
