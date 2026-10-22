@@ -226,3 +226,8 @@ export function formatDelta(delta: number, percent: number | null): string {
 	return percent === null ? `${absolute} · no prior baseline` : `${absolute} · ${percent > 0 ? "+" : ""}${percent}%`;
 }
 
+
+/** Only active workflow groups count as current open work. */
+export function isCurrentOpen(stateGroup: string): boolean {
+	return stateGroup === "backlog" || stateGroup === "unstarted" || stateGroup === "started";
+}
