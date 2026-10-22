@@ -281,7 +281,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		setComparisonMode(filters.compare);
 	}, [initialSearchParams]);
 	useEffect(() => {
-		if (!manager || (exportSection === "workload" && personKey !== "all")) setExportSection("all");
+		if (exportSection === "workload" && (!manager || personKey !== "all")) setExportSection("all");
 	}, [manager, personKey, exportSection]);
 	useEffect(() => {
 		if (!profile || start > end) return;
@@ -598,7 +598,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				const summaryValues = manager
 					? [summary.total, summary.open, summary.overdue, summary.completedInRange, summary.unassigned]
 					: [summary.total, summary.open, summary.overdue, summary.completedInRange];
-				autoTable(doc, { startY: y, head: [summaryHeaders], body: [summaryValues], styles: { fontSize: 8 }, didDrawPage: () => pdfReportFooter(doc, "Palmstead") });
+				autoTable(doc, { startY: y, margin: { bottom: 20 }, head: [summaryHeaders], body: [summaryValues], styles: { fontSize: 8 } });
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("comparison")) {
@@ -618,7 +618,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 						["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed === null ? "No prior baseline" : `${comparison.percent.completed}%`],
 					],
 					styles: { fontSize: 8 },
-					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+					margin: { bottom: 20 },
 				});
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
@@ -639,7 +639,8 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				const chartWidth = doc.internal.pageSize.getWidth() - 34;
 				const chartTop = y + 2;
 				const chartHeight = 34;
-				const maxValue = Math.max(1, ...trend.points.flatMap((point) => [point.created, point.completed]));
+				const tickStep = Math.max(1, Math.ceil(Math.max(0, ...trend.points.flatMap((point) => [point.created, point.completed])) / 3));
+				const maxValue = tickStep * 3;
 				for (let tick = 0; tick <= 3; tick += 1) {
 					const gridY = chartTop + (chartHeight * tick) / 3;
 					doc.setDrawColor(224, 230, 234);
@@ -647,7 +648,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					doc.line(chartLeft, gridY, chartLeft + chartWidth, gridY);
 					doc.setFontSize(6);
 					doc.setTextColor(92, 108, 120);
-					doc.text(String(Math.round((maxValue * (3 - tick)) / 3)), chartLeft - 3, gridY + 1, { align: "right" });
+					doc.text(String(tickStep * (3 - tick)), chartLeft - 3, gridY + 1, { align: "right" });
 				}
 				const xFor = (index: number) => chartLeft + (trend.points.length <= 1 ? chartWidth / 2 : (chartWidth * index) / (trend.points.length - 1));
 				const yFor = (value: number) => chartTop + chartHeight - (chartHeight * value) / maxValue;
@@ -694,7 +695,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 						? trend.points.map((point) => [point.label, point.created, point.completed])
 						: [["No activity in this date range", 0, 0]],
 					styles: { fontSize: 8 },
-					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+					margin: { bottom: 20 },
 				});
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
@@ -712,7 +713,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					head: [["Staff member", "Open now", "Overdue now", "Completed in period"]],
 					body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.completed]),
 					styles: { fontSize: 8 },
-					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+					margin: { bottom: 20 },
 				});
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
@@ -735,10 +736,11 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 						: [["—", "No issues match these filters", "—", "—", "—", "—"]],
 					styles: { fontSize: 7, cellPadding: 2 },
 					columnStyles: { 1: { cellWidth: 65 }, 2: { cellWidth: 30 } },
-					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+					margin: { bottom: 20 },
 				});
 			}
 
+			// This helper stamps every page; call once after the final page count is known.
 			pdfReportFooter(doc, "Palmstead");
 			doc.save(`operations-${exportSection}-${reportType}-${start}-${end}.pdf`);
 		} finally {
@@ -848,7 +850,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					</div>
 					<div className="basis-full space-y-2">
 						<Label>Quick date range</Label>
-						<div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick date ranges">
+						<fieldset className="flex min-w-0 flex-wrap gap-1.5" aria-label="Quick date ranges">
 							{reportDatePresets.map((preset) => {
 								const selected = activeDatePreset(start, end, new Date()) === preset.value;
 								return (
@@ -869,7 +871,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 									</Button>
 								);
 							})}
-						</div>
+						</fieldset>
 					</div>
 					<div className="space-y-1.5">
 						<Label>From</Label>

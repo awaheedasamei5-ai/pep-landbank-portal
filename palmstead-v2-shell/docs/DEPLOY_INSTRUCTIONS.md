@@ -2,6 +2,14 @@
 
 Read this before running any deploy command, every time. Getting this wrong doesn't just break something in a test environment — it's an immediate, live change to what real staff use every day.
 
+## Current Git deployment configuration — verified 2026-10-22
+
+The user authorized connecting Vercel to GitHub. The Vercel project API now confirms `awaheedasamei5-ai/pep-landbank-portal`, production branch `rebuild`, root directory `palmstead-v2-shell`, project `prj_gY7vGFLflbYScHn6Z6eirvVVJ1wQ`, owner `dnm-garments`.
+
+**Pushing `rebuild` now triggers a V2 production deployment.** The older statements below that a rebuild push is source-only and that manual CLI deployment is the only V2 release path are historical and superseded by this verified configuration. Finish slice verification before pushing. After the push, inspect the exact commit's deployment, wait for READY, and verify the production alias with a fresh browser context. Use the manual command only when a separate deliberate release is necessary; avoid duplicate deployments of the same commit. Never push or merge to `main`.
+
+The Vercel connector's team-scope authorization is separate from CLI login and Git deployment. If the connector returns 403, use the explicitly scoped authorized CLI. Do not change the project or Git connection to repair an expired CLI login.
+
 ## The two deploy targets, and why they must never cross
 
 | | V1 (real production) | V2 (`palmstead-v2-shell`) |

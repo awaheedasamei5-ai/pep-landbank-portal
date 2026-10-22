@@ -1,5 +1,9 @@
 # Continue Here — Handoff for Any AI Tool
 
+## 2026-10-22 release-path correction
+
+Vercel's project API confirms the user's authorized GitHub integration: production branch `rebuild`, root `palmstead-v2-shell`, team `dnm-garments`, project `prj_gY7vGFLflbYScHn6Z6eirvVVJ1wQ`. A rebuild push now deploys V2 production automatically; historical source-only-push statements below are superseded. Verify a slice before pushing, then verify its exact READY deployment and production behavior. Read the current notice in DEPLOY_INSTRUCTIONS. Never touch main/V1. The 14m verification plan records the current login/PDF repair boundary.
+
 ## Latest active request — 2026-10-16
 
 **Latest Operations release:** guarded project lifecycle and Management project recovery are published through `eaed8fb` and deployed READY as `dpl_5NvW6Ws7mBfj2jmi5DBmZ4wTMHLV`. Project create is atomic; update is role/stale guarded; delete is Management-only archive; the Deleted view now restores projects and work items. Live Management and Adams checks passed without changing business data, and the Management project settings page had no horizontal page overflow at 360 px. Adams project/state/label controls are read-only with mutation actions absent. Evidence: `docs/plans/14g-operations-project-actions-verification.md`. Next: replace legacy direct state/label writes with guarded audited server actions, then cycles/modules/views and the Operations reports programme. Preserve concurrent work.

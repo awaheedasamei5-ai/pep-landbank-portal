@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { useRouter } from "next/navigation";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +23,10 @@ const formSchema = z.object({
 
 export function LoginForm() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
   const { login, isPending } = useLiveLogin();
+  useEffect(() => setReady(true), []);
+  const disabled = !ready || isPending;
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -44,14 +49,18 @@ export function LoginForm() {
     router.push("/dashboard/default");
   }
 
+  let submitLabel = "Login";
+  if (!ready) submitLabel = "Preparing sign-in…";
+  else if (isPending) submitLabel = "Signing in…";
+
   return (
-    <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form method="post" noValidate onSubmit={form.handleSubmit(onSubmit)} aria-busy={disabled} className="flex flex-col gap-4">
       <FieldGroup className="gap-4">
         <Controller
           control={form.control}
           name="email"
           render={({ field, fieldState }) => (
-            <Field className="gap-1.5" data-invalid={fieldState.invalid}>
+            <Field className="gap-1.5" data-invalid={fieldState.invalid} data-disabled={disabled}>
               <FieldLabel htmlFor="login-email">Email Address</FieldLabel>
               <Input
                 {...field}
@@ -59,6 +68,7 @@ export function LoginForm() {
                 type="email"
                 placeholder="you@example.com"
                 autoComplete="email"
+                disabled={disabled}
                 aria-invalid={fieldState.invalid}
               />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
@@ -69,7 +79,7 @@ export function LoginForm() {
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
-            <Field className="gap-1.5" data-invalid={fieldState.invalid}>
+            <Field className="gap-1.5" data-invalid={fieldState.invalid} data-disabled={disabled}>
               <FieldLabel htmlFor="login-password">Password</FieldLabel>
               <Input
                 {...field}
@@ -77,6 +87,7 @@ export function LoginForm() {
                 type="password"
                 placeholder="••••••••"
                 autoComplete="current-password"
+                disabled={disabled}
                 aria-invalid={fieldState.invalid}
               />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
@@ -87,11 +98,12 @@ export function LoginForm() {
           control={form.control}
           name="remember"
           render={({ field, fieldState }) => (
-            <Field orientation="horizontal" data-invalid={fieldState.invalid}>
+            <Field orientation="horizontal" data-invalid={fieldState.invalid} data-disabled={disabled}>
               <Checkbox
                 id="login-remember"
                 name={field.name}
                 checked={field.value}
+                disabled={disabled}
                 onCheckedChange={(checked) => field.onChange(Boolean(checked))}
                 aria-invalid={fieldState.invalid}
               />
@@ -105,9 +117,10 @@ export function LoginForm() {
           )}
         />
       </FieldGroup>
-      <Button className="w-full" type="submit" disabled={isPending}>
-        {isPending ? "Signing in…" : "Login"}
+      <Button className="w-full" type="submit" disabled={disabled}>
+        {submitLabel}
       </Button>
+      <noscript>Enable JavaScript to sign in securely.</noscript>
     </form>
   );
 }
