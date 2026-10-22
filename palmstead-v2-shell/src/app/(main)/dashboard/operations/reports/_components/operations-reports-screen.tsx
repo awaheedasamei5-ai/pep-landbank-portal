@@ -623,7 +623,11 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("trend")) {
-				preparePdfSection();
+				const contentBottom = doc.internal.pageSize.getHeight() - 20;
+				if (y + 88 > contentBottom) {
+					doc.addPage();
+					y = 18;
+				}
 				y = pdfSectionTitle(
 					doc,
 					y,
@@ -631,6 +635,58 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					"Created and completed trend",
 					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets · selected filters · no historical state is inferred`,
 				);
+				const chartLeft = 22;
+				const chartWidth = doc.internal.pageSize.getWidth() - 34;
+				const chartTop = y + 2;
+				const chartHeight = 34;
+				const maxValue = Math.max(1, ...trend.points.flatMap((point) => [point.created, point.completed]));
+				for (let tick = 0; tick <= 3; tick += 1) {
+					const gridY = chartTop + (chartHeight * tick) / 3;
+					doc.setDrawColor(224, 230, 234);
+					doc.setLineWidth(0.2);
+					doc.line(chartLeft, gridY, chartLeft + chartWidth, gridY);
+					doc.setFontSize(6);
+					doc.setTextColor(92, 108, 120);
+					doc.text(String(Math.round((maxValue * (3 - tick)) / 3)), chartLeft - 3, gridY + 1, { align: "right" });
+				}
+				const xFor = (index: number) => chartLeft + (trend.points.length <= 1 ? chartWidth / 2 : (chartWidth * index) / (trend.points.length - 1));
+				const yFor = (value: number) => chartTop + chartHeight - (chartHeight * value) / maxValue;
+				const series = [
+					{ key: "created" as const, color: [20, 92, 140] as [number, number, number], label: "Created" },
+					{ key: "completed" as const, color: [28, 128, 102] as [number, number, number], label: "Completed" },
+				];
+				for (const line of series) {
+					doc.setDrawColor(...line.color);
+					doc.setFillColor(...line.color);
+					doc.setLineWidth(0.8);
+					trend.points.forEach((point, index) => {
+						const x = xFor(index);
+						const py = yFor(point[line.key]);
+						if (index > 0) {
+							const previous = trend.points[index - 1];
+							doc.line(xFor(index - 1), yFor(previous[line.key]), x, py);
+						}
+						doc.circle(x, py, 0.8, "F");
+					});
+				}
+				const labelStep = Math.max(1, Math.ceil(trend.points.length / 6));
+				trend.points.forEach((point, index) => {
+					if (index % labelStep !== 0 && index !== trend.points.length - 1) return;
+					doc.setFontSize(6);
+					doc.setTextColor(92, 108, 120);
+					doc.text(point.label, xFor(index), chartTop + chartHeight + 4, { align: "center" });
+				});
+				let legendX = chartLeft;
+				for (const line of series) {
+					doc.setDrawColor(...line.color);
+					doc.setFillColor(...line.color);
+					doc.line(legendX, chartTop + chartHeight + 10, legendX + 6, chartTop + chartHeight + 10);
+					doc.setFontSize(7);
+					doc.setTextColor(60, 72, 82);
+					doc.text(line.label, legendX + 8, chartTop + chartHeight + 11);
+					legendX += 34;
+				}
+				y = chartTop + chartHeight + 18;
 				autoTable(doc, {
 					startY: y,
 					head: [["Period", "Created", "Completed"]],
