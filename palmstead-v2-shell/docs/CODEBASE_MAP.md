@@ -64,7 +64,7 @@ npx tsc -b
 
 ## Current release context
 
-The cycle/module/saved-view action slice has guarded backend routines, select-only table policies, audited writes, and passing rollback-only database checks. Its eight service/store files and migration are published to `rebuild`; the exact release copy typechecks. Production deployment is currently blocked because the Vercel connector returns a team-scope 403 and does not expose its prescribed `authorize_team_access` operation, while CLI device approval remains disabled. Do not describe that slice as live until it is deployed, hard-refreshed, and role-verified.
+The cycle/module/saved-view action slice has guarded backend routines, select-only table policies, audited writes, and passing rollback-only database checks. Its eight service/store files and migration are published to `rebuild`; the exact release copy typechecks. The Operations report comparison slice is also on `rebuild`: it adds previous-period/year comparison, a created/completed trend, and separate summary/register CSV exports. Six model tests and `npx tsc -b` pass; production builds stalled without a result and role/browser report verification is still open. Production deployment is blocked because the Vercel connector returns a team-scope 403 and does not expose its prescribed `authorize_team_access` operation, while CLI device approval remains disabled. Do not describe either slice as live until it is deployed, hard-refreshed, and role-verified.
 
 ## How to keep this map useful
 
