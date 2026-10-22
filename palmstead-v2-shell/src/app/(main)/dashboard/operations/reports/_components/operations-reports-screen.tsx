@@ -90,6 +90,15 @@ type StaffMetric = {
 	overdue: number;
 	completed: number;
 };
+type ReportExportSection = "all" | "summary" | "comparison" | "trend" | "workload" | "register";
+const exportSectionLabels: Record<ReportExportSection, string> = {
+	all: "Full report",
+	summary: "Summary",
+	comparison: "Period comparison",
+	trend: "Activity trend",
+	workload: "Staff workload",
+	register: "Issue register",
+};
 type ReportData = { issues: Issue[]; staff: { key: string; name: string }[] };
 
 async function fetchPages<T>(
@@ -221,6 +230,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 	const [start, setStart] = useState(initialFilters.from);
 	const [end, setEnd] = useState(initialFilters.to);
 	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>(initialFilters.compare);
+	const [exportSection, setExportSection] = useState<ReportExportSection>("all");
 	const [exporting, setExporting] = useState(false);
 	useEffect(() => {
 		const now = new Date();
@@ -234,6 +244,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		setEnd(filters.to);
 		setComparisonMode(filters.compare);
 	}, [initialSearchParams]);
+	useEffect(() => {
+		if (!manager || (exportSection === "workload" && personKey !== "all")) setExportSection("all");
+	}, [manager, personKey, exportSection]);
 	useEffect(() => {
 		if (!profile || start > end) return;
 		const filters: OperationsReportFilters = {
@@ -521,7 +534,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				reportType === "open-overdue"
 					? `Current open work snapshot · ${todayIso()}`
 					: `${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
-				[`${scopeLabel}`, `Generated ${today()}`],
+				[`${scopeLabel}`, exportSectionLabels[exportSection], `Generated ${today()}`],
 				null,
 			);
 			const filterLines = doc.splitTextToSize(
@@ -532,110 +545,98 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			doc.setTextColor(92, 114, 128);
 			doc.text(filterLines, 12, y);
 			y += filterLines.length * 4 + 4;
-			y = pdfSectionTitle(
-				doc,
-				y,
-				doc.internal.pageSize.getWidth(),
-				"Report summary",
-			);
-			const summaryHeaders = manager
-				? [
-						"Issues in view",
-						"Currently open",
-						"Overdue now",
-						"Completed in range",
-						"Unassigned",
-					]
-				: ["My issues", "Currently open", "Overdue now", "Completed in range"];
-			const summaryValues = manager
-				? [
-						summary.total,
-						summary.open,
-						summary.overdue,
-						summary.completedInRange,
-						summary.unassigned,
-					]
-				: [
-						summary.total,
-						summary.open,
-						summary.overdue,
-						summary.completedInRange,
-					];
-			autoTable(doc, {
-				startY: y,
-				head: [summaryHeaders],
-				body: [summaryValues],
-				styles: { fontSize: 8 },
-			});
-			y =
-				(doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
-					.finalY + 11;
-			y = pdfSectionTitle(
-				doc,
-				y,
-				doc.internal.pageSize.getWidth(),
-				"Period comparison",
-				`Current ${start} to ${end} · Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
-			);
-			autoTable(doc, {
-				startY: y,
-				head: [["Activity date", "Current period", "Previous period", "Change", "Change %"]],
-				body: [
-					["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created === null ? "No prior baseline" : `${comparison.percent.created}%`],
-					["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed === null ? "No prior baseline" : `${comparison.percent.completed}%`],
-				],
-				styles: { fontSize: 8 },
-			});
-			y =
-				(doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
-					.finalY + 11;
-			if (manager && personKey === "all") {
+			const includeSection = (section: ReportExportSection) => exportSection === "all" || exportSection === section;
+			if (includeSection("summary")) {
+				y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Report summary");
+				const summaryHeaders = manager
+					? ["Issues in view", "Currently open", "Overdue now", "Completed in range", "Unassigned"]
+					: ["My issues", "Currently open", "Overdue now", "Completed in range"];
+				const summaryValues = manager
+					? [summary.total, summary.open, summary.overdue, summary.completedInRange, summary.unassigned]
+					: [summary.total, summary.open, summary.overdue, summary.completedInRange];
+				autoTable(doc, { startY: y, head: [summaryHeaders], body: [summaryValues], styles: { fontSize: 8 }, didDrawPage: () => pdfReportFooter(doc, "Palmstead") });
+				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
+			}
+			if (includeSection("comparison")) {
+				y = pdfSectionTitle(
+					doc,
+					y,
+					doc.internal.pageSize.getWidth(),
+					"Period comparison",
+					`Current ${start} to ${end} · Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
+				);
+				autoTable(doc, {
+					startY: y,
+					head: [["Activity date", "Current period", "Previous period", "Change", "Change %"]],
+					body: [
+						["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created === null ? "No prior baseline" : `${comparison.percent.created}%`],
+						["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed === null ? "No prior baseline" : `${comparison.percent.completed}%`],
+					],
+					styles: { fontSize: 8 },
+					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+				});
+				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
+			}
+			if (includeSection("trend")) {
+				y = pdfSectionTitle(
+					doc,
+					y,
+					doc.internal.pageSize.getWidth(),
+					"Created and completed trend",
+					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets · selected filters · no historical state is inferred`,
+				);
+				autoTable(doc, {
+					startY: y,
+					head: [["Period", "Created", "Completed"]],
+					body: trend.points.length
+						? trend.points.map((point) => [point.label, point.created, point.completed])
+						: [["No activity in this date range", 0, 0]],
+					styles: { fontSize: 8 },
+					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+				});
+				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
+			}
+			if (manager && personKey === "all" && includeSection("workload")) {
 				y = pdfSectionTitle(
 					doc,
 					y,
 					doc.internal.pageSize.getWidth(),
 					"Workload by staff",
+					"Assignment volume only; this is not a measure of effort or performance",
 				);
 				autoTable(doc, {
 					startY: y,
-					head: [["Staff member", "Open", "Overdue now", "Completed in range"]],
-					body: staffMetrics.map((row) => [
-						row.name,
-						row.open,
-						row.overdue,
-						row.completed,
-					]),
+					head: [["Staff member", "Open now", "Overdue now", "Completed in period"]],
+					body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.completed]),
 					styles: { fontSize: 8 },
 					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
 				});
-				y =
-					(doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
-						.finalY + 11;
+				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
-			y = pdfSectionTitle(
-				doc,
-				y,
-				doc.internal.pageSize.getWidth(),
-				"Issue register",
-				"Current status; archived issues excluded",
-			);
-			autoTable(doc, {
-				startY: y,
-				head: [["ID", "Issue", "Project", "Status", "Priority", "Due"]],
-				body: displayIssues.map((issue) => [
-					issueCode(issue),
-					issue.name,
-					issue.project,
-					issue.state,
-					issue.priority ?? "None",
-					issue.target_date ?? "—",
-				]),
-				styles: { fontSize: 7, cellPadding: 2 },
-				columnStyles: { 1: { cellWidth: 65 }, 2: { cellWidth: 30 } },
-				didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
-			});
+			if (includeSection("register")) {
+				y = pdfSectionTitle(
+					doc,
+					y,
+					doc.internal.pageSize.getWidth(),
+					"Issue register",
+					"Current status; archived issues excluded",
+				);
+				autoTable(doc, {
+					startY: y,
+					head: [["ID", "Issue", "Project", "Status", "Priority", "Due"]],
+					body: displayIssues.length
+						? displayIssues.map((issue) => [
+								issueCode(issue), issue.name, issue.project, issue.state, issue.priority ?? "None", issue.target_date ?? "—",
+							])
+						: [["—", "No issues match these filters", "—", "—", "—", "—"]],
+					styles: { fontSize: 7, cellPadding: 2 },
+					columnStyles: { 1: { cellWidth: 65 }, 2: { cellWidth: 30 } },
+					didDrawPage: () => pdfReportFooter(doc, "Palmstead"),
+				});
+			}
+
 			pdfReportFooter(doc, "Palmstead");
-			doc.save(`operations-${reportType}-${start}-${end}.pdf`);
+			doc.save(`operations-${exportSection}-${reportType}-${start}-${end}.pdf`);
 		} finally {
 			setExporting(false);
 		}
@@ -727,6 +728,17 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								<SelectItem value="created">Created in period</SelectItem>
 								<SelectItem value="due">Due in period</SelectItem>
 								<SelectItem value="open-overdue">Open work</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="space-y-1.5">
+						<Label>PDF section</Label>
+						<Select value={exportSection} onValueChange={(value) => setExportSection(value as ReportExportSection)}>
+							<SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+							<SelectContent>
+								{(Object.keys(exportSectionLabels) as ReportExportSection[])
+									.filter((section) => section !== "workload" || (manager && personKey === "all"))
+									.map((section) => <SelectItem key={section} value={section}>{exportSectionLabels[section]}</SelectItem>)}
 							</SelectContent>
 						</Select>
 					</div>
