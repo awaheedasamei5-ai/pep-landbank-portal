@@ -7,7 +7,7 @@ import { ensureCurrentPlaneUser } from "@openplane-web/lib/palmstead-adapters";
 import { store } from "@openplane-web/lib/store-context";
 import { IssueService } from "@openplane-web/services/issue";
 import { E_SORT_ORDER } from "@plane/constants";
-import { Archive, ArrowUp } from "lucide-react";
+import { Archive, ArrowUp, Pencil, Trash2 } from "lucide-react";
 import { observer } from "mobx-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -63,6 +63,10 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentDraft, setEditingCommentDraft] = useState("");
+  const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [leaveConflicts, setLeaveConflicts] = useState<{ staffKey: string; staffName: string }[]>([]);
   const [showEscalate, setShowEscalate] = useState(false);
@@ -207,6 +211,41 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
     }
   }
 
+  async function saveComment(commentId: string) {
+    const comment = detail.comment.getCommentById(commentId);
+    if (!comment || !editingCommentDraft.trim()) return;
+    setSavingCommentId(commentId);
+    setError(null);
+    try {
+      await detail.comment.updateComment(WORKSPACE_SLUG, projectId, issueId, commentId, {
+        comment_html: operationCommentTextToHtml(editingCommentDraft),
+        updated_at: comment.updated_at,
+      });
+      setEditingCommentId(null);
+      setEditingCommentDraft("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update comment.");
+      throw err;
+    } finally {
+      setSavingCommentId(null);
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    const comment = detail.comment.getCommentById(commentId);
+    if (!comment) return;
+    setDeletingCommentId(commentId);
+    setError(null);
+    try {
+      await detail.comment.removeComment(WORKSPACE_SLUG, projectId, issueId, commentId, comment.updated_at);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete comment.");
+      throw err;
+    } finally {
+      setDeletingCommentId(null);
+    }
+  }
+
   if (loading)
     return (
       <div className="grid gap-4 xl:grid-cols-12">
@@ -337,11 +376,95 @@ export const IssueDetailScreen = observer(function IssueDetailScreen({
                 if (item.activity_type === "COMMENT") {
                   const comment = detail.comment.getCommentById(item.id);
                   if (!comment) return null;
+                  const canManageOwnComment = comment.actor === capabilities?.actor_key;
+                  const isEditing = editingCommentId === comment.id;
                   return (
-                    <div key={item.id} className="border-l-2 pl-3 text-sm">
-                      <span className="font-medium">{comment.actor_detail.display_name}</span>{" "}
-                      <OperationCommentBody html={comment.comment_html} />
-                      <div className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</div>
+                    <div key={item.id} className="min-w-0 border-l-2 pl-3 text-sm">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <span className="min-w-0 break-words font-medium">{comment.actor_detail.display_name}</span>
+                        {canManageOwnComment && !isEditing && (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Edit your comment"
+                              title="Edit comment"
+                              disabled={savingCommentId === comment.id || deletingCommentId === comment.id}
+                              onClick={() => {
+                                setEditingCommentId(comment.id);
+                                setEditingCommentDraft(comment.comment_stripped ?? "");
+                              }}
+                            >
+                              <Pencil aria-hidden="true" />
+                            </Button>
+                            <ConfirmDialog
+                              title="Delete this comment?"
+                              description="This permanently removes your comment from the work-item activity."
+                              confirmLabel="Delete comment"
+                              onConfirm={() => deleteComment(comment.id)}
+                              trigger={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="Delete your comment"
+                                  title="Delete comment"
+                                  disabled={deletingCommentId === comment.id || savingCommentId === comment.id}
+                                >
+                                  <Trash2 aria-hidden="true" />
+                                </Button>
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {isEditing ? (
+                        <div className="mt-2 grid gap-2">
+                          <Textarea
+                            aria-label="Edit comment"
+                            value={editingCommentDraft}
+                            maxLength={OPERATION_COMMENT_TEXT_LIMIT}
+                            rows={4}
+                            disabled={savingCommentId === comment.id}
+                            onChange={(event) => setEditingCommentDraft(event.target.value)}
+                          />
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {editingCommentDraft.length.toLocaleString()} / {OPERATION_COMMENT_TEXT_LIMIT.toLocaleString()} characters
+                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={savingCommentId === comment.id}
+                                onClick={() => {
+                                  setEditingCommentId(null);
+                                  setEditingCommentDraft("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <SubmitButton
+                                type="button"
+                                size="sm"
+                                loading={savingCommentId === comment.id}
+                                disabled={!editingCommentDraft.trim()}
+                                onClick={() => saveComment(comment.id)}
+                              >
+                                Save
+                              </SubmitButton>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <OperationCommentBody html={comment.comment_html} />
+                      )}
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(comment.created_at).toLocaleString()}
+                        {comment.updated_at !== comment.created_at && <span className="ml-2">Edited</span>}
+                      </div>
                     </div>
                   );
                 }
