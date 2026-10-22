@@ -1,13 +1,14 @@
 "use client";
 
+import { useMemo, useState, type ReactNode } from "react";
+
 import { useQuery } from "@tanstack/react-query";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Download, FileText, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import { PageHeader } from "@/components/page-header";
-import { PortalBackLink } from "../../../_components/portal-navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	type ChartConfig,
+	ChartContainer,
+	ChartTooltip,
+	ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -43,6 +50,15 @@ import {
 	pdfReportFooter,
 	pdfSectionTitle,
 } from "@/webnext/shared/lib/pdfReport";
+
+import { PortalBackLink } from "../../../_components/portal-navigation";
+import {
+	buildTrend,
+	type ComparisonMode,
+	comparePeriods,
+	displayDate,
+	formatDelta,
+} from "./operations-report-model";
 
 type RawIssue = {
 	id: string;
@@ -170,15 +186,13 @@ const isOpen = (issue: Issue) =>
 const dateInRange = (date: string | null, start: string, end: string) =>
 	!!date && displayDate(date) >= start && displayDate(date) <= end;
 const issueCode = (issue: Issue) => `${issue.identifier}-${issue.sequence_id}`;
-const displayDate = (date: string | null) =>
-	date
-		? date.includes("T")
-			? isoDateOnly(new Date(date))
-			: date.slice(0, 10)
-		: "";
 const cleanCsv = (value: unknown) =>
 	`"${String(value ?? "").replaceAll('"', '""')}"`;
 const todayIso = () => isoDateOnly(new Date());
+const trendConfig = {
+	created: { label: "Created", color: "var(--chart-1)" },
+	completed: { label: "Completed", color: "var(--chart-2)" },
+} satisfies ChartConfig;
 
 function startMonth(date: Date) {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
@@ -197,6 +211,7 @@ export function OperationsReportsScreen() {
 	const [priority, setPriority] = useState("all");
 	const [start, setStart] = useState(() => startMonth(new Date()));
 	const [end, setEnd] = useState(() => endMonth(new Date()));
+	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("previous-period");
 	const [exporting, setExporting] = useState(false);
 	const profileKey = profile?.key;
 	const query = useQuery({
@@ -208,6 +223,14 @@ export function OperationsReportsScreen() {
 		enabled: Boolean(profileKey),
 	});
 	const data = query.data;
+	let scopeLabel = "My assigned work";
+	if (manager && personKey === "all") scopeLabel = "Company-wide";
+	else if (manager) {
+		scopeLabel = data?.staff.find((person) => person.key === personKey)?.name ?? "Selected staff";
+	}
+	let staffFilterLabel = "Self only";
+	if (manager && personKey === "all") staffFilterLabel = "All staff";
+	else if (manager) staffFilterLabel = scopeLabel;
 	const projects = useMemo(
 		() =>
 			[
@@ -220,7 +243,7 @@ export function OperationsReportsScreen() {
 			].sort((a, b) => a.name.localeCompare(b.name)),
 		[data?.issues],
 	);
-	const filtered = useMemo(
+	const facetFiltered = useMemo(
 		() =>
 			(data?.issues ?? []).filter((issue) => {
 				if (projectId !== "all" && issue.project_id !== projectId) return false;
@@ -234,18 +257,6 @@ export function OperationsReportsScreen() {
 					!issue.assignees.includes(personKey)
 				)
 					return false;
-				if (
-					reportType === "completed" &&
-					!dateInRange(issue.completed_at, start, end)
-				)
-					return false;
-				if (
-					reportType === "created" &&
-					!dateInRange(issue.created_at, start, end)
-				)
-					return false;
-				if (reportType === "due" && !dateInRange(issue.target_date, start, end))
-					return false;
 				return true;
 			}),
 		[
@@ -255,10 +266,25 @@ export function OperationsReportsScreen() {
 			priority,
 			manager,
 			personKey,
-			reportType,
-			start,
-			end,
 		],
+	);
+	const filtered = useMemo(
+		() =>
+			facetFiltered.filter((issue) => {
+				if (reportType === "completed" && !dateInRange(issue.completed_at, start, end)) return false;
+				if (reportType === "created" && !dateInRange(issue.created_at, start, end)) return false;
+				if (reportType === "due" && !dateInRange(issue.target_date, start, end)) return false;
+				return true;
+			}),
+		[facetFiltered, reportType, start, end],
+	);
+	const comparison = useMemo(
+		() => comparePeriods(facetFiltered, { start, end }, comparisonMode),
+		[facetFiltered, start, end, comparisonMode],
+	);
+	const trend = useMemo(
+		() => buildTrend(facetFiltered, { start, end }),
+		[facetFiltered, start, end],
 	);
 	const summary = useMemo(
 		() => ({
@@ -324,12 +350,9 @@ export function OperationsReportsScreen() {
 		.sort((a, b) =>
 			(a.target_date ?? "9999").localeCompare(b.target_date ?? "9999"),
 		);
-	const error =
-		start > end
-			? "Choose a start date that is on or before the end date."
-			: query.error instanceof Error
-				? query.error.message
-				: null;
+	let error: string | null = null;
+	if (start > end) error = "Choose a start date that is on or before the end date.";
+	else if (query.error instanceof Error) error = query.error.message;
 
 	function resetFilters() {
 		setProjectId("all");
@@ -339,6 +362,7 @@ export function OperationsReportsScreen() {
 		setReportType("work-summary");
 		setStart(startMonth(new Date()));
 		setEnd(endMonth(new Date()));
+		setComparisonMode("previous-period");
 	}
 	function downloadCsv() {
 		const headings = [
@@ -382,27 +406,48 @@ export function OperationsReportsScreen() {
 		anchor.click();
 		URL.revokeObjectURL(url);
 	}
+	function downloadSummaryCsv() {
+		const headings = [
+			"Record Type", "Name", "Current Period Start", "Current Period End",
+			"Comparison Period Start", "Comparison Period End", "Current Value", "Previous Value", "Change", "Change %",
+		];
+		const metadata = [
+			["Scope", scopeLabel],
+			["Report", reportType],
+			["Project", projectId === "all" ? "All projects" : projects.find((project) => project.id === projectId)?.name ?? "Selected"],
+			["Status", statusGroup],
+			["Priority", priority],
+			["Staff filter", staffFilterLabel],
+		].map(([name, value]) => ["Filter", name, start, end, comparison.previousRange.start, comparison.previousRange.end, value, "", "", ""]);
+		const metrics = [
+			["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created],
+			["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed],
+		].map(([name, current, previous, delta, percent]) => ["Metric", name, start, end, comparison.previousRange.start, comparison.previousRange.end, current, previous, delta, percent === null ? "No prior baseline" : `${percent}%`]);
+		const csv = [headings, ...metadata, ...metrics]
+			.map((row) => row.map(cleanCsv).join(","))
+			.join("\r\n");
+		const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = `operations-summary-${start}-${end}.csv`;
+		anchor.click();
+		URL.revokeObjectURL(url);
+	}
 	async function downloadPdf() {
 		setExporting(true);
 		try {
 			const doc = new jsPDF({ unit: "mm", format: "a4" });
-			const scope = manager
-				? personKey === "all"
-					? "Company-wide"
-					: (data?.staff.find((person) => person.key === personKey)?.name ??
-						"Selected staff")
-				: "My assigned work";
 			const filters = [
 				`Project: ${projectId === "all" ? "All" : (projects.find((project) => project.id === projectId)?.name ?? "Selected")}`,
 				`Status: ${statusGroup}`,
 				`Priority: ${priority}`,
-				manager ? `Staff: ${scope}` : "Staff: self only",
+				manager ? `Staff: ${staffFilterLabel}` : "Staff: self only",
 			].join(" · ");
 			let y = pdfBrandedHeader(
 				doc,
 				"Operations report",
 				`${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
-				[`${scope}`, `Generated ${today()}`],
+				[`${scopeLabel}`, `Generated ${today()}`],
 				null,
 			);
 			const filterLines = doc.splitTextToSize(
@@ -446,6 +491,25 @@ export function OperationsReportsScreen() {
 				startY: y,
 				head: [summaryHeaders],
 				body: [summaryValues],
+				styles: { fontSize: 8 },
+			});
+			y =
+				(doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
+					.finalY + 11;
+			y = pdfSectionTitle(
+				doc,
+				y,
+				doc.internal.pageSize.getWidth(),
+				"Period comparison",
+				`Current ${start} to ${end} · Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
+			);
+			autoTable(doc, {
+				startY: y,
+				head: [["Activity date", "Current period", "Previous period", "Change", "Change %"]],
+				body: [
+					["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created === null ? "No prior baseline" : `${comparison.percent.created}%`],
+					["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed === null ? "No prior baseline" : `${comparison.percent.completed}%`],
+				],
 				styles: { fontSize: 8 },
 			});
 			y =
@@ -502,6 +566,39 @@ export function OperationsReportsScreen() {
 			setExporting(false);
 		}
 	}
+	let trendLabel = "Monthly";
+	if (trend.bucket === "day") trendLabel = "Daily";
+	else if (trend.bucket === "week") trendLabel = "Weekly";
+	let trendContent: ReactNode;
+	if (query.isLoading) trendContent = <Skeleton className="h-64 w-full" />;
+	else if (trend.points.length === 0) {
+		trendContent = (
+			<p className="py-12 text-center text-muted-foreground">
+				Choose a valid date range to view activity.
+			</p>
+		);
+	} else {
+		trendContent = (
+			<ChartContainer
+				config={trendConfig}
+				className="aspect-auto h-64 w-full"
+				aria-label="Created and completed issue counts by time bucket"
+			>
+				<LineChart
+					accessibilityLayer
+					data={trend.points}
+					margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+				>
+					<CartesianGrid vertical={false} strokeOpacity={0.45} />
+					<XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={22} />
+					<YAxis allowDecimals={false} width={30} tickLine={false} axisLine={false} />
+					<ChartTooltip content={<ChartTooltipContent />} />
+					<Line dataKey="created" type="monotone" stroke="var(--color-created)" strokeWidth={2} dot={false} />
+					<Line dataKey="completed" type="monotone" stroke="var(--color-completed)" strokeWidth={2} dot={false} />
+				</LineChart>
+			</ChartContainer>
+		);
+	}
 
 	if (!profile) return <Skeleton className="h-48 w-full" />;
 	return (
@@ -518,11 +615,19 @@ export function OperationsReportsScreen() {
 					<div className="flex gap-2">
 						<Button
 							variant="outline"
+							onClick={downloadSummaryCsv}
+							disabled={!data || !!error}
+						>
+							<Download data-icon="inline-start" />
+							Summary CSV
+						</Button>
+						<Button
+							variant="outline"
 							onClick={downloadCsv}
 							disabled={!data || !!error}
 						>
 							<Download data-icon="inline-start" />
-							CSV
+							Register CSV
 						</Button>
 						<Button
 							onClick={downloadPdf}
@@ -568,6 +673,16 @@ export function OperationsReportsScreen() {
 							onChange={(event) => setEnd(event.target.value)}
 							className="w-40"
 						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label>Compare with</Label>
+						<Select value={comparisonMode} onValueChange={(value) => setComparisonMode(value as ComparisonMode)}>
+							<SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+							<SelectContent>
+								<SelectItem value="previous-period">Previous equal period</SelectItem>
+								<SelectItem value="previous-year">Same period last year</SelectItem>
+							</SelectContent>
+						</Select>
 					</div>
 					<div className="space-y-1.5">
 						<Label>Project</Label>
@@ -651,11 +766,52 @@ export function OperationsReportsScreen() {
 					</Button>
 				</CardContent>
 			</Card>
-			<p className="text-xs text-muted-foreground">
+			<p className="text-muted-foreground text-xs">
 				Date range applies to the selected report type. Overdue means open work
 				past its due date today. Company totals count each issue once; staff
 				workload counts it for each assignee.
 			</p>
+			{!error && (
+				<div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-base">Created and completed trend</CardTitle>
+							<CardDescription>
+								{trendLabel} activity for the selected dates and current filters.
+								Status and overdue counts are current snapshots.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							{trendContent}
+						</CardContent>
+					</Card>
+					<Card>
+						<CardHeader>
+							<CardTitle className="text-base">Period comparison</CardTitle>
+							<CardDescription>
+								{start} – {end} compared with {comparison.previousRange.start} – {comparison.previousRange.end}
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-5">
+							{([
+								["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created],
+								["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed],
+							] as const).map(([label, current, previous, delta, percent]) => (
+								<div key={label} className="flex items-start justify-between gap-3 border-b pb-4 last:border-b-0 last:pb-0">
+									<div>
+										<p className="font-medium">{label}</p>
+										<p className="text-muted-foreground text-sm">Current {current} · Previous {previous}</p>
+									</div>
+									<p className="text-right font-semibold text-sm tabular-nums">{formatDelta(delta, percent)}</p>
+								</div>
+							))}
+							<p className="text-muted-foreground text-xs">
+								The comparison counts items by their created or completed date. It does not reconstruct historical status or workload.
+							</p>
+						</CardContent>
+					</Card>
+				</div>
+			)}
 			{error && (
 				<Alert variant="destructive">
 					<AlertDescription>{error}</AlertDescription>
@@ -663,8 +819,8 @@ export function OperationsReportsScreen() {
 			)}
 			{query.isLoading ? (
 				<div className="grid gap-3 md:grid-cols-5">
-					{Array.from({ length: 5 }, (_, i) => (
-						<Skeleton key={i} className="h-24" />
+					{["one", "two", "three", "four", "five"].map((key) => (
+						<Skeleton key={key} className="h-24" />
 					))}
 				</div>
 			) : (
@@ -753,7 +909,7 @@ export function OperationsReportsScreen() {
 											<TableRow key={issue.id}>
 												<TableCell>
 													<div className="font-medium">{issue.name}</div>
-													<div className="text-xs text-muted-foreground">
+													<div className="text-muted-foreground text-xs">
 														{issueCode(issue)}
 													</div>
 												</TableCell>
@@ -783,7 +939,7 @@ export function OperationsReportsScreen() {
 							</CardContent>
 						</Card>
 						{!manager && (
-							<p className="text-xs text-muted-foreground">
+							<p className="text-muted-foreground text-xs">
 								This view contains only work assigned to your account.
 							</p>
 						)}
@@ -793,3 +949,4 @@ export function OperationsReportsScreen() {
 		</div>
 	);
 }
+
