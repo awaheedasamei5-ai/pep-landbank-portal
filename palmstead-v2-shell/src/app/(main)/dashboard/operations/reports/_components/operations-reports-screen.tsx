@@ -213,6 +213,42 @@ function endMonth(date: Date) {
 	return isoDateOnly(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 }
 
+type ReportDatePreset = "today" | "last-7-days" | "last-30-days" | "this-month" | "last-month" | "quarter-to-date" | "year-to-date";
+const reportDatePresets: { value: ReportDatePreset; label: string }[] = [
+	{ value: "today", label: "Today" },
+	{ value: "last-7-days", label: "Last 7 days" },
+	{ value: "last-30-days", label: "Last 30 days" },
+	{ value: "this-month", label: "This month" },
+	{ value: "last-month", label: "Last month" },
+	{ value: "quarter-to-date", label: "Quarter to date" },
+	{ value: "year-to-date", label: "Year to date" },
+];
+function datePresetRange(preset: ReportDatePreset, currentDate: Date) {
+	const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+	const offset = (days: number) => isoDateOnly(new Date(today.getFullYear(), today.getMonth(), today.getDate() + days));
+	switch (preset) {
+		case "today": return { from: isoDateOnly(today), to: isoDateOnly(today) };
+		case "last-7-days": return { from: offset(-6), to: isoDateOnly(today) };
+		case "last-30-days": return { from: offset(-29), to: isoDateOnly(today) };
+		case "this-month": return { from: startMonth(today), to: isoDateOnly(today) };
+		case "last-month": {
+			const previous = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+			return { from: startMonth(previous), to: endMonth(previous) };
+		}
+		case "quarter-to-date": {
+			const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+			return { from: startMonth(quarterStart), to: isoDateOnly(today) };
+		}
+		case "year-to-date": return { from: `${today.getFullYear()}-01-01`, to: isoDateOnly(today) };
+	}
+}
+function activeDatePreset(from: string, to: string, currentDate: Date): ReportDatePreset | null {
+	return reportDatePresets.find(({ value }) => {
+		const range = datePresetRange(value, currentDate);
+		return range.from === from && range.to === to;
+	})?.value ?? null;
+}
+
 export function OperationsReportsScreen({ initialSearchParams }: { initialSearchParams: string }) {
 	const profile = useAuthStore((state) => state.profile);
 	const manager = profile?.role === "manager";
@@ -742,6 +778,31 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 							</SelectContent>
 						</Select>
 					</div>
+					<div className="basis-full space-y-2">
+						<Label>Quick date range</Label>
+						<div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick date ranges">
+							{reportDatePresets.map((preset) => {
+								const selected = activeDatePreset(start, end, new Date()) === preset.value;
+								return (
+									<Button
+										key={preset.value}
+										type="button"
+										size="sm"
+										variant={selected ? "secondary" : "ghost"}
+										className="h-8 px-2.5 text-xs"
+										aria-pressed={selected}
+										onClick={() => {
+											const range = datePresetRange(preset.value, new Date());
+											setStart(range.from);
+											setEnd(range.to);
+										}}
+									>
+										{preset.label}
+									</Button>
+								);
+							})}
+						</div>
+					</div>
 					<div className="space-y-1.5">
 						<Label>From</Label>
 						<Input
@@ -858,8 +919,17 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				Company totals count each issue once; staff workload counts it for each assignee.
 			</p>
 			{!error && (
+				<nav aria-label="Report sections" className="flex gap-1 overflow-x-auto border-b pb-2">
+					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#overview">Overview</a>
+					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#trends">Trends</a>
+					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#comparison">Comparison</a>
+					{manager && personKey === "all" && <a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#workload">Workload</a>}
+					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#register">Issue register</a>
+				</nav>
+			)}
+			{!error && (
 				<div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
-					<Card>
+					<Card id="trends" className="scroll-mt-6">
 						<CardHeader>
 							<CardTitle className="text-base">Created and completed trend</CardTitle>
 							<CardDescription>
@@ -871,7 +941,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 							{trendContent}
 						</CardContent>
 					</Card>
-					<Card>
+					<Card id="comparison" className="scroll-mt-6">
 						<CardHeader>
 							<CardTitle className="text-base">Period comparison</CardTitle>
 							<CardDescription>
@@ -912,7 +982,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			) : (
 				!error && (
 					<>
-						<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+						<div id="overview" className="grid scroll-mt-6 gap-3 sm:grid-cols-2 xl:grid-cols-5">
 							{summaryCards.map((item) => (
 								<Card key={item.label}>
 									<CardHeader className="pb-2">
@@ -925,7 +995,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 							))}
 						</div>
 						{manager && personKey === "all" && (
-							<Card>
+							<Card id="workload" className="scroll-mt-6">
 								<CardHeader>
 									<CardTitle className="text-base">Workload by staff</CardTitle>
 									<CardDescription>
@@ -970,7 +1040,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								</CardContent>
 							</Card>
 						)}
-						<Card>
+						<Card id="register" className="scroll-mt-6">
 							<CardHeader>
 								<CardTitle className="text-base">Issue register</CardTitle>
 								<CardDescription>
