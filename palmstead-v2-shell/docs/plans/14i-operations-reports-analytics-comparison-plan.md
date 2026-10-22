@@ -128,3 +128,12 @@ CSV contains the exact filtered register with stable headers and UTF-8 BOM. Incl
 
 Saved scheduled report deliveries; capacity planning; custom formula/chart builders; historical status snapshots; true cycle/lead-time metrics; arbitrary baselines and forecasting; app-wide general BI; any Accounting/Leave reports; or third-party messaging. These require additional business rules, history or delivery infrastructure and separate plans.
 
+## 11. Progress record — 2026-10-22
+
+- Phase A is complete: reviewed the existing report screen and plan, identified that the current page already has filterable register exports and manager workload counts, and documented the missing period comparison/trend semantics. Research basis above checked against current official Plane, Linear and Asana documentation.
+- Phase B is implemented in `operations-report-model.ts`: inclusive previous-period ranges, previous-year ranges with leap-day clamping, safe percentage change for a zero baseline, date normalization, and adaptive day/week/month trend buckets. Six focused Node tests pass, including a month-end bucket regression.
+- Phase C has a first implementation: compare-with control, date-bucketed created/completed line chart, period deltas, and personal-only staff scope retained. Existing project/status/priority/person filters feed the analytics and register. URL persistence, date presets, tabs/section selection, and drill-through remain open.
+- Phase D is partial: the report PDF includes a period comparison table; separate summary CSV and filtered register CSV are provided. The PDF trend graphic, all synthetic page-layout variants, visual PDF inspection and CSV/PDF parity verification remain open.
+- Phase E is partial: `npx tsc -b`, six pure-model tests, and Biome lint passed (one informational style suggestion was corrected). Both default Turbopack and explicit Webpack production-build attempts stalled without a completion result. Local browser role/export verification and live role checks have not been completed. This slice is on `rebuild` but is not approved to call live or complete.
+- V2 deployment is independently blocked by Vercel team authorization: the connector returns a 403 for `dnm-garments` and recommends `authorize_team_access`, which is not exposed in the currently available Vercel tools; CLI device approval remained disabled. Resume deployment after the team scope is authorized, then read `docs/DEPLOY_INSTRUCTIONS.md`, use the exact checked V2 stage, and verify Management and Staff after a hard refresh.
+
