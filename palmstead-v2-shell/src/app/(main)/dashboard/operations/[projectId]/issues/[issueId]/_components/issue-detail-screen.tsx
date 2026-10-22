@@ -49,12 +49,11 @@ type IssueCapabilities = {
 const FIELD_LABEL: Record<string, string> = { state: "status", priority: "priority", name: "title", target_date: "due date" };
 
 function operationCommentHtmlToDraft(html: string) {
-  const safe = safeOperationCommentHtml(html)
-    .replace(/<br\\s*\\/?>/gi, "\\n")
-    .replace(/<\\/(?:p|li|blockquote)>/gi, "\\n");
   const container = document.createElement("div");
-  container.innerHTML = safe;
-  return (container.textContent ?? "").replace(/\\n{3,}/g, "\\n\\n").trim();
+  container.innerHTML = safeOperationCommentHtml(html);
+  container.querySelectorAll("br").forEach((element) => element.replaceWith("\n"));
+  container.querySelectorAll("p, li, blockquote").forEach((element) => element.append("\n"));
+  return (container.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 const issueService = new IssueService();
