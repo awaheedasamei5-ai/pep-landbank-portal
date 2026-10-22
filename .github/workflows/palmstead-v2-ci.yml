@@ -1,0 +1,31 @@
+name: Palmstead V2 CI
+
+on:
+  push:
+    branches: [rebuild]
+    paths:
+      - 'palmstead-v2-shell/**'
+      - '.github/workflows/palmstead-v2-ci.yml'
+  pull_request:
+    paths:
+      - 'palmstead-v2-shell/**'
+      - '.github/workflows/palmstead-v2-ci.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: palmstead-v2-shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: palmstead-v2-shell/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
