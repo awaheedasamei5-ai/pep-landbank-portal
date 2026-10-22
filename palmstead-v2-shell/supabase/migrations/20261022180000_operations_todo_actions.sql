@@ -39,6 +39,7 @@ declare
   v_removed boolean;
   v_count integer;
 begin
+  if v_actor.id is null or not v_actor.active then raise exception 'An active profile is required.' using errcode='42501'; end if;
   if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
     raise exception 'To-do action payload must be an object.' using errcode = '22023';
   end if;
