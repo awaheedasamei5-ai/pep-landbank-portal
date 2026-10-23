@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "cn";
 import {
@@ -98,6 +100,11 @@ export function TemplateDetailScreen() {
   }
   function updateSectionText(id: string, text: string) {
     setContent((c) => c.map((s) => (s.id === id ? { ...s, text } : s)));
+  }
+  // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 2 -- the real,
+  // explicit per-section page-break toggle.
+  function toggleSectionPageBreak(id: string) {
+    setContent((c) => c.map((s) => (s.id === id ? { ...s, pageBreakBefore: !s.pageBreakBefore } : s)));
   }
   function removeSection(id: string) {
     setContent((c) => c.filter((s) => s.id !== id));
@@ -258,6 +265,7 @@ export function TemplateDetailScreen() {
               onMoveUp={() => moveSection(section.id, -1)}
               onMoveDown={() => moveSection(section.id, 1)}
               onFocus={() => setActiveSectionId(section.id)}
+              onTogglePageBreak={() => toggleSectionPageBreak(section.id)}
               registerRef={(el) => {
                 textareaRefs.current[section.id] = el;
               }}
@@ -347,6 +355,7 @@ function SectionCard({
   onMoveUp,
   onMoveDown,
   onFocus,
+  onTogglePageBreak,
   registerRef,
 }: {
   section: ContractSection;
@@ -358,6 +367,7 @@ function SectionCard({
   onMoveUp: () => void;
   onMoveDown: () => void;
   onFocus: () => void;
+  onTogglePageBreak: () => void;
   registerRef: (el: HTMLTextAreaElement | null) => void;
 }) {
   return (
@@ -365,7 +375,18 @@ function SectionCard({
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{SECTION_KIND_LABEL[section.kind]}</span>
         {editable && (
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
+            {/* docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 2 --
+                only meaningful on headings/body text; an image/signature
+                block already forces its own layout decisions. */}
+            {section.kind !== "signature_block" && section.kind !== "image" && (
+              <div className="mr-2 flex items-center gap-1.5">
+                <Switch id={`pagebreak-${section.id}`} size="sm" checked={!!section.pageBreakBefore} onCheckedChange={onTogglePageBreak} />
+                <Label htmlFor={`pagebreak-${section.id}`} className="cursor-pointer text-xs font-normal text-muted-foreground">
+                  New page before this
+                </Label>
+              </div>
+            )}
             <Button type="button" variant="ghost" size="icon-sm" disabled={!canMoveUp} onClick={onMoveUp} aria-label="Move up">
               <ArrowUp />
             </Button>

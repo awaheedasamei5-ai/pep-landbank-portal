@@ -1714,6 +1714,11 @@ export interface ContractSection {
   text?: string;
   clauseId?: string;
   imageRef?: string;
+  // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 2 -- an
+  // explicit, Management-visible "always start a fresh page here"
+  // (Template Studio editor toggle), the honest replacement for the
+  // legacy renderer's hidden exact-string-match force-breaks.
+  pageBreakBefore?: boolean;
 }
 
 export type ContractTemplateVersionStatus = 'draft' | 'in_review' | 'published' | 'archived';

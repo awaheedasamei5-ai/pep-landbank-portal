@@ -70,18 +70,49 @@ export function buildContractFromSections(title: string, sections: ContractSecti
   doc.text(titleLines, pageW / 2, y, { align: 'center' });
   y += titleLines.length * 8 + 10;
 
-  for (const section of sections) {
-    if (y > pageH - 30) {
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 2 -- a real,
+    // explicit "start a fresh page here" Management can set per section
+    // (Template Studio editor toggle), mirroring what the legacy
+    // renderer's hand-tuned force-breaks did implicitly via exact-string
+    // matching, which silently stopped working the moment wording
+    // changed. Checked before the normal height-based break below, and
+    // skipped for the very first section (nothing to break away from).
+    if (section.pageBreakBefore && i > 0) {
+      n++;
+      y = contractNewPage(doc, n);
+    } else if (y > pageH - 30) {
       n++;
       y = contractNewPage(doc, n);
     }
     if (section.kind === 'heading') {
+      // Orphan-heading protection -- a heading alone at the bottom of a
+      // page with its first clause pushed to the next page reads as
+      // broken even though nothing actually split mid-sentence. Looks
+      // ahead to the very next section (if it's body text) and requires
+      // both heights to fit together before drawing the heading; a
+      // rough estimate (CONTRACT_SPACING_ROOMY.lineH, contractPdf.ts's
+      // own plain-paragraph line height) rather than contractBody's full
+      // numbered-clause heuristics, since this only needs to be good
+      // enough to catch the common "heading alone at the bottom" case,
+      // not reproduce contractBody's exact per-paragraph layout.
+      const headingLines: string[] = doc.splitTextToSize(section.text ?? '', pageW - 28);
+      let neededHeight = headingLines.length * 6.6 + 4;
+      const next = sections[i + 1];
+      if (next && (next.kind === 'paragraph' || next.kind === 'clause' || next.kind === 'footer') && next.text) {
+        const nextLines: string[] = doc.splitTextToSize(next.text, pageW - 28);
+        neededHeight += nextLines.length * 5.2;
+      }
+      if (y + neededHeight > pageH - 20) {
+        n++;
+        y = contractNewPage(doc, n);
+      }
       doc.setFont(headingFamily, 'bold');
       doc.setFontSize(headingSize);
       doc.setTextColor(...CONTRACT_INK);
-      const lines: string[] = doc.splitTextToSize(section.text ?? '', pageW - 28);
-      doc.text(lines, 14, y);
-      y += lines.length * 6.6 + 4;
+      doc.text(headingLines, 14, y);
+      y += headingLines.length * 6.6 + 4;
     } else if (section.kind === 'signature_block') {
       ({ y, n } = renderSignatureBlock(doc, y, n, headingFamily));
     } else if (section.kind === 'image') {
