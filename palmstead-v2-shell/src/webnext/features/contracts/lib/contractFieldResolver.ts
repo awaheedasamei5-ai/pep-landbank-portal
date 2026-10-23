@@ -30,6 +30,7 @@ export type ContractFieldKey =
   | 'clientContact'
   | 'plotType'
   | 'noPlots'
+  | 'landAcres'
   | 'unitPrice'
   | 'discount'
   | 'grandTotal'
@@ -45,7 +46,10 @@ export type ContractFieldKey =
   | 'kycContactPhone'
   | 'kycLandUsage'
   | 'vendorCeoName'
-  | 'generationDate';
+  | 'vendorCompanyName'
+  | 'generationDate'
+  | 'amountPaidToDate'
+  | 'balanceOutstanding';
 
 const TOKEN_PATTERN = /\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g;
 
@@ -58,6 +62,7 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   clientContact: 'Client contact',
   plotType: 'Plot type',
   noPlots: 'Number of plots',
+  landAcres: 'Land area (acres)',
   unitPrice: 'Unit price',
   discount: 'Discount',
   grandTotal: 'Grand total',
@@ -73,18 +78,31 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   kycContactPhone: 'Contact person phone',
   kycLandUsage: 'Land usage',
   vendorCeoName: 'Vendor CEO name',
+  vendorCompanyName: 'Vendor company name',
   generationDate: 'Generation date',
+  amountPaidToDate: 'Amount paid to date',
+  balanceOutstanding: 'Balance outstanding',
 };
 
-export function resolveContractFields(lead: Lead, config: Config): Record<ContractFieldKey, string> {
+// docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- no token for
+// "amount paid so far" existed before this; the real legal document
+// (§1.3.8 in the seeded Standard template) now states it plainly. Takes
+// an explicit `amountPaid` override rather than only ever reading
+// `lead.amtPaid` directly, since Generate's walk-in-client path (Phase 3)
+// has no Lead row to read from at all, and an existing lead's "Update
+// amount paid" flow should reflect what was just entered immediately,
+// not wait for a refetch.
+export function resolveContractFields(lead: Lead, config: Config, amountPaidOverride?: number): Record<ContractFieldKey, string> {
   const totals = computeLeadQuotationTotals(config, lead);
   const depositTarget = lead.depositTarget != null ? lead.depositTarget : Math.round(totals.net * QUOTE_DEPOSIT_PCT);
+  const amountPaid = amountPaidOverride != null ? amountPaidOverride : lead.amtPaid || 0;
   return {
     clientLegalName: lead.name || '',
     clientAddress: lead.address || lead.kyc?.location || '',
     clientContact: lead.contact || '',
     plotType: lead.plotType || '',
     noPlots: String(lead.noPlots || 1),
+    landAcres: String(Math.round(0.1607 * (lead.noPlots || 1) * 100) / 100),
     unitPrice: ghs(lead.unitPrice || 0),
     discount: ghs(lead.discount || 0),
     grandTotal: ghs(totals.grand),
@@ -100,7 +118,10 @@ export function resolveContractFields(lead: Lead, config: Config): Record<Contra
     kycContactPhone: lead.kyc?.contactPhone || '',
     kycLandUsage: lead.kyc?.landUsage || '',
     vendorCeoName: config.contractCeoName || '',
+    vendorCompanyName: (config.quoteCompanyName || 'Trulander JSF Limited').toUpperCase(),
     generationDate: fmtLongDate(today()),
+    amountPaidToDate: ghs(amountPaid),
+    balanceOutstanding: ghs(Math.max(0, totals.grand - amountPaid)),
   };
 }
 
