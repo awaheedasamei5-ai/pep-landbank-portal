@@ -75,29 +75,31 @@ export interface CommissionReportConfig {
 // company_phone/email/tin elsewhere. logoImage is a real uploaded
 // company logo (Settings), checked before the bundled
 // /trulander-logo.png fallback every report PDF uses.
-export function useCommissionReportConfig() {
+export function useCommissionReportConfig(includeSensitiveFields = true) {
   return useQuery({
-    queryKey: ["commission-report-config"],
+    queryKey: ["commission-report-config", includeSensitiveFields],
     queryFn: async (): Promise<CommissionReportConfig> => {
       const sb = requireSupabase();
-      const { data, error } = await sb
-        .from("app_config")
-        .select(
-          "quote_company_name,company_address,company_phone,company_email,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code,receipt_logo_image",
-        )
-        .limit(1)
-        .single();
+      const query = sb.from("app_config");
+      const { data, error } = includeSensitiveFields
+        ? await query
+            .select(
+              "quote_company_name,company_address,company_phone,company_email,company_bank_name,company_bank_account_name,company_bank_account_number,company_bank_branch,company_bank_swift_code,receipt_logo_image",
+            )
+            .limit(1)
+            .single()
+        : await query.select("quote_company_name,receipt_logo_image").limit(1).single();
       if (error) throw error;
       const row = data as {
         quote_company_name: string | null;
-        company_address: string | null;
-        company_phone: string | null;
-        company_email: string | null;
-        company_bank_name: string | null;
-        company_bank_account_name: string | null;
-        company_bank_account_number: string | null;
-        company_bank_branch: string | null;
-        company_bank_swift_code: string | null;
+        company_address?: string | null;
+        company_phone?: string | null;
+        company_email?: string | null;
+        company_bank_name?: string | null;
+        company_bank_account_name?: string | null;
+        company_bank_account_number?: string | null;
+        company_bank_branch?: string | null;
+        company_bank_swift_code?: string | null;
         receipt_logo_image: string | null;
       };
       return {
@@ -128,3 +130,4 @@ export function useRaiseCommissionConcern(callerKey: string | undefined, callerN
     onSuccess: () => qc.invalidateQueries({ queryKey: ["messages"] }),
   });
 }
+
