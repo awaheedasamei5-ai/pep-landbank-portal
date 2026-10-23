@@ -139,3 +139,12 @@ Saved scheduled report deliveries; capacity planning; custom formula/chart build
 - The latest report URL source is on `rebuild`: model commit `211f3d74d52aa1da210fc7c953842d7282785413`, screen commit `69607c57ff3cb864be4486d9ea34b10649a477a6`, URL tests commit `bd567a98c869ecd4e66051042e3391fdb5decd3f`, and SSR-safe filter hydration commits `b76e50f16f38deade15bf025a902646bffb652b1` and page-prop commit `332902dbaa02be10757b3c6fdf29c4edb28a0ecc`.
 - V2 deployment is independently blocked by Vercel team authorization: the connector returns a 403 for `dnm-garments` and recommends `authorize_team_access`, which is not exposed in the currently available Vercel tools; the CLI device approval remains unavailable. Resume deployment after the team scope is authorized; read `docs/DEPLOY_INSTRUCTIONS.md`, use the exact checked V2 stage, and verify Management and Staff after a hard refresh.
 
+
+## 12. Progress record — 2026-10-23
+
+- Re-read the existing report plans and traced the current calculation path. Fixed a scope/date-mixing defect: selecting Created, Completed, or Due no longer narrows the `Open now`, `Overdue now`, or `Unassigned open` snapshot counts. Those snapshots now use the facet-scoped issue cohort, independent of the report-type event window.
+- Added one pure metric calculation shared by the Management summary and staff workload rows. It reports Created, Completed and Due in the selected period beside current open/overdue snapshots. Due-in-period excludes work already completed or cancelled, as defined in plan 06.
+- Expanded the Management workload table and PDF section to include Created and Due in period. Staff assignment scope is still applied before per-person metrics; no colleague dimensions are introduced for Staff.
+- Replaced special punctuation in generated Operations PDF labels with portable ASCII characters to prevent missing-glyph rendering in standard jsPDF fonts.
+- Added a focused regression fixture for snapshot independence and due-work semantics. All 10 operations-report-model tests pass; `npx tsc -b --pretty false` passes.
+- Still open: live Management/Staff render and role-scope checks of this change, responsive/table inspection, and generated Operations PDF/CSV visual and parity variants. The connected Vercel tool currently returns a team-scope 403; browser control times out before inspection. Do not call this slice verified or deploy it to production until those checks are completed.
