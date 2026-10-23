@@ -1789,6 +1789,33 @@ export interface ContractGeneration {
   generatedAt: string;
 }
 
+// Real table `contract_drafts` -- an in-progress contract a staff member
+// started but hasn't generated yet (docs/plans/16-contract-of-sale-build-plan.md
+// §1.2). Distinct from ContractRequest (a request for someone ELSE to act)
+// and ContractGeneration (an already-issued snapshot).
+export type ContractDraftStatus = 'in_progress' | 'ready_to_generate';
+
+export interface ContractDraft {
+  id: string;
+  leadId: string | null;
+  clientName: string;
+  templateId: string | null;
+  fieldValues: Record<string, string>;
+  status: ContractDraftStatus;
+  createdBy: string;
+  createdByName: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface NewContractDraft {
+  leadId?: string | null;
+  clientName: string;
+  templateId?: string | null;
+  fieldValues?: Record<string, string>;
+  status?: ContractDraftStatus;
+}
+
 export type ContractApprovalStatus = 'approved' | 'rejected';
 
 export interface ContractApproval {

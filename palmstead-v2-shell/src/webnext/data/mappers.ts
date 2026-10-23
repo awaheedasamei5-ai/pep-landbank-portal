@@ -1,4 +1,5 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractDraft,
+  ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -565,6 +566,21 @@ export function mapContractRequestRow(r: Record<string, unknown>): ContractReque
     status: (r.status as ContractRequest['status']) ?? 'pending',
     createdAt: r.created_at as string,
     fulfilledAt: (r.fulfilled_at as string) ?? null,
+  };
+}
+
+export function mapContractDraftRow(r: Record<string, unknown>): ContractDraft {
+  return {
+    id: r.id as string,
+    leadId: (r.lead_id as string) ?? null,
+    clientName: r.client_name as string,
+    templateId: (r.template_id as string) ?? null,
+    fieldValues: (r.field_values as Record<string, string>) ?? {},
+    status: (r.status as ContractDraft['status']) ?? 'in_progress',
+    createdBy: r.created_by as string,
+    createdByName: r.created_by_name as string,
+    updatedAt: r.updated_at as string,
+    createdAt: r.created_at as string,
   };
 }
 

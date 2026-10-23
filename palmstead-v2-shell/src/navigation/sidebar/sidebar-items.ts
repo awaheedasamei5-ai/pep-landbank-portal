@@ -199,7 +199,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "contract-of-sale",
 				title: "Contract of Sale",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/contract-of-sale",
 				icon: FileSignature,
 			},
 			{

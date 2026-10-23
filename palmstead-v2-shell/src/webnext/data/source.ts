@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { requireLeaveSelectionYear } from '../features/leave/lib/leaveDates';
@@ -7,6 +7,7 @@ import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import {
+  mapContractDraftRow,
   mapAchievementDefRow,
   mapActivityLogRow,
   mapAllocationRequestRow,
@@ -602,6 +603,15 @@ export interface DataSource {
   contracts: {
     list(): Promise<Contract[]>;
     create(leadId: string, clientName: string, agentKey: string, createdBy: string, createdByName: string): Promise<Contract>;
+  };
+  // Real table `contract_drafts` (docs/plans/16-contract-of-sale-build-plan.md
+  // §1.2) -- an in-progress contract saved before generation. RLS: owner
+  // (created_by) or manager/elizabeth.
+  contractDrafts: {
+    list(): Promise<ContractDraft[]>;
+    create(createdBy: string, createdByName: string, input: NewContractDraft): Promise<ContractDraft>;
+    update(id: string, patch: Partial<NewContractDraft>): Promise<ContractDraft>;
+    remove(id: string): Promise<void>;
   };
   // CONTRACT_OF_SALE_BLUEPRINT.md §4/§16 -- the real template studio.
   // RLS on all 6 tables is manager-or-elizabeth (matching the existing
@@ -2376,6 +2386,45 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractRow(data);
+      },
+    },
+    contractDrafts: {
+      async list() {
+        const { data, error } = await requireClient().from('contract_drafts').select('*').order('updated_at', { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapContractDraftRow);
+      },
+      async create(createdBy, createdByName, input) {
+        const { data, error } = await requireClient()
+          .from('contract_drafts')
+          .insert({
+            lead_id: input.leadId ?? null,
+            client_name: input.clientName,
+            template_id: input.templateId ?? null,
+            field_values: input.fieldValues ?? {},
+            status: input.status ?? 'in_progress',
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractDraftRow(data);
+      },
+      async update(id, patch) {
+        const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (patch.clientName !== undefined) payload.client_name = patch.clientName;
+        if (patch.leadId !== undefined) payload.lead_id = patch.leadId;
+        if (patch.templateId !== undefined) payload.template_id = patch.templateId;
+        if (patch.fieldValues !== undefined) payload.field_values = patch.fieldValues;
+        if (patch.status !== undefined) payload.status = patch.status;
+        const { data, error } = await requireClient().from('contract_drafts').update(payload).eq('id', id).select().single();
+        if (error) throw error;
+        return mapContractDraftRow(data);
+      },
+      async remove(id) {
+        const { error } = await requireClient().from('contract_drafts').delete().eq('id', id);
+        if (error) throw error;
       },
     },
     contractTemplates: {
