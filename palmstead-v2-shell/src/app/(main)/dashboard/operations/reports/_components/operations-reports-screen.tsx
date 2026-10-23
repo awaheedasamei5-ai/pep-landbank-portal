@@ -720,7 +720,10 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (manager && personKey === "all" && includeSection("workload")) {
-				preparePdfSection();
+				// Keep the workload table and register together when the date trend
+				// has already used most of a page. Otherwise the register can be
+				// stranded alone on a nearly blank final page.
+				preparePdfSection(60 + staffMetrics.length * 9 + 42);
 				y = pdfSectionTitle(
 					doc,
 					y,
