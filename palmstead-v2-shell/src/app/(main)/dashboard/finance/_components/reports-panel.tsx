@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,8 @@ import { buildCommissionReportRangePdf, buildExpensesReportPdf, buildPayrollRepo
 // range picked -- no pre-aggregated or sample data. Built on the same
 // pdfReport.ts toolkit every other report PDF in this app already uses.
 type Section = "summary" | "payments" | "expenses" | "commission" | "payroll";
+const managementSections: Section[] = ["summary", "payments", "expenses", "commission", "payroll"];
+const staffSections: Section[] = ["payments", "expenses", "commission"];
 
 function money(n: number): string {
   return `GHS ${n.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -58,15 +61,17 @@ function presetRange(preset: string): DateRange {
 export function ReportsPanel() {
   const profile = useAuthStore((s) => s.profile);
   const isManager = profile?.role === "manager";
-  const { data: reportConfig } = useCommissionReportConfig();
+  const { data: reportConfig, error: reportConfigError } = useCommissionReportConfig(isManager);
   const [section, setSection] = useState<Section>("summary");
+  const activeSection = isManager || staffSections.includes(section) ? section : "payments";
+  const availableSections = isManager ? managementSections : staffSections;
   const [range, setRange] = useState<DateRange>(() => presetRange("this-month"));
   const [downloading, setDownloading] = useState(false);
 
-  const needsPayments = section === "payments" || section === "summary";
-  const needsExpenses = section === "expenses" || section === "summary";
-  const needsCommission = section === "commission" || section === "summary";
-  const needsPayroll = section === "payroll" || section === "summary";
+  const needsPayments = activeSection === "payments" || activeSection === "summary";
+  const needsExpenses = activeSection === "expenses" || activeSection === "summary";
+  const needsCommission = activeSection === "commission" || activeSection === "summary";
+  const needsPayroll = isManager && (activeSection === "payroll" || activeSection === "summary");
 
   const paymentsQ = usePaymentsReport(range, needsPayments);
   const expensesQ = useExpensesReport(range, needsExpenses);
@@ -74,7 +79,16 @@ export function ReportsPanel() {
   const payrollQ = usePayrollReport(range, needsPayroll);
 
   const loading =
-    (needsPayments && paymentsQ.isLoading) || (needsExpenses && expensesQ.isLoading) || (needsCommission && commissionQ.isLoading) || (needsPayroll && payrollQ.isLoading);
+    (needsPayments && paymentsQ.isLoading) ||
+    (needsExpenses && expensesQ.isLoading) ||
+    (needsCommission && commissionQ.isLoading) ||
+    (needsPayroll && payrollQ.isLoading);
+  const reportError =
+    reportConfigError ||
+    (needsPayments && paymentsQ.error) ||
+    (needsExpenses && expensesQ.error) ||
+    (needsCommission && commissionQ.error) ||
+    (needsPayroll && payrollQ.error);
 
   const summary = useMemo(() => {
     const collected = (paymentsQ.data ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + r.amount, 0);
@@ -84,32 +98,24 @@ export function ReportsPanel() {
     return { collected, expensesTotal, commissionTotal, payrollTotal, net: collected - expensesTotal - commissionTotal - payrollTotal };
   }, [paymentsQ.data, expensesQ.data, commissionQ.data, payrollQ.data]);
 
-  if (!isManager) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">Reports are visible to Management only.</CardContent>
-      </Card>
-    );
-  }
-
   async function download() {
     if (!reportConfig) return;
     setDownloading(true);
     try {
-      const fname = `${section}_report_${range.start}_${range.end}.pdf`;
-      if (section === "payments") {
+      const fname = `${activeSection}_report_${range.start}_${range.end}.pdf`;
+      if (activeSection === "payments") {
         const doc = await buildPaymentsReportPdf(range, paymentsQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
-      } else if (section === "expenses") {
+      } else if (activeSection === "expenses") {
         const doc = await buildExpensesReportPdf(range, expensesQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
-      } else if (section === "commission") {
+      } else if (activeSection === "commission") {
         const doc = await buildCommissionReportRangePdf(range, commissionQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
-      } else if (section === "payroll") {
+      } else if (activeSection === "payroll" && isManager) {
         const doc = await buildPayrollReportPdf(range, payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
-      } else {
+      } else if (activeSection === "summary" && isManager) {
         const doc = await buildSummaryReportPdf(range, paymentsQ.data ?? [], expensesQ.data ?? [], commissionQ.data ?? [], payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
       }
@@ -121,8 +127,12 @@ export function ReportsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-medium">Reports</h2>
-        <p className="text-sm text-muted-foreground">Pick a section and a date range, then download a real PDF report.</p>
+        <h2 className="text-lg font-medium">{isManager ? "Reports" : "My reports"}</h2>
+        <p className="text-sm text-muted-foreground">
+          {isManager
+            ? "Pick a section and a date range, then download a real PDF report."
+            : "Review and download reports for your own payment, expense, and commission records."}
+        </p>
       </div>
 
       <Card>
@@ -130,16 +140,16 @@ export function ReportsPanel() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Section</Label>
-              <Select value={section} onValueChange={(v) => setSection(v as Section)}>
+              <Select value={activeSection} onValueChange={(v) => setSection(v as Section)}>
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="summary">Financial summary</SelectItem>
-                  <SelectItem value="payments">Payments</SelectItem>
-                  <SelectItem value="expenses">Expenses</SelectItem>
-                  <SelectItem value="commission">Commission</SelectItem>
-                  <SelectItem value="payroll">Payroll</SelectItem>
+                  {availableSections.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item === "summary" ? "Financial summary" : item[0].toUpperCase() + item.slice(1)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -165,7 +175,7 @@ export function ReportsPanel() {
               <Label>To</Label>
               <Input type="date" value={range.end} onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))} className="w-40" />
             </div>
-            <Button onClick={download} disabled={downloading || loading || !reportConfig}>
+            <Button onClick={download} disabled={downloading || loading || !!reportError || !reportConfig}>
               <Download data-icon="inline-start" />
               {downloading ? "Preparing…" : "Download PDF"}
             </Button>
@@ -173,18 +183,23 @@ export function ReportsPanel() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {reportError ? (
+        <Alert variant="destructive">
+          <AlertDescription>We couldn’t load this report. Check your connection and try again.</AlertDescription>
+        </Alert>
+      ) : loading ? (
         <Skeleton className="h-48 w-full" />
       ) : (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Preview</CardTitle>
             <CardDescription>
-              {section === "summary" ? "Financial summary" : section[0].toUpperCase() + section.slice(1)} · {range.start} to {range.end}
+              {activeSection === "summary" ? "Financial summary" : activeSection[0].toUpperCase() + activeSection.slice(1)} · {range.start} to {range.end}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {section === "summary" && (
+            {!isManager && <p className="mb-3 text-sm text-muted-foreground">This view is restricted to your own records.</p>}
+            {activeSection === "summary" && isManager && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {[
                   { label: "Collected", value: summary.collected },
@@ -200,13 +215,14 @@ export function ReportsPanel() {
                 ))}
               </div>
             )}
-            {section === "payments" && <p className="text-sm text-muted-foreground">{(paymentsQ.data ?? []).length} payment(s) in range · {money((paymentsQ.data ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + r.amount, 0))} approved</p>}
-            {section === "expenses" && <p className="text-sm text-muted-foreground">{(expensesQ.data ?? []).length} expense(s) in range · {money((expensesQ.data ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + r.amount, 0))} approved</p>}
-            {section === "commission" && <p className="text-sm text-muted-foreground">{(commissionQ.data ?? []).length} agent-month row(s) · {money((commissionQ.data ?? []).reduce((s, r) => s + r.total, 0))} total</p>}
-            {section === "payroll" && <p className="text-sm text-muted-foreground">{(payrollQ.data ?? []).length} payee-run row(s) · {money((payrollQ.data ?? []).reduce((s, r) => s + r.net, 0))} total net pay</p>}
+            {activeSection === "payments" && <p className="text-sm text-muted-foreground">{(paymentsQ.data ?? []).length} payment(s) in range · {money((paymentsQ.data ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + r.amount, 0))} approved</p>}
+            {activeSection === "expenses" && <p className="text-sm text-muted-foreground">{(expensesQ.data ?? []).length} expense(s) in range · {money((expensesQ.data ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + r.amount, 0))} approved</p>}
+            {activeSection === "commission" && <p className="text-sm text-muted-foreground">{(commissionQ.data ?? []).length} personal month row(s) · {money((commissionQ.data ?? []).reduce((s, r) => s + r.total, 0))} calculated</p>}
+            {activeSection === "payroll" && isManager && <p className="text-sm text-muted-foreground">{(payrollQ.data ?? []).length} payee-run row(s) · {money((payrollQ.data ?? []).reduce((s, r) => s + r.net, 0))} total net pay</p>}
           </CardContent>
         </Card>
       )}
     </div>
   );
 }
+
