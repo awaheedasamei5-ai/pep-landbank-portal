@@ -1,7 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
 
@@ -200,8 +201,6 @@ export function useActiveMeetingStaff() {
 }
 
 export interface NewMeetingInput {
-	ownerKey: string;
-	ownerName: string;
 	title: string;
 	description: string;
 	date: string;
@@ -216,47 +215,34 @@ export function useCreateScheduleMeeting() {
 	return useMutation({
 		mutationFn: async (input: NewMeetingInput) => {
 			const client = requireSupabase();
-			const { data, error } = await client
-				.from("schedule_items")
-				.insert({
-					kind: "meeting",
-					owner_key: input.ownerKey,
-					owner_name: input.ownerName,
-					assigned_to: input.ownerKey,
-					assigned_to_name: input.ownerName,
-					assigned_by: input.ownerKey,
-					assigned_by_name: input.ownerName,
-					title: input.title.trim(),
-					description: input.description.trim() || null,
-					item_date: input.date,
-					start_time: input.startTime,
-					end_time: input.endTime,
-					meeting_location: input.location.trim() || null,
-					status: "open",
-				})
-				.select(MEETING_COLUMNS)
-				.single();
+			const { error } = await client.rpc("create_schedule_meeting", {
+				p_title: input.title.trim(),
+				p_description: input.description.trim() || null,
+				p_item_date: input.date,
+				p_start_time: input.startTime,
+				p_end_time: input.endTime,
+				p_location: input.location.trim() || null,
+				p_invitee_keys: [...new Set(input.inviteeKeys)],
+			});
 			if (error) throw error;
+		},
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: MEETINGS_KEY }),
+	});
+}
 
-			const inviteeKeys = [...new Set(input.inviteeKeys)].filter(
-				(key) => key !== input.ownerKey,
+export function useReplaceScheduleMeetingInvitees() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async (input: { id: string; inviteeKeys: string[] }) => {
+			const { data, error } = await requireSupabase().rpc(
+				"replace_schedule_meeting_invitees",
+				{
+					p_schedule_item_id: input.id,
+					p_invitee_keys: [...new Set(input.inviteeKeys)],
+				},
 			);
-			if (inviteeKeys.length) {
-				const { error: inviteError } = await client
-					.from("schedule_item_invitees")
-					.insert(
-						inviteeKeys.map((staffKey) => ({
-							schedule_item_id: data.id,
-							staff_key: staffKey,
-							staff_name: null,
-						})),
-					);
-				if (inviteError) {
-					await client.from("schedule_items").delete().eq("id", data.id);
-					throw inviteError;
-				}
-			}
-			return mapMeeting(data as MeetingRow);
+			if (error) throw error;
+			return data as { added: number; removed: number; invitee_count: number };
 		},
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: MEETINGS_KEY }),
 	});
