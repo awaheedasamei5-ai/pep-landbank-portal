@@ -809,7 +809,7 @@ export function mapContractGenerationRow(r: Record<string, unknown>): ContractGe
   return {
     id: r.id as string,
     contractRequestId: (r.contract_request_id as string | null) ?? null,
-    leadId: r.lead_id as string,
+    leadId: (r.lead_id as string | null) ?? null,
     clientName: r.client_name as string,
     templateId: (r.template_id as string | null) ?? null,
     templateVersionId: (r.template_version_id as string | null) ?? null,

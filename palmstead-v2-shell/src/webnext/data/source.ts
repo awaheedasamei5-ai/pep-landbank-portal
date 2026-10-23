@@ -673,7 +673,7 @@ export interface DataSource {
     list(): Promise<ContractGeneration[]>;
     create(input: {
       contractRequestId: string | null;
-      leadId: string;
+      leadId: string | null;
       clientName: string;
       templateId: string | null;
       templateVersionId: string | null;

@@ -34,6 +34,18 @@ export type GenerateContractInput = {
     content: ContractSection[];
   };
   contractRequestId?: string | null;
+  // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- a walk-in
+  // client (typed in directly, never added to the real leads table) has
+  // no real lead.id to record. Only valid with `template` set: the
+  // walk-in path has no v1-parity legacy-document fallback, since that
+  // path's own contracts.create() needs a real, non-null lead_id and
+  // has no FK to relax the way contract_generations.lead_id did.
+  isWalkIn?: boolean;
+  // Overrides resolveContractFields' default (lead.amtPaid) -- the real
+  // fix for "let us enter the amount already paid before generating",
+  // used both for a walk-in's typed-in figure and for re-stating an
+  // existing lead's current real amount at generation time.
+  amountPaidOverride?: number;
 };
 
 // Builds the branded PDF and downloads it. Without a template, this is the
@@ -58,12 +70,12 @@ export function useGenerateContract() {
   const { data: config } = useConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ lead, template, contractRequestId }: GenerateContractInput) => {
+    mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride }: GenerateContractInput) => {
       if (!config) throw new Error('Config not loaded yet');
       if (!profile) throw new Error('Not signed in');
 
       if (template) {
-        const fieldValues = resolveContractFields(lead, config);
+        const fieldValues = resolveContractFields(lead, config, amountPaidOverride);
         const resolvedContent = resolveSections(template.content, fieldValues);
         const missing = findUnresolvedTokens(resolvedContent);
         if (missing.length > 0) {
@@ -85,11 +97,11 @@ export function useGenerateContract() {
         doc.save(contractFilename(lead.name));
         const ds = getDataSource(demoMode);
         const pdfBlob = doc.output('blob') as Blob;
-        const storagePath = `${lead.id}/${template.templateVersionId}-${Date.now()}.pdf`;
+        const storagePath = `${isWalkIn ? 'walk-in' : lead.id}/${template.templateVersionId}-${Date.now()}.pdf`;
         const uploadedPath = await ds.contractGenerations.uploadPdf(storagePath, pdfBlob);
         await ds.contractGenerations.create({
           contractRequestId: contractRequestId ?? null,
-          leadId: lead.id,
+          leadId: isWalkIn ? null : lead.id,
           clientName: lead.name,
           templateId: template.templateId,
           templateVersionId: template.templateVersionId,
@@ -104,6 +116,12 @@ export function useGenerateContract() {
         // unchanged (§8 step 4) -- the metadata-only row still gets
         // recorded so anything already reading contracts.list() (the
         // "Previously generated" list, fulfil status) keeps working.
+        // Skipped for a walk-in: contracts.lead_id is a real, non-null
+        // column with no FK to relax the way contract_generations' was --
+        // there is no real lead.id to honestly record there, and the
+        // Vault (reading contract_generations directly) already shows
+        // every walk-in generation without this metadata-only row.
+        if (isWalkIn) return null;
         return ds.contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
       }
 

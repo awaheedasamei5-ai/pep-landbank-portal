@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileDown } from "lucide-react";
+import Link from "next/link";
+import { FileDown, UserPlus, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
 import { useAllLeads } from "../../payments/hooks/useLogPayment";
@@ -15,12 +17,13 @@ import { useContracts, useGenerateContract } from "../hooks/useContracts";
 import { useContractTemplates, usePublishedContractTemplateVersions, useContractGenerations } from "../hooks/useContractTemplates";
 import { computeLeadQuotationTotals } from "../../quotation/lib/quotationLogic";
 import { useConfig } from "../../manager/hooks/useConfigSettings";
+import { useSessionStore } from "../../../auth/useSessionStore";
 import { ghs } from "../../../shared/lib/format";
 import { LeadKycDialog } from "../components/LeadKycDialog";
 import { resolveContractFields, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
 import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from "../hooks/useContractAi";
 import { useContractDrafts, useDeleteContractDraft, useUpdateContractDraft } from "../hooks/useContractDrafts";
-import type { Lead } from "../../../types/domain";
+import type { Lead, PlotType, PaymentPlan } from "../../../types/domain";
 
 // Standalone generator for the real Contract of Sale PDF (index.html's
 // buildContractOfSalePDF). Gated the same way v1's canManageContracts()
@@ -48,6 +51,11 @@ function ContractGeneratorInner() {
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const [query, setQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isWalkIn, setIsWalkIn] = useState(false);
+  // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- the real
+  // gap: Generate could only ever resolve against an existing leads row,
+  // with no path at all for someone genuinely not in the database yet.
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   // Resume-from-draft (docs/plans/16-contract-of-sale-build-plan.md §4) --
   // the Drafts screen hands over a leadId via the URL; once the real lead
@@ -64,6 +72,12 @@ function ContractGeneratorInner() {
   const q = query.trim().toLowerCase();
   const matches = q ? (leads ?? []).filter((l) => l.name.toLowerCase().includes(q) || l.contact.includes(q)).slice(0, 8) : [];
 
+  function reset() {
+    setSelectedLead(null);
+    setIsWalkIn(false);
+    setWalkInOpen(false);
+  }
+
   return (
     <div>
       <PageHeader title="Generate Contract" description="Search a client and generate their branded Contract of Sale PDF — the full legal document, pricing, KYC and all." />
@@ -71,24 +85,41 @@ function ContractGeneratorInner() {
       <Card className="mb-6">
         <CardContent className="pt-6">
           {!selectedLead ? (
-            <>
-              <Input placeholder="Search any client by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
-              {matches.length > 0 && (
-                <div className="mt-2 divide-y rounded-md border">
-                  {matches.map((l) => (
-                    <button key={l.id} type="button" className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/60" onClick={() => setSelectedLead(l)}>
-                      <span className="font-medium">{l.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {l.contact} · {l.plotType} · {l.paymentPlan}
-                      </span>
-                    </button>
-                  ))}
+            walkInOpen ? (
+              <WalkInClientForm
+                onCancel={() => setWalkInOpen(false)}
+                onSubmit={(lead) => {
+                  setSelectedLead(lead);
+                  setIsWalkIn(true);
+                  setWalkInOpen(false);
+                }}
+              />
+            ) : (
+              <>
+                <Input placeholder="Search any client by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                {matches.length > 0 && (
+                  <div className="mt-2 divide-y rounded-md border">
+                    {matches.map((l) => (
+                      <button key={l.id} type="button" className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-muted/60" onClick={() => setSelectedLead(l)}>
+                        <span className="font-medium">{l.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {l.contact} · {l.plotType} · {l.paymentPlan}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {q && matches.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No clients match &quot;{query}&quot;.</p>}
+                <div className="mt-3 border-t pt-3">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setWalkInOpen(true)}>
+                    <UserPlus />
+                    New client — not in the system yet
+                  </Button>
                 </div>
-              )}
-              {q && matches.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No clients match &quot;{query}&quot;.</p>}
-            </>
+              </>
+            )
           ) : (
-            <SelectedLeadPreview lead={selectedLead} onChange={() => setSelectedLead(null)} resumeDraftId={resumeDraftId} />
+            <SelectedLeadPreview lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} />
           )}
         </CardContent>
       </Card>
@@ -118,7 +149,119 @@ function ContractGeneratorInner() {
   );
 }
 
-function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; onChange: () => void; resumeDraftId: string | null }) {
+// docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- just enough
+// fields to resolve every real ContractFieldKey (see contractFieldResolver.ts)
+// without a leads row existing at all. Deliberately leaves grandTotal/
+// netTotal/depositTarget/discount unset (not merely zeroed) so
+// computeLeadQuotationTotals falls back to real config pricing by plot
+// type exactly the way a normal lead without manager overrides does --
+// casting through Partial<Lead> is what makes "unset" possible despite
+// Lead's own fields being non-optional.
+function WalkInClientForm({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (lead: Lead) => void }) {
+  const profile = useSessionStore((s) => s.profile);
+  const [name, setName] = useState("");
+  const [contact, setContact] = useState("");
+  const [address, setAddress] = useState("");
+  const [plotType, setPlotType] = useState<PlotType>("Full Plot");
+  const [noPlots, setNoPlots] = useState("1");
+  const [paymentPlan, setPaymentPlan] = useState<PaymentPlan>("Full Payment");
+
+  const valid = name.trim().length > 0 && contact.trim().length > 0;
+
+  function submit() {
+    if (!valid) return;
+    const partial: Partial<Lead> = {
+      id: `walkin-${crypto.randomUUID()}`,
+      agent: profile?.key ?? "manager",
+      name: name.trim(),
+      contact: contact.trim(),
+      address: address.trim() || undefined,
+      date: new Date().toISOString().slice(0, 10),
+      plotType,
+      noPlots: Math.max(1, Number(noPlots) || 1),
+      paymentPlan,
+      amtPaid: 0,
+      stage: "2A",
+    };
+    onSubmit(partial as Lead);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium">New client — not in the system yet</p>
+        <p className="text-xs text-muted-foreground">
+          For someone with no real Pipeline record. This generates a standalone contract — it will never appear in Pipeline, Payments, or reports tied to a lead.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Full name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Kwabena Mensah" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Contact</Label>
+          <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="024XXXXXXX" />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label>Address</Label>
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="East Legon, Accra" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Plot type</Label>
+          <Select value={plotType} onValueChange={(v) => setPlotType(v as PlotType)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Full Plot">Full Plot</SelectItem>
+              <SelectItem value="Half Plot">Half Plot</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Number of plots</Label>
+          <Input type="number" min={1} value={noPlots} onChange={(e) => setNoPlots(e.target.value)} />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label>Payment plan</Label>
+          <Select value={paymentPlan} onValueChange={(v) => setPaymentPlan(v as PaymentPlan)}>
+            <SelectTrigger className="w-full sm:w-60">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Full Payment">Full Payment (Outright)</SelectItem>
+              <SelectItem value="3 Months">3 Months</SelectItem>
+              <SelectItem value="6 Months">6 Months</SelectItem>
+              <SelectItem value="9 Months">9 Months</SelectItem>
+              <SelectItem value="12 Months">12 Months</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" disabled={!valid} onClick={submit}>
+          Continue
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SelectedLeadPreview({
+  lead,
+  isWalkIn,
+  onChange,
+  resumeDraftId,
+}: {
+  lead: Lead;
+  isWalkIn: boolean;
+  onChange: () => void;
+  resumeDraftId: string | null;
+}) {
   const { data: config } = useConfig();
   const generate = useGenerateContract();
   const deleteDraft = useDeleteContractDraft();
@@ -174,8 +317,18 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeDraftId, restored, selected?.version.id]);
 
+  // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- real amount-
+  // paid capture, right in the client-details step before generation, as
+  // asked. An existing lead shows its real figure (synced from the real
+  // Payments ledger, never a parallel editable field here per
+  // pipeline-payment-integrity's standing caution) with a link out to the
+  // real Log Payment flow; a walk-in has no ledger to diverge from, so a
+  // plain typed figure is the legitimate case for one.
+  const [walkInAmountPaid, setWalkInAmountPaid] = useState("0");
+  const amountPaidOverride = isWalkIn ? Number(walkInAmountPaid) || 0 : undefined;
+
   const { data: generations } = useContractGenerations();
-  const latestGen = (generations ?? []).filter((g) => g.leadId === lead.id)[0] ?? null;
+  const latestGen = isWalkIn ? null : (generations ?? []).filter((g) => g.leadId === lead.id)[0] ?? null;
   const changes: ContractFieldChange[] = [];
   if (latestGen && config) {
     const current = resolveContractFields({ ...lead, kyc: effectiveKyc }, config);
@@ -214,10 +367,15 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
             templateName: selected.templateName,
             content: selected.version.content,
           },
+          isWalkIn,
+          amountPaidOverride,
         },
         { onSuccess: onGenerateSuccess },
       );
     } else {
+      // Walk-in has no v1-parity legacy-document fallback (see
+      // GenerateContractInput's own comment) -- a real published
+      // template must be picked first, guarded by the Select below.
       generate.mutate({ lead: { ...lead, kyc: effectiveKyc } }, { onSuccess: onGenerateSuccess });
     }
   }
@@ -226,7 +384,14 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-medium">{lead.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{lead.name}</span>
+            {isWalkIn && (
+              <Badge variant="outline" title="Generated directly, never added to Pipeline">
+                Walk-in — not linked to Pipeline
+              </Badge>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">
             {lead.contact} · {lead.plotType} · {lead.noPlots || 1} plot(s)
           </div>
@@ -244,7 +409,25 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Amount paid</div>
-            <div className="font-medium">{ghs(lead.amtPaid)}</div>
+            {isWalkIn ? (
+              <Input
+                type="number"
+                min={0}
+                value={walkInAmountPaid}
+                onChange={(e) => setWalkInAmountPaid(e.target.value)}
+                className="mt-0.5 h-7 w-32"
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{ghs(lead.amtPaid)}</span>
+                <Button asChild type="button" variant="link" size="sm" className="h-auto p-0 text-xs">
+                  <Link href={`/dashboard/pipeline/${lead.id}`} target="_blank">
+                    Update amount paid
+                    <ExternalLink className="size-3" />
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
           {totals.planMonths > 0 && (
             <div>
@@ -275,13 +458,17 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
 
       {templateOptions.length > 0 && (
         <div className="space-y-1.5">
-          <Label>Template</Label>
+          <Label>Template {isWalkIn && <span className="text-destructive">*</span>}</Label>
           <Select value={templateVersionId} onValueChange={setTemplateVersionId}>
             <SelectTrigger className="w-full sm:w-80">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__standard__">Standard (legacy document)</SelectItem>
+              {/* Walk-in has no v1-parity legacy-document fallback -- that
+                  path's own contracts.create() needs a real, non-null
+                  lead_id with no FK to relax the way contract_generations'
+                  was (see useContracts.ts's own comment). */}
+              {!isWalkIn && <SelectItem value="__standard__">Standard (legacy document)</SelectItem>}
               {templateOptions.map((o) => (
                 <SelectItem key={o.version.id} value={o.version.id}>
                   {o.templateName} · v{o.version.versionNumber}
@@ -289,10 +476,11 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
               ))}
             </SelectContent>
           </Select>
+          {isWalkIn && !selected && <p className="text-xs text-muted-foreground">A walk-in client needs a real published template picked here.</p>}
         </div>
       )}
 
-      <Button type="button" disabled={generate.isPending || !config} onClick={generateNow}>
+      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && !selected)} onClick={generateNow}>
         <FileDown />
         {generate.isPending ? "Generating…" : "Generate & download PDF"}
       </Button>

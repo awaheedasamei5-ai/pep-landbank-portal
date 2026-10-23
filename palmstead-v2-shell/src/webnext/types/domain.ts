@@ -1776,7 +1776,10 @@ export interface ContractField {
 export interface ContractGeneration {
   id: string;
   contractRequestId: string | null;
-  leadId: string;
+  // null for a walk-in client (docs/plans/17-contract-of-sale-v3-gaps-plan.md
+  // Phase 3) -- someone with no real leads row, generated for directly
+  // without being added to Pipeline.
+  leadId: string | null;
   clientName: string;
   templateId: string | null;
   templateVersionId: string | null;

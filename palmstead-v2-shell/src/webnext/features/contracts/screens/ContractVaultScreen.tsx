@@ -61,7 +61,18 @@ export function ContractVaultScreen() {
                   const templateName = g.templateId ? (templates ?? []).find((t) => t.id === g.templateId)?.name ?? "Template" : "Standard (legacy document)";
                   return (
                     <TableRow key={g.id}>
-                      <TableCell className="font-medium">{g.clientName}</TableCell>
+                      <TableCell className="font-medium">
+                        {g.clientName}
+                        {/* docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- a
+                            walk-in generation has no leadId at all (by design, never
+                            written to Pipeline), flagged here so it's never mistaken
+                            for a real pipeline lead later. */}
+                        {g.leadId == null && (
+                          <Badge variant="outline" className="ml-2">
+                            Walk-in
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {g.templateId ? (
                           <span>
