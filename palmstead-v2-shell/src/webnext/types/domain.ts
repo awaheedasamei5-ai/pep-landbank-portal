@@ -2362,3 +2362,16 @@ export interface PermissionOverride {
   grantedBy: string | null;
   grantedAt: string;
 }
+
+// docs/plans/19-data-check-plan.md -- real server-side Data Check
+// dismiss state (real table `data_check_dismissals`), replacing the
+// prior web-next port's localStorage-only dismissal.
+export interface DataCheckDismissal {
+  id: string;
+  leadId: string;
+  issueType: string;
+  dismissedBy: string;
+  dismissedByName: string;
+  dismissedAt: string;
+  isCompanyWide: boolean;
+}

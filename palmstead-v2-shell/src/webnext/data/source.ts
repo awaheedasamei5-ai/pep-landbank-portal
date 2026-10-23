@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, ContractStyleSettings, ContractStyleSettingsPatch, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, DataCheckDismissal, ContractStyleSettings, ContractStyleSettingsPatch, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { requireLeaveSelectionYear } from '../features/leave/lib/leaveDates';
@@ -30,6 +30,7 @@ import {
   mapComplaintRow,
   mapContractRequestRow,
   mapContractApprovalRow,
+  mapDataCheckDismissalRow,
   mapContractClauseRow,
   mapContractFieldRow,
   mapContractGenerationRow,
@@ -693,6 +694,13 @@ export interface DataSource {
   contractApprovals: {
     listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
     decide(templateVersionId: string, status: ContractApprovalStatus, reason: string | null, decidedBy: string, decidedByName: string): Promise<ContractApproval>;
+  };
+  // docs/plans/19-data-check-plan.md -- real server-side Data Check
+  // dismiss state. RLS already scopes list() to "mine or company-wide"
+  // (data_check_dismissals_sel) -- no agent filter needed client-side.
+  dataCheckDismissals: {
+    list(): Promise<DataCheckDismissal[]>;
+    create(leadId: string, issueType: string, dismissedBy: string, dismissedByName: string, isCompanyWide: boolean): Promise<DataCheckDismissal>;
   };
   // Real table `leave_requests` (confirmed live). Staff reads are owner-
   // scoped by RLS; Management sees the company queue. Date-only team
@@ -2624,6 +2632,22 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractApprovalRow(data);
+      },
+    },
+    dataCheckDismissals: {
+      async list() {
+        const { data, error } = await requireClient().from('data_check_dismissals').select('*');
+        if (error) throw error;
+        return (data ?? []).map(mapDataCheckDismissalRow);
+      },
+      async create(leadId, issueType, dismissedBy, dismissedByName, isCompanyWide) {
+        const { data, error } = await requireClient()
+          .from('data_check_dismissals')
+          .insert({ lead_id: leadId, issue_type: issueType, dismissed_by: dismissedBy, dismissed_by_name: dismissedByName, is_company_wide: isCompanyWide })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapDataCheckDismissalRow(data);
       },
     },
     leaveRequests: {

@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractDraft,
+import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractDraft, DataCheckDismissal,
   ContractRequest,
   ContractStyleSettings, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
@@ -832,6 +832,18 @@ export function mapContractApprovalRow(r: Record<string, unknown>): ContractAppr
     decidedBy: r.decided_by as string,
     decidedByName: r.decided_by_name as string,
     decidedAt: r.decided_at as string,
+  };
+}
+
+export function mapDataCheckDismissalRow(r: Record<string, unknown>): DataCheckDismissal {
+  return {
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    issueType: r.issue_type as string,
+    dismissedBy: r.dismissed_by as string,
+    dismissedByName: r.dismissed_by_name as string,
+    dismissedAt: r.dismissed_at as string,
+    isCompanyWide: r.is_company_wide as boolean,
   };
 }
 

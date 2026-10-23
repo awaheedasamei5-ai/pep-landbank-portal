@@ -267,7 +267,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "data-check",
 				title: "Data Check",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/data-check",
 				icon: UserCheck,
 			},
 			{
