@@ -1,3 +1,11 @@
+## 2026-10-23 Operations reports release and next priorities
+
+The Operations Reports analytics/comparison/export slice has been implemented and verified on the exact current-base Vercel preview. Release candidate commit `c5722976bf7b204a680e0768fdcb9386b18d9a4b` is on `codex/operations-reports-release-current` (parent `ed8f6ad`, current `rebuild` at verification). Management and Staff live preview checks, CSV exports, A4 PDFs, typecheck, and 10/10 report model tests passed. Management PDF pagination was corrected so workload and issue register share the final page. **Production merge/deployment and fresh production-role checks are the remaining immediate step.** See the verification addendum at the top of `docs/plans/14i-operations-reports-analytics-comparison-plan.md`.
+
+Next, per the user’s latest request: research and implement the Operations schedule/daily planner with reliable due/missed reminders for staff when the app is closed; then redesign client receipts and implement monthly-plan due reminders and payment thank-you messages with secure receipt links; then close the cross-app client/payment/pipeline/allocation/inventory sync gaps. Start by reading the existing calendar, finance, client, allocation and pipeline plans and source, inspect the V2 Supabase schema/RLS only, and research the current push/SMS limits and provider configuration before coding. Preserve the user’s earlier requirement for a phase plan, real source references and separate Management/Staff tests. Do not send any live SMS while testing.
+
+---
+
 # Continue Here — Handoff for Any AI Tool
 
 ## 2026-10-22 release-path correction

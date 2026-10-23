@@ -1,3 +1,17 @@
+## Verification addendum — 2026-10-23
+
+**Status: preview-verified release candidate; production merge/deployment pending.** The report implementation is based on the current `rebuild` head `ed8f6ad` (including its Smart Insights addition) and release commit `c572297`. The exact final preview `https://palmstead-v2-shell-h1b5a6mfc-dnm-garments.vercel.app` reached READY after a successful Vercel production build and TypeScript check.
+
+- Management and Staff test accounts were each signed in and checked against the same real, read-only Operations data. Management sees the company summary, staff workload and all-staff filter. Staff sees only “My issues”; colleague filters and workload rows are absent, and the view labels its self-only scope.
+- Management and Staff summary CSVs and full-report PDFs were downloaded from the final preview. The CSV metadata records period, comparison range, report, filters and scope; Staff CSV says “My assigned work” / “Self only.” Staff issue-register CSV renders assignee as “You,” without colleague names.
+- The A4 Management PDF was visually and textually inspected: 3 pages, with the workload and issue register together on the last page. This fixed an earlier export defect where a single issue register row was stranded on an almost-empty page. The Staff A4 PDF was inspected: 2 pages and only the self-scoped issue register.
+- Model suite: 10/10 tests pass. Vercel build and TypeScript pass. Test reads did not mutate business data.
+- Remaining release step: merge this verified report-only change into `rebuild`, inspect that exact production deployment, then hard-refresh and recheck the production Reports page in both roles. Do not deploy the old preview branch or any dirty local tree.
+
+The broader reports programme and Operations Tracker remain in progress; this verification closes only the analytics/comparison/export slice described here.
+
+---
+
 # Operations Tracker Reports: comparison and analytics completion plan
 
 **Status:** research and implementation plan, 2026-10-22  
