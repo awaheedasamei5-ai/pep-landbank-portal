@@ -1,5 +1,6 @@
 import type { AchievementDef, ActivityLogEntry, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatusLogEntry, ChatMessage, Complaint, Config, Contract, ContractApproval, ContractClause, ContractField, ContractGeneration, ContractDraft,
-  ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
+  ContractRequest,
+  ContractStyleSettings, ContractSection, ContractTemplate, ContractTemplateVersion, DownloadRecord, Enquiry, FundRequest, Lead, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaderboardWeights, LeaveRequest, LeaveHoliday, LeaveRequestLog, OfficeLocation, Memo, MemoRecipient, Note, Payment, PermissionDef, PermissionOverride, Plot, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemStatus, SiteVisit, StaffAchievement, StaffInvite, SveDayReport, SveDayReportEntry, SveInviteRecord, SveSubmissionRecord, StreakRow, TaskEvent, WeeklyVisitForm } from '../types/domain';
 
 // snake_case (real Postgres columns, confirmed live against the schema)
 // <-> camelCase (this app's domain types) mapping, one function per
@@ -566,6 +567,25 @@ export function mapContractRequestRow(r: Record<string, unknown>): ContractReque
     status: (r.status as ContractRequest['status']) ?? 'pending',
     createdAt: r.created_at as string,
     fulfilledAt: (r.fulfilled_at as string) ?? null,
+  };
+}
+
+export function mapContractStyleSettingsRow(r: Record<string, unknown>): ContractStyleSettings {
+  return {
+    id: r.id as string,
+    isActive: r.is_active as boolean,
+    headingFont: r.heading_font as string,
+    bodyFont: r.body_font as string,
+    monoFont: r.mono_font as string,
+    baseFontSizePt: Number(r.base_font_size_pt),
+    headingFontSizePt: Number(r.heading_font_size_pt),
+    lineHeight: Number(r.line_height),
+    coverImagePath: (r.cover_image_path as string) ?? null,
+    wordmarkImagePath: (r.wordmark_image_path as string) ?? null,
+    ceoName: (r.ceo_name as string) ?? null,
+    updatedBy: (r.updated_by as string) ?? null,
+    updatedByName: (r.updated_by_name as string) ?? null,
+    updatedAt: r.updated_at as string,
   };
 }
 

@@ -87,6 +87,16 @@ export function useCreateContractClause() {
   });
 }
 
+export function useUpdateContractClause() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<{ name: string; category: string | null; body: string; isActive: boolean }> }) =>
+      getDataSource(demoMode).contractClauses.update(id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contractClauses'] }),
+  });
+}
+
 export function useContractFields() {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({ queryKey: ['contractFields'], queryFn: () => getDataSource(demoMode).contractFields.list() });

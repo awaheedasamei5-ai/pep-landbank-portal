@@ -1,4 +1,4 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
+import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, ContractStyleSettings, ContractStyleSettingsPatch, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
 import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
 import { agentPoints } from '../features/manager/lib/leaderboardLogic';
 import { requireLeaveSelectionYear } from '../features/leave/lib/leaveDates';
@@ -7,6 +7,7 @@ import { today, monthKey, shiftMonth } from '../shared/lib/format';
 import { getSupabaseClient } from './client';
 import { friendlyErrorObj } from '../shared/lib/friendlyError';
 import {
+  mapContractStyleSettingsRow,
   mapContractDraftRow,
   mapAchievementDefRow,
   mapActivityLogRow,
@@ -456,6 +457,15 @@ export interface DataSource {
           | 'quoteLandNoteText'
           | 'quoteLogoImage'
           | 'quoteAccentColor'
+          // Real columns, read by mapConfigRow and rendered on the real
+          // Contract of Sale PDF (contractPdf.ts), never whitelisted for
+          // writing -- the exact same silently-dropped-write bug this
+          // function's own comments already describe twice above, now
+          // fixed for the Style & Text page (docs/plans/16-contract-of-
+          // sale-build-plan.md §4).
+          | 'contractCeoName'
+          | 'contractCoverImage'
+          | 'contractWordmarkImage'
         >
       >
     ): Promise<Config>;
@@ -641,6 +651,19 @@ export interface DataSource {
   contractClauses: {
     list(): Promise<ContractClause[]>;
     create(createdBy: string, createdByName: string, input: NewContractClause): Promise<ContractClause>;
+    // Real dedicated per-clause-group editing pages (docs/plans/16-contract-
+    // of-sale-build-plan.md §4) need to edit/retire a library clause in
+    // place -- editing here never retroactively changes a template that
+    // already copied the clause's body inline (see insertClause in
+    // TemplateDetailScreen.tsx).
+    update(id: string, patch: Partial<{ name: string; category: string | null; body: string; isActive: boolean }>): Promise<ContractClause>;
+  };
+  // Real table `contract_style_settings` -- one active row, same pattern
+  // as attendance_policy. SELECT is open (every staff's generated PDF
+  // uses real branding); UPDATE/INSERT are manager/elizabeth-only.
+  contractStyleSettings: {
+    get(): Promise<ContractStyleSettings | null>;
+    update(patch: ContractStyleSettingsPatch, updatedBy: string, updatedByName: string): Promise<ContractStyleSettings>;
   };
   contractFields: {
     list(): Promise<ContractField[]>;
@@ -2022,6 +2045,9 @@ function createLiveDataSource(): DataSource {
         if (patch.quoteLandNoteText !== undefined) dbPatch.quote_land_note_text = patch.quoteLandNoteText;
         if (patch.quoteLogoImage !== undefined) dbPatch.quote_logo_image = patch.quoteLogoImage;
         if (patch.quoteAccentColor !== undefined) dbPatch.quote_accent_color = patch.quoteAccentColor;
+        if (patch.contractCeoName !== undefined) dbPatch.contract_ceo_name = patch.contractCeoName;
+        if (patch.contractCoverImage !== undefined) dbPatch.contract_cover_image = patch.contractCoverImage;
+        if (patch.contractWordmarkImage !== undefined) dbPatch.contract_wordmark_image = patch.contractWordmarkImage;
         const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
@@ -2500,6 +2526,38 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractClauseRow(data);
+      },
+      async update(id, patch) {
+        const payload: Record<string, unknown> = {};
+        if (patch.name !== undefined) payload.name = patch.name;
+        if (patch.category !== undefined) payload.category = patch.category;
+        if (patch.body !== undefined) payload.body = patch.body;
+        if (patch.isActive !== undefined) payload.is_active = patch.isActive;
+        const { data, error } = await requireClient().from('contract_clauses').update(payload).eq('id', id).select().single();
+        if (error) throw error;
+        return mapContractClauseRow(data);
+      },
+    },
+    contractStyleSettings: {
+      async get() {
+        const { data, error } = await requireClient().from('contract_style_settings').select('*').eq('is_active', true).limit(1).maybeSingle();
+        if (error) throw error;
+        return data ? mapContractStyleSettingsRow(data) : null;
+      },
+      async update(patch, updatedBy, updatedByName) {
+        const payload: Record<string, unknown> = { updated_by: updatedBy, updated_by_name: updatedByName, updated_at: new Date().toISOString() };
+        if (patch.headingFont !== undefined) payload.heading_font = patch.headingFont;
+        if (patch.bodyFont !== undefined) payload.body_font = patch.bodyFont;
+        if (patch.monoFont !== undefined) payload.mono_font = patch.monoFont;
+        if (patch.baseFontSizePt !== undefined) payload.base_font_size_pt = patch.baseFontSizePt;
+        if (patch.headingFontSizePt !== undefined) payload.heading_font_size_pt = patch.headingFontSizePt;
+        if (patch.lineHeight !== undefined) payload.line_height = patch.lineHeight;
+        if (patch.coverImagePath !== undefined) payload.cover_image_path = patch.coverImagePath;
+        if (patch.wordmarkImagePath !== undefined) payload.wordmark_image_path = patch.wordmarkImagePath;
+        if (patch.ceoName !== undefined) payload.ceo_name = patch.ceoName;
+        const { data, error } = await requireClient().from('contract_style_settings').update(payload).eq('is_active', true).select().single();
+        if (error) throw error;
+        return mapContractStyleSettingsRow(data);
       },
     },
     contractFields: {

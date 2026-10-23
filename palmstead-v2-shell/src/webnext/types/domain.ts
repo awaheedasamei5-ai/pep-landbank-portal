@@ -1816,6 +1816,38 @@ export interface NewContractDraft {
   status?: ContractDraftStatus;
 }
 
+// Real table `contract_style_settings` -- typography/branding config for
+// the generated PDF (docs/plans/16-contract-of-sale-build-plan.md §1.2).
+// One active row, same pattern as attendance_policy.
+export interface ContractStyleSettings {
+  id: string;
+  isActive: boolean;
+  headingFont: string;
+  bodyFont: string;
+  monoFont: string;
+  baseFontSizePt: number;
+  headingFontSizePt: number;
+  lineHeight: number;
+  coverImagePath: string | null;
+  wordmarkImagePath: string | null;
+  ceoName: string | null;
+  updatedBy: string | null;
+  updatedByName: string | null;
+  updatedAt: string;
+}
+
+export interface ContractStyleSettingsPatch {
+  headingFont?: string;
+  bodyFont?: string;
+  monoFont?: string;
+  baseFontSizePt?: number;
+  headingFontSizePt?: number;
+  lineHeight?: number;
+  coverImagePath?: string | null;
+  wordmarkImagePath?: string | null;
+  ceoName?: string | null;
+}
+
 export type ContractApprovalStatus = 'approved' | 'rejected';
 
 export interface ContractApproval {

@@ -74,7 +74,14 @@ export function useGenerateContract() {
           // shown instantly; the AI phrasing is a progressive add-on).
           throw Object.assign(new Error(`Can't generate yet -- missing: ${missing.join(', ')}. Fill these in (KYC details or config) and try again.`), { missingKeys: missing });
         }
-        const doc = buildContractFromSections(template.templateName, resolvedContent);
+        const styleSettings = await getDataSource(demoMode).contractStyleSettings.get();
+        let templateCover: string | null = null;
+        try {
+          templateCover = config.contractCoverImage || (await loadImageAsDataUri('/contract-cover.jpg'));
+        } catch {
+          // Missing cover image shouldn't stop the contract from generating.
+        }
+        const doc = buildContractFromSections(template.templateName, resolvedContent, styleSettings, templateCover);
         doc.save(contractFilename(lead.name));
         const ds = getDataSource(demoMode);
         const pdfBlob = doc.output('blob') as Blob;

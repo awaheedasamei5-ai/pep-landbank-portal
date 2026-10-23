@@ -1,6 +1,16 @@
 import { jsPDF } from 'jspdf';
 import { CONTRACT_INK, contractBorder, contractBody, contractNewPage, contractFilename } from './contractPdf';
-import type { ContractSection } from '../../../types/domain';
+import type { ContractSection, ContractStyleSettings } from '../../../types/domain';
+
+// jsPDF's standard (base-14) font families -- the only ones it can embed
+// without a real font-loading pipeline (see docs/plans/16-contract-of-
+// sale-build-plan.md §1.2's font constraint). Any stored value outside
+// this set falls back to 'times' rather than silently breaking the PDF.
+const VALID_FONT_FAMILIES = new Set(['times', 'helvetica', 'courier']);
+function normalizeFontFamily(name: string | undefined): 'times' | 'helvetica' | 'courier' {
+  const lower = (name ?? '').toLowerCase();
+  return (VALID_FONT_FAMILIES.has(lower) ? lower : 'times') as 'times' | 'helvetica' | 'courier';
+}
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §6.3/§8 -- the real PDF renderer for the
 // NEW structured content model (ContractSection[]), shared by the Preview
@@ -18,16 +28,43 @@ import type { ContractSection } from '../../../types/domain';
 // sections render as a bracketed placeholder rather than an embedded
 // asset -- no image-upload/asset-resolution UI exists for template
 // sections yet.
-export function buildContractFromSections(title: string, sections: ContractSection[]): jsPDF {
+//
+// `style` (docs/plans/16-contract-of-sale-build-plan.md §4, the Style &
+// Text page) controls the title/heading/image-placeholder/signature-
+// block font family and the heading/title size -- the direct setFont()
+// calls in THIS file. Honestly scoped: paragraph/clause/footer body text
+// still goes through contractBody(), the shared legacy clause-numbering
+// renderer also used by the untouched hardcoded-text path, so body
+// typography stays on the proven 'times' typesetting for now rather than
+// risking that shared primitive for a cosmetic setting.
+export function buildContractFromSections(title: string, sections: ContractSection[], style?: ContractStyleSettings | null, coverDataUri?: string | null): jsPDF {
+  const headingFamily = normalizeFontFamily(style?.headingFont);
+  const headingSize = style?.headingFontSizePt ?? 12.5;
+  const titleSize = (style?.headingFontSizePt ?? 14) + 2;
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  contractBorder(doc, pageW, pageH);
 
+  // ---- Page 1: cover, same real full-bleed-photo convention as the
+  // legacy buildContractOfSalePdf -- a template-based contract should
+  // never look less finished than the hardcoded-text one it's replacing.
   let n = 1;
-  let y = 26;
-  doc.setFont('times', 'bold');
-  doc.setFontSize(16);
+  let y: number;
+  if (coverDataUri) {
+    try {
+      doc.addImage(coverDataUri, 'JPEG', 0, 0, pageW, pageH);
+    } catch {
+      // A malformed cover shouldn't block the rest of the document.
+    }
+    n = 2;
+    y = contractNewPage(doc, n);
+  } else {
+    contractBorder(doc, pageW, pageH);
+    y = 26;
+  }
+  doc.setFont(headingFamily, 'bold');
+  doc.setFontSize(titleSize);
   doc.setTextColor(...CONTRACT_INK);
   const titleLines: string[] = doc.splitTextToSize(title, pageW - 28);
   doc.text(titleLines, pageW / 2, y, { align: 'center' });
@@ -39,16 +76,16 @@ export function buildContractFromSections(title: string, sections: ContractSecti
       y = contractNewPage(doc, n);
     }
     if (section.kind === 'heading') {
-      doc.setFont('times', 'bold');
-      doc.setFontSize(12.5);
+      doc.setFont(headingFamily, 'bold');
+      doc.setFontSize(headingSize);
       doc.setTextColor(...CONTRACT_INK);
       const lines: string[] = doc.splitTextToSize(section.text ?? '', pageW - 28);
       doc.text(lines, 14, y);
       y += lines.length * 6.6 + 4;
     } else if (section.kind === 'signature_block') {
-      ({ y, n } = renderSignatureBlock(doc, y, n));
+      ({ y, n } = renderSignatureBlock(doc, y, n, headingFamily));
     } else if (section.kind === 'image') {
-      doc.setFont('times', 'italic');
+      doc.setFont(headingFamily, 'italic');
       doc.setFontSize(9.5);
       doc.setTextColor(...CONTRACT_INK);
       doc.text(`[Image: ${section.imageRef || 'not set'}]`, 14, y);
@@ -63,7 +100,7 @@ export function buildContractFromSections(title: string, sections: ContractSecti
   return doc;
 }
 
-function renderSignatureBlock(doc: jsPDF, y: number, n: number): { y: number; n: number } {
+function renderSignatureBlock(doc: jsPDF, y: number, n: number, headingFamily: 'times' | 'helvetica' | 'courier'): { y: number; n: number } {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   if (y > pageH - 90) {
@@ -71,7 +108,7 @@ function renderSignatureBlock(doc: jsPDF, y: number, n: number): { y: number; n:
     y = contractNewPage(doc, n);
   }
   const colW = pageW / 2 - 14;
-  doc.setFont('times', 'bold');
+  doc.setFont(headingFamily, 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(...CONTRACT_INK);
   const vLines: string[] = doc.splitTextToSize('SIGNED AND DELIVERED ON BEHALF OF THE VENDOR:', colW);
@@ -79,7 +116,7 @@ function renderSignatureBlock(doc: jsPDF, y: number, n: number): { y: number; n:
   doc.text(vLines, 14, y);
   doc.text(pLines, pageW / 2 + 4, y);
   y += Math.max(vLines.length, pLines.length) * 5.5 + 14;
-  doc.setFont('times', 'normal');
+  doc.setFont(headingFamily, 'normal');
   doc.setFontSize(10.5);
   const sigRows: [string, string][] = [
     ['Sign', '…………………………………....'],
