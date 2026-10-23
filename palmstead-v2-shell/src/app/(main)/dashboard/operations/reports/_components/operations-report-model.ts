@@ -73,9 +73,24 @@ export type ReportRecord = {
 	target_date: string | null;
 };
 
+export type IssueMetricRecord = ReportRecord & {
+	stateGroup: string;
+	assignees: string[];
+};
+
+export type IssueMetricCounts = {
+	openNow: number;
+	overdueNow: number;
+	createdInRange: number;
+	completedInRange: number;
+	dueInRange: number;
+	unassignedOpen: number;
+};
+
 export type PeriodCounts = {
 	created: number;
 	completed: number;
+	due: number;
 };
 
 export type PeriodComparison = {
@@ -84,7 +99,7 @@ export type PeriodComparison = {
 	current: PeriodCounts;
 	previous: PeriodCounts;
 	delta: PeriodCounts;
-	percent: { created: number | null; completed: number | null };
+	percent: { created: number | null; completed: number | null; due: number | null };
 };
 
 export type TrendPoint = {
@@ -145,9 +160,10 @@ function countsForRange(records: ReportRecord[], range: DateRange): PeriodCounts
 		(counts, record) => {
 			if (dateInRange(record.created_at, range)) counts.created += 1;
 			if (dateInRange(record.completed_at, range)) counts.completed += 1;
+			if (dateInRange(record.target_date, range)) counts.due += 1;
 			return counts;
 		},
-		{ created: 0, completed: 0 },
+		{ created: 0, completed: 0, due: 0 },
 	);
 }
 
@@ -167,10 +183,12 @@ export function comparePeriods(
 		delta: {
 			created: current.created - previous.created,
 			completed: current.completed - previous.completed,
+			due: current.due - previous.due,
 		},
 		percent: {
 			created: percentChange(current.created, previous.created),
 			completed: percentChange(current.completed, previous.completed),
+			due: percentChange(current.due, previous.due),
 		},
 	};
 }
@@ -231,3 +249,31 @@ export function formatDelta(delta: number, percent: number | null): string {
 export function isCurrentOpen(stateGroup: string): boolean {
 	return stateGroup === "backlog" || stateGroup === "unstarted" || stateGroup === "started";
 }
+
+/** Keeps live workload snapshots separate from events in the selected period. */
+export function summarizeIssueMetrics(
+	issues: IssueMetricRecord[],
+	range: DateRange,
+	asOfDate: string,
+): IssueMetricCounts {
+	return issues.reduce<IssueMetricCounts>(
+		(counts, issue) => {
+			const open = isCurrentOpen(issue.stateGroup);
+			if (open) {
+				counts.openNow += 1;
+				if (issue.target_date && issue.target_date < asOfDate) counts.overdueNow += 1;
+				if (issue.assignees.length === 0) counts.unassignedOpen += 1;
+			}
+			if (dateInRange(issue.created_at, range)) counts.createdInRange += 1;
+			if (dateInRange(issue.completed_at, range)) counts.completedInRange += 1;
+			if (
+				issue.stateGroup !== "completed" &&
+				issue.stateGroup !== "cancelled" &&
+				dateInRange(issue.target_date, range)
+			) counts.dueInRange += 1;
+			return counts;
+		},
+		{ openNow: 0, overdueNow: 0, createdInRange: 0, completedInRange: 0, dueInRange: 0, unassignedOpen: 0 },
+	);
+}
+
