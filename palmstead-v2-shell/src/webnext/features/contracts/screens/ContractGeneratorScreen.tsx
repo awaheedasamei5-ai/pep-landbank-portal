@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { ghs } from "../../../shared/lib/format";
 import { LeadKycDialog } from "../components/LeadKycDialog";
 import { resolveContractFields, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
 import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from "../hooks/useContractAi";
+import { useDeleteContractDraft } from "../hooks/useContractDrafts";
 import type { Lead } from "../../../types/domain";
 
 // Standalone generator for the real Contract of Sale PDF (index.html's
@@ -39,10 +41,25 @@ export function ContractGeneratorScreen() {
 }
 
 function ContractGeneratorInner() {
+  const searchParams = useSearchParams();
+  const resumeLeadId = searchParams.get("lead");
+  const resumeDraftId = searchParams.get("draft");
   const { data: leads } = useAllLeads();
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const [query, setQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+
+  // Resume-from-draft (docs/plans/16-contract-of-sale-build-plan.md §4) --
+  // the Drafts screen hands over a leadId via the URL; once the real lead
+  // list loads, auto-select it so "Resume" lands exactly where Generate
+  // normally lands after a manual client search.
+  useEffect(() => {
+    if (resumeLeadId && leads && !selectedLead) {
+      const match = leads.find((l) => l.id === resumeLeadId);
+      if (match) setSelectedLead(match);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeLeadId, leads]);
 
   const q = query.trim().toLowerCase();
   const matches = q ? (leads ?? []).filter((l) => l.name.toLowerCase().includes(q) || l.contact.includes(q)).slice(0, 8) : [];
@@ -71,7 +88,7 @@ function ContractGeneratorInner() {
               {q && matches.length === 0 && <p className="mt-2 text-sm text-muted-foreground">No clients match &quot;{query}&quot;.</p>}
             </>
           ) : (
-            <SelectedLeadPreview lead={selectedLead} onChange={() => setSelectedLead(null)} />
+            <SelectedLeadPreview lead={selectedLead} onChange={() => setSelectedLead(null)} resumeDraftId={resumeDraftId} />
           )}
         </CardContent>
       </Card>
@@ -101,9 +118,10 @@ function ContractGeneratorInner() {
   );
 }
 
-function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => void }) {
+function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; onChange: () => void; resumeDraftId: string | null }) {
   const { data: config } = useConfig();
   const generate = useGenerateContract();
+  const deleteDraft = useDeleteContractDraft();
   const { data: templates } = useContractTemplates();
   const { data: publishedVersions } = usePublishedContractTemplateVersions();
   const totals = config ? computeLeadQuotationTotals(config, lead) : null;
@@ -140,20 +158,30 @@ function SelectedLeadPreview({ lead, onChange }: { lead: Lead; onChange: () => v
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generate.error]);
 
+  // Resuming a draft is one-way: once the document is actually generated,
+  // the draft's job is done, so it's cleared rather than left to linger
+  // as a stale "in progress" row.
+  function onGenerateSuccess() {
+    if (resumeDraftId) deleteDraft.mutate(resumeDraftId);
+  }
+
   function generateNow() {
     if (selected) {
-      generate.mutate({
-        lead: { ...lead, kyc: effectiveKyc },
-        template: {
-          templateId: selected.version.templateId,
-          templateVersionId: selected.version.id,
-          versionNumber: selected.version.versionNumber,
-          templateName: selected.templateName,
-          content: selected.version.content,
+      generate.mutate(
+        {
+          lead: { ...lead, kyc: effectiveKyc },
+          template: {
+            templateId: selected.version.templateId,
+            templateVersionId: selected.version.id,
+            versionNumber: selected.version.versionNumber,
+            templateName: selected.templateName,
+            content: selected.version.content,
+          },
         },
-      });
+        { onSuccess: onGenerateSuccess },
+      );
     } else {
-      generate.mutate({ lead: { ...lead, kyc: effectiveKyc } });
+      generate.mutate({ lead: { ...lead, kyc: effectiveKyc } }, { onSuccess: onGenerateSuccess });
     }
   }
 
