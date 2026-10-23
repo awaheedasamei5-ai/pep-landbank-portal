@@ -73,6 +73,20 @@ export type ReportRecord = {
 	target_date: string | null;
 };
 
+export type IssueMetricRecord = ReportRecord & {
+	stateGroup: string;
+	assignees: string[];
+};
+
+export type IssueMetricCounts = {
+	openNow: number;
+	overdueNow: number;
+	createdInRange: number;
+	completedInRange: number;
+	dueInRange: number;
+	unassignedOpen: number;
+};
+
 export type PeriodCounts = {
 	created: number;
 	completed: number;
@@ -230,4 +244,31 @@ export function formatDelta(delta: number, percent: number | null): string {
 /** Only active workflow groups count as current open work. */
 export function isCurrentOpen(stateGroup: string): boolean {
 	return stateGroup === "backlog" || stateGroup === "unstarted" || stateGroup === "started";
+}
+
+/** Keeps live workload snapshots separate from events in the selected period. */
+export function summarizeIssueMetrics(
+	issues: IssueMetricRecord[],
+	range: DateRange,
+	asOfDate: string,
+): IssueMetricCounts {
+	return issues.reduce<IssueMetricCounts>(
+		(counts, issue) => {
+			const open = isCurrentOpen(issue.stateGroup);
+			if (open) {
+				counts.openNow += 1;
+				if (issue.target_date && issue.target_date < asOfDate) counts.overdueNow += 1;
+				if (issue.assignees.length === 0) counts.unassignedOpen += 1;
+			}
+			if (dateInRange(issue.created_at, range)) counts.createdInRange += 1;
+			if (dateInRange(issue.completed_at, range)) counts.completedInRange += 1;
+			if (
+				issue.stateGroup !== "completed" &&
+				issue.stateGroup !== "cancelled" &&
+				dateInRange(issue.target_date, range)
+			) counts.dueInRange += 1;
+			return counts;
+		},
+		{ openNow: 0, overdueNow: 0, createdInRange: 0, completedInRange: 0, dueInRange: 0, unassignedOpen: 0 },
+	);
 }
