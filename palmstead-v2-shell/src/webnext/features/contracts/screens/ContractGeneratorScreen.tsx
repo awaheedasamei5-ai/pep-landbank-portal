@@ -19,7 +19,7 @@ import { ghs } from "../../../shared/lib/format";
 import { LeadKycDialog } from "../components/LeadKycDialog";
 import { resolveContractFields, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
 import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from "../hooks/useContractAi";
-import { useDeleteContractDraft } from "../hooks/useContractDrafts";
+import { useContractDrafts, useDeleteContractDraft, useUpdateContractDraft } from "../hooks/useContractDrafts";
 import type { Lead } from "../../../types/domain";
 
 // Standalone generator for the real Contract of Sale PDF (index.html's
@@ -122,6 +122,7 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
   const { data: config } = useConfig();
   const generate = useGenerateContract();
   const deleteDraft = useDeleteContractDraft();
+  const updateDraft = useUpdateContractDraft();
   const { data: templates } = useContractTemplates();
   const { data: publishedVersions } = usePublishedContractTemplateVersions();
   const totals = config ? computeLeadQuotationTotals(config, lead) : null;
@@ -136,6 +137,42 @@ function SelectedLeadPreview({ lead, onChange, resumeDraftId }: { lead: Lead; on
     templateName: templates?.find((t) => t.id === v.templateId)?.name ?? "Untitled template",
   }));
   const selected = templateOptions.find((o) => o.version.id === templateVersionId) ?? null;
+
+  // Real gap fixed here: useUpdateContractDraft existed but was never
+  // called anywhere, so resuming a draft and picking a template here
+  // never wrote that choice back -- the Drafts list (and its AI
+  // readiness nudge) had no way to ever reflect real progress. Restore
+  // the Select to whichever PUBLISHED version of the draft's saved
+  // templateId is still current (an unpublished/superseded templateId
+  // just falls back to "__standard__", same as never having picked one)
+  // -- gated by `restored` so the save-back effect below can never fire
+  // on the stale "__standard__" default and clobber a draft's real
+  // saved templateId before this restore has had a chance to apply.
+  const { data: drafts } = useContractDrafts();
+  const resumedDraft = resumeDraftId ? (drafts ?? []).find((d) => d.id === resumeDraftId) : null;
+  const [restored, setRestored] = useState(!resumeDraftId);
+  useEffect(() => {
+    if (restored || !drafts) return;
+    if (resumedDraft?.templateId) {
+      const match = templateOptions.find((o) => o.version.templateId === resumedDraft.templateId);
+      if (match) setTemplateVersionId(match.version.id);
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, drafts, resumedDraft?.templateId, templateOptions.length]);
+
+  // Syncs the picked template (and a real ready_to_generate/in_progress
+  // status derived from whether one is actually picked) back onto the
+  // draft row being resumed, same discipline as onGenerateSuccess below
+  // already uses for clearing a finished draft.
+  useEffect(() => {
+    if (!resumeDraftId || !restored) return;
+    const newTemplateId = selected?.version.templateId ?? null;
+    const newStatus = selected ? 'ready_to_generate' : 'in_progress';
+    if (resumedDraft && resumedDraft.templateId === newTemplateId && resumedDraft.status === newStatus) return;
+    updateDraft.mutate({ id: resumeDraftId, patch: { templateId: newTemplateId, status: newStatus } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeDraftId, restored, selected?.version.id]);
 
   const { data: generations } = useContractGenerations();
   const latestGen = (generations ?? []).filter((g) => g.leadId === lead.id)[0] ?? null;

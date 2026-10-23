@@ -3,8 +3,9 @@ import { getSupabaseClient } from '../../../data/client';
 import { missingKycFieldLabels } from '../lib/contractFieldResolver';
 import type { Lead } from '../../../types/domain';
 
-// CONTRACT_OF_SALE_BLUEPRINT.md §9 -- the 4 named AI capabilities, all
-// through the shared ai-insights function's new contract_* kinds.
+// CONTRACT_OF_SALE_BLUEPRINT.md §9 -- the 4 named AI capabilities plus
+// one new one (draft-readiness nudge, added per docs/plans/16's §3), all
+// through the shared ai-insights function's contract_* kinds.
 // Deterministic-verdict/AI-drafts-language throughout, matching every
 // other AI capability built this session: a real check/diff already
 // decided the facts below, the model only phrases them -- it's never
@@ -90,6 +91,33 @@ export function useMissingDataChecklistDraft() {
       const { data, error } = await client.functions.invoke('ai-insights', { body: { kind: 'contract_missing_data_checklist', context: { missingKeys } } });
       if (error) throw error;
       return (data as { message?: string } | null)?.message ?? null;
+    },
+  });
+}
+
+// 5. Draft-readiness nudge -- the one real NEW capability this build adds
+// (build plan §3/§5 phase 9), not just a port. The real deterministic
+// verdict -- which fields this specific draft's own picked template
+// still can't resolve against the linked lead -- is computed by the
+// Drafts screen itself (resolveContractFields + findUnresolvedTokens,
+// the exact same gate Generate already enforces); this hook only phrases
+// that real list as a one-line nudge, auto-fetched per draft row the
+// same way useKycCompletenessSummary is.
+export function useDraftReadinessNudge(firstName: string | undefined, missingFieldLabels: string[]) {
+  return useQuery({
+    queryKey: ['contractDraftReadiness', firstName, missingFieldLabels.join(',')],
+    enabled: !!firstName && missingFieldLabels.length > 0,
+    staleTime: 1000 * 60 * 10,
+    retry: false,
+    queryFn: async () => {
+      const client = getSupabaseClient();
+      if (!client) return null;
+      const { data, error } = await client.functions.invoke('ai-insights', {
+        body: { kind: 'contract_draft_readiness', context: { firstName, missingFieldLabels } },
+      });
+      if (error) return null;
+      const message = (data as { message?: string } | null)?.message;
+      return message && message.length > 0 ? message : null;
     },
   });
 }

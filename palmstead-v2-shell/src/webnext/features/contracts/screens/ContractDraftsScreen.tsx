@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FilePlus2, Trash2 } from "lucide-react";
+import { FilePlus2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,8 +13,12 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
 import { useSessionStore } from "../../../auth/useSessionStore";
 import { useAllLeads } from "../../payments/hooks/useLogPayment";
+import { useConfig } from "../../manager/hooks/useConfigSettings";
 import { useContractDrafts, useCreateContractDraft, useDeleteContractDraft } from "../hooks/useContractDrafts";
-import type { ContractDraft, Lead } from "../../../types/domain";
+import { usePublishedContractTemplateVersions } from "../hooks/useContractTemplates";
+import { useDraftReadinessNudge } from "../hooks/useContractAi";
+import { resolveContractFields, resolveSections, findUnresolvedTokens, CONTRACT_FIELD_LABELS, type ContractFieldKey } from "../lib/contractFieldResolver";
+import type { ContractDraft, ContractTemplateVersion, Lead, Config } from "../../../types/domain";
 
 // NEW page (docs/plans/16-contract-of-sale-build-plan.md §4/§1.2) -- no
 // prior work covers this. A draft is just a saved pointer at a client
@@ -24,6 +28,9 @@ import type { ContractDraft, Lead } from "../../../types/domain";
 export function ContractDraftsScreen() {
   const profile = useSessionStore((s) => s.profile);
   const { data: drafts, isLoading } = useContractDrafts();
+  const { data: leads } = useAllLeads();
+  const { data: config } = useConfig();
+  const { data: publishedVersions } = usePublishedContractTemplateVersions();
   const [createOpen, setCreateOpen] = useState(false);
 
   const mine = (drafts ?? []).filter((d) => d.createdBy === profile?.key);
@@ -59,7 +66,15 @@ export function ContractDraftsScreen() {
               ) : mine.length === 0 ? (
                 <TableEmpty colSpan={4} message="No drafts yet — start one from here or from Generate." />
               ) : (
-                mine.map((d) => <DraftRow key={d.id} draft={d} />)
+                mine.map((d) => (
+                  <DraftRow
+                    key={d.id}
+                    draft={d}
+                    lead={leads?.find((l) => l.id === d.leadId) ?? null}
+                    config={config ?? null}
+                    publishedVersions={publishedVersions ?? []}
+                  />
+                ))
               )}
             </TableBody>
           </Table>
@@ -101,12 +116,51 @@ export function ContractDraftsScreen() {
   );
 }
 
-function DraftRow({ draft }: { draft: ContractDraft }) {
+function DraftRow({
+  draft,
+  lead,
+  config,
+  publishedVersions,
+}: {
+  draft: ContractDraft;
+  lead: Lead | null;
+  config: Config | null;
+  publishedVersions: ContractTemplateVersion[];
+}) {
   const router = useRouter();
   const del = useDeleteContractDraft();
+
+  // Draft-readiness nudge (docs/plans/16-contract-of-sale-build-plan.md
+  // §3/§5 phase 9) -- the real deterministic verdict reuses the exact
+  // same resolver + unresolved-token gate Generate itself enforces at
+  // generation time, just run proactively here so staff see what's
+  // missing without opening Generate first.
+  const missingLabels = useMemo(() => {
+    if (!lead || !config || !draft.templateId) return [];
+    const version = publishedVersions.find((v) => v.templateId === draft.templateId);
+    if (!version) return [];
+    const fieldValues = resolveContractFields(lead, config);
+    const resolved = resolveSections(version.content, fieldValues);
+    const unresolvedKeys = findUnresolvedTokens(resolved);
+    return unresolvedKeys.map((k) => CONTRACT_FIELD_LABELS[k as ContractFieldKey] ?? k);
+  }, [lead, config, draft.templateId, publishedVersions]);
+
+  const firstName = lead?.name.split(" ")[0] ?? lead?.name;
+  const { data: nudge } = useDraftReadinessNudge(firstName, missingLabels);
+
   return (
     <TableRow>
-      <TableCell className="font-medium">{draft.clientName}</TableCell>
+      <TableCell className="font-medium">
+        <div>{draft.clientName}</div>
+        {!draft.templateId ? (
+          <div className="mt-0.5 text-xs text-muted-foreground">No template picked yet</div>
+        ) : missingLabels.length > 0 ? (
+          <div className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
+            <Sparkles className="mt-0.5 size-3 shrink-0" />
+            <span>{nudge ?? `Still needs: ${missingLabels.join(", ")}`}</span>
+          </div>
+        ) : null}
+      </TableCell>
       <TableCell>
         <Badge variant={draft.status === "ready_to_generate" ? "secondary" : "outline"}>{draft.status === "ready_to_generate" ? "Ready" : "In progress"}</Badge>
       </TableCell>
