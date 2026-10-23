@@ -123,55 +123,55 @@ interface NewTodoInput {
   endTime: string | null;
 }
 
-async function insertTodo(ownerKey: string, ownerName: string, t: NewTodoInput): Promise<Todo> {
-  const sb = requireSupabase();
-  const { data, error } = await sb
-    .from("op_todos")
-    .insert({
-      owner_key: ownerKey,
-      owner_name: ownerName,
-      assigned_to: ownerKey,
-      assigned_to_name: ownerName,
-      assigned_by: ownerKey,
-      assigned_by_name: ownerName,
-      title: t.title,
-      notes: t.notes,
-      contact: t.contact,
-      item_date: t.date,
-      start_time: t.startTime,
-      end_time: t.endTime,
-    })
-    .select(TODO_COLUMNS)
-    .single();
+function expectedTodo(todo: Todo) {
+  return {
+    title: todo.title,
+    notes: todo.notes,
+    contact: todo.contact,
+    date: todo.date,
+    startTime: todo.startTime,
+    endTime: todo.endTime,
+    status: todo.status,
+  };
+}
+
+async function todoAction<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+  const { data, error } = await requireSupabase().rpc("operations_todo_action", {
+    p_action: action,
+    p_payload: payload,
+  });
   if (error) throw error;
-  return mapTodo(data as Raw);
+  return data as T;
+}
+
+async function insertTodo(_ownerKey: string, _ownerName: string, t: NewTodoInput): Promise<Todo> {
+  const raw = await todoAction<Raw>("create", {
+    title: t.title, notes: t.notes, contact: t.contact, date: t.date,
+    startTime: t.startTime, endTime: t.endTime,
+  });
+  return mapTodo(raw);
 }
 
 export function useCreateTodo(ownerKey: string | undefined, ownerName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (t: NewTodoInput) => insertTodo(ownerKey as string, ownerName as string, t),
+    mutationFn: (t: NewTodoInput) => {
+      if (!ownerKey || !ownerName) throw new Error("Your profile is not ready.");
+      return insertTodo(ownerKey, ownerName, t);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
 
-// Real recurrence generator, same simplified rules as V1's
-// generateRecurrenceDates: daily/weekly/monthly + interval, optional end
-// date, capped at 12 occurrences, materialized as real rows up front
-// (matching this codebase's existing simple-generation style, not a
-// virtual RFC5545 expansion).
+// Keep recurrence generation in sync with the displayed simple daily/weekly/monthly rule.
 function generateRecurrenceDates(startDate: string, freq: RecurFreq, interval: number, until: string | null, cap: number): string[] {
   const dates = [startDate];
   let cur = startDate;
   while (dates.length < cap) {
     if (freq === "daily") {
-      const d = new Date(cur);
-      d.setDate(d.getDate() + interval);
-      cur = isoDateOnly(d);
+      const d = new Date(cur); d.setDate(d.getDate() + interval); cur = isoDateOnly(d);
     } else if (freq === "weekly") {
-      const d = new Date(cur);
-      d.setDate(d.getDate() + 7 * interval);
-      cur = isoDateOnly(d);
+      const d = new Date(cur); d.setDate(d.getDate() + 7 * interval); cur = isoDateOnly(d);
     } else {
       const [y, m, d] = cur.split("-").map(Number);
       const idx = m - 1 + interval;
@@ -190,34 +190,15 @@ export function useCreateRecurringTodo(ownerKey: string | undefined, ownerName: 
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: NewTodoInput & { recur: { freq: RecurFreq; interval: number; until: string | null } }) => {
-      const sb = requireSupabase();
-      const dates = generateRecurrenceDates(input.date, input.recur.freq, input.recur.interval || 1, input.recur.until, 12);
-      const rows = dates.map((d) => ({
-        owner_key: ownerKey,
-        owner_name: ownerName,
-        assigned_to: ownerKey,
-        assigned_to_name: ownerName,
-        assigned_by: ownerKey,
-        assigned_by_name: ownerName,
-        title: input.title,
-        notes: input.notes,
-        contact: input.contact,
-        item_date: d,
-        start_time: input.startTime,
-        end_time: input.endTime,
-        recurs_freq: input.recur.freq,
-        recurs_interval: input.recur.interval || 1,
-        recurs_until: input.recur.until,
-      }));
-      const { data, error } = await sb.from("op_todos").insert(rows).select(TODO_COLUMNS);
-      if (error) throw error;
-      const mapped = (data as Raw[]).map(mapTodo);
-      if (mapped.length > 1) {
-        const parentId = mapped[0].id;
-        const childIds = mapped.slice(1).map((m) => m.id);
-        await sb.from("op_todos").update({ recurs_parent_id: parentId }).in("id", childIds);
-      }
-      return mapped;
+      if (!ownerKey || !ownerName) throw new Error("Your profile is not ready.");
+      const interval = input.recur.interval || 1;
+      const dates = generateRecurrenceDates(input.date, input.recur.freq, interval, input.recur.until, 12);
+      const rows = await todoAction<Raw[]>("create_series", {
+        title: input.title, notes: input.notes, contact: input.contact, date: input.date,
+        startTime: input.startTime, endTime: input.endTime, freq: input.recur.freq,
+        interval, until: input.recur.until, dates,
+      });
+      return rows.map(mapTodo);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
@@ -226,38 +207,21 @@ export function useCreateRecurringTodo(ownerKey: string | undefined, ownerName: 
 export function useUpdateTodoStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: TodoStatus }) => {
-      const sb = requireSupabase();
-      const patch: Record<string, unknown> = { status };
-      if (status === "done") patch.completed_at = new Date().toISOString();
-      if (status === "cancelled") patch.cancelled_at = new Date().toISOString();
-      const { error } = await sb.from("op_todos").update(patch).eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ todo, status }: { todo: Todo; status: TodoStatus }) => {
+      await todoAction<Raw>("status", { id: todo.id, status, expectedStatus: todo.status });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
 
-// Real drag-to-reschedule: inserts a NEW row at the new date/time and
-// marks the original 'rescheduled' (auditable move), same as V1's real
-// apiRescheduleTodo -- not an in-place date edit.
-export function useRescheduleTodo(ownerKey: string | undefined, ownerName: string | undefined) {
+// Rescheduling is one atomic, auditable action; the original item remains as history.
+export function useRescheduleTodo(_ownerKey: string | undefined, _ownerName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ todo, newDate, newStart, newEnd }: { todo: Todo; newDate: string; newStart: string | null; newEnd: string | null }) => {
-      const created = await insertTodo(ownerKey as string, ownerName as string, {
-        title: todo.title,
-        notes: todo.notes,
-        contact: todo.contact,
-        date: newDate,
-        startTime: newStart,
-        endTime: newEnd,
-      });
-      const sb = requireSupabase();
-      const { error } = await sb.from("op_todos").update({ status: "rescheduled", rescheduled_to_id: created.id }).eq("id", todo.id);
-      if (error) throw error;
-      return created;
-    },
+    mutationFn: async ({ todo, newDate, newStart, newEnd }: { todo: Todo; newDate: string; newStart: string | null; newEnd: string | null }) =>
+      mapTodo(await todoAction<Raw>("reschedule", {
+        id: todo.id, expected: expectedTodo(todo), date: newDate, startTime: newStart, endTime: newEnd,
+      })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
@@ -265,17 +229,15 @@ export function useRescheduleTodo(ownerKey: string | undefined, ownerName: strin
 export function useUpdateTodo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: Partial<NewTodoInput> }) => {
-      const sb = requireSupabase();
+    mutationFn: async ({ todo, patch }: { todo: Todo; patch: Partial<NewTodoInput> }) => {
       const dbPatch: Record<string, unknown> = {};
       if (patch.title !== undefined) dbPatch.title = patch.title;
       if (patch.notes !== undefined) dbPatch.notes = patch.notes;
       if (patch.contact !== undefined) dbPatch.contact = patch.contact;
-      if (patch.date !== undefined) dbPatch.item_date = patch.date;
-      if (patch.startTime !== undefined) dbPatch.start_time = patch.startTime;
-      if (patch.endTime !== undefined) dbPatch.end_time = patch.endTime;
-      const { error } = await sb.from("op_todos").update(dbPatch).eq("id", id);
-      if (error) throw error;
+      if (patch.date !== undefined) dbPatch.date = patch.date;
+      if (patch.startTime !== undefined) dbPatch.startTime = patch.startTime;
+      if (patch.endTime !== undefined) dbPatch.endTime = patch.endTime;
+      await todoAction<Raw>("update", { id: todo.id, expected: expectedTodo(todo), patch: dbPatch });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
@@ -284,11 +246,9 @@ export function useUpdateTodo() {
 export function useDeleteTodo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const sb = requireSupabase();
-      const { error } = await sb.from("op_todos").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (todo: Todo) => todoAction<{ removed: boolean; item: Raw }>("delete", {
+      id: todo.id, expectedStatus: todo.status,
+    }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
@@ -296,16 +256,8 @@ export function useDeleteTodo() {
 export function useCancelFutureRecurrence() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ seriesId, fromDate }: { seriesId: string; fromDate: string }) => {
-      const sb = requireSupabase();
-      const { error } = await sb
-        .from("op_todos")
-        .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
-        .or(`recurs_parent_id.eq.${seriesId},id.eq.${seriesId}`)
-        .eq("status", "open")
-        .gte("item_date", fromDate);
-      if (error) throw error;
-    },
+    mutationFn: async ({ seriesId, fromDate }: { seriesId: string; fromDate: string }) =>
+      todoAction<{ cancelled: number }>("cancel_future", { seriesId, fromDate }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
@@ -329,25 +281,11 @@ export async function checkScheduleConflicts(staffKey: string, date: string, sta
     .map((r) => ({ id: r.id, title: r.title, startTime: (r.start_time ?? "").slice(0, 5), endTime: (r.end_time ?? "").slice(0, 5) }));
 }
 
-export function useEscalateTodo(escalatedBy: string | undefined, escalatedByName: string | undefined) {
+export function useEscalateTodo(_escalatedBy: string | undefined, _escalatedByName: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, toKey, toName, note }: { id: string; toKey: string; toName: string; note: string }) => {
-      const sb = requireSupabase();
-      const { error } = await sb
-        .from("op_todos")
-        .update({
-          assigned_to: toKey,
-          assigned_to_name: toName,
-          escalated_to: toKey,
-          escalated_to_name: toName,
-          escalated_by: escalatedBy,
-          escalated_by_name: escalatedByName,
-          escalated_at: new Date().toISOString(),
-          escalation_note: note,
-        })
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, toKey, note }: { id: string; toKey: string; toName: string; note: string }) => {
+      await todoAction<Raw>("escalate", { id, toKey, note });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });

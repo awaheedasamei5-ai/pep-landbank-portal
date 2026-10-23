@@ -40,44 +40,61 @@ export class IssueLabelService extends APIService {
     return ((data ?? []) as OpLabelRow[]).map(toPlaneLabel);
   }
 
-  /** Phase 4b: real insert into op_labels. */
-  async createIssueLabel(workspaceSlug: string, projectId: string, data: Partial<IIssueLabel>): Promise<IIssueLabel> {
+  /** Guarded server insert into op_labels. */
+  async createIssueLabel(_workspaceSlug: string, projectId: string, data: Partial<IIssueLabel>): Promise<IIssueLabel> {
     const sb = requireSupabase();
-    const workspaceId = await getWorkspaceIdBySlug(workspaceSlug);
-    const { data: row, error } = await sb
-      .from("op_labels")
-      .insert({
-        workspace_id: workspaceId,
-        project_id: projectId,
-        name: data.name,
-        color: data.color ?? "#60646C",
-        parent_id: data.parent ?? null,
-        sort_order: data.sort_order ?? 0,
-      })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_label", {
+      p_project_id: projectId,
+      p_name: data.name,
+      p_color: data.color ?? "#60646C",
+      p_parent_id: data.parent ?? null,
+    });
     if (error) throw error;
     return toPlaneLabel(row as OpLabelRow);
   }
 
-  /** Phase 4b: real update of op_labels. */
-  async patchIssueLabel(_workspaceSlug: string, _projectId: string, labelId: string, data: Partial<IIssueLabel>): Promise<IIssueLabel> {
+  /** Guarded stale-checked update of op_labels. */
+  async patchIssueLabel(_workspaceSlug: string, projectId: string, labelId: string, data: Partial<IIssueLabel>): Promise<IIssueLabel> {
     const sb = requireSupabase();
     const patch: Record<string, unknown> = {};
     if (data.name !== undefined) patch.name = data.name;
     if (data.color !== undefined) patch.color = data.color;
     if (data.parent !== undefined) patch.parent_id = data.parent;
     if (data.sort_order !== undefined) patch.sort_order = data.sort_order;
-    const { data: row, error } = await sb.from("op_labels").update(patch).eq("id", labelId).select("*").single();
+    const { data: current, error: currentError } = await sb
+      .from("op_labels")
+      .select("updated_at")
+      .eq("id", labelId)
+      .eq("project_id", projectId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("Label not found.");
+    const { data: row, error } = await sb.rpc("update_operation_label", {
+      p_project_id: projectId,
+      p_label_id: labelId,
+      p_expected_updated_at: current.updated_at,
+      p_patch: patch,
+    });
     if (error) throw error;
     return toPlaneLabel(row as OpLabelRow);
   }
 
-  /** Phase 4b: real delete from op_labels. */
-  async deleteIssueLabel(_workspaceSlug: string, _projectId: string, labelId: string): Promise<{ success: true }> {
+  /** Guarded delete; child labels are rejected and issue links are audited. */
+  async deleteIssueLabel(_workspaceSlug: string, projectId: string, labelId: string): Promise<{ success: true }> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_labels").delete().eq("id", labelId);
+    const { data: current, error: currentError } = await sb
+      .from("op_labels")
+      .select("updated_at")
+      .eq("id", labelId)
+      .eq("project_id", projectId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("Label not found.");
+    const { error } = await sb.rpc("delete_operation_label", {
+      p_project_id: projectId,
+      p_label_id: labelId,
+      p_expected_updated_at: current.updated_at,
+    });
     if (error) throw error;
     return { success: true };
   }
 }
+

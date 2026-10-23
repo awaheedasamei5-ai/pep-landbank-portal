@@ -23,24 +23,15 @@ export class ProjectStateService extends APIService {
     super(API_BASE_URL);
   }
 
-  /** Phase 4b: real insert into op_states. */
-  async createState(workspaceSlug: string, projectId: string, data: Partial<IState>): Promise<IState> {
+  /** Guarded server insert into op_states. */
+  async createState(_workspaceSlug: string, projectId: string, data: Partial<IState>): Promise<IState> {
     const sb = requireSupabase();
-    const workspaceId = await getWorkspaceIdBySlug(workspaceSlug);
-    const { data: row, error } = await sb
-      .from("op_states")
-      .insert({
-        workspace_id: workspaceId,
-        project_id: projectId,
-        name: data.name,
-        color: data.color ?? "#60646C",
-        description: data.description ?? null,
-        group: data.group ?? "unstarted",
-        sequence: data.sequence ?? 0,
-        order: data.order ?? 0,
-      })
-      .select("*")
-      .single();
+    const { data: row, error } = await sb.rpc("create_operation_state", {
+      p_project_id: projectId,
+      p_name: data.name,
+      p_color: data.color ?? "#60646C",
+      p_group: data.group ?? "unstarted",
+    });
     if (error) throw error;
     return toPlaneState(row as OpStateRow);
   }
@@ -57,12 +48,19 @@ export class ProjectStateService extends APIService {
    */
   async markDefault(_workspaceSlug: string, projectId: string, stateId: string): Promise<void> {
     const sb = requireSupabase();
-    const { error: clearError } = await sb.from("op_states").update({ default: false }).eq("project_id", projectId);
-    if (clearError) throw clearError;
-    const { error } = await sb.from("op_states").update({ default: true }).eq("id", stateId);
+    const { data: current, error: currentError } = await sb
+      .from("op_states")
+      .select("updated_at")
+      .eq("id", stateId)
+      .eq("project_id", projectId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("State not found.");
+    const { error } = await sb.rpc("set_operation_default_state", {
+      p_project_id: projectId,
+      p_state_id: stateId,
+      p_expected_updated_at: current.updated_at,
+    });
     if (error) throw error;
-    const { error: projectError } = await sb.from("op_projects").update({ default_state_id: stateId }).eq("id", projectId);
-    if (projectError) throw projectError;
   }
 
   /** Phase 4b: real read from op_states. */
@@ -94,8 +92,8 @@ export class ProjectStateService extends APIService {
     return this.patchState(workspaceSlug, projectId, stateId, data);
   }
 
-  /** Phase 4b: real update of op_states. */
-  async patchState(_workspaceSlug: string, _projectId: string, stateId: string, data: Partial<IState>): Promise<IState> {
+  /** Guarded stale-checked update of op_states. */
+  async patchState(_workspaceSlug: string, projectId: string, stateId: string, data: Partial<IState>): Promise<IState> {
     const sb = requireSupabase();
     const patch: Record<string, unknown> = {};
     if (data.name !== undefined) patch.name = data.name;
@@ -104,15 +102,38 @@ export class ProjectStateService extends APIService {
     if (data.group !== undefined) patch.group = data.group;
     if (data.sequence !== undefined) patch.sequence = data.sequence;
     if (data.order !== undefined) patch.order = data.order;
-    const { data: row, error } = await sb.from("op_states").update(patch).eq("id", stateId).select("*").single();
+    const { data: current, error: currentError } = await sb
+      .from("op_states")
+      .select("updated_at")
+      .eq("id", stateId)
+      .eq("project_id", projectId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("State not found.");
+    const { data: row, error } = await sb.rpc("update_operation_state", {
+      p_project_id: projectId,
+      p_state_id: stateId,
+      p_expected_updated_at: current.updated_at,
+      p_patch: patch,
+    });
     if (error) throw error;
     return toPlaneState(row as OpStateRow);
   }
 
-  /** Phase 4b: real delete from op_states. */
-  async deleteState(_workspaceSlug: string, _projectId: string, stateId: string): Promise<{ success: true }> {
+  /** Guarded delete; used/default states are rejected by the server. */
+  async deleteState(_workspaceSlug: string, projectId: string, stateId: string): Promise<{ success: true }> {
     const sb = requireSupabase();
-    const { error } = await sb.from("op_states").delete().eq("id", stateId);
+    const { data: current, error: currentError } = await sb
+      .from("op_states")
+      .select("updated_at")
+      .eq("id", stateId)
+      .eq("project_id", projectId)
+      .single();
+    if (currentError || !current) throw currentError ?? new Error("State not found.");
+    const { error } = await sb.rpc("delete_operation_state", {
+      p_project_id: projectId,
+      p_state_id: stateId,
+      p_expected_updated_at: current.updated_at,
+    });
     if (error) throw error;
     return { success: true };
   }
@@ -126,3 +147,4 @@ export class ProjectStateService extends APIService {
     return ((data ?? []) as OpStateRow[]).map(toPlaneState);
   }
 }
+

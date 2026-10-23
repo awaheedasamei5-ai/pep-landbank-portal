@@ -559,6 +559,7 @@ export class ProjectStore implements IProjectStore {
       });
       const response = await this.projectService.updateProject(workspaceSlug, projectId, data);
       runInAction(() => {
+        set(this.projectMap, [projectId], response);
         this.isUpdatingProject = false;
       });
       return response;

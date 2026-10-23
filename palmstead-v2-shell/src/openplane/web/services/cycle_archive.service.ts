@@ -10,47 +10,72 @@ import type { ICycle } from "@plane/types";
 // helpers
 // services
 import { APIService } from "@openplane-web/services/api.service";
+import { toPlaneCycle, type OpCycleRow } from "@openplane-web/lib/palmstead-adapters";
+import { requireSupabase } from "@/lib/supabase.client";
 
 export class CycleArchiveService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
-  async getArchivedCycles(workspaceSlug: string, projectId: string): Promise<ICycle[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/archived-cycles/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  async getArchivedCycles(_workspaceSlug: string, projectId: string): Promise<ICycle[]> {
+    const sb = requireSupabase();
+    const { data, error } = await sb
+      .from("op_cycles")
+      .select("*")
+      .eq("project_id", projectId)
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as OpCycleRow[]).map((row) => toPlaneCycle(row, undefined));
   }
 
-  async getArchivedCycleDetails(workspaceSlug: string, projectId: string, cycleId: string): Promise<ICycle> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/archived-cycles/${cycleId}/`)
-      .then((res) => res?.data)
-      .catch((err) => {
-        throw err?.response?.data;
-      });
+  async getArchivedCycleDetails(_workspaceSlug: string, projectId: string, cycleId: string): Promise<ICycle> {
+    const sb = requireSupabase();
+    const { data, error } = await sb
+      .from("op_cycles")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("id", cycleId)
+      .not("archived_at", "is", null)
+      .single();
+    if (error) throw error;
+    return toPlaneCycle(data as OpCycleRow, undefined);
   }
 
   async archiveCycle(
-    workspaceSlug: string,
+    _workspaceSlug: string,
     projectId: string,
-    cycleId: string
+    cycleId: string,
+    expectedUpdatedAt?: string
   ): Promise<{
     archived_at: string;
   }> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/archive/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+    const sb = requireSupabase();
+    const { data, error } = await sb.rpc("set_operation_cycle_archive", {
+      p_project_id: projectId,
+      p_cycle_id: cycleId,
+      p_archived: true,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+    });
+    if (error) throw error;
+    return { archived_at: (data as OpCycleRow).archived_at ?? new Date().toISOString() };
   }
 
-  async restoreCycle(workspaceSlug: string, projectId: string, cycleId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/archive/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
+  async restoreCycle(
+    _workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    expectedUpdatedAt?: string
+  ): Promise<void> {
+    const sb = requireSupabase();
+    const { error } = await sb.rpc("set_operation_cycle_archive", {
+      p_project_id: projectId,
+      p_cycle_id: cycleId,
+      p_archived: false,
+      p_expected_updated_at: expectedUpdatedAt ?? null,
+    });
+    if (error) throw error;
   }
 }
+

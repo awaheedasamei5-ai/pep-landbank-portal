@@ -434,7 +434,10 @@ export class ModulesStore implements IModuleStore {
       runInAction(() => {
         set(this.moduleMap, [moduleId], { ...originalModuleDetails, ...data });
       });
-      const response = await this.moduleService.patchModule(workspaceSlug, projectId, moduleId, data);
+      const response = await this.moduleService.patchModule(workspaceSlug, projectId, moduleId, {
+        ...data,
+        updated_at: originalModuleDetails?.updated_at,
+      });
       return response;
     } catch (error) {
       console.error("Failed to update module in module store", error);
@@ -454,7 +457,7 @@ export class ModulesStore implements IModuleStore {
   deleteModule = async (workspaceSlug: string, projectId: string, moduleId: string) => {
     const moduleDetails = this.getModuleById(moduleId);
     if (!moduleDetails) return;
-    await this.moduleService.deleteModule(workspaceSlug, projectId, moduleId).then(() => {
+    await this.moduleService.deleteModule(workspaceSlug, projectId, moduleId, moduleDetails.updated_at).then(() => {
       runInAction(() => {
         delete this.moduleMap[moduleId];
         if (this.rootStore.favorite.entityMap[moduleId]) this.rootStore.favorite.removeFavoriteFromStore(moduleId);
@@ -605,7 +608,7 @@ export class ModulesStore implements IModuleStore {
     const moduleDetails = this.getModuleById(moduleId);
     if (moduleDetails?.archived_at) return;
     await this.moduleArchiveService
-      .archiveModule(workspaceSlug, projectId, moduleId)
+      .archiveModule(workspaceSlug, projectId, moduleId, moduleDetails?.updated_at)
       .then((response) => {
         runInAction(() => {
           set(this.moduleMap, [moduleId, "archived_at"], response.archived_at);
@@ -628,7 +631,7 @@ export class ModulesStore implements IModuleStore {
     const moduleDetails = this.getModuleById(moduleId);
     if (!moduleDetails?.archived_at) return;
     await this.moduleArchiveService
-      .restoreModule(workspaceSlug, projectId, moduleId)
+      .restoreModule(workspaceSlug, projectId, moduleId, moduleDetails?.updated_at)
       .then(() => {
         runInAction(() => {
           set(this.moduleMap, [moduleId, "archived_at"], null);
@@ -639,3 +642,4 @@ export class ModulesStore implements IModuleStore {
       });
   };
 }
+

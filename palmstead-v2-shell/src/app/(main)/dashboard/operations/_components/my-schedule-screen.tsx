@@ -151,7 +151,7 @@ function TodoDetailDialog({
 	async function saveEdits() {
 		if (title !== todo.title || notes !== (todo.notes ?? "")) {
 			await updateTodo.mutateAsync({
-				id: todo.id,
+				todo,
 				patch: { title, notes: notes || null },
 			});
 		}
@@ -170,13 +170,11 @@ function TodoDetailDialog({
 					<Input
 						value={title}
 						onChange={(e) => setTitle(e.target.value)}
-						onBlur={saveEdits}
 						placeholder="Title"
 					/>
 					<Textarea
 						value={notes}
 						onChange={(e) => setNotes(e.target.value)}
-						onBlur={saveEdits}
 						placeholder="Notes"
 						rows={3}
 					/>
@@ -191,13 +189,18 @@ function TodoDetailDialog({
 					)}
 				</div>
 				<DialogFooter className="flex-wrap gap-2 sm:justify-between">
-					<div className="flex gap-2">
+					<div className="flex flex-wrap gap-2">
+						{(title !== todo.title || notes !== (todo.notes ?? "")) && (
+							<Button size="sm" variant="outline" disabled={updateTodo.isPending} onClick={() => saveEdits().then(onClose)}>
+								Save changes
+							</Button>
+						)}
 						{todo.status === "open" && (
 							<Button
 								size="sm"
 								onClick={() =>
 									updateStatus
-										.mutateAsync({ id: todo.id, status: "done" })
+										.mutateAsync({ todo, status: "done" })
 										.then(onClose)
 								}
 							>
@@ -211,7 +214,7 @@ function TodoDetailDialog({
 								variant="outline"
 								onClick={() =>
 									updateStatus
-										.mutateAsync({ id: todo.id, status: "cancelled" })
+										.mutateAsync({ todo, status: "cancelled" })
 										.then(onClose)
 								}
 							>
@@ -229,7 +232,7 @@ function TodoDetailDialog({
 						title="Delete this item?"
 						description="This permanently removes it from your schedule."
 						confirmLabel="Delete"
-						onConfirm={() => deleteTodo.mutateAsync(todo.id).then(onClose)}
+						onConfirm={() => deleteTodo.mutateAsync(todo).then(onClose)}
 					/>
 				</DialogFooter>
 			</DialogContent>

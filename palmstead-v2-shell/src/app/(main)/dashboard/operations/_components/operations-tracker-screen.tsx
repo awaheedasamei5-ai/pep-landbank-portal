@@ -19,6 +19,7 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { MyScheduleScreen } from "./my-schedule-screen";
 import { OperationsAuditLog } from "./operations-audit-log";
+import { OperationsArchive } from "./operations-archive";
 import { OperationsCommandCenter } from "./operations-command-center";
 import { OperationsWorkQueuePage } from "./operations-work-queue-page";
 
@@ -33,7 +34,7 @@ const WORKSPACE_SLUG = "palmstead";
 
 export const OperationsTrackerScreen = observer(
 	function OperationsTrackerScreen() {
-		const [view, setView] = usePortalTab("view", ["overview", "schedule", "queue", "audit"] as const, "overview");
+		const [view, setView] = usePortalTab("view", ["overview", "schedule", "queue", "audit", "archive"] as const, "overview");
 		const [loading, setLoading] = useState(true);
 		const [error, setError] = useState<string | null>(null);
 		const [showNewProject, setShowNewProject] = useState(false);
@@ -104,6 +105,7 @@ export const OperationsTrackerScreen = observer(
 								<TabsTrigger value="schedule">My Schedule</TabsTrigger>
 								<TabsTrigger value="queue">Work Queue</TabsTrigger>
 								<TabsTrigger value="audit">Audit Log</TabsTrigger>
+								{canResetData && <TabsTrigger value="archive">Deleted</TabsTrigger>}
 							</TabsList>
 						</Tabs>
 					}
@@ -216,6 +218,7 @@ export const OperationsTrackerScreen = observer(
 				{view === "schedule" && <MyScheduleScreen />}
 				{view === "queue" && <OperationsWorkQueuePage />}
 				{view === "audit" && <OperationsAuditLog />}
+				{view === "archive" && <OperationsArchive />}
 			</div>
 		);
 	},
