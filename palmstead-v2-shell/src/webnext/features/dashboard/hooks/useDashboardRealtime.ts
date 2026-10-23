@@ -105,6 +105,29 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
       queryClient.invalidateQueries({ queryKey: ['contractRequests'] });
     };
+    // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 4 -- these 7
+    // tables (Templates/Clauses/Vault/Style/Drafts, shipped this build)
+    // were never in this bridge at all, and weren't even in the
+    // supabase_realtime publication until this same migration -- a
+    // clause edited or a template published on one device left every
+    // other open Clause Library/Template Studio/Drafts/Style screen
+    // stale until a manual refresh, unlike every other app here.
+    const invalidateContractDrafts = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractDrafts'] });
+    };
+    const invalidateContractTemplates = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractTemplates'] });
+      queryClient.invalidateQueries({ queryKey: ['contractTemplateVersions'] });
+    };
+    const invalidateContractClauses = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractClauses'] });
+    };
+    const invalidateContractGenerations = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractGenerations'] });
+    };
+    const invalidateContractStyleSettings = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractStyleSettings'] });
+    };
     const invalidateReferrals = () => {
       queryClient.invalidateQueries({ queryKey: ['referrals'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
@@ -213,6 +236,12 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plots' }, invalidateAllocations)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contracts' }, invalidateContracts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_requests' }, invalidateContracts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_drafts' }, invalidateContractDrafts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_templates' }, invalidateContractTemplates)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_template_versions' }, invalidateContractTemplates)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_clauses' }, invalidateContractClauses)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_generations' }, invalidateContractGenerations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_style_settings' }, invalidateContractStyleSettings)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, invalidateReferrals);
     if (isManager) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table: 'staff_permission_overrides' }, invalidatePermissions);
