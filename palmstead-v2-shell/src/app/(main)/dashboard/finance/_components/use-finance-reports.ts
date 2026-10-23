@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 // Real cross-section Report Builder (Accounting app, Part B.10 --
 // docs/plans/05-accounting-app-blueprint.md). Real domain research: a
@@ -30,9 +31,10 @@ export interface PaymentsReportRow {
 }
 
 export function usePaymentsReport(range: DateRange, enabled: boolean) {
+  const profile = useAuthStore((state) => state.profile);
   return useQuery({
-    queryKey: ["report-payments", range],
-    enabled,
+    queryKey: ["report-payments", profile?.key, profile?.role, range],
+    enabled: enabled && !!profile?.key,
     queryFn: async (): Promise<PaymentsReportRow[]> => {
       const sb = requireSupabase();
       const { data, error } = await sb
@@ -65,9 +67,10 @@ export interface ExpensesReportRow {
 }
 
 export function useExpensesReport(range: DateRange, enabled: boolean) {
+  const profile = useAuthStore((state) => state.profile);
   return useQuery({
-    queryKey: ["report-expenses", range],
-    enabled,
+    queryKey: ["report-expenses", profile?.key, profile?.role, range],
+    enabled: enabled && !!profile?.key,
     queryFn: async (): Promise<ExpensesReportRow[]> => {
       const sb = requireSupabase();
       const { data, error } = await sb
@@ -111,9 +114,10 @@ function monthsBetween(start: string, end: string): string[] {
 }
 
 export function useCommissionReport(range: DateRange, enabled: boolean) {
+  const profile = useAuthStore((state) => state.profile);
   return useQuery({
-    queryKey: ["report-commission", range],
-    enabled,
+    queryKey: ["report-commission", profile?.key, profile?.role, range],
+    enabled: enabled && !!profile?.key,
     queryFn: async (): Promise<CommissionReportRow[]> => {
       const sb = requireSupabase();
       const months = monthsBetween(range.start, range.end);
@@ -140,9 +144,10 @@ export interface PayrollReportRow {
 }
 
 export function usePayrollReport(range: DateRange, enabled: boolean) {
+  const profile = useAuthStore((state) => state.profile);
   return useQuery({
-    queryKey: ["report-payroll", range],
-    enabled,
+    queryKey: ["report-payroll", profile?.key, profile?.role, range],
+    enabled: enabled && profile?.role === "manager",
     queryFn: async (): Promise<PayrollReportRow[]> => {
       const sb = requireSupabase();
       const startMonth = range.start.slice(0, 7);
@@ -173,3 +178,4 @@ export function usePayrollReport(range: DateRange, enabled: boolean) {
     },
   });
 }
+
