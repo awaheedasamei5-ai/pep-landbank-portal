@@ -96,6 +96,7 @@ export function TemplatePreviewScreen() {
   const resolved: ContractSection[] = resolveSections(version.content, fieldValues);
 
   async function download() {
+    if (!config) return;
     let cover: string | null = null;
     try {
       cover = config.contractCoverImage || (await loadImageAsDataUri("/contract-cover.jpg"));
