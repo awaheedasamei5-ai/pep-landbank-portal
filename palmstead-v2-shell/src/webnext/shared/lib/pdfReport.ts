@@ -24,8 +24,8 @@ export function pdfFitText(doc: jsPDF, text: unknown, maxW: number): string {
   if (!str) return '';
   if (doc.getTextWidth(str) <= maxW) return str;
   let t = str;
-  while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
-  return t + '…';
+  while (t.length > 1 && doc.getTextWidth(`${t}...`) > maxW) t = t.slice(0, -1);
+  return `${t}...`;
 }
 
 // Full-width navy header band with the PEP Landbank logo on its own white
@@ -219,45 +219,72 @@ export interface PdfLedgerLine {
 // subtotal between sections), not a flat stat-card dashboard. Every
 // report PDF in this app (Payments/Expenses/Commission/Payroll/Summary)
 // is built from this, so they all read as one consistent document family.
-export function pdfLedgerSection(doc: jsPDF, y: number, pageW: number, title: string, lines: PdfLedgerLine[], totalLabel: string, totalValue: string, options?: { emphasize?: boolean }): number {
+export function pdfLedgerSection(
+  doc: jsPDF,
+  y: number,
+  pageW: number,
+  title: string,
+  lines: PdfLedgerLine[],
+  totalLabel: string,
+  totalValue: string,
+  options?: { emphasize?: boolean; showEmptyMessage?: boolean },
+): number {
+  let cursor = y;
   const usableW = pageW - 24;
+  const contentBottom = doc.internal.pageSize.getHeight() - 26;
+  const continueSection = () => {
+    doc.addPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_MUTED);
+    doc.text(`${title.toUpperCase()} (CONTINUED)`, 12, 16);
+    doc.setTextColor(20, 20, 20);
+    return 22;
+  };
+
+  if (cursor + 5 > contentBottom) {
+    doc.addPage();
+    cursor = 16;
+  }
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...PDF_INK);
-  doc.text(title.toUpperCase(), 12, y);
-  y += 5;
+  doc.text(title.toUpperCase(), 12, cursor);
+  cursor += 5;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.3);
-  if (lines.length === 0) {
+  if (lines.length === 0 && options?.showEmptyMessage !== false) {
     doc.setTextColor(...PDF_MUTED);
-    doc.text('No entries', 16, y + 1);
-    y += 6.5;
+    doc.text('No entries', 16, cursor + 1);
+    cursor += 6.5;
   } else {
-    lines.forEach((line) => {
+    for (const line of lines) {
+      if (cursor + 6.5 + 8 > contentBottom) cursor = continueSection();
       doc.setTextColor(60, 66, 74);
-      doc.text(pdfFitText(doc, line.label, usableW * 0.65), 16, y + 1);
+      doc.text(pdfFitText(doc, line.label, usableW * 0.65), 16, cursor + 1);
       doc.setTextColor(20, 20, 20);
-      doc.text(line.value, 12 + usableW, y + 1, { align: 'right' });
+      doc.text(line.value, 12 + usableW, cursor + 1, { align: 'right' });
       doc.setDrawColor(238, 241, 245);
       doc.setLineWidth(0.2);
-      doc.line(12, y + 3, 12 + usableW, y + 3);
-      y += 6.5;
-    });
+      doc.line(12, cursor + 3, 12 + usableW, cursor + 3);
+      cursor += 6.5;
+    }
   }
 
   const totalH = options?.emphasize ? 9 : 7.5;
+  if (cursor + totalH > contentBottom) cursor = continueSection();
   doc.setFillColor(options?.emphasize ? 244 : 248, options?.emphasize ? 246 : 249, options?.emphasize ? 240 : 251);
-  doc.rect(12, y, usableW, totalH, 'F');
+  doc.rect(12, cursor, usableW, totalH, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(options?.emphasize ? 10 : 8.6);
   doc.setTextColor(...PDF_INK);
-  doc.text(totalLabel.toUpperCase(), 16, y + totalH / 2 + 1.5);
-  doc.text(totalValue, 12 + usableW - 4, y + totalH / 2 + 1.5, { align: 'right' });
-  y += totalH + 7;
+  doc.text(totalLabel.toUpperCase(), 16, cursor + totalH / 2 + 1.5);
+  doc.text(totalValue, 12 + usableW - 4, cursor + totalH / 2 + 1.5, { align: 'right' });
+  cursor += totalH + 7;
 
   doc.setTextColor(20, 20, 20);
-  return y;
+  return cursor;
 }
 
 export interface PdfLinePoint {
@@ -339,8 +366,8 @@ export function pdfReportFooter(doc: jsPDF, companyName: string | null | undefin
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(120, 130, 145);
-    doc.text((companyName || 'PEP Landbank') + ' · Confidential', 12, pageH - 9);
-    doc.text('Page ' + i + ' of ' + pageCount, pageW - 12, pageH - 9, { align: 'right' });
+    doc.text(`${companyName || 'PEP Landbank'} | Confidential`, 12, pageH - 9);
+    doc.text(`Page ${i} of ${pageCount}`, pageW - 12, pageH - 9, { align: 'right' });
   }
   doc.setTextColor(20, 20, 20);
 }
