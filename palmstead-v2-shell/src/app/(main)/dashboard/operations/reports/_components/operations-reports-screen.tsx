@@ -163,6 +163,7 @@ async function loadReportData(
 						.from("profiles")
 						.select("agent_key,name")
 						.eq("active", true)
+						.neq("role", "manager")
 						.range(from, to),
 				)
 			: Promise.resolve([] as { agent_key: string; name: string }[]),
