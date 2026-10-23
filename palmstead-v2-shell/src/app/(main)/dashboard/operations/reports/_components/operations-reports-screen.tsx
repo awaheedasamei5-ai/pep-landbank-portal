@@ -60,6 +60,7 @@ import {
 	formatDelta,
 	isCurrentOpen,
 	parseReportFilters,
+	summarizeIssueMetrics,
 	type OperationsReportFilters,
 	writeReportFilters,
 } from "./operations-report-model";
@@ -88,7 +89,9 @@ type StaffMetric = {
 	name: string;
 	open: number;
 	overdue: number;
+	created: number;
 	completed: number;
+	due: number;
 };
 type ReportExportSection = "all" | "summary" | "comparison" | "trend" | "workload" | "register";
 const exportSectionLabels: Record<ReportExportSection, string> = {
@@ -378,7 +381,12 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				if (reportType === "open-overdue" && !isOpen(issue)) return false;
 				if (reportType === "completed" && !dateInRange(issue.completed_at, start, end)) return false;
 				if (reportType === "created" && !dateInRange(issue.created_at, start, end)) return false;
-				if (reportType === "due" && !dateInRange(issue.target_date, start, end)) return false;
+				if (
+					reportType === "due" &&
+					(!dateInRange(issue.target_date, start, end) ||
+						issue.stateGroup === "completed" ||
+						issue.stateGroup === "cancelled")
+				) return false;
 				return true;
 			}),
 		[facetFiltered, reportType, start, end],
@@ -391,47 +399,42 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		() => buildTrend(facetFiltered, { start, end }),
 		[facetFiltered, start, end],
 	);
+	const reportAsOfDate = todayIso();
 	const summary = useMemo(
-		() => ({
-			total: filtered.length,
-			open: filtered.filter(isOpen).length,
-			overdue: filtered.filter(
-				(issue) =>
-					isOpen(issue) && issue.target_date && issue.target_date < todayIso(),
-			).length,
-			completedInRange: filtered.filter((issue) =>
-				dateInRange(issue.completed_at, start, end),
-			).length,
-			unassigned: filtered.filter(
-				(issue) => isOpen(issue) && issue.assignees.length === 0,
-			).length,
-		}),
-		[filtered, start, end],
+		() => {
+			const metrics = summarizeIssueMetrics(facetFiltered, { start, end }, reportAsOfDate);
+			return {
+				total: filtered.length,
+				open: metrics.openNow,
+				overdue: metrics.overdueNow,
+				createdInRange: metrics.createdInRange,
+				completedInRange: metrics.completedInRange,
+				dueInRange: metrics.dueInRange,
+				unassigned: metrics.unassignedOpen,
+			};
+		},
+		[filtered.length, facetFiltered, start, end, reportAsOfDate],
 	);
 	const staffMetrics = useMemo(
 		() =>
 			(data?.staff ?? [])
 				.map((staff): StaffMetric => {
-					const mine = filtered.filter((issue) =>
+					const mine = facetFiltered.filter((issue) =>
 						issue.assignees.includes(staff.key),
 					);
+					const metrics = summarizeIssueMetrics(mine, { start, end }, reportAsOfDate);
 					return {
 						key: staff.key,
 						name: staff.name,
-						open: mine.filter(isOpen).length,
-						overdue: mine.filter(
-							(issue) =>
-								isOpen(issue) &&
-								issue.target_date &&
-								issue.target_date < todayIso(),
-						).length,
-						completed: mine.filter((issue) =>
-							dateInRange(issue.completed_at, start, end),
-						).length,
+						open: metrics.openNow,
+						overdue: metrics.overdueNow,
+						created: metrics.createdInRange,
+						completed: metrics.completedInRange,
+						due: metrics.dueInRange,
 					};
 				})
 				.sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
-		[data?.staff, filtered, start, end],
+		[data?.staff, facetFiltered, start, end, reportAsOfDate],
 	);
 	let summaryCards: { label: string; value: number }[];
 	if (reportType === "open-overdue" && manager) {
@@ -559,17 +562,17 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		try {
 			const doc = new jsPDF({ unit: "mm", format: "a4" });
 			const filters = [
-				`Project: ${projectId === "all" ? "All" : (projects.find((project) => project.id === projectId)?.name ?? "Selected")}`,
-				`Status: ${statusGroup}`,
-				`Priority: ${priority}`,
-				manager ? `Staff: ${staffFilterLabel}` : "Staff: self only",
-			].join(" · ");
+					`Project: ${projectId === "all" ? "All" : (projects.find((project) => project.id === projectId)?.name ?? "Selected")}`,
+					`Status: ${statusGroup}`,
+					`Priority: ${priority}`,
+					manager ? `Staff: ${staffFilterLabel}` : "Staff: self only",
+				].join(" | ");
 			let y = pdfBrandedHeader(
 				doc,
 				"Operations report",
 				reportType === "open-overdue"
-					? `Current open work snapshot · ${todayIso()}`
-					: `${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
+					? `Current open work snapshot | ${todayIso()}`
+					: `${reportType.replaceAll("-", " ")} | ${start} to ${end}`,
 				[`${scopeLabel}`, exportSectionLabels[exportSection], `Generated ${today()}`],
 				null,
 			);
@@ -608,7 +611,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					y,
 					doc.internal.pageSize.getWidth(),
 					"Period comparison",
-					`Current ${start} to ${end} · Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
+					`Current ${start} to ${end} | Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
 				);
 				autoTable(doc, {
 					startY: y,
@@ -633,7 +636,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					y,
 					doc.internal.pageSize.getWidth(),
 					"Created and completed trend",
-					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets · selected filters · no historical state is inferred`,
+					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets | selected filters | no historical state is inferred`,
 				);
 				const chartLeft = 22;
 				const chartWidth = doc.internal.pageSize.getWidth() - 34;
@@ -710,9 +713,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				);
 				autoTable(doc, {
 					startY: y,
-					head: [["Staff member", "Open now", "Overdue now", "Completed in period"]],
-					body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.completed]),
-					styles: { fontSize: 8 },
+						head: [["Staff member", "Open now", "Overdue now", "Created in period", "Completed in period", "Due in period"]],
+						body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.created, row.completed, row.due]),
+						styles: { fontSize: 7 },
 					margin: { bottom: 20 },
 				});
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
@@ -731,9 +734,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					head: [["ID", "Issue", "Project", "Status", "Priority", "Due"]],
 					body: displayIssues.length
 						? displayIssues.map((issue) => [
-								issueCode(issue), issue.name, issue.project, issue.state, issue.priority ?? "None", issue.target_date ?? "—",
+								issueCode(issue), issue.name, issue.project, issue.state, issue.priority ?? "None", issue.target_date ?? "-",
 							])
-						: [["—", "No issues match these filters", "—", "—", "—", "—"]],
+						: [["-", "No issues match these filters", "-", "-", "-", "-"]],
 					styles: { fontSize: 7, cellPadding: 2 },
 					columnStyles: { 1: { cellWidth: 65 }, 2: { cellWidth: 30 } },
 					margin: { bottom: 20 },
@@ -1077,16 +1080,14 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								<CardContent className="p-0">
 									<Table>
 										<TableHeader>
-											<TableRow>
-												<TableHead>Staff member</TableHead>
-												<TableHead className="text-right">Open</TableHead>
-												<TableHead className="text-right">
-													Overdue now
-												</TableHead>
-												<TableHead className="text-right">
-													Completed in period
-												</TableHead>
-											</TableRow>
+							<TableRow>
+								<TableHead>Staff member</TableHead>
+								<TableHead className="text-right">Open now</TableHead>
+								<TableHead className="text-right">Overdue now</TableHead>
+								<TableHead className="text-right">Created in period</TableHead>
+								<TableHead className="text-right">Completed in period</TableHead>
+								<TableHead className="text-right">Due in period</TableHead>
+							</TableRow>
 										</TableHeader>
 										<TableBody>
 											{staffMetrics.map((row) => (
@@ -1101,8 +1102,12 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 														{row.overdue}
 													</TableCell>
 													<TableCell className="text-right tabular-nums">
+									{row.created}
+								</TableCell>
+								<TableCell className="text-right tabular-nums">
 														{row.completed}
 													</TableCell>
+								<TableCell className="text-right tabular-nums">{row.due}</TableCell>
 												</TableRow>
 											))}
 										</TableBody>
