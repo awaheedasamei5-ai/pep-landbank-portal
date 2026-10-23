@@ -5,6 +5,7 @@ import {
   isCurrentOpen,
   parseReportFilters,
   previousDateRange,
+  summarizeIssueMetrics,
   writeReportFilters,
 } from "../src/app/(main)/dashboard/operations/reports/_components/operations-report-model.ts";
 import assert from "node:assert/strict";
@@ -28,21 +29,22 @@ test("previous-year range clamps leap day to the last valid day", () => {
   );
 });
 
-test("comparison counts created and completed events independently and handles zero baselines", () => {
+test("comparison counts created, completed, and currently assigned due dates independently", () => {
   const rows = [
-    { created_at: "2026-05-05T10:00:00Z", completed_at: "2026-04-29T10:00:00Z", target_date: null },
-    { created_at: "2026-04-28T10:00:00Z", completed_at: "2026-05-06T10:00:00Z", target_date: null },
+    { created_at: "2026-05-05T10:00:00Z", completed_at: "2026-04-29T10:00:00Z", target_date: "2026-05-08" },
+    { created_at: "2026-04-28T10:00:00Z", completed_at: "2026-05-06T10:00:00Z", target_date: "2026-04-30" },
   ];
   const result = comparePeriods(rows, { start: "2026-05-04", end: "2026-05-10" }, "previous-period");
-  assert.deepEqual(result.current, { created: 1, completed: 1 });
-  assert.deepEqual(result.previous, { created: 1, completed: 1 });
-  assert.deepEqual(result.delta, { created: 0, completed: 0 });
+  assert.deepEqual(result.current, { created: 1, completed: 1, due: 1 });
+  assert.deepEqual(result.previous, { created: 1, completed: 1, due: 1 });
+  assert.deepEqual(result.delta, { created: 0, completed: 0, due: 0 });
   const noBaseline = comparePeriods(
     [{ created_at: "2026-05-05", completed_at: null, target_date: null }],
     { start: "2026-05-04", end: "2026-05-10" },
     "previous-period",
   );
   assert.equal(noBaseline.percent.created, null);
+  assert.equal(noBaseline.percent.due, null);
 });
 
 test("trend keeps every bucket and does not skip a month when the range starts on month end", () => {
@@ -77,6 +79,27 @@ test("open snapshot excludes completed and cancelled groups", () => {
   assert.equal(isCurrentOpen("backlog"), true);
   assert.equal(isCurrentOpen("completed"), false);
   assert.equal(isCurrentOpen("cancelled"), false);
+});
+
+test("current workload snapshots stay separate from the selected event-period counts", () => {
+  const metrics = summarizeIssueMetrics(
+    [
+      { created_at: "2025-03-01", completed_at: null, target_date: "2026-10-02", stateGroup: "started", assignees: [] },
+      { created_at: "2026-10-10", completed_at: null, target_date: "2026-11-10", stateGroup: "unstarted", assignees: ["adams"] },
+      { created_at: "2025-03-01", completed_at: "2026-10-12", target_date: "2026-10-05", stateGroup: "completed", assignees: ["adams"] },
+      { created_at: "2026-10-05", completed_at: null, target_date: "2026-10-08", stateGroup: "cancelled", assignees: ["adams"] },
+    ],
+    { start: "2026-10-01", end: "2026-10-31" },
+    "2026-10-23",
+  );
+  assert.deepEqual(metrics, {
+    openNow: 2,
+    overdueNow: 1,
+    createdInRange: 2,
+    completedInRange: 1,
+    dueInRange: 1,
+    unassignedOpen: 1,
+  });
 });
 
 test("report filters round trip through a URL while preserving portal return context", () => {
@@ -114,3 +137,4 @@ test("report URL parsing rejects ambiguous and invalid filters and drops staff-o
   params.append("report", "created");
   assert.equal(parseReportFilters(params, defaults, true).report, "work-summary");
 });
+
