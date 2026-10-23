@@ -1,0 +1,54 @@
+/* docs/plans/18-smart-insights-plan.md -- staggered entrance + a
+   tone-colored glow/pulse on danger-tone cards only, the one state that
+   most needs to grab attention. Same strong ease-out curve and
+   reduced-motion pattern already established by page-transition.module.css,
+   extended rather than forked. */
+
+.card {
+  animation: card-enter 220ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation-fill-mode: backwards;
+  animation-delay: calc(var(--stagger-index, 0) * 50ms);
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dangerGlow {
+  animation:
+    card-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards calc(var(--stagger-index, 0) * 50ms),
+    danger-pulse 2.4s ease-in-out 470ms infinite;
+}
+
+@keyframes danger-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-destructive) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-destructive) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .dangerGlow {
+    animation: card-enter-reduced 160ms ease;
+  }
+}
+
+@keyframes card-enter-reduced {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,22 +1,21 @@
-"use client";
-
 import type { Lead, Payment } from '../../../types/domain';
-import { today, shiftMonth, monthKey, daysSince } from '../../../shared/lib/format';
+import { today, shiftMonth, monthKey, daysSince, ghs } from '../../../shared/lib/format';
 import { linearForecastNextMonth } from '../../../shared/lib/forecast';
-import { ghs } from '../../../shared/lib/format';
-import type { IconName } from '../../../shared/ui/Icon';
 
-// Port of index.html's getInsightLists()/computeSmartInsights() (index.
-// html:9484-9954) -- proactive, auto-generated nudges from data already
-// on hand, re-scanned every time the screen opens (no dismiss/snooze
+// docs/plans/18-smart-insights-plan.md -- port of index.html's real
+// getInsightLists()/computeSmartInsights() (index.html:9484-9954),
+// already correctly ported once before in web-next/src/features/
+// smart-insights/lib/smartInsightsLogic.ts; carried over near-verbatim
+// here since the logic itself was already right, only the UI needed a
+// real rebuild. Proactive, auto-generated nudges from data already on
+// hand, re-scanned every time the screen opens (no dismiss/snooze
 // state, matching the original). One real check deliberately dropped:
 // "overdue follow-ups" read `l.followDate` on a LEAD object -- verified
-// live (information_schema.columns on both staging and production) that
-// `leads` has no `follow_date` column at all; that field only exists on
-// `enquiries`. The check was comparing a lead against a property no lead
-// object has ever carried, so in real production data it always
-// evaluates to an empty list -- a genuine latent dead-code bug in
-// index.html, not ported forward here.
+// live (information_schema.columns) that `leads` has no `follow_date`
+// column at all; that field only exists on `enquiries`. The check was
+// comparing a lead against a property no lead object has ever carried,
+// so in real production data it always evaluates to an empty list -- a
+// genuine latent dead-code bug in index.html, not ported forward here.
 
 export type InsightKind = 'cold' | 'nearTrigger' | 'readyForAllocation' | 'stalledHigh';
 
@@ -24,7 +23,7 @@ export const INSIGHT_META: Record<InsightKind, { title: string; desc: string }> 
   cold: { title: 'Going cold', desc: 'No next action set, added 10+ days ago' },
   readyForAllocation: { title: 'Ready for allocation', desc: '30% or more paid — eligible for a plot allocation request' },
   nearTrigger: { title: 'Near the 30% allocation mark', desc: 'Between 20% and 30% paid — one more payment away from triggering an allocation request' },
-  stalledHigh: { title: 'High priority, no follow-up planned', desc: "Marked High priority but nothing scheduled next" },
+  stalledHigh: { title: 'High priority, no follow-up planned', desc: 'Marked High priority but nothing scheduled next' },
 };
 
 export interface PctLead extends Lead {
@@ -70,7 +69,7 @@ export function getInsightLists(leads: Lead[]): Record<InsightKind, PctLead[]> {
 
 export interface SmartInsight {
   key: string;
-  icon: IconName;
+  icon: 'warning' | 'trophy' | 'chartLine' | 'barChart' | 'check';
   tone: 'ok' | 'warn' | 'danger';
   text: string;
   detail?: string;
@@ -87,10 +86,11 @@ export function computeSmartInsights(leads: Lead[], payments: Payment[]): SmartI
       icon: 'warning',
       tone: 'warn',
       text: `${cold.length} lead${cold.length === 1 ? '' : 's'} ${cold.length === 1 ? 'has' : 'have'} no next action set and ${cold.length === 1 ? 'is' : 'are'} going cold`,
-      detail: cold
-        .slice(0, 3)
-        .map((l) => l.name)
-        .join(', ') + (cold.length > 3 ? ` +${cold.length - 3} more` : ''),
+      detail:
+        cold
+          .slice(0, 3)
+          .map((l) => l.name)
+          .join(', ') + (cold.length > 3 ? ` +${cold.length - 3} more` : ''),
       kind: 'cold',
     });
   }

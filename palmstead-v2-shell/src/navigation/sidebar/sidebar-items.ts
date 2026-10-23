@@ -261,7 +261,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "smart-insights",
 				title: "Smart Insights",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/smart-insights",
 				icon: Lightbulb,
 			},
 			{
