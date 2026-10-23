@@ -60,6 +60,7 @@ import {
 	formatDelta,
 	isCurrentOpen,
 	parseReportFilters,
+	summarizeIssueMetrics,
 	type OperationsReportFilters,
 	writeReportFilters,
 } from "./operations-report-model";
@@ -88,7 +89,9 @@ type StaffMetric = {
 	name: string;
 	open: number;
 	overdue: number;
+	created: number;
 	completed: number;
+	due: number;
 };
 type ReportExportSection = "all" | "summary" | "comparison" | "trend" | "workload" | "register";
 const exportSectionLabels: Record<ReportExportSection, string> = {
@@ -160,6 +163,7 @@ async function loadReportData(
 						.from("profiles")
 						.select("agent_key,name")
 						.eq("active", true)
+						.neq("role", "manager")
 						.range(from, to),
 				)
 			: Promise.resolve([] as { agent_key: string; name: string }[]),
@@ -378,7 +382,12 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				if (reportType === "open-overdue" && !isOpen(issue)) return false;
 				if (reportType === "completed" && !dateInRange(issue.completed_at, start, end)) return false;
 				if (reportType === "created" && !dateInRange(issue.created_at, start, end)) return false;
-				if (reportType === "due" && !dateInRange(issue.target_date, start, end)) return false;
+				if (
+					reportType === "due" &&
+					(!dateInRange(issue.target_date, start, end) ||
+						issue.stateGroup === "completed" ||
+						issue.stateGroup === "cancelled")
+				) return false;
 				return true;
 			}),
 		[facetFiltered, reportType, start, end],
@@ -391,47 +400,42 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		() => buildTrend(facetFiltered, { start, end }),
 		[facetFiltered, start, end],
 	);
+	const reportAsOfDate = todayIso();
 	const summary = useMemo(
-		() => ({
-			total: filtered.length,
-			open: filtered.filter(isOpen).length,
-			overdue: filtered.filter(
-				(issue) =>
-					isOpen(issue) && issue.target_date && issue.target_date < todayIso(),
-			).length,
-			completedInRange: filtered.filter((issue) =>
-				dateInRange(issue.completed_at, start, end),
-			).length,
-			unassigned: filtered.filter(
-				(issue) => isOpen(issue) && issue.assignees.length === 0,
-			).length,
-		}),
-		[filtered, start, end],
+		() => {
+			const metrics = summarizeIssueMetrics(facetFiltered, { start, end }, reportAsOfDate);
+			return {
+				total: filtered.length,
+				open: metrics.openNow,
+				overdue: metrics.overdueNow,
+				createdInRange: metrics.createdInRange,
+				completedInRange: metrics.completedInRange,
+				dueInRange: metrics.dueInRange,
+				unassigned: metrics.unassignedOpen,
+			};
+		},
+		[filtered.length, facetFiltered, start, end, reportAsOfDate],
 	);
 	const staffMetrics = useMemo(
 		() =>
 			(data?.staff ?? [])
 				.map((staff): StaffMetric => {
-					const mine = filtered.filter((issue) =>
+					const mine = facetFiltered.filter((issue) =>
 						issue.assignees.includes(staff.key),
 					);
+					const metrics = summarizeIssueMetrics(mine, { start, end }, reportAsOfDate);
 					return {
 						key: staff.key,
 						name: staff.name,
-						open: mine.filter(isOpen).length,
-						overdue: mine.filter(
-							(issue) =>
-								isOpen(issue) &&
-								issue.target_date &&
-								issue.target_date < todayIso(),
-						).length,
-						completed: mine.filter((issue) =>
-							dateInRange(issue.completed_at, start, end),
-						).length,
+						open: metrics.openNow,
+						overdue: metrics.overdueNow,
+						created: metrics.createdInRange,
+						completed: metrics.completedInRange,
+						due: metrics.dueInRange,
 					};
 				})
 				.sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
-		[data?.staff, filtered, start, end],
+		[data?.staff, facetFiltered, start, end, reportAsOfDate],
 	);
 	let summaryCards: { label: string; value: number }[];
 	if (reportType === "open-overdue" && manager) {
@@ -450,7 +454,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			{ label: "Issues in view", value: summary.total },
 			{ label: "Currently open", value: summary.open },
 			{ label: "Overdue now", value: summary.overdue },
+			{ label: "Created in period", value: summary.createdInRange },
 			{ label: "Completed in period", value: summary.completedInRange },
+			{ label: "Due in period", value: summary.dueInRange },
 			{ label: "Unassigned open", value: summary.unassigned },
 		];
 	} else {
@@ -458,7 +464,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			{ label: "My issues", value: summary.total },
 			{ label: "Currently open", value: summary.open },
 			{ label: "Overdue now", value: summary.overdue },
+			{ label: "Created in period", value: summary.createdInRange },
 			{ label: "Completed in period", value: summary.completedInRange },
+			{ label: "Due in period", value: summary.dueInRange },
 		];
 	}
 	const displayIssues: FilteredIssue[] = filtered
@@ -482,6 +490,20 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		setStart(startMonth(new Date()));
 		setEnd(endMonth(new Date()));
 		setComparisonMode("previous-period");
+	}
+	function downloadCsvFile(filename: string, contents: string) {
+		const url = URL.createObjectURL(
+			new Blob(["\uFEFF", contents], { type: "text/csv;charset=utf-8" }),
+		);
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = filename;
+		anchor.style.display = "none";
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		// Let the browser begin reading the blob before releasing its object URL.
+		window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
 	function downloadCsv() {
 		const headings = [
@@ -516,16 +538,10 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		const csv = [headings, ...records]
 			.map((row) => row.map(cleanCsv).join(","))
 			.join("\r\n");
-		const url = URL.createObjectURL(
-			new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
-		);
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = reportType === "open-overdue"
+		const filename = reportType === "open-overdue"
 			? `operations-open-work-as-of-${todayIso()}.csv`
 			: `operations-${reportType}-${start}-${end}.csv`;
-		anchor.click();
-		URL.revokeObjectURL(url);
+		downloadCsvFile(filename, csv);
 	}
 	function downloadSummaryCsv() {
 		const headings = [
@@ -535,6 +551,8 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		const metadata = [
 			["Scope", scopeLabel],
 			["Report", reportType],
+			["Comparison", comparisonMode],
+			["As of", todayIso()],
 			["Project", projectId === "all" ? "All projects" : projects.find((project) => project.id === projectId)?.name ?? "Selected"],
 			["Status", statusGroup],
 			["Priority", priority],
@@ -543,33 +561,29 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		const metrics = [
 			["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created],
 			["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed],
+			["Due date", comparison.current.due, comparison.previous.due, comparison.delta.due, comparison.percent.due],
 		].map(([name, current, previous, delta, percent]) => ["Metric", name, start, end, comparison.previousRange.start, comparison.previousRange.end, current, previous, delta, percent === null ? "No prior baseline" : `${percent}%`]);
 		const csv = [headings, ...metadata, ...metrics]
 			.map((row) => row.map(cleanCsv).join(","))
 			.join("\r\n");
-		const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = `operations-summary-${start}-${end}.csv`;
-		anchor.click();
-		URL.revokeObjectURL(url);
+		downloadCsvFile(`operations-summary-${start}-${end}.csv`, csv);
 	}
 	async function downloadPdf() {
 		setExporting(true);
 		try {
 			const doc = new jsPDF({ unit: "mm", format: "a4" });
 			const filters = [
-				`Project: ${projectId === "all" ? "All" : (projects.find((project) => project.id === projectId)?.name ?? "Selected")}`,
-				`Status: ${statusGroup}`,
-				`Priority: ${priority}`,
-				manager ? `Staff: ${staffFilterLabel}` : "Staff: self only",
-			].join(" · ");
+					`Project: ${projectId === "all" ? "All" : (projects.find((project) => project.id === projectId)?.name ?? "Selected")}`,
+					`Status: ${statusGroup}`,
+					`Priority: ${priority}`,
+					manager ? `Staff: ${staffFilterLabel}` : "Staff: self only",
+				].join(" | ");
 			let y = pdfBrandedHeader(
 				doc,
 				"Operations report",
 				reportType === "open-overdue"
-					? `Current open work snapshot · ${todayIso()}`
-					: `${reportType.replaceAll("-", " ")} · ${start} to ${end}`,
+					? `Current open work snapshot | ${todayIso()}`
+					: `${reportType.replaceAll("-", " ")} | ${start} to ${end}`,
 				[`${scopeLabel}`, exportSectionLabels[exportSection], `Generated ${today()}`],
 				null,
 			);
@@ -582,23 +596,28 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 			doc.text(filterLines, 12, y);
 			y += filterLines.length * 4 + 4;
 			const includeSection = (section: ReportExportSection) => exportSection === "all" || exportSection === section;
-			const preparePdfSection = () => {
+			const preparePdfSection = (minimumHeight = 38) => {
 				const contentBottom = doc.internal.pageSize.getHeight() - 20;
-				if (y + 38 > contentBottom) {
+				if (y + minimumHeight > contentBottom) {
 					doc.addPage();
 					y = 18;
 				}
 			};
 			if (includeSection("summary")) {
-				preparePdfSection();
+				preparePdfSection(manager ? 72 : 64);
 				y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Report summary");
-				const summaryHeaders = manager
-					? ["Issues in view", "Currently open", "Overdue now", "Completed in range", "Unassigned"]
-					: ["My issues", "Currently open", "Overdue now", "Completed in range"];
-				const summaryValues = manager
-					? [summary.total, summary.open, summary.overdue, summary.completedInRange, summary.unassigned]
-					: [summary.total, summary.open, summary.overdue, summary.completedInRange];
-				autoTable(doc, { startY: y, margin: { bottom: 20 }, head: [summaryHeaders], body: [summaryValues], styles: { fontSize: 8 } });
+				const summaryRows: [string, number][] = manager
+					? [
+							["Issues in view", summary.total], ["Currently open", summary.open], ["Overdue now", summary.overdue],
+							["Created in period", summary.createdInRange], ["Completed in period", summary.completedInRange],
+							["Due in period", summary.dueInRange], ["Unassigned open", summary.unassigned],
+						]
+					: [
+							["My issues", summary.total], ["Currently open", summary.open], ["Overdue now", summary.overdue],
+							["Created in period", summary.createdInRange], ["Completed in period", summary.completedInRange],
+							["Due in period", summary.dueInRange],
+						];
+				autoTable(doc, { startY: y, margin: { bottom: 20 }, head: [["Measure", "Count"]], body: summaryRows, styles: { fontSize: 8 }, columnStyles: { 1: { cellWidth: 28, halign: "right" } } });
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
 			}
 			if (includeSection("comparison")) {
@@ -608,7 +627,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					y,
 					doc.internal.pageSize.getWidth(),
 					"Period comparison",
-					`Current ${start} to ${end} · Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
+					`Current ${start} to ${end} | Previous ${comparison.previousRange.start} to ${comparison.previousRange.end}`,
 				);
 				autoTable(doc, {
 					startY: y,
@@ -616,6 +635,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					body: [
 						["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created === null ? "No prior baseline" : `${comparison.percent.created}%`],
 						["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed === null ? "No prior baseline" : `${comparison.percent.completed}%`],
+						["Due date", comparison.current.due, comparison.previous.due, comparison.delta.due, comparison.percent.due === null ? "No prior baseline" : `${comparison.percent.due}%`],
 					],
 					styles: { fontSize: 8 },
 					margin: { bottom: 20 },
@@ -633,7 +653,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					y,
 					doc.internal.pageSize.getWidth(),
 					"Created and completed trend",
-					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets · selected filters · no historical state is inferred`,
+					`${trend.bucket[0].toUpperCase() + trend.bucket.slice(1)} buckets | selected filters | no historical state is inferred`,
 				);
 				const chartLeft = 22;
 				const chartWidth = doc.internal.pageSize.getWidth() - 34;
@@ -710,9 +730,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 				);
 				autoTable(doc, {
 					startY: y,
-					head: [["Staff member", "Open now", "Overdue now", "Completed in period"]],
-					body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.completed]),
-					styles: { fontSize: 8 },
+						head: [["Staff member", "Open now", "Overdue now", "Created in period", "Completed in period", "Due in period"]],
+						body: staffMetrics.map((row) => [row.name, row.open, row.overdue, row.created, row.completed, row.due]),
+						styles: { fontSize: 7 },
 					margin: { bottom: 20 },
 				});
 				y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
@@ -731,9 +751,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					head: [["ID", "Issue", "Project", "Status", "Priority", "Due"]],
 					body: displayIssues.length
 						? displayIssues.map((issue) => [
-								issueCode(issue), issue.name, issue.project, issue.state, issue.priority ?? "None", issue.target_date ?? "—",
+								issueCode(issue), issue.name, issue.project, issue.state, issue.priority ?? "None", issue.target_date ?? "-",
 							])
-						: [["—", "No issues match these filters", "—", "—", "—", "—"]],
+						: [["-", "No issues match these filters", "-", "-", "-", "-"]],
 					styles: { fontSize: 7, cellPadding: 2 },
 					columnStyles: { 1: { cellWidth: 65 }, 2: { cellWidth: 30 } },
 					margin: { bottom: 20 },
@@ -1022,6 +1042,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 							{([
 								["Created", comparison.current.created, comparison.previous.created, comparison.delta.created, comparison.percent.created],
 								["Completed", comparison.current.completed, comparison.previous.completed, comparison.delta.completed, comparison.percent.completed],
+								["Due date", comparison.current.due, comparison.previous.due, comparison.delta.due, comparison.percent.due],
 							] as const).map(([label, current, previous, delta, percent]) => (
 								<div key={label} className="flex items-start justify-between gap-3 border-b pb-4 last:border-b-0 last:pb-0">
 									<div>
@@ -1032,7 +1053,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								</div>
 							))}
 							<p className="text-muted-foreground text-xs">
-								The comparison counts items by their created or completed date. It does not reconstruct historical status or workload.
+								Created and completed counts use their event dates. Due counts use each issue's current due date, so they do not reconstruct historical schedule changes, status, or workload.
 							</p>
 						</CardContent>
 					</Card>
@@ -1077,16 +1098,14 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								<CardContent className="p-0">
 									<Table>
 										<TableHeader>
-											<TableRow>
-												<TableHead>Staff member</TableHead>
-												<TableHead className="text-right">Open</TableHead>
-												<TableHead className="text-right">
-													Overdue now
-												</TableHead>
-												<TableHead className="text-right">
-													Completed in period
-												</TableHead>
-											</TableRow>
+							<TableRow>
+								<TableHead>Staff member</TableHead>
+								<TableHead className="text-right">Open now</TableHead>
+								<TableHead className="text-right">Overdue now</TableHead>
+								<TableHead className="text-right">Created in period</TableHead>
+								<TableHead className="text-right">Completed in period</TableHead>
+								<TableHead className="text-right">Due in period</TableHead>
+							</TableRow>
 										</TableHeader>
 										<TableBody>
 											{staffMetrics.map((row) => (
@@ -1101,8 +1120,12 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 														{row.overdue}
 													</TableCell>
 													<TableCell className="text-right tabular-nums">
+									{row.created}
+								</TableCell>
+								<TableCell className="text-right tabular-nums">
 														{row.completed}
 													</TableCell>
+								<TableCell className="text-right tabular-nums">{row.due}</TableCell>
 												</TableRow>
 											))}
 										</TableBody>
@@ -1175,4 +1198,5 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 		</div>
 	);
 }
+
 
