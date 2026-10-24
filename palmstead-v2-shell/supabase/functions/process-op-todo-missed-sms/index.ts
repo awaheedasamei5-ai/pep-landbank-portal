@@ -1,0 +1,123 @@
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { classifyProviderResponse, normalizeGhanaPhone, type DeliveryOutcome } from "./delivery.ts";
+
+type OutboxRow = {
+  id: string;
+  todo_id: string;
+  recipient_key: string;
+  message_body: string;
+  attempt_count: number;
+};
+
+Deno.serve(async (request) => {
+  if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
+
+  const workerToken = request.headers.get("x-internal-secret");
+  const projectUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!workerToken || !projectUrl || !serviceRoleKey) {
+    return Response.json({ error: "Worker authorization is unavailable" }, { status: 401 });
+  }
+
+  const supabase = createClient(projectUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: validToken, error: tokenError } = await supabase.rpc("verify_op_todo_sms_worker_token", {
+    p_token: workerToken,
+  });
+  if (tokenError || validToken !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const apiKey = Deno.env.get("ARKESEL_API_KEY");
+  const { data, error } = await supabase.rpc("claim_op_todo_sms_outbox", { p_limit: 10 });
+  if (error) return Response.json({ error: "Could not claim queued messages" }, { status: 500 });
+
+  const rows = (data ?? []) as OutboxRow[];
+  let accepted = 0;
+  let failed = 0;
+  let needsReview = 0;
+  let retryQueued = 0;
+  let persistenceErrors = 0;
+
+  for (const row of rows) {
+    // Recheck the task and the current profile number immediately before
+    // delivery so a completion, reassignment, or phone change cancels stale SMS.
+    const [{ data: todo, error: todoError }, { data: profile, error: profileError }] = await Promise.all([
+      supabase.from("op_todos").select("id,status,assigned_to,sms_missed_notified_at").eq("id", row.todo_id).maybeSingle(),
+      supabase.from("profiles").select("phone").eq("agent_key", row.recipient_key).maybeSingle(),
+    ]);
+
+    let outcome: DeliveryOutcome;
+    let phone: string | null = null;
+    let providerStatus: Record<string, unknown> | null = null;
+    if (todoError || profileError) {
+      outcome = { status: "needs_review", providerReference: null, error: "Task or staff delivery details could not be rechecked." };
+    } else if (!todo || todo.status !== "open" || todo.assigned_to !== row.recipient_key || todo.sms_missed_notified_at) {
+      const { error: cancelError } = await supabase.from("op_todo_sms_outbox")
+        .update({ status: "cancelled", lease_until: null, last_error: "Task was completed, reassigned, or no longer needs a reminder.", updated_at: new Date().toISOString() })
+        .eq("id", row.id).eq("status", "sending").eq("attempt_count", row.attempt_count);
+      if (cancelError) persistenceErrors += 1;
+      continue;
+    } else {
+      phone = normalizeGhanaPhone(profile?.phone ?? null);
+      if (!apiKey) {
+        outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server." };
+      } else if (!phone) {
+        outcome = { status: "failed", providerReference: null, error: "The assigned staff member has no valid Ghana mobile number on file." };
+      } else {
+        try {
+          const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ sender: "Palmstead", message: row.message_body, recipients: [phone] }),
+            signal: AbortSignal.timeout(12_000),
+          });
+          const body: unknown = await response.json().catch(() => null);
+          providerStatus = { httpStatus: response.status };
+          outcome = classifyProviderResponse(response.status, body, phone);
+        } catch {
+          // A timeout may occur after provider acceptance; do not retry and risk
+          // sending a duplicate real SMS without provider confirmation.
+          outcome = { status: "needs_review", providerReference: null, error: "SMS outcome is uncertain. Check the provider history before retrying." };
+        }
+      }
+    }
+
+    if (outcome.status === "queued" && row.attempt_count >= 5) {
+      outcome = { status: "failed", providerReference: null, error: "SMS provider rate limit persisted after five attempts." };
+    }
+    const backoffSeconds = Math.min(2 ** row.attempt_count * 60, 21_600);
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase.from("op_todo_sms_outbox")
+      .update({
+        status: outcome.status,
+        next_attempt_at: new Date(Date.now() + backoffSeconds * 1000).toISOString(),
+        provider_accepted_at: outcome.status === "accepted" ? now : null,
+        lease_until: null,
+        provider_reference: outcome.providerReference,
+        last_error: outcome.error,
+        provider_status: providerStatus,
+        updated_at: now,
+      })
+      .eq("id", row.id).eq("status", "sending").eq("attempt_count", row.attempt_count);
+    if (updateError) {
+      persistenceErrors += 1;
+      continue;
+    }
+
+    if (outcome.status === "accepted") {
+      const { error: todoUpdateError } = await supabase.from("op_todos")
+        .update({ sms_missed_notified_at: now })
+        .eq("id", row.todo_id).eq("status", "open").eq("assigned_to", row.recipient_key)
+        .is("sms_missed_notified_at", null);
+      if (todoUpdateError) persistenceErrors += 1;
+      accepted += 1;
+    } else if (outcome.status === "needs_review") needsReview += 1;
+    else if (outcome.status === "queued") retryQueued += 1;
+    else failed += 1;
+  }
+
+  return Response.json(
+    { claimed: rows.length, providerAccepted: accepted, failed, needsReview, retryQueued, persistenceErrors },
+    { status: persistenceErrors ? 503 : 200 },
+  );
+});
