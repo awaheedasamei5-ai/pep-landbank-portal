@@ -30,6 +30,7 @@ export function useClientRelatedData() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const agentKey = profile?.key ?? '';
   const role = profile?.role ?? 'agent';
+  const isManager = role === 'manager';
 
   return useQuery({
     queryKey: ['clientRelatedData', agentKey],
@@ -37,11 +38,14 @@ export function useClientRelatedData() {
     queryFn: async (): Promise<ClientRelatedData> => {
       const ds = getDataSource(demoMode);
       const [payments, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
-        ds.payments.listForAgent(agentKey),
-        ds.siteVisits.listForAgent(agentKey),
+        // Management opens Customer 360 from the company-wide client list,
+        // so related records use the matching company-wide reads. RLS still
+        // enforces the role boundary on the live project. Staff remain scoped.
+        isManager ? ds.payments.listAll() : ds.payments.listForAgent(agentKey),
+        isManager ? ds.siteVisits.listAll() : ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
-        ds.complaints.listForAgent(agentKey),
+        isManager ? ds.complaints.listAll() : ds.complaints.listForAgent(agentKey),
         ds.contracts.list(),
       ]);
       return { payments, siteVisits, allocations, contractRequests, complaints, contracts };

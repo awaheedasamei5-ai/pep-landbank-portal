@@ -53,7 +53,17 @@ export function shiftMonth(mk: string, delta: number): string {
 // Ported from index.html's fmtLongDate() (index.html:23587) -- 'YYYY-MM-DD' -> '12 April 1990'.
 export function fmtLongDate(iso: string): string {
   if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const value = iso.trim();
+  if (!value) return '';
+  // Date-only values are parsed as local midnight to preserve the calendar
+  // day displayed by the legacy app. Database timestamps already contain a
+  // time (and often a timezone), so appending another time suffix makes
+  // them invalid and surfaces "Invalid Date" in Customer 360.
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00`)
+    : new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function daysSince(iso: string): number {

@@ -69,7 +69,7 @@ export interface BuildReceiptParams {
   lead: Lead | null;
   receiptNumber: string;
   config: Config;
-  paidAsOf?: number;
+  paidAsOf?: number | null;
   issuerSignature?: string | null;
   issuerName?: string | null;
 }
@@ -146,40 +146,35 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setDrawColor(...GOLD);
   doc.line(L, y + 1.5, L + 16, y + 1.5);
   y += 6;
-  const tblX = [L, 98, 120, 158];
-  const tblW = [84, 22, 38, 38];
+  const tblX = [L, 50, 88, 142];
+  const tblW = [36, 38, 54, 54];
   doc.setFillColor(...INK);
   doc.rect(L, y, R - L, 8, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('DESCRIPTION', tblX[0] + 3, y + 5.3);
-  // Numeric columns' headers right-align to sit directly above their own
-  // values (fixed real bug: headers used to be left-aligned while QTY/
-  // UNIT PRICE/TOTAL values are right-aligned, so each amount visually
-  // "drifted" away from its own column header instead of sitting under it).
-  doc.text('QTY', tblX[1] + tblW[1] - 3, y + 5.3, { align: 'right' });
-  doc.text('UNIT PRICE', tblX[2] + tblW[2] - 3, y + 5.3, { align: 'right' });
-  doc.text('TOTAL', tblX[3] + tblW[3] - 3, y + 5.3, { align: 'right' });
+  doc.text('PAYMENT DATE', tblX[0] + 3, y + 5.3);
+  doc.text('METHOD', tblX[1] + 3, y + 5.3);
+  doc.text('REFERENCE', tblX[2] + 3, y + 5.3);
+  doc.text('AMOUNT RECEIVED', tblX[3] + tblW[3] - 3, y + 5.3, { align: 'right' });
   y += 8;
   const grand = lead?.grandTotal ?? 0;
-  const desc = lead ? `${lead.plotType || 'Plot'} — ${siteName}` : 'Payment received';
-  const unitPrice = lead ? ghs(grand / qtyOfType) : '—';
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
   doc.rect(L, y, R - L, 9.5);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...DARK);
-  doc.text(fitText(doc, desc, tblW[0] - 6), tblX[0] + 3, y + 6.2);
-  doc.text(String(qtyOfType), tblX[1] + tblW[1] - 3, y + 6.2, { align: 'right' });
-  doc.text(unitPrice, tblX[2] + tblW[2] - 3, y + 6.2, { align: 'right' });
+  doc.text(dateStr, tblX[0] + 3, y + 6.2);
+  doc.text(fitText(doc, payment.paymentMethod || 'Not recorded', tblW[1] - 6), tblX[1] + 3, y + 6.2);
+  doc.text(fitText(doc, payment.referenceNumber || 'Not provided', tblW[2] - 6), tblX[2] + 3, y + 6.2);
   doc.setFont('helvetica', 'bold');
   doc.text(ghs(payment.amount), tblX[3] + tblW[3] - 3, y + 6.2, { align: 'right' });
   y += 9.5 + 4;
 
-  if (lead) {
-    const paid = paidAsOf ?? lead.amtPaid;
+  const paidSnapshot = paidAsOf === undefined ? (lead?.amtPaid ?? null) : paidAsOf;
+  if (lead && paidSnapshot !== null) {
+    const paid = paidSnapshot;
     const bal = Math.max(grand - paid, 0);
     const boxX = tblX[2];
     const totRows: [string, string, boolean][] = [
@@ -204,6 +199,16 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
       doc.text(row[1], R - 3, ry, { align: 'right' });
     });
     y += 3 * 7.8 + 8;
+  } else if (lead) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    const snapshotNote = doc.splitTextToSize(
+      'Balance at the time of this payment is unavailable for this older record.',
+      R - tblX[2] - 6,
+    );
+    doc.text(snapshotNote, tblX[2] + 3, y + 4);
+    y += Math.max(16, snapshotNote.length * 4.2 + 8);
   } else {
     y += 8;
   }
@@ -217,12 +222,12 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.line(colLx, y + 1.5, colLx + 16, y + 1.5);
   doc.line(colRx, y + 1.5, colRx + 16, y + 1.5);
   y += 8;
-  const balNow = lead ? Math.max(grand - (paidAsOf ?? lead.amtPaid), 0) : 0;
+  const balNow = lead && paidSnapshot !== null ? Math.max(grand - paidSnapshot, 0) : null;
   const payRows: [string, string][] = [
     ['Payment Method', payment.paymentMethod || '—'],
     ['Reference No.', ref],
     ['Payment Date', dateStr],
-    ['Status', lead ? (balNow <= 0 ? 'PAID IN FULL' : 'PARTIAL PAYMENT') : 'RECEIVED'],
+    ['Status', lead ? (balNow === null ? 'PAYMENT RECEIVED' : balNow <= 0 ? 'PAID IN FULL' : 'PARTIAL PAYMENT') : 'RECEIVED'],
   ];
   payRows.forEach((row, i) => receiptRow(doc, colLx, y + i * rowH, colW, row[0], row[1]));
 
@@ -259,3 +264,4 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   pdfGeneratedStamp(doc, issuerName);
   return doc;
 }
+

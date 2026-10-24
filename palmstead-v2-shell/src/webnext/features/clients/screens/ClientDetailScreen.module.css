@@ -153,3 +153,35 @@
 .chip_muted { background: var(--c-paper); color: var(--c-muted); border: 1px solid var(--c-line); }
 
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; margin-top: 4px; }
+
+.visitDetails {
+  margin-top: 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-paper);
+  overflow: hidden;
+}
+.visitDetails summary {
+  padding: 9px 11px;
+  color: var(--c-ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.visitDetails summary:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+.visitFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
+  margin: 0;
+  padding: 0 11px 10px;
+  border-top: 1px solid var(--c-line);
+}
+.visitField { min-width: 0; padding-top: 9px; }
+.visitField dt { color: var(--c-muted); font-size: 10px; font-weight: 700; }
+.visitField dd { margin: 2px 0 0; color: var(--c-ink); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.visitEmpty { margin: 0; padding: 0 11px 10px; color: var(--c-muted); font-size: 11.5px; }
+
+@media (width <= 480px) {
+  .visitFields { grid-template-columns: minmax(0, 1fr); }
+}

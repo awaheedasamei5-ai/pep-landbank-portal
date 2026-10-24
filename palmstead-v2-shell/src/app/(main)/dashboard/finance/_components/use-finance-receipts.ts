@@ -8,6 +8,7 @@ import { buildReceiptPdf } from "@/webnext/features/payments/lib/receiptPdf";
 import type { Config, Lead, Payment as WebnextPayment } from "@/webnext/types/domain";
 
 import type { Payment } from "./use-finance-payments";
+import { calculatePaidAsOf } from "./receipt-snapshot";
 
 // Real receipt generation for Finance > Payments (the gap flagged after
 // the fact: V1's real Log Payment offers "Download receipt PDF / Send via
@@ -99,6 +100,24 @@ async function ensureReceiptNumber(paymentId: string): Promise<string> {
   return data as string;
 }
 
+async function paidAsOfPayment(payment: Payment): Promise<number | null> {
+  if (payment.status !== "approved") throw new Error("A receipt is available only for an approved payment.");
+  const { data, error } = await requireSupabase()
+    .from("payments")
+    .select("id,amount,decided_at")
+    .eq("lead_id", payment.leadId)
+    .eq("status", "approved")
+    .not("decided_at", "is", null)
+    .order("decided_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+  const rows = (data ?? []) as { id: string; amount: number | string; decided_at: string }[];
+  return calculatePaidAsOf(
+    rows.map((row) => ({ id: row.id, amount: row.amount, decidedAt: row.decided_at })),
+    payment.id,
+  );
+}
+
 export interface ReceiptLeadInfo {
   name: string;
   contact: string | null;
@@ -112,6 +131,7 @@ export function useDownloadReceipt(config: Config | undefined, issuerSignature: 
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
+      const paidAsOf = await paidAsOfPayment(payment);
       const receiptNumber = await ensureReceiptNumber(payment.id);
       const doc = buildReceiptPdf({
         clientName: payment.leadName,
@@ -119,6 +139,7 @@ export function useDownloadReceipt(config: Config | undefined, issuerSignature: 
         lead: lead ? toWebnextLead(lead) : null,
         receiptNumber,
         config,
+        paidAsOf,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
       });
@@ -134,6 +155,7 @@ export function useIssueReceiptLink(config: Config | undefined, issuerSignature:
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
+      const paidAsOf = await paidAsOfPayment(payment);
       const sb = requireSupabase();
       const receiptNumber = await ensureReceiptNumber(payment.id);
       const doc = buildReceiptPdf({
@@ -142,6 +164,7 @@ export function useIssueReceiptLink(config: Config | undefined, issuerSignature:
         lead: lead ? toWebnextLead(lead) : null,
         receiptNumber,
         config,
+        paidAsOf,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
       });
@@ -155,3 +178,4 @@ export function useIssueReceiptLink(config: Config | undefined, issuerSignature:
     },
   });
 }
+
