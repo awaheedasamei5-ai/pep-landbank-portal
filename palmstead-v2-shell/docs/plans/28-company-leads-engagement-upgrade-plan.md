@@ -106,7 +106,9 @@ None new in this slice — call logging is a plain structured form, not a drafti
 
 **Phase 2 (Follow-ups view) — folded into Phase 1, shipped same commit.** The real derived follow-up queue (§5's precise definition) shipped as the Call Log page's own "Follow-ups due" quick filter rather than a separate page — building a second page around the exact same query and columns the first page's own filter already shows would have been padding, not real additional structure.
 
-**Phases 3-5 (Analytics tab, Data Quality tab, Settings tab) — not yet started.**
+**Phase 3 (Analytics tab) — DONE, verified live, 2026-10-24.** New `useCompanyLeadsAnalytics()` hook (real, company-leads-scoped: calls by month from the already-scoped `useCompanyWideActivity()`, leads by source, funnel by stage, site-visits-vs-purchases, cash receipts by month from approved `payments`) + `CompanyLeadsAnalyticsScreen.tsx` reusing the general Analytics app's own `AnalyticsKpiStrip` component rather than a second hand-rolled one. New route `/dashboard/company-leads/analytics`, reachable via a header button on the Company Leads list (matching the existing "📞 Call Log" button pattern). Every number verified against a direct SQL cross-check against the real `sbydzrlzqxcdbudjaube` project (`leads` filtered to `agent_key='company' and deleted_at is null`): 169 total leads, 168 "Plot allocation import" + 1 "Banner" by source, all 169 in stage "1" (New), 0 calls today, 0 site visits, GHS 0 collected in the last 6 months — every figure matched the live screen exactly. `npx tsc -b` and `npm run build` both clean.
+
+**Phases 4-5 (Data Quality tab, Settings tab) — not yet started.**
 
 ## 7. QA
 

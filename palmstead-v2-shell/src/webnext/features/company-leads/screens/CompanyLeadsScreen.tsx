@@ -191,6 +191,9 @@ export function CompanyLeadsScreen() {
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/calls')}>
             📞 Call Log
           </button>
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/analytics')}>
+            📊 Analytics
+          </button>
           <button type="button" className={styles.iconBtn} title="Export Company Leads (.xlsx)" disabled={downloadCompanyLeads.isPending} onClick={() => downloadCompanyLeads.mutate()}>
             ⬇
           </button>
