@@ -5,6 +5,7 @@ import { PortalBackLink } from "../_components/portal-navigation";
 import { AccountingTabs } from "./_components/accounting-tabs";
 import { CommissionPanel } from "./_components/commission-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
+import { MonthlyPlansPanel } from "./_components/monthly-plans-panel";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 import { PayrollPanel } from "./_components/payroll-panel";
@@ -33,6 +34,10 @@ export default function Page() {
           <PaymentsPanel />
         </TabsContent>
 
+        <TabsContent value="installments">
+          <MonthlyPlansPanel />
+        </TabsContent>
+
         <TabsContent value="expenses">
           <ExpensesPanel />
         </TabsContent>
@@ -56,3 +61,4 @@ export default function Page() {
     </div>
   );
 }
+
