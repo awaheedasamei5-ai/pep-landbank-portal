@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { ScheduleMeetingComposer, ScheduleMeetingDetails } from "./schedule-meetings-dialogs";
+import { SchedulePushSettings } from "./schedule-push-settings";
 import {
   addScheduleDays,
   calendarDateOnly,
@@ -795,6 +796,7 @@ export function MyScheduleScreen() {
 
   return (
     <div className="grid gap-4">
+      <SchedulePushSettings />
       {overdue.length > 0 && (
         <Alert variant="destructive" className="border-destructive/40 bg-destructive/5">
           <AlertTriangle />
