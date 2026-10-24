@@ -1,2 +1,5 @@
 [functions.process-leave-sms-outbox]
 verify_jwt = false
+
+[functions.process-op-todo-missed-sms]
+verify_jwt = false
