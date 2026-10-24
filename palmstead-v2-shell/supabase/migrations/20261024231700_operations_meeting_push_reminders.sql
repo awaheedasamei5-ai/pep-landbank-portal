@@ -82,7 +82,7 @@ begin
   end if;
 
   v_start := ((new.item_date + new.start_time) at time zone 'Africa/Accra');
-  if v_start <= v_now or v_start > v_now + interval '90 days' then
+  if v_start <= v_now then
     return new;
   end if;
   -- Queue one reminder per active invitee; deliver only to opted-in devices.
@@ -157,7 +157,7 @@ begin
   end if;
 
   v_start := ((v_meeting.item_date + v_meeting.start_time) at time zone 'Africa/Accra');
-  if v_start <= v_now or v_start > v_now + interval '90 days' then
+  if v_start <= v_now then
     return new;
   end if;
   v_reminder := greatest(v_start - interval '15 minutes', v_now);
@@ -225,7 +225,7 @@ select meeting.id, meeting.meeting_signature, invitee.staff_key,
 from future_meetings meeting
 join public.schedule_item_invitees invitee on invitee.schedule_item_id = meeting.id
 where meeting.starts_at > clock_timestamp()
-  and meeting.starts_at <= clock_timestamp() + interval '90 days'
+
   and invitee.status in ('invited', 'accepted')
 on conflict (meeting_id, recipient_key, event_kind, meeting_signature) do nothing;
 
