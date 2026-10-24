@@ -1,12 +1,28 @@
 "use client";
 
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { getDataSource } from '../../../data/source';
-import { useSessionStore } from '../../../auth/useSessionStore';
-import { useConfig } from '../../manager/hooks/useConfigSettings';
-import { useLogDownload } from '../../../shared/hooks/useLogDownload';
-import { buildReceiptPdf } from '../lib/receiptPdf';
-import type { Lead, Payment } from '../../../types/domain';
+import { useMutation, useQuery } from "@tanstack/react-query";
+
+import { useSessionStore } from "../../../auth/useSessionStore";
+import { getDataSource } from "../../../data/source";
+import { useLogDownload } from "../../../shared/hooks/useLogDownload";
+import type { Lead, Payment } from "../../../types/domain";
+import { useConfig } from "../../manager/hooks/useConfigSettings";
+import { buildReceiptPdf } from "../lib/receiptPdf";
+
+function receiptBalanceSnapshot(payment: Payment) {
+  const exact =
+    payment.approvalSnapshotIsLegacy === false &&
+    payment.paidAfterApproval != null &&
+    payment.balanceAfterApproval != null &&
+    payment.contractTotalAtApproval != null;
+  return exact
+    ? {
+        paidAsOf: payment.paidAfterApproval,
+        balanceAsOf: payment.balanceAfterApproval,
+        contractTotalAsOf: payment.contractTotalAtApproval,
+      }
+    : { paidAsOf: null, balanceAsOf: null, contractTotalAsOf: null };
+}
 
 // Resolves a private receipt_proof_path into something an <img> can
 // render -- a signed URL live, the data URI itself in demo mode (see
@@ -17,7 +33,7 @@ import type { Lead, Payment } from '../../../types/domain';
 export function useProofUrl(path: string | null | undefined) {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({
-    queryKey: ['paymentProofUrl', path],
+    queryKey: ["paymentProofUrl", path],
     enabled: !!path,
     staleTime: 1000 * 60 * 4,
     queryFn: () => getDataSource(demoMode).payments.resolveProofUrl(path as string),
@@ -34,11 +50,20 @@ export function useIssueReceiptLink() {
   const { data: config } = useConfig();
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: Lead | null }) => {
-      if (!config) throw new Error('Config not loaded yet');
+      if (!config) throw new Error("Config not loaded yet");
       const receiptNumber = await getDataSource(demoMode).payments.ensureReceiptNumber(payment.id);
-      const doc = buildReceiptPdf({ clientName: payment.clientName ?? lead?.name ?? 'Client', payment, lead, receiptNumber, config, issuerSignature: profile?.signatureData ?? null, issuerName: profile?.name ?? null });
-      const blob = doc.output('blob');
-      const token = await getDataSource(demoMode).payments.issueReceiptLink(payment.id, blob, profile?.key ?? '');
+      const doc = buildReceiptPdf({
+        clientName: payment.clientName ?? lead?.name ?? "Client",
+        payment,
+        lead,
+        receiptNumber,
+        config,
+        ...receiptBalanceSnapshot(payment),
+        issuerSignature: profile?.signatureData ?? null,
+        issuerName: profile?.name ?? null,
+      });
+      const blob = doc.output("blob");
+      const token = await getDataSource(demoMode).payments.issueReceiptLink(payment.id, blob, profile?.key ?? "");
       return `${window.location.origin}/receipt/${token}`;
     },
   });
@@ -55,13 +80,23 @@ export function useDownloadReceipt() {
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: Lead | null }) => {
-      if (!config) throw new Error('Config not loaded yet');
+      if (!config) throw new Error("Config not loaded yet");
       const receiptNumber = await getDataSource(demoMode).payments.ensureReceiptNumber(payment.id);
-      const doc = buildReceiptPdf({ clientName: payment.clientName ?? lead?.name ?? 'Client', payment, lead, receiptNumber, config, issuerSignature: profile?.signatureData ?? null, issuerName: profile?.name ?? null });
+      const doc = buildReceiptPdf({
+        clientName: payment.clientName ?? lead?.name ?? "Client",
+        payment,
+        lead,
+        receiptNumber,
+        config,
+        ...receiptBalanceSnapshot(payment),
+        issuerSignature: profile?.signatureData ?? null,
+        issuerName: profile?.name ?? null,
+      });
       const filename = `Receipt_${receiptNumber}.pdf`;
       doc.save(filename);
-      logDownload(filename, 'pdf', doc.output('datauristring'));
+      logDownload(filename, "pdf", doc.output("datauristring"));
       return receiptNumber;
     },
   });
 }
+
