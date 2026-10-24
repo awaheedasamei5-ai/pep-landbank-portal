@@ -261,9 +261,14 @@ function QuickAddForm({
 	const [until, setUntil] = useState("");
 	const [conflict, setConflict] = useState<{
 		title: string;
-		startTime: string;
-		endTime: string;
+		startTime: string | null;
+		endTime: string | null;
+		kind: "task" | "meeting";
 	} | null>(null);
+	const [checkingConflicts, setCheckingConflicts] = useState(false);
+	const [conflictCheckError, setConflictCheckError] = useState<string | null>(
+		null,
+	);
 
 	// Real-time collision detection -- same real V1 logic
 	// (apiCheckScheduleConflicts/scheduleConflictReasonText) this app
@@ -272,19 +277,34 @@ function QuickAddForm({
 	// time change, not computed off whatever's already loaded in the
 	// visible calendar range.
 	useEffect(() => {
-		if (!profile?.key || !startTime || !endTime) {
+		if (!profile?.key) {
 			setConflict(null);
+			setCheckingConflicts(false);
+			setConflictCheckError(null);
 			return;
 		}
 		let cancelled = false;
+		setCheckingConflicts(true);
+		setConflictCheckError(null);
 		const timer = setTimeout(async () => {
-			const hits = await checkScheduleConflicts(
-				profile.key,
-				date,
-				startTime,
-				endTime,
-			);
-			if (!cancelled) setConflict(hits[0] ?? null);
+			try {
+				const hits = await checkScheduleConflicts(
+					profile.key,
+					date,
+					startTime || "",
+					endTime || "",
+				);
+				if (!cancelled) setConflict(hits[0] ?? null);
+			} catch {
+				if (!cancelled) {
+					setConflict(null);
+					setConflictCheckError(
+						"We couldn't check your schedule. Try again before adding this task.",
+					);
+				}
+			} finally {
+				if (!cancelled) setCheckingConflicts(false);
+			}
 		}, 300);
 		return () => {
 			cancelled = true;
@@ -351,8 +371,15 @@ function QuickAddForm({
 				{conflict && (
 					<p className="flex items-center gap-1.5 text-amber-600 text-xs dark:text-amber-400">
 						<AlertTriangle className="size-3.5" />
-						You already have &quot;{conflict.title}&quot; {conflict.startTime}–
-						{conflict.endTime} that day.
+						This overlaps with your {conflict.kind}: &quot;
+						{conflict.title}&quot; (
+						{conflict.startTime ?? "all day"}
+						{conflict.endTime ? `–${conflict.endTime}` : ""}).
+					</p>
+				)}
+				{conflictCheckError && (
+					<p role="alert" className="text-destructive text-xs">
+						{conflictCheckError}
 					</p>
 				)}
 				<div className="flex items-center gap-2 text-sm">
@@ -386,6 +413,7 @@ function QuickAddForm({
 				)}
 				<SubmitButton
 					type="button"
+					disabled={checkingConflicts || Boolean(conflictCheckError)}
 					loading={createTodo.isPending || createRecurring.isPending}
 					onClick={submit}
 					className="ml-auto"
