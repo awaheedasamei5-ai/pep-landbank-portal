@@ -137,6 +137,9 @@ export function ClientDetailScreen() {
                     <div className={styles.rowSub}>
                       {fmtLongDate(p.date)}
                       {p.paymentMethod ? ` · ${p.paymentMethod}` : ''}
+                      {p.referenceNumber ? ` · Ref ${p.referenceNumber}` : ''}
+                      {p.receiptNumber ? ` · Receipt ${p.receiptNumber}` : ''}
+                      {p.decidedAt ? ` · Approved ${fmtLongDate(p.decidedAt)}` : ''}
                     </div>
                   </div>
                   <PaymentStatusChip status={p.status} />
@@ -150,7 +153,10 @@ export function ClientDetailScreen() {
                 <div key={v.id} className={styles.rowStatic}>
                   <div className={styles.rowMain}>
                     <div className={styles.rowTitle}>{v.site}</div>
-                    <div className={styles.rowSub}>{fmtLongDate(v.visitDate)}</div>
+                    <div className={styles.rowSub}>
+                      {fmtLongDate(v.visitDate)}{v.visitTime ? ` · ${v.visitTime}` : ''} · Logged by {v.agentName}
+                    </div>
+                    <SiteVisitRecord visit={v} />
                   </div>
                   <StatusChip tone={v.status === 'completed' ? 'ok' : v.status === 'cancelled' ? 'dgr' : 'muted'}>{v.status}</StatusChip>
                 </div>
@@ -217,6 +223,39 @@ export function ClientDetailScreen() {
         )}
       </div>
     </div>
+  );
+}
+
+function SiteVisitRecord({ visit }: { visit: import('../../../types/domain').SiteVisit }) {
+  const fields: [string, string | null | undefined][] = [
+    ['Visit purpose', visit.purpose], ['Lead source', visit.source],
+    ['Plot or area discussed', visit.plot],
+    ['People attending', visit.people == null ? null : String(visit.people)],
+    ['Transport', visit.transport], ['Pickup point', visit.pickup],
+    ['Client occupation', [visit.position, visit.placeOfWork].filter(Boolean).join(' · ') || null],
+    ['Nationality', visit.nationality], ['Accompanied by', visit.accompanied],
+    ['Discussion so far', visit.discussionSoFar], ['Client understanding', visit.keyUnderstanding],
+    ['Follow-up feedback', visit.feedbackAfter], ['Agreed next steps', visit.keyNextSteps],
+    ['Additional notes', visit.notes],
+    ['Rescheduled from', visit.previousVisitDate ? fmtLongDate(visit.previousVisitDate) : null],
+    ['Cancellation reason', visit.cancellationReason],
+    ['Recorded on', visit.createdAt ? fmtLongDate(visit.createdAt) : null],
+  ];
+  const visibleFields = fields.filter(([, value]) => Boolean(value));
+
+  return (
+    <details className={styles.visitDetails}>
+      <summary>View submitted visit form ({visibleFields.length} details)</summary>
+      {visibleFields.length > 0 ? (
+        <dl className={styles.visitFields}>
+          {visibleFields.map(([label, value]) => (
+            <div key={label} className={styles.visitField}>
+              <dt>{label}</dt><dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : <p className={styles.visitEmpty}>No additional form details were recorded.</p>}
+    </details>
   );
 }
 
