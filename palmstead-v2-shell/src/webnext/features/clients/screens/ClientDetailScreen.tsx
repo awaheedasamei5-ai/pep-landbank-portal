@@ -43,16 +43,15 @@ export function ClientDetailScreen() {
   const key = rawKey ? decodeURIComponent(rawKey) : '';
   const profile = useSessionStore((s) => s.profile);
   const { data: clients } = useClients();
+  const client = (clients ?? []).find((c) => clientKey(c.name, c.contact) === key);
   const ownLeads = useLeads();
   const allLeads = useAllLeads();
   const { data: leads } = profile?.role === 'manager' ? allLeads : ownLeads;
-  const { data: related } = useClientRelatedData();
+  const { data: related } = useClientRelatedData(client?.leadIds ?? []);
   const downloadReceipt = useDownloadReceipt();
   const issueReceiptLink = useIssueReceiptLink();
   const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
   const [receiptLinks, setReceiptLinks] = useState<Record<string, string>>({});
-
-  const client = (clients ?? []).find((c) => clientKey(c.name, c.contact) === key);
   const clientLeads = useMemo(() => (leads ?? []).filter((l) => client?.leadIds.includes(l.id)), [leads, client]);
   const leadIdSet = useMemo(() => new Set(client?.leadIds ?? []), [client]);
 
