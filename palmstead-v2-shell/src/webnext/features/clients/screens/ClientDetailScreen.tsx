@@ -15,6 +15,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useClients } from '../hooks/useClients';
 import { useClientRelatedData } from '../hooks/useClientRelatedData';
 import { clientKey } from '../lib/groupClients';
+import type { SiteVisit } from '../../../types/domain';
 import styles from './ClientDetailScreen.module.css';
 
 function initials(name: string): string {
@@ -212,15 +213,22 @@ export function ClientDetailScreen() {
             </Section>
 
             <Section title="Site visits" count={siteVisits.length} icon="pin">
-              {siteVisits.length === 0 && <EmptyRow text="No site visits recorded." />}
-              {siteVisits.map((v) => (
-                <div key={v.id} className={styles.rowStatic}>
-                  <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>{v.site}</div>
-                    <div className={styles.rowSub}>{fmtLongDate(v.visitDate)}</div>
+              {siteVisits.length === 0 && clientLeads.some((lead) => lead.siteVisit?.trim().toLowerCase() === "yes") && (
+                <div className={styles.visitGap} role="note">
+                  <div className={styles.visitGapTitle}>Pipeline marked this client as “Site visited”</div>
+                  <div className={styles.visitGapText}>
+                    There is no submitted site-visit form linked to this client yet. The pipeline flag is not a substitute for the staff visit record.
                   </div>
-                  <StatusChip tone={v.status === 'completed' ? 'ok' : v.status === 'cancelled' ? 'dgr' : 'muted'}>{v.status}</StatusChip>
+                  {clientLeads.filter((lead) => lead.siteVisit?.trim().toLowerCase() === "yes").map((lead) => (
+                    <button key={lead.id} type="button" className={styles.visitGapButton} onClick={() => navigate(`/dashboard/pipeline/${lead.id}`)}>
+                      Review {lead.plotType} lead
+                    </button>
+                  ))}
                 </div>
+              )}
+              {siteVisits.length === 0 && <EmptyRow text="No submitted site-visit forms are linked to this client." />}
+              {siteVisits.map((visit) => (
+                <SiteVisitRecord key={visit.id} visit={visit} />
               ))}
             </Section>
 
@@ -285,6 +293,79 @@ export function ClientDetailScreen() {
       </div>
     </div>
   );
+}
+
+function SiteVisitRecord({ visit }: { visit: SiteVisit }) {
+  const fields = siteVisitFormFields(visit);
+  const summary = [fmtLongDate(visit.visitDate), visit.visitTime, visit.plot ? `Plot: ${visit.plot}` : null].filter(Boolean).join(" · ");
+  const status = visit.status || "Status not recorded";
+  const statusTone = status.toLowerCase() === "completed" ? "ok" : status.toLowerCase() === "cancelled" ? "dgr" : "muted";
+  const attribution = [
+    visit.agentName ? `Recorded by ${visit.agentName}` : null,
+    visit.createdAt ? `Entered ${fmtLongDate(visit.createdAt)}` : null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <details className={styles.visitRecord}>
+      <summary className={styles.visitSummary}>
+        <div className={styles.rowMain}>
+          <div className={styles.rowTitle}>{visit.site || "Site visit"}</div>
+          <div className={styles.rowSub}>{summary || "Visit date not recorded"}</div>
+        </div>
+        <StatusChip tone={statusTone}>{status}</StatusChip>
+      </summary>
+      <div className={styles.visitBody}>
+        <div className={styles.visitAttribution}>{attribution || "Visit record"}</div>
+        {fields.length === 0 ? (
+          <div className={styles.visitNoFields}>No additional form answers were saved.</div>
+        ) : (
+          <dl className={styles.visitFormGrid}>
+            {fields.map(([label, value]) => (
+              <div key={label} className={styles.visitFormField}>
+                <dt className={styles.visitFormLabel}>{label}</dt>
+                <dd className={styles.visitFormValue}>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {visit.previousVisitDate && (
+          <div className={styles.visitHistory}>Rescheduled from {fmtLongDate(visit.previousVisitDate)}</div>
+        )}
+        {visit.cancellationReason && (
+          <div className={styles.visitHistory}>Cancellation reason: {visit.cancellationReason}</div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function siteVisitFormFields(visit: SiteVisit): Array<[string, string]> {
+  const submitted: Array<[string, string | number | null | undefined]> = [
+    ["Client name", visit.name],
+    ["Contact", visit.contact],
+    ["Plot interest", visit.plot],
+    ["People attending", visit.people],
+    ["Transport", visit.transport],
+    ["Pickup point", visit.pickup],
+    ["Place of work", visit.placeOfWork],
+    ["Position", visit.position],
+    ["Nationality", visit.nationality],
+    ["Purpose of visit", visit.purpose],
+    ["Discussion so far", visit.discussionSoFar],
+    ["Key understanding", visit.keyUnderstanding],
+    ["Feedback after visit", visit.feedbackAfter],
+    ["Next steps", visit.keyNextSteps],
+    ["Lead source", visit.source],
+    ["Accompanied by", visit.accompanied],
+    ["Additional notes", visit.notes],
+  ];
+
+  return submitted.reduce<Array<[string, string]>>((result, [label, value]) => {
+    if (value === null || value === undefined) return result;
+    const normalized = String(value).trim();
+    if (normalized) result.push([label, normalized]);
+    return result;
+  }, []);
 }
 
 function Section({ title, count, icon, children }: { title: string; count: number; icon: IconName; children: React.ReactNode }) {
