@@ -6,7 +6,16 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { usePortalTab } from "../../_components/portal-navigation";
 
-const tabs = ["overview", "payments", "expenses", "commission", "payroll", "reports", "settings"] as const;
+const tabs = [
+  "overview",
+  "payments",
+  "installments",
+  "expenses",
+  "commission",
+  "payroll",
+  "reports",
+  "settings",
+] as const;
 
 export function AccountingTabs({ children }: { children: ReactNode }) {
   const [value, select] = usePortalTab("tab", tabs, "overview");
@@ -25,3 +34,4 @@ export function AccountingTabs({ children }: { children: ReactNode }) {
     </Tabs>
   );
 }
+
