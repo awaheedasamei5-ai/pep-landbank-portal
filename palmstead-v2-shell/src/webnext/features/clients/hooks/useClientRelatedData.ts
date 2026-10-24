@@ -35,7 +35,7 @@ export function useClientRelatedData(leadIds: string[] = []) {
       const ds = getDataSource(demoMode);
       const [paymentsByLead, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
         Promise.all(clientLeadIds.map((leadId) => ds.payments.listForLead(leadId))),
-        ds.siteVisits.listForAgent(agentKey),
+        role === 'manager' ? ds.siteVisits.listAll() : ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
         ds.complaints.listForAgent(agentKey),
