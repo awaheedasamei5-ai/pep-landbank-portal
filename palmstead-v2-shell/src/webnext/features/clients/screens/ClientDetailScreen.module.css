@@ -2,12 +2,8 @@
    that file's own comment for the full reasoning) -- one detail-panel
    pattern for the whole app. Inert below 1024px: mobile gets a plain
    full-page route instead, exactly like Pipeline. */
-.drawerBackdrop {
-  display: contents;
-}
-.drawerPanel {
-  display: contents;
-}
+.drawerBackdrop { display: contents; }
+.drawerPanel { display: contents; }
 
 @media (width >= 1024px) {
   /* Real flex sibling of the list inside .pageRowSplit (ClientDatabase
@@ -29,26 +25,13 @@
   }
 }
 
-@keyframes slideIn {
-  from {
-    transform: translateX(24px);
-    opacity: 0.6;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
+@keyframes slideIn { from { transform: translateX(24px); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawerPanel {
-    animation: none;
-  }
+  .drawerPanel { animation: none; }
 }
 
-.closeDrawerBtn {
-  display: none;
-}
+.closeDrawerBtn { display: none; }
 
 @media (width >= 1024px) {
   .closeDrawerBtn {
@@ -67,27 +50,13 @@
     right: 16px;
     font-size: 15px;
   }
-  .closeDrawerBtn:hover {
-    color: var(--c-danger);
-    border-color: var(--c-danger);
-  }
+  .closeDrawerBtn:hover { color: var(--c-danger); border-color: var(--c-danger); }
 }
 
-.wrap {
-  padding: 20px 16px 90px;
-  max-width: 480px;
-}
-.emptyMsg {
-  color: var(--c-muted);
-  font-size: 13.5px;
-}
+.wrap { padding: 20px 16px 90px; max-width: 480px; }
+.emptyMsg { color: var(--c-muted); font-size: 13.5px; }
 
-.head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .avatar {
   width: 46px;
   height: 46px;
@@ -101,30 +70,11 @@
   font-size: 16px;
   flex: 0 0 auto;
 }
-.eyebrow {
-  font-size: 11px;
-  color: var(--c-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.name {
-  font-size: 19px;
-  font-weight: 800;
-  margin: 2px 0 0;
-}
-.meta {
-  color: var(--c-muted);
-  font-size: 12.5px;
-  margin: 2px 0 0;
-}
+.eyebrow { font-size: 11px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
+.meta { color: var(--c-muted); font-size: 12.5px; margin: 2px 0 0; }
 
-.statsRow {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 20px;
-}
+.statsRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
 .statCard {
   background: var(--c-card);
   border: 1px solid var(--c-line);
@@ -132,37 +82,13 @@
   padding: 12px 10px;
   box-shadow: var(--shadow);
 }
-.statLabel {
-  font-size: 10.5px;
-  color: var(--c-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.statValue {
-  font-family: var(--font-mono);
-  font-weight: 800;
-  font-size: 14px;
-  margin-top: 3px;
-}
+.statLabel { font-size: 10.5px; color: var(--c-muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.statValue { font-family: var(--font-mono); font-weight: 800; font-size: 14px; margin-top: 3px; }
 
-.section {
-  margin-bottom: 16px;
-}
-.sectionHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.sectionIcon {
-  display: flex;
-  color: var(--c-muted);
-}
-.sectionTitle {
-  font-weight: 700;
-  font-size: 13px;
-}
+.section { margin-bottom: 16px; }
+.sectionHead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sectionIcon { display: flex; color: var(--c-muted); }
+.sectionTitle { font-weight: 700; font-size: 13px; }
 .sectionCount {
   font-size: 10.5px;
   font-weight: 700;
@@ -182,8 +108,7 @@
   overflow: hidden;
 }
 
-.row,
-.rowStatic {
+.row, .rowStatic {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -191,10 +116,7 @@
   padding: 11px 14px;
   border-bottom: 1px solid var(--c-line);
 }
-.row:last-child,
-.rowStatic:last-child {
-  border-bottom: none;
-}
+.row:last-child, .rowStatic:last-child { border-bottom: none; }
 .row {
   width: 100%;
   background: none;
@@ -206,106 +128,32 @@
   color: inherit;
   cursor: pointer;
 }
-.row:hover {
-  background: var(--c-paper);
-}
+.row:hover { background: var(--c-paper); }
 
-.rowMain {
-  min-width: 0;
-  flex: 1;
-}
-.rowTitle {
-  font-weight: 700;
-  font-size: 13px;
-}
-.rowSub {
-  color: var(--c-muted);
-  font-size: 11.5px;
-  margin-top: 2px;
-}
-.rowRight {
-  text-align: right;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-.rowValue {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 13px;
-}
+.rowMain { min-width: 0; flex: 1; }
+.rowTitle { font-weight: 700; font-size: 13px; }
+.rowSub { color: var(--c-muted); font-size: 11.5px; margin-top: 2px; }
+.rowRight { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.rowValue { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
 
-.paymentRow {
-  align-items: flex-start;
-}
-.paymentRight {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-}
-.paymentActions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
+.paymentRow { align-items: flex-start; }
+.paymentRight { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.paymentActions { display: flex; align-items: center; gap: 3px; }
 .receiptAction {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--c-line);
-  border-radius: 8px;
-  background: var(--c-card);
-  color: var(--c-ink);
-  cursor: pointer;
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card); color: var(--c-ink); cursor: pointer;
 }
-.receiptAction:hover {
-  background: var(--c-paper);
-  border-color: var(--c-accent);
-}
-.receiptAction:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
-.receiptFeedback {
-  color: var(--c-success);
-  font-size: 10px;
-  white-space: nowrap;
-}
-.receiptLink {
-  color: var(--c-ink);
-  font-size: 10.5px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
-}
-.receiptError {
-  padding: 8px 12px;
-  color: var(--c-danger);
-  font-size: 11.5px;
-}
-
-.emptyRow {
-  padding: 14px;
-  color: var(--c-muted);
-  font-size: 12.5px;
-  text-align: center;
-}
+.receiptAction:hover { background: var(--c-paper); border-color: var(--c-accent); }
+.receiptAction:disabled { opacity: .55; cursor: wait; }
+.receiptLink { color: var(--c-ink); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.receiptError { padding: 8px 12px; color: var(--c-danger); font-size: 11.5px; }
 
 @media (max-width: 480px) {
-  .paymentRow {
-    flex-wrap: wrap;
-  }
-  .paymentRight {
-    width: 100%;
-    justify-content: space-between;
-  }
+  .paymentRow { flex-wrap: wrap; }
+  .paymentRight { width: 100%; justify-content: space-between; }
 }
+
+.emptyRow { padding: 14px; color: var(--c-muted); font-size: 12.5px; text-align: center; }
 
 .chip {
   flex-shrink: 0;
@@ -316,32 +164,9 @@
   text-transform: capitalize;
   white-space: nowrap;
 }
-.chip_ok {
-  background: var(--c-success-bg);
-  color: var(--c-success);
-}
-.chip_warn {
-  background: var(--c-warn-bg);
-  color: var(--c-warn);
-}
-.chip_dgr {
-  background: var(--c-danger-bg);
-  color: var(--c-danger);
-}
-.chip_muted {
-  background: var(--c-paper);
-  color: var(--c-muted);
-  border: 1px solid var(--c-line);
-}
+.chip_ok { background: var(--c-success-bg); color: var(--c-success); }
+.chip_warn { background: var(--c-warn-bg); color: var(--c-warn); }
+.chip_dgr { background: var(--c-danger-bg); color: var(--c-danger); }
+.chip_muted { background: var(--c-paper); color: var(--c-muted); border: 1px solid var(--c-line); }
 
-.backBtn {
-  background: none;
-  border: none;
-  color: var(--c-muted);
-  font-weight: 700;
-  cursor: pointer;
-  padding: 8px 0;
-  font-size: 13px;
-  margin-top: 4px;
-}
-
+.backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; margin-top: 4px; }
