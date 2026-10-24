@@ -1,6 +1,7 @@
 export interface ScheduleConflictItem {
 	id: string;
 	title: string;
+	date: string;
 	startTime: string | null;
 	endTime: string | null;
 	status: string;
@@ -61,4 +62,3 @@ export function findScheduleConflicts<T extends ScheduleConflictItem>(
 			return aStart - bStart || a.title.localeCompare(b.title);
 		});
 }
-
