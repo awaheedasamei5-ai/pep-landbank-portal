@@ -15,31 +15,33 @@ export interface ClientRelatedData {
 }
 
 // Master Rebuild Spec 17.2: "Open customer -> all related leads, payments,
-// visits, allocations, contracts and complaints." Staff fetch their own
-// payments; Management fetches company-visible payments under the existing
-// payments RLS policy. The client detail screen filters every result to this
-// customer's lead IDs before rendering. Contracts have no agent-scoped
-// variant, so the caller must apply that same client filter to them too.
-export function useClientRelatedData() {
+// visits, allocations, contracts and complaints." Fetch payments by this
+// customer's lead IDs. The database's payments RLS policy still controls which
+// rows the current role can read, while the lead filter avoids an extra,
+// viewer-agent filter that can hide a staff member's own client's payments.
+// Contracts have no agent-scoped variant, so the caller applies the same
+// client filter to them before rendering.
+export function useClientRelatedData(leadIds: string[] = []) {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const agentKey = profile?.key ?? '';
   const role = profile?.role ?? 'agent';
+  const clientLeadIds = [...new Set(leadIds)].sort();
 
   return useQuery({
-    queryKey: ['clientRelatedData', agentKey, role],
+    queryKey: ['clientRelatedData', agentKey, role, clientLeadIds],
     enabled: !!agentKey,
     queryFn: async (): Promise<ClientRelatedData> => {
       const ds = getDataSource(demoMode);
-      const [payments, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
-        role === 'manager' ? ds.payments.listAll() : ds.payments.listForAgent(agentKey),
+      const [paymentsByLead, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
+        Promise.all(clientLeadIds.map((leadId) => ds.payments.listForLead(leadId))),
         ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
         ds.complaints.listForAgent(agentKey),
         ds.contracts.list(),
       ]);
-      return { payments, siteVisits, allocations, contractRequests, complaints, contracts };
+      return { payments: paymentsByLead.flat(), siteVisits, allocations, contractRequests, complaints, contracts };
     },
   });
 }
