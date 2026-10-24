@@ -269,7 +269,7 @@ export function useCancelFutureRecurrence() {
 // whatever's already loaded in the current view window.
 export async function checkScheduleConflicts(staffKey: string, date: string, start: string, end: string, excludeId?: string) {
   const sb = requireSupabase();
-  const [todoResult, meetingResult, inviteeResult] = await Promise.all([
+  const [todoResult, meetingResult] = await Promise.all([
     sb
       .from("op_todos")
       .select("id,title,start_time,end_time,status,item_date")
@@ -282,18 +282,25 @@ export async function checkScheduleConflicts(staffKey: string, date: string, sta
       .eq("kind", "meeting")
       .eq("item_date", date)
       .not("status", "in", "(done,cancelled,rescheduled)"),
-    sb
-      .from("schedule_item_invitees")
-      .select("schedule_item_id")
-      .eq("staff_key", staffKey),
   ]);
   if (todoResult.error) throw todoResult.error;
   if (meetingResult.error) throw meetingResult.error;
-  if (inviteeResult.error) throw inviteeResult.error;
 
-  const invitedMeetings = new Set(
-    (inviteeResult.data ?? []).map((row) => row.schedule_item_id),
-  );
+  const meetingRows = meetingResult.data ?? [];
+  const meetingIds = meetingRows.map((row) => row.id);
+  const invitedMeetingIds = new Set<string>();
+  if (meetingIds.length > 0) {
+    const inviteeResult = await sb
+      .from("schedule_item_invitees")
+      .select("schedule_item_id")
+      .eq("staff_key", staffKey)
+      .in("schedule_item_id", meetingIds);
+    if (inviteeResult.error) throw inviteeResult.error;
+    for (const row of inviteeResult.data ?? []) {
+      invitedMeetingIds.add(row.schedule_item_id);
+    }
+  }
+
   const taskItems = (todoResult.data ?? []).map((row) => ({
     id: row.id,
     title: row.title,
@@ -303,12 +310,12 @@ export async function checkScheduleConflicts(staffKey: string, date: string, sta
     date: row.item_date,
     kind: "task" as const,
   }));
-  const meetingItems = (meetingResult.data ?? [])
+  const meetingItems = meetingRows
     .filter(
       (row) =>
         row.owner_key === staffKey ||
         row.assigned_to === staffKey ||
-        invitedMeetings.has(row.id),
+        invitedMeetingIds.has(row.id),
     )
     .map((row) => ({
       id: row.id,
