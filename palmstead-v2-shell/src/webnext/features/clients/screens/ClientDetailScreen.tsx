@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Check, Download, Link2 } from 'lucide-react';
+// biome-ignore lint/correctness/noUndeclaredDependencies: this resolves through the local webnext router shim.
 import { useNavigate, useParams } from 'react-router';
 import { ghs, fmtLongDate } from '../../../shared/lib/format';
 import { Icon, type IconName } from '../../../shared/ui/Icon';
+import { useAllLeads } from '../../payments/hooks/useLogPayment';
+import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
 import { StageBadge } from '../../pipeline/components/StageBadge';
 import { qtyOfType } from '../../pipeline/lib/pipelineLogic';
 import { useLeads } from '../../pipeline/hooks/useLeads';
+import { useSessionStore } from '../../../auth/useSessionStore';
 import { useClients } from '../hooks/useClients';
 import { useClientRelatedData } from '../hooks/useClientRelatedData';
 import { clientKey } from '../lib/groupClients';
@@ -36,11 +41,17 @@ export function ClientDetailScreen() {
   const navigate = useNavigate();
   const { key: rawKey } = useParams<{ key: string }>();
   const key = rawKey ? decodeURIComponent(rawKey) : '';
+  const profile = useSessionStore((s) => s.profile);
   const { data: clients } = useClients();
-  const { data: leads } = useLeads();
-  const { data: related } = useClientRelatedData();
-
   const client = (clients ?? []).find((c) => clientKey(c.name, c.contact) === key);
+  const ownLeads = useLeads();
+  const allLeads = useAllLeads();
+  const { data: leads } = profile?.role === 'manager' ? allLeads : ownLeads;
+  const { data: related } = useClientRelatedData(client?.leadIds ?? []);
+  const downloadReceipt = useDownloadReceipt();
+  const issueReceiptLink = useIssueReceiptLink();
+  const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
+  const [receiptLinks, setReceiptLinks] = useState<Record<string, string>>({});
   const clientLeads = useMemo(() => (leads ?? []).filter((l) => client?.leadIds.includes(l.id)), [leads, client]);
   const leadIdSet = useMemo(() => new Set(client?.leadIds ?? []), [client]);
 
@@ -57,6 +68,21 @@ export function ClientDetailScreen() {
   // showing a colleague's contract. Never remove this filter.
   const contracts = useMemo(() => (related?.contracts ?? []).filter((c) => leadIdSet.has(c.leadId)), [related, leadIdSet]);
   const complaints = useMemo(() => (related?.complaints ?? []).filter((co) => client && clientKey(co.name ?? '', co.contact ?? '') === key), [related, client, key]);
+
+  async function shareReceipt(paymentId: string, leadId: string) {
+    const payment = payments.find((item) => item.id === paymentId);
+    const lead = clientLeads.find((item) => item.id === leadId);
+    if (!payment || !lead) return;
+    const link = await issueReceiptLink.mutateAsync({ payment, lead });
+    setReceiptLinks((current) => ({ ...current, [payment.id]: link }));
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedReceiptId(payment.id);
+      window.setTimeout(() => setCopiedReceiptId((current) => (current === payment.id ? null : current)), 2500);
+    } catch {
+      setCopiedReceiptId(null);
+    }
+  }
 
   return (
     <div className={styles.drawerBackdrop}>
@@ -130,18 +156,59 @@ export function ClientDetailScreen() {
 
             <Section title="Payments" count={payments.length} icon="wallet">
               {payments.length === 0 && <EmptyRow text="No payments logged yet." />}
-              {payments.map((p) => (
-                <div key={p.id} className={styles.rowStatic}>
-                  <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>{ghs(p.amount)}</div>
-                    <div className={styles.rowSub}>
-                      {fmtLongDate(p.date)}
-                      {p.paymentMethod ? ` · ${p.paymentMethod}` : ''}
+              {payments.map((p) => {
+                const approved = (p.status ?? 'approved') === 'approved';
+                const lead = clientLeads.find((item) => item.id === p.leadId);
+                return (
+                  <div key={p.id} className={`${styles.rowStatic} ${styles.paymentRow}`}>
+                    <div className={styles.rowMain}>
+                      <div className={styles.rowTitle}>{ghs(p.amount)}</div>
+                      <div className={styles.rowSub}>
+                        {fmtLongDate(p.date)}
+                        {p.paymentMethod ? ` · ${p.paymentMethod}` : ''}
+                        {p.receiptNumber ? ` · ${p.receiptNumber}` : ''}
+                      </div>
+                    </div>
+                    <div className={styles.paymentRight}>
+                      <PaymentStatusChip status={p.status} />
+                      {approved && lead && (
+                        <div className={styles.paymentActions}>
+                          <button
+                            type="button"
+                            className={styles.receiptAction}
+                            onClick={() => downloadReceipt.mutate({ payment: p, lead })}
+                            disabled={downloadReceipt.isPending}
+                            aria-label={`Download receipt${p.receiptNumber ? ` ${p.receiptNumber}` : ''}`}
+                            title="Download receipt PDF"
+                          >
+                            <Download size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.receiptAction}
+                            onClick={() => void shareReceipt(p.id, lead.id).catch(() => setCopiedReceiptId(null))}
+                            disabled={issueReceiptLink.isPending}
+                            aria-label={copiedReceiptId === p.id ? 'Receipt link copied' : 'Copy secure receipt link'}
+                            title={copiedReceiptId === p.id ? 'Receipt link copied' : 'Copy secure receipt link'}
+                          >
+                            {copiedReceiptId === p.id ? <Check size={15} aria-hidden="true" /> : <Link2 size={15} aria-hidden="true" />}
+                          </button>
+                        </div>
+                      )}
+                      {approved && receiptLinks[p.id] && (
+                        <a className={styles.receiptLink} href={receiptLinks[p.id]} target="_blank" rel="noreferrer">
+                          Open receipt
+                        </a>
+                      )}
                     </div>
                   </div>
-                  <PaymentStatusChip status={p.status} />
+                );
+              })}
+              {(downloadReceipt.error || issueReceiptLink.error) && (
+                <div className={styles.receiptError} role="alert">
+                  {downloadReceipt.error?.message ?? issueReceiptLink.error?.message ?? 'The receipt could not be prepared. Please try again.'}
                 </div>
-              ))}
+              )}
             </Section>
 
             <Section title="Site visits" count={siteVisits.length} icon="pin">

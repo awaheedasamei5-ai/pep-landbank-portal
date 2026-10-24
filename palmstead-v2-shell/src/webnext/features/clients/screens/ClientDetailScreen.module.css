@@ -136,6 +136,23 @@
 .rowRight { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .rowValue { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
 
+.paymentRow { align-items: flex-start; }
+.paymentRight { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.paymentActions { display: flex; align-items: center; gap: 3px; }
+.receiptAction {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card); color: var(--c-ink); cursor: pointer;
+}
+.receiptAction:hover { background: var(--c-paper); border-color: var(--c-accent); }
+.receiptAction:disabled { opacity: .55; cursor: wait; }
+.receiptLink { color: var(--c-ink); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.receiptError { padding: 8px 12px; color: var(--c-danger); font-size: 11.5px; }
+
+@media (max-width: 480px) {
+  .paymentRow { flex-wrap: wrap; }
+  .paymentRight { width: 100%; justify-content: space-between; }
+}
+
 .emptyRow { padding: 14px; color: var(--c-muted); font-size: 12.5px; text-align: center; }
 
 .chip {
