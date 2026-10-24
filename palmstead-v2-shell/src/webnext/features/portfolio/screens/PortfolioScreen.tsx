@@ -31,7 +31,7 @@ export function PortfolioScreen() {
             <Trophy className="size-8 text-muted-foreground" />
             <p className="font-medium">See the Leaderboard instead</p>
             <p className="max-w-sm text-sm text-muted-foreground">Portfolio is for individual staff tracking — as Management you already see everyone on the Leaderboard.</p>
-            <Link href="/dashboard/coming-soon" className="mt-2 text-sm font-medium text-primary hover:underline">
+            <Link href="/dashboard/leaderboard" className="mt-2 text-sm font-medium text-primary hover:underline">
               Go to Leaderboard
             </Link>
           </CardContent>

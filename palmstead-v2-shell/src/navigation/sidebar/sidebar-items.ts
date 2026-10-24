@@ -298,7 +298,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "leaderboard",
 				title: "Leaderboard",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/leaderboard",
 				icon: Trophy,
 			},
 		],
