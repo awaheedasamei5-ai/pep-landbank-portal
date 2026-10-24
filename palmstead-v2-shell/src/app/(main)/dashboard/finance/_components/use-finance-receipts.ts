@@ -3,8 +3,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
-import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 import { buildReceiptPdf } from "@/webnext/features/payments/lib/receiptPdf";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 import type { Config, Lead, Payment as WebnextPayment } from "@/webnext/types/domain";
 
 import type { Payment } from "./use-finance-payments";
@@ -19,7 +19,8 @@ import type { Payment } from "./use-finance-payments";
 // web-next phase -- this just wires this shell's own real Supabase client
 // and auth store into that existing infrastructure, since web-next's own
 // DataSource/useSessionStore abstractions don't exist here.
-const RECEIPT_CONFIG_COLUMNS = "quote_company_name,quote_site_name,company_phone,company_email,company_tin,quote_footer_address,receipt_thanks_text,receipt_logo_image";
+const RECEIPT_CONFIG_COLUMNS =
+  "quote_company_name,quote_site_name,company_phone,company_email,company_tin,quote_footer_address,receipt_thanks_text,receipt_logo_image";
 
 async function fetchReceiptConfig(): Promise<Config> {
   const sb = requireSupabase();
@@ -60,10 +61,26 @@ export function useReceiptLeadInfo(leadId: string | null) {
     enabled: !!leadId,
     queryFn: async (): Promise<ReceiptLeadInfo> => {
       const sb = requireSupabase();
-      const { data, error } = await sb.from("leads").select("name,contact,plot_type,grand_total,amt_paid").eq("id", leadId as string).single();
+      const { data, error } = await sb
+        .from("leads")
+        .select("name,contact,plot_type,grand_total,amt_paid")
+        .eq("id", leadId as string)
+        .single();
       if (error) throw error;
-      const row = data as { name: string; contact: string | null; plot_type: string | null; grand_total: number | null; amt_paid: number | null };
-      return { name: row.name, contact: row.contact, plotType: row.plot_type, grandTotal: Number(row.grand_total ?? 0), amtPaid: Number(row.amt_paid ?? 0) };
+      const row = data as {
+        name: string;
+        contact: string | null;
+        plot_type: string | null;
+        grand_total: number | null;
+        amt_paid: number | null;
+      };
+      return {
+        name: row.name,
+        contact: row.contact,
+        plotType: row.plot_type,
+        grandTotal: Number(row.grand_total ?? 0),
+        amtPaid: Number(row.amt_paid ?? 0),
+      };
     },
   });
 }
@@ -77,11 +94,18 @@ function toWebnextPayment(p: Payment): WebnextPayment {
     date: p.paymentDate,
     clientName: p.leadName,
     paymentMethod: p.paymentMethod as WebnextPayment["paymentMethod"],
+    referenceNumber: p.referenceNumber,
     status: p.status as WebnextPayment["status"],
   } as unknown as WebnextPayment;
 }
 
-function toWebnextLead(input: { name: string; contact: string | null; plotType: string | null; grandTotal: number; amtPaid: number }): Lead {
+function toWebnextLead(input: {
+  name: string;
+  contact: string | null;
+  plotType: string | null;
+  grandTotal: number;
+  amtPaid: number;
+}): Lead {
   return {
     name: input.name,
     contact: input.contact ?? "",
@@ -107,51 +131,73 @@ export interface ReceiptLeadInfo {
   amtPaid: number;
 }
 
-export function useDownloadReceipt(config: Config | undefined, issuerSignature: string | null | undefined, issuerName: string | null | undefined) {
+export function useDownloadReceipt(
+  config: Config | undefined,
+  issuerSignature: string | null | undefined,
+  issuerName: string | null | undefined,
+) {
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
       const receiptNumber = await ensureReceiptNumber(payment.id);
       const doc = buildReceiptPdf({
-        clientName: payment.leadName,
+        clientName: payment.clientName ?? payment.leadName,
         payment: toWebnextPayment(payment),
         lead: lead ? toWebnextLead(lead) : null,
         receiptNumber,
         config,
+        paidAsOf: payment.approvalSnapshotIsLegacy ? null : payment.paidAfterApproval,
+        balanceAsOf: payment.approvalSnapshotIsLegacy ? null : payment.balanceAfterApproval,
+        contractTotalAsOf: payment.approvalSnapshotIsLegacy ? null : payment.contractTotalAtApproval,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
       });
       const filename = `Receipt_${receiptNumber}.pdf`;
       doc.save(filename);
-      logDownload(filename, 'pdf', doc.output('datauristring'));
+      logDownload(filename, "pdf", doc.output("datauristring"));
       return receiptNumber;
     },
   });
 }
 
-export function useIssueReceiptLink(config: Config | undefined, issuerSignature: string | null | undefined, issuerName: string | null | undefined, createdBy: string | undefined) {
+export function useIssueReceiptLink(
+  config: Config | undefined,
+  issuerSignature: string | null | undefined,
+  issuerName: string | null | undefined,
+  createdBy: string | undefined,
+) {
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
       const sb = requireSupabase();
       const receiptNumber = await ensureReceiptNumber(payment.id);
       const doc = buildReceiptPdf({
-        clientName: payment.leadName,
+        clientName: payment.clientName ?? payment.leadName,
         payment: toWebnextPayment(payment),
         lead: lead ? toWebnextLead(lead) : null,
         receiptNumber,
         config,
+        paidAsOf: payment.approvalSnapshotIsLegacy ? null : payment.paidAfterApproval,
+        balanceAsOf: payment.approvalSnapshotIsLegacy ? null : payment.balanceAfterApproval,
+        contractTotalAsOf: payment.approvalSnapshotIsLegacy ? null : payment.contractTotalAtApproval,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
       });
       const blob = doc.output("blob");
       const path = `${payment.id}/receipt-${Date.now()}.pdf`;
-      const { error: uploadError } = await sb.storage.from("payment-receipts").upload(path, blob, { contentType: "application/pdf", upsert: true });
+      const { error: uploadError } = await sb.storage
+        .from("payment-receipts")
+        .upload(path, blob, { contentType: "application/pdf", upsert: true });
       if (uploadError) throw uploadError;
-      const { data, error } = await sb.from("receipt_share_links").insert({ payment_id: payment.id, storage_path: path, created_by: createdBy ?? null }).select("token").single();
+      const { data, error } = await sb
+        .from("receipt_share_links")
+        .insert({ payment_id: payment.id, storage_path: path, created_by: createdBy ?? null })
+        .select("token")
+        .single();
       if (error) throw error;
       return `${window.location.origin}/receipt/${(data as { token: string }).token}`;
     },
   });
 }
+
