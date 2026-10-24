@@ -1,7 +1,10 @@
 "use client";
 
-import { CalendarDays, Check, Clock3, MapPin, Users, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+
+import { CalendarDays, Check, Clock3, MapPin, Users, X } from "lucide-react";
+
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,10 +25,19 @@ import {
 	type ScheduleMeeting,
 	useActiveMeetingStaff,
 	useCreateScheduleMeeting,
+	useReplaceScheduleMeetingInvitees,
 	useRespondToScheduleMeeting,
 	useUpdateScheduleMeeting,
 } from "./use-schedule-meetings";
 import { workspaceDateOnly } from "./schedule-time.ts";
+
+function inviteeStatusVariant(
+	status: string,
+): "default" | "destructive" | "outline" {
+	if (status === "accepted") return "default";
+	if (status === "declined") return "destructive";
+	return "outline";
+}
 
 function todayDate() {
 	return workspaceDateOnly(new Date());
@@ -89,8 +101,6 @@ export function ScheduleMeetingComposer({
 	async function submit() {
 		if (!profile || !isValid) return;
 		await createMeeting.mutateAsync({
-			ownerKey: profile.key,
-			ownerName: profile.name,
 			title,
 			description,
 			date,
@@ -108,7 +118,8 @@ export function ScheduleMeetingComposer({
 				<DialogHeader>
 					<DialogTitle>Schedule a meeting</DialogTitle>
 					<p className="text-sm text-muted-foreground">
-						Times use Palmstead&apos;s Africa/Accra workspace time.
+						Times use Palmstead&apos;s Africa/Accra workspace time. Invitations appear in
+						Operations for invited staff; this does not send email or SMS.
 					</p>
 				</DialogHeader>
 				<div className="grid gap-4">
@@ -282,6 +293,7 @@ export function ScheduleMeetingDetails({
 }) {
 	const staffQuery = useActiveMeetingStaff();
 	const updateMeeting = useUpdateScheduleMeeting();
+	const replaceInvitees = useReplaceScheduleMeetingInvitees();
 	const respond = useRespondToScheduleMeeting();
 	const [title, setTitle] = useState(meeting.title);
 	const [description, setDescription] = useState(meeting.description ?? "");
@@ -290,6 +302,11 @@ export function ScheduleMeetingDetails({
 	const [endTime, setEndTime] = useState(meeting.endTime ?? "09:30");
 	const [location, setLocation] = useState(meeting.location ?? "");
 	const [editing, setEditing] = useState(false);
+	const [editingInvitees, setEditingInvitees] = useState(false);
+	const [inviteeSearch, setInviteeSearch] = useState("");
+	const [selectedInviteeKeys, setSelectedInviteeKeys] = useState<string[]>(
+		meeting.invitees.map((invitee) => invitee.staffKey),
+	);
 	const [feedback, setFeedback] = useState<string | null>(null);
 	const canManage =
 		profile?.role === "manager" || profile?.key === meeting.ownerKey;
@@ -300,6 +317,68 @@ export function ScheduleMeetingDetails({
 		(staffQuery.data ?? []).map((person) => [person.key, person.name]),
 	);
 	const cancelled = meeting.status === "cancelled";
+	const inviteeOptions = useMemo(() => {
+		const active = staffQuery.data ?? [];
+		const activeKeys = new Set(active.map((person) => person.key));
+		const existing = meeting.invitees
+			.filter((invitee) => !activeKeys.has(invitee.staffKey))
+			.map((invitee) => ({
+				key: invitee.staffKey,
+				name: invitee.staffName || invitee.staffKey,
+				department: "Inactive staff",
+			}));
+		return [...active, ...existing].filter(
+			(person) => person.key !== meeting.ownerKey,
+		);
+	}, [meeting.invitees, meeting.ownerKey, staffQuery.data]);
+	const filteredInviteeOptions = inviteeOptions.filter((person) =>
+		`${person.name} ${person.department ?? ""}`
+			.toLowerCase()
+			.includes(inviteeSearch.trim().toLowerCase()),
+	);
+	let inviteeContent: ReactNode;
+	if (canManage && meeting.invitees.length > 0) {
+		inviteeContent = (
+			<div className="divide-y rounded-md border">
+				{meeting.invitees.map((invitee) => (
+					<div
+						key={invitee.id}
+						className="flex items-center justify-between gap-3 px-3 py-2"
+					>
+						<span className="min-w-0 truncate text-sm">
+							{invitee.staffName ||
+								staffNames.get(invitee.staffKey) ||
+								invitee.staffKey}
+						</span>
+						<Badge
+							variant={inviteeStatusVariant(invitee.status)}
+						>
+							{invitee.status === "invited"
+								? "Needs response"
+								: invitee.status}
+						</Badge>
+					</div>
+				))}
+			</div>
+		);
+	} else if (ownInvite) {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">
+				Your response: {ownInvite.status === "invited" ? "Needs response" : ownInvite.status}.
+				 Attendee responses are visible to the organizer and management.
+			</p>
+		);
+	} else if (meeting.invitees.length > 0) {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">
+				Attendee details are limited to the organizer and management.
+			</p>
+		);
+	} else {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">No staff were invited.</p>
+		);
+	}
 
 	useEffect(() => {
 		setTitle(meeting.title);
@@ -309,8 +388,28 @@ export function ScheduleMeetingDetails({
 		setEndTime(meeting.endTime ?? "09:30");
 		setLocation(meeting.location ?? "");
 		setEditing(false);
+		setEditingInvitees(false);
+		setSelectedInviteeKeys(meeting.invitees.map((invitee) => invitee.staffKey));
+		setInviteeSearch("");
 		setFeedback(null);
 	}, [meeting]);
+
+	async function saveInvitees() {
+		try {
+			const result = await replaceInvitees.mutateAsync({
+				id: meeting.id,
+				inviteeKeys: selectedInviteeKeys,
+			});
+			setFeedback(
+				`Invitees updated. ${result.added} added and ${result.removed} removed. Retained responses are unchanged.`,
+			);
+			setEditingInvitees(false);
+		} catch (error) {
+			setFeedback(
+				error instanceof Error ? error.message : "Invitees could not be updated.",
+			);
+		}
+	}
 
 	async function save() {
 		if (
@@ -367,6 +466,55 @@ export function ScheduleMeetingDetails({
 					: "Your response could not be saved.",
 			);
 		}
+	}
+
+	let inviteeEditorContent: ReactNode;
+	if (staffQuery.isError) {
+		inviteeEditorContent = (
+			<p role="alert" className="p-3 text-sm text-destructive">
+				Staff could not be loaded. Try again before saving.
+			</p>
+		);
+	} else if (staffQuery.isLoading) {
+		inviteeEditorContent = (
+			<p className="p-3 text-sm text-muted-foreground">Loading staff…</p>
+		);
+	} else if (filteredInviteeOptions.length === 0) {
+		inviteeEditorContent = (
+			<p className="p-3 text-sm text-muted-foreground">
+				No staff match that search.
+			</p>
+		);
+	} else {
+		inviteeEditorContent = filteredInviteeOptions.map((person) => (
+			<div
+				key={person.key}
+				className="flex min-h-11 items-center gap-3 border-b px-3 last:border-0"
+			>
+				<Checkbox
+					id={`edit-invitee-${person.key}`}
+					checked={selectedInviteeKeys.includes(person.key)}
+					onCheckedChange={(checked) =>
+						setSelectedInviteeKeys((current) =>
+							checked
+								? [...current, person.key]
+								: current.filter((key) => key !== person.key),
+						)
+					}
+				/>
+				<label
+					htmlFor={`edit-invitee-${person.key}`}
+					className="min-w-0 flex-1 cursor-pointer truncate text-sm"
+				>
+					{person.name}
+				</label>
+				{person.department && (
+					<span className="text-xs text-muted-foreground">
+						{person.department}
+					</span>
+				)}
+			</div>
+		));
 	}
 
 	return (
@@ -460,53 +608,32 @@ export function ScheduleMeetingDetails({
 									{meeting.invitees.length}
 								</span>
 							</div>
-							{meeting.invitees.length && canManage ? (
-								<div className="divide-y rounded-md border">
-									{meeting.invitees.map((invitee) => (
-										<div
-											key={invitee.id}
-											className="flex items-center justify-between gap-3 px-3 py-2"
-										>
-											<span className="min-w-0 truncate text-sm">
-												{invitee.staffName ||
-													staffNames.get(invitee.staffKey) ||
-													invitee.staffKey}
-											</span>
-											<Badge
-												variant={
-													invitee.status === "accepted"
-														? "default"
-														: invitee.status === "declined"
-															? "destructive"
-															: "outline"
-												}
-											>
-												{invitee.status === "invited"
-													? "Needs response"
-													: invitee.status}
-											</Badge>
-										</div>
-									))}
-								</div>
-							) : ownInvite ? (
-								<p className="text-sm text-muted-foreground">
-									Your response:{" "}
-									{ownInvite.status === "invited"
-										? "Needs response"
-										: ownInvite.status}
-									. Attendee responses are visible to the organizer and
-									management.
-								</p>
-							) : meeting.invitees.length ? (
-								<p className="text-sm text-muted-foreground">
-									Attendee details are limited to the organizer and management.
-								</p>
+							{canManage && !cancelled && (
+								<div className="flex flex-wrap gap-2">
+									{editingInvitees ? (
+										<>
+											<Button size="sm" variant="outline" onClick={() => {
+												setSelectedInviteeKeys(meeting.invitees.map((invitee) => invitee.staffKey));
+												setEditingInvitees(false);
+											}}>Discard changes</Button>
+											<Button size="sm" onClick={() => void saveInvitees()} disabled={replaceInvitees.isPending || staffQuery.isLoading || staffQuery.isError}>
+												{replaceInvitees.isPending ? "Saving…" : "Save invitees"}
+											</Button>
+										</>
 							) : (
-								<p className="text-sm text-muted-foreground">
-									No staff were invited.
-								</p>
+										<Button size="sm" variant="outline" onClick={() => setEditingInvitees(true)}>Edit invitees</Button>
 							)}
-						</section>
+								</div>
+							)}
+							{editingInvitees ? (
+								<div className="grid gap-2">
+									<p className="text-xs text-muted-foreground">Retained staff keep their current response. Removed staff lose access to this invitation.</p>
+									<Input value={inviteeSearch} onChange={(event) => setInviteeSearch(event.target.value)} placeholder="Search staff" aria-label="Search meeting invitees" />
+									<div className="max-h-52 overflow-y-auto rounded-md border">
+							{inviteeEditorContent}
+									</div>
+								</div>
+							) : inviteeContent}</section>
 					</div>
 				)}
 				{feedback && (
@@ -589,3 +716,4 @@ export function ScheduleMeetingDetails({
 		</Dialog>
 	);
 }
+
