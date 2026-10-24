@@ -247,6 +247,16 @@ Every icon this plan touches uses `lucide-react` (already the project's icon lib
 
 Every phase gets a real SQL cross-check against the live `sbydzrlzqxcdbudjaube` project before being called done, matching every other slice built this session (e.g. Phase 1's `select count(*) from activity_log al join leads l on l.id = al.lead_id where l.agent_key='company'`-style verification).
 
+## 8a. Progress
+
+**Phase A (shared period-filter engine + icon fixes) — DONE, verified live, 2026-10-24.** `periodFilter.ts`, `<PeriodFilterBar />`; every emoji icon on `CompanyLeadsScreen.tsx` swapped to `lucide-react`.
+
+**Phase B (Dashboard redesign) — DONE, verified live, 2026-10-24.** `CompanyLeadsDashboardPanel.tsx` + `useCompanyLeadsDashboard.ts`: the real 12-tile + 2-chart layout from workbook §1.2, sitting above the existing pipeline-value KPI strip. Real bug caught and fixed before shipping: switching to "Year" granularity hid the month selector but `periodToRange()` kept using the stale month value instead of widening to the full year — fixed, and the Dashboard specifically uses `showGranularityTabs={false}` (only Year+Month, matching the workbook) since its two charts are fixed, not a viewer-picked breakdown. Every tile verified against direct SQL: 169 clients in register, GHS 1,494,657 outstanding, 0 active deals, 0 bought, 0 calls/visits/cash for the selected month (all real, prior test data was cleaned up after Phase 1).
+
+**Phase C (Analytics full rebuild) — DONE, verified live, 2026-10-24.** `CompanyLeadsAnalyticsScreen.tsx` + rebuilt `useCompanyLeadsAnalytics.ts`: real Day/Month/Year tabs per workbook §1.3 (Day: calls-by-day table+chart for the selected month; Month: Calls/Active Days/Avg Calls per Active Day/Site Visits/Cash In table+chart for the selected year; Year: New Clients/Calls/Site Visits/Cash In table+chart, all-time). Verified against direct SQL: Year 2026 row shows 169 new clients (matches `date_added between 2026-01-01 and 2026-12-31`), 0 calls/visits/cash (matches real state).
+
+**Phases D-F (Call Log rebuild, layered client page, contract pipeline) — not yet started.**
+
 ## 9. QA
 
 Per phase: log a real test call/visit/payment where relevant, confirm every tile/chart/table number matches a direct SQL query for the same period. For Phase F specifically: generate a real contract for a test lead, confirm the `/contract/[token]` link opens and downloads correctly in an incognito-equivalent fresh browser tab (no session), confirm the SMS fires via `sms_log`, then delete the test contract/share-link/SMS row and the test lead's KYC afterward.
