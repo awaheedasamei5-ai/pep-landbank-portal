@@ -593,7 +593,9 @@ export function MyScheduleScreen() {
 								onClick={() => setSelected(todo)}
 								aria-label={`Open ${todo.title}, due ${todo.date}`}
 							>
-								<span className="truncate">{todo.title}</span>
+								<span className="min-w-0 flex-1 truncate">
+									{todo.title}
+								</span>
 								<span className="shrink-0 text-muted-foreground">
 									{todo.date}
 									{todo.endTime || todo.startTime
@@ -624,7 +626,9 @@ export function MyScheduleScreen() {
 								onClick={() => setSelected(todo)}
 								aria-label={`Open ${todo.title}, due ${todo.date}`}
 							>
-								<span className="truncate">{todo.title}</span>
+								<span className="min-w-0 flex-1 truncate">
+									{todo.title}
+								</span>
 								<span className="shrink-0 text-muted-foreground">
 									{todo.date}
 									{todo.endTime || todo.startTime
