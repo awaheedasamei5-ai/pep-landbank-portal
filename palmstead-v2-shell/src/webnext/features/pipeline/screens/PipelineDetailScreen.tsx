@@ -19,6 +19,7 @@ import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage,
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
+import { LogCallDialog } from '../../company-leads/components/LogCallDialog';
 import styles from './PipelineDetailScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -243,7 +244,7 @@ export function PipelineDetailScreen() {
       </div>
 
       <SiteVisitsSection lead={lead} />
-      <ActivitySection leadId={lead.id} />
+      <ActivitySection lead={lead} />
       <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
 
       <DocumentationSection lead={lead} />
@@ -1049,22 +1050,40 @@ function SiteVisitsSection({ lead }: { lead: Lead }) {
 // Master Spec Section 4's combined Activity timeline -- real
 // activity_log.lead_id FK, populated by the payment-decision RPCs
 // (approve/decline/needs-correction/resubmit) and manual writes.
-function ActivitySection({ leadId }: { leadId: string }) {
-  const { data: entries } = useActivityForLead(leadId);
+// docs/plans/28-company-leads-engagement-upgrade-plan.md Phase 1 -- now
+// shows the real method/outcome/note/follow fields (previously only
+// written by a handful of system auto-calls, never shown), and gains
+// its own "Log a call" action so a manual contact record can be added
+// from any lead's detail page, not just Company Leads' own list/Call
+// Log screens.
+function ActivitySection({ lead }: { lead: Lead }) {
+  const { data: entries } = useActivityForLead(lead.id);
+  const [logOpen, setLogOpen] = useState(false);
 
   return (
     <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Activity</h2>
+      <div className={styles.sectionHeadRow}>
+        <h2 className={styles.sectionTitle}>Activity</h2>
+        <button type="button" className={styles.editLink} onClick={() => setLogOpen(true)}>
+          Log a call
+        </button>
+      </div>
       {(!entries || entries.length === 0) && <p className={styles.emptyMsg}>No activity recorded for this lead yet.</p>}
       {entries?.map((a) => (
         <div className={styles.historyRow} key={a.id}>
           <div className={styles.historyMain}>
-            <div className={styles.historyDate}>{a.action}</div>
-            {a.detail && <div className={styles.readLabel}>{a.detail}</div>}
+            <div className={styles.historyDate}>
+              {a.action}
+              {a.method ? ` · ${a.method}` : ''}
+              {a.outcome ? ` · ${a.outcome}` : ''}
+            </div>
+            {(a.note || a.detail) && <div className={styles.readLabel}>{a.note || a.detail}</div>}
+            {a.follow && <div className={styles.readLabel}>Follow up: {a.follow}</div>}
           </div>
           <span className={styles.readLabel}>{a.createdAt.slice(0, 10)}</span>
         </div>
       ))}
+      <LogCallDialog lead={lead} open={logOpen} onOpenChange={setLogOpen} />
     </div>
   );
 }

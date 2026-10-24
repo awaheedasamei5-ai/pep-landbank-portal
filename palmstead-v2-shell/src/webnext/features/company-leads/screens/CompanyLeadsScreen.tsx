@@ -24,6 +24,7 @@ import {
   type PipelineFilters,
 } from '../../pipeline/lib/pipelineListLogic';
 import { useAgentRoster, useAssignCompanyLead, useAssignCompanyLeadHandler, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
+import { LogCallDialog } from '../components/LogCallDialog';
 import type { Lead } from '../../../types/domain';
 import styles from './CompanyLeadsScreen.module.css';
 
@@ -109,6 +110,7 @@ export function CompanyLeadsScreen() {
   const [bulkValue, setBulkValue] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [callLead, setCallLead] = useState<Lead | null>(null);
 
   const all = leads ?? [];
   const sources = useMemo(() => Array.from(new Set(all.map((l) => l.leadSource).filter(Boolean))) as string[], [all]);
@@ -186,6 +188,9 @@ export function CompanyLeadsScreen() {
           <p className={styles.sub}>Clients who came to the company directly -- through company socials, banners, etc. -- not tied to any staff&apos;s own pipeline until assigned.</p>
         </div>
         <div className={styles.headActions}>
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/calls')}>
+            📞 Call Log
+          </button>
           <button type="button" className={styles.iconBtn} title="Export Company Leads (.xlsx)" disabled={downloadCompanyLeads.isPending} onClick={() => downloadCompanyLeads.mutate()}>
             ⬇
           </button>
@@ -414,6 +419,9 @@ export function CompanyLeadsScreen() {
                       </td>
                       <td className={styles.td}>{l.priority || 'Low'}</td>
                       <td className={styles.td}>
+                        <button type="button" className={styles.editIconBtn} title="Log a call" aria-label={`Log a call with ${l.name}`} onClick={() => setCallLead(l)}>
+                          📞
+                        </button>
                         <button
                           type="button"
                           className={styles.editIconBtn}
@@ -477,6 +485,9 @@ export function CompanyLeadsScreen() {
                     </div>
                   </div>
                 </div>
+                <button type="button" className={styles.editIconBtnMobile} title="Log a call" aria-label={`Log a call with ${l.name}`} onClick={() => setCallLead(l)}>
+                  📞
+                </button>
                 <button
                   type="button"
                   className={styles.editIconBtnMobile}
@@ -504,6 +515,7 @@ export function CompanyLeadsScreen() {
         })}
       </div>
     </div>
+    {callLead && <LogCallDialog lead={callLead} open={!!callLead} onOpenChange={(open) => !open && setCallLead(null)} />}
     {/* Nested route for a lead's own detail drawer -- sibling of .wrap
         (not inside it) so it renders regardless of hasDetailOpen's
         mobile-hide toggle above, same structure as PipelineListScreen's

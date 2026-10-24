@@ -1095,6 +1095,10 @@ export interface ActivityLogEntry {
   note: string | null;
   method: string | null;
   follow: string | null;
+  // docs/plans/28-company-leads-engagement-upgrade-plan.md -- new real
+  // column (migration activity_log_call_log_upgrade), the real Call
+  // Log's outcome field (e.g. "Reached — interested", "No answer").
+  outcome: string | null;
   createdAt: string;
   leadId: string | null;
 }

@@ -347,6 +347,7 @@ export function mapActivityLogRow(r: Record<string, unknown>): ActivityLogEntry 
     note: (r.note as string) ?? null,
     method: (r.method as string) ?? null,
     follow: (r.follow as string) ?? null,
+    outcome: (r.outcome as string) ?? null,
     createdAt: r.created_at as string,
     leadId: (r.lead_id as string) ?? null,
   };

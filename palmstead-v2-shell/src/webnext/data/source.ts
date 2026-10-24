@@ -528,9 +528,22 @@ export interface DataSource {
   // agent_key row and read own-or-manager -- log() is a direct insert,
   // not an RPC, matching that real permission shape (no privileged write
   // path needed, unlike audit_events).
+  //
+  // docs/plans/28-company-leads-engagement-upgrade-plan.md -- the real
+  // Call Log upgrade. method/note/follow always existed on the real
+  // table but were never written by this method; `outcome` is a new
+  // column (migration `activity_log_call_log_upgrade`). logCall() is the
+  // new manual entry point (Company Leads' own "Log a call" action);
+  // log() is kept unchanged for the existing system-auto-write call
+  // sites (payment decisions, stage changes) that never set these
+  // fields. listCompanyWide() backs the new company-wide Call Log page
+  // -- real activity_log_sel RLS (own-agent-or-manager) already scopes
+  // it correctly, same as every other company-wide list in this app.
   activityLog: {
     listForLead(leadId: string): Promise<ActivityLogEntry[]>;
     log(agentKey: string, agentName: string, client: string, action: string, detail?: string | null, leadId?: string | null): Promise<void>;
+    logCall(input: { agentKey: string; agentName: string; client: string; leadId: string; action: string; outcome: string | null; method: string | null; note: string | null; follow: string | null }): Promise<ActivityLogEntry>;
+    listCompanyWide(): Promise<ActivityLogEntry[]>;
   };
   // Deliberately read-only-plus-create: no "mark cleared"/payout method
   // exists on this interface at all. See the Referral type's comment in
@@ -2224,6 +2237,30 @@ function createLiveDataSource(): DataSource {
           .insert({ agent_key: agentKey, agent_name: agentName, client, action, detail: detail ?? null, lead_id: leadId ?? null });
         // Never blocks the calling flow, same discipline as audit.log().
         if (error) console.error('activity_log insert failed', error);
+      },
+      async logCall(input) {
+        const { data, error } = await requireClient()
+          .from('activity_log')
+          .insert({
+            agent_key: input.agentKey,
+            agent_name: input.agentName,
+            client: input.client,
+            lead_id: input.leadId,
+            action: input.action,
+            outcome: input.outcome,
+            method: input.method,
+            note: input.note,
+            follow: input.follow,
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return mapActivityLogRow(data);
+      },
+      async listCompanyWide() {
+        const { data, error } = await requireClient().from('activity_log').select('*').not('lead_id', 'is', null).order('created_at', { ascending: false }).limit(1000);
+        if (error) throw error;
+        return (data ?? []).map(mapActivityLogRow);
       },
     },
     referrals: {
