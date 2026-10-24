@@ -255,7 +255,9 @@ Every phase gets a real SQL cross-check against the live `sbydzrlzqxcdbudjaube` 
 
 **Phase C (Analytics full rebuild) — DONE, verified live, 2026-10-24.** `CompanyLeadsAnalyticsScreen.tsx` + rebuilt `useCompanyLeadsAnalytics.ts`: real Day/Month/Year tabs per workbook §1.3 (Day: calls-by-day table+chart for the selected month; Month: Calls/Active Days/Avg Calls per Active Day/Site Visits/Cash In table+chart for the selected year; Year: New Clients/Calls/Site Visits/Cash In table+chart, all-time). Verified against direct SQL: Year 2026 row shows 169 new clients (matches `date_added between 2026-01-01 and 2026-12-31`), 0 calls/visits/cash (matches real state).
 
-**Phases D-F (Call Log rebuild, layered client page, contract pipeline) — not yet started.**
+**Phase D (Call Log rebuild) — DONE, verified live, 2026-10-24.** Added a real "Trends" section to `CallLogScreen.tsx`: the full `<PeriodFilterBar />` (Day/Week/Month/Year/Custom) driving a calls-by-granularity bar chart (`useCallLogTrends.ts`, reusing `bucketByGranularity`), plus the real visited/bought/not-bought cohort the user asked for by name ("how many of the people have gone to site out of the company leads, how many have bought the land, how many didn't buy") via a new, shared `computeVisitCohort()` in `callLogLogic.ts` -- deliberately the Site Visit Log sheet's own definition (bought/not-bought among the VISITED cohort), kept distinct from the Dashboard's all-clients bought/not-bought tiles since the workbook has both as separate real metrics. Verified live: Day/Week/Month granularity switches render without error (zero-filled, matching the real zero-activity state), site visits/bought/not-bought all read 0 against the real data.
+
+**Phases E-F (layered client page, contract pipeline) — not yet started.**
 
 ## 9. QA
 

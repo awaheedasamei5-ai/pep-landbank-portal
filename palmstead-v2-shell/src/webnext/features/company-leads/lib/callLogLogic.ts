@@ -1,4 +1,4 @@
-import type { ActivityLogEntry } from '../../../types/domain';
+import type { ActivityLogEntry, Lead, SiteVisit } from '../../../types/domain';
 import { today } from '../../../shared/lib/format';
 
 // docs/plans/28-company-leads-engagement-upgrade-plan.md §5 -- the real,
@@ -33,4 +33,25 @@ export function getOpenFollowUps(entries: ActivityLogEntry[]): OpenFollowUp[] {
 
 export function isToday(iso: string): boolean {
   return iso.slice(0, 10) === today();
+}
+
+// docs/plans/29-company-leads-full-system-blueprint.md Section 7.4 -- "how
+// many of the people have gone to site out of the Company Leads, how many
+// have bought, how many didn't," per the user's own words. Same real
+// definition as the Dashboard's own tiles (all-time cohort measures, not
+// period-gated -- matching the workbook's own Dashboard tab, where these
+// three tiles don't move with the Year/Month selector either), factored
+// out here so Call Log and the Dashboard can't silently drift apart.
+export interface VisitCohort {
+  visitedCount: number;
+  boughtCount: number;
+  notBoughtCount: number;
+}
+
+export function computeVisitCohort(leads: Lead[], visits: SiteVisit[]): VisitCohort {
+  const leadIds = new Set(leads.map((l) => l.id));
+  const visitedLeadIds = new Set(visits.filter((v) => v.leadId && leadIds.has(v.leadId)).map((v) => v.leadId as string));
+  const visitedLeads = leads.filter((l) => visitedLeadIds.has(l.id));
+  const boughtCount = visitedLeads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal).length;
+  return { visitedCount: visitedLeadIds.size, boughtCount, notBoughtCount: visitedLeadIds.size - boughtCount };
 }
