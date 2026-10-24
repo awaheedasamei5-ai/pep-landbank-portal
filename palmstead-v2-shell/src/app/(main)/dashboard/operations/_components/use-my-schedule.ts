@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { isoDateOnly } from "@/lib/palmstead/format";
 import { requireSupabase } from "@/lib/supabase.client";
+import { findScheduleConflicts } from "./schedule-conflicts";
 
 // Real day/week/month personal planner ("My Schedule"), ported from V1's
 // real schedule_items (kind='todo') logic -- apiLoadTodos/apiInsertTodo/
@@ -268,17 +269,63 @@ export function useCancelFutureRecurrence() {
 // whatever's already loaded in the current view window.
 export async function checkScheduleConflicts(staffKey: string, date: string, start: string, end: string, excludeId?: string) {
   const sb = requireSupabase();
-  const { data, error } = await sb
-    .from("op_todos")
-    .select("id,title,start_time,end_time,status")
-    .eq("item_date", date)
-    .or(`assigned_to.eq.${staffKey},owner_key.eq.${staffKey}`)
-    .not("status", "in", "(done,cancelled,rescheduled)")
-    .not("start_time", "is", null);
-  if (error) return [];
-  return (data ?? [])
-    .filter((r) => r.id !== excludeId && start < (r.end_time ?? "").slice(0, 5) && (r.start_time ?? "").slice(0, 5) < end)
-    .map((r) => ({ id: r.id, title: r.title, startTime: (r.start_time ?? "").slice(0, 5), endTime: (r.end_time ?? "").slice(0, 5) }));
+  const [todoResult, meetingResult, inviteeResult] = await Promise.all([
+    sb
+      .from("op_todos")
+      .select("id,title,start_time,end_time,status,item_date")
+      .eq("item_date", date)
+      .or(`assigned_to.eq.${staffKey},owner_key.eq.${staffKey}`)
+      .not("status", "in", "(done,cancelled,rescheduled)"),
+    sb
+      .from("schedule_items")
+      .select("id,title,start_time,end_time,status,item_date,owner_key,assigned_to")
+      .eq("kind", "meeting")
+      .eq("item_date", date)
+      .not("status", "in", "(done,cancelled,rescheduled)"),
+    sb
+      .from("schedule_item_invitees")
+      .select("schedule_item_id")
+      .eq("staff_key", staffKey),
+  ]);
+  if (todoResult.error) throw todoResult.error;
+  if (meetingResult.error) throw meetingResult.error;
+  if (inviteeResult.error) throw inviteeResult.error;
+
+  const invitedMeetings = new Set(
+    (inviteeResult.data ?? []).map((row) => row.schedule_item_id),
+  );
+  const taskItems = (todoResult.data ?? []).map((row) => ({
+    id: row.id,
+    title: row.title,
+    startTime: row.start_time?.slice(0, 5) ?? null,
+    endTime: row.end_time?.slice(0, 5) ?? null,
+    status: row.status,
+    date: row.item_date,
+    kind: "task" as const,
+  }));
+  const meetingItems = (meetingResult.data ?? [])
+    .filter(
+      (row) =>
+        row.owner_key === staffKey ||
+        row.assigned_to === staffKey ||
+        invitedMeetings.has(row.id),
+    )
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      startTime: row.start_time?.slice(0, 5) ?? null,
+      endTime: row.end_time?.slice(0, 5) ?? null,
+      status: row.status,
+      date: row.item_date,
+      kind: "meeting" as const,
+    }));
+
+  return findScheduleConflicts([...taskItems, ...meetingItems], {
+    date,
+    startTime: start,
+    endTime: end,
+    excludeId,
+  });
 }
 
 export function useEscalateTodo(_escalatedBy: string | undefined, _escalatedByName: string | undefined) {
@@ -290,3 +337,4 @@ export function useEscalateTodo(_escalatedBy: string | undefined, _escalatedByNa
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myTodos"] }),
   });
 }
+
