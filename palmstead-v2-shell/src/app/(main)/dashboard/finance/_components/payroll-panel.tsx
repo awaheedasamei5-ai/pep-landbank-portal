@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { requireSupabase } from "@/lib/supabase.client";
 import { today } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 
 import { useCommissionReportConfig } from "./use-finance-commission";
 import {
@@ -267,6 +268,7 @@ function RunBreakdownDialog({ run, staffBankLookup }: { run: PayrollRun; staffBa
   const profile = useAuthStore((s) => s.profile);
   const [downloadingRun, setDownloadingRun] = useState(false);
   const [downloadingSlip, setDownloadingSlip] = useState<string | null>(null);
+  const logDownload = useLogDownload();
 
   const byStaff = new Map<string, { name: string; lines: typeof lines }>();
   for (const l of lines ?? []) {
@@ -296,7 +298,9 @@ function RunBreakdownDialog({ run, staffBankLookup }: { run: PayrollRun; staffBa
                 setDownloadingRun(true);
                 try {
                   const doc = await buildPayrollRunPdf(run.period, lines, reportConfig, profile?.signatureData, profile?.name, staffBankLookup);
-                  doc.save(`Payroll_${run.period}.pdf`);
+                  const filename = `Payroll_${run.period}.pdf`;
+                  doc.save(filename);
+                  logDownload(filename, 'pdf', doc.output('datauristring'));
                 } finally {
                   setDownloadingRun(false);
                 }
@@ -323,7 +327,9 @@ function RunBreakdownDialog({ run, staffBankLookup }: { run: PayrollRun; staffBa
                     setDownloadingSlip(staffId);
                     try {
                       const doc = await buildPayslipPdf(run.period, v.name, staffBankLookup.get(staffId) ?? null, v.lines ?? [], reportConfig.companyName, reportConfig.logoImage);
-                      doc.save(`Payslip_${v.name.replace(/\s+/g, "_")}_${run.period}.pdf`);
+                      const filename = `Payslip_${v.name.replace(/\s+/g, "_")}_${run.period}.pdf`;
+                      doc.save(filename);
+                      logDownload(filename, 'pdf', doc.output('datauristring'));
                     } finally {
                       setDownloadingSlip(null);
                     }

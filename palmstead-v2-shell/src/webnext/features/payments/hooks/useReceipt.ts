@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildReceiptPdf } from '../lib/receiptPdf';
 import type { Lead, Payment } from '../../../types/domain';
 
@@ -51,12 +52,15 @@ export function useDownloadReceipt() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: Lead | null }) => {
       if (!config) throw new Error('Config not loaded yet');
       const receiptNumber = await getDataSource(demoMode).payments.ensureReceiptNumber(payment.id);
       const doc = buildReceiptPdf({ clientName: payment.clientName ?? lead?.name ?? 'Client', payment, lead, receiptNumber, config, issuerSignature: profile?.signatureData ?? null, issuerName: profile?.name ?? null });
-      doc.save(`Receipt_${receiptNumber}.pdf`);
+      const filename = `Receipt_${receiptNumber}.pdf`;
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
       return receiptNumber;
     },
   });

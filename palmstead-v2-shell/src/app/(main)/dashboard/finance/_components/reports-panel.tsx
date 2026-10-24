@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { today } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 
 import { useCommissionReportConfig } from "./use-finance-commission";
 import { type DateRange, useCommissionReport, useExpensesReport, usePaymentsReport, usePayrollReport } from "./use-finance-reports";
@@ -62,6 +63,7 @@ export function ReportsPanel() {
   const [section, setSection] = useState<Section>("summary");
   const [range, setRange] = useState<DateRange>(() => presetRange("this-month"));
   const [downloading, setDownloading] = useState(false);
+  const logDownload = useLogDownload();
 
   const needsPayments = section === "payments" || section === "summary";
   const needsExpenses = section === "expenses" || section === "summary";
@@ -100,18 +102,23 @@ export function ReportsPanel() {
       if (section === "payments") {
         const doc = await buildPaymentsReportPdf(range, paymentsQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
+        logDownload(fname, 'pdf', doc.output('datauristring'));
       } else if (section === "expenses") {
         const doc = await buildExpensesReportPdf(range, expensesQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
+        logDownload(fname, 'pdf', doc.output('datauristring'));
       } else if (section === "commission") {
         const doc = await buildCommissionReportRangePdf(range, commissionQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
+        logDownload(fname, 'pdf', doc.output('datauristring'));
       } else if (section === "payroll") {
         const doc = await buildPayrollReportPdf(range, payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
+        logDownload(fname, 'pdf', doc.output('datauristring'));
       } else {
         const doc = await buildSummaryReportPdf(range, paymentsQ.data ?? [], expensesQ.data ?? [], commissionQ.data ?? [], payrollQ.data ?? [], reportConfig.companyName, profile?.name, reportConfig.logoImage);
         doc.save(fname);
+        logDownload(fname, 'pdf', doc.output('datauristring'));
       }
     } finally {
       setDownloading(false);

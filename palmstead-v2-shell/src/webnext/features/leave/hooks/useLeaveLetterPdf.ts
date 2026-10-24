@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildLeaveLetterPdf, leaveLetterFilename } from '../lib/leaveLetterPdf';
 import type { LeaveRequest } from '../../../types/domain';
 
@@ -14,6 +15,7 @@ import type { LeaveRequest } from '../../../types/domain';
 // requester's signature, not their own).
 export function useDownloadLeaveLetterPdf() {
   const demoMode = useSessionStore((s) => s.demoMode);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (request: LeaveRequest) => {
       const ds = getDataSource(demoMode);
@@ -29,7 +31,9 @@ export function useDownloadLeaveLetterPdf() {
       ]);
       const staffSignature = staff.find((s) => s.key === request.agentKey)?.signatureData ?? null;
       const doc = buildLeaveLetterPdf(request, staffSignature, logo, { companyName: config.quoteCompanyName });
-      doc.save(leaveLetterFilename(request));
+      const filename = leaveLetterFilename(request);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

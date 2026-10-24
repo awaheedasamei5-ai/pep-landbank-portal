@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { today } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 
 import { buildCommissionCalculatorPdf } from "./commission-calculator-pdf";
 import { useCommissionReportConfig } from "./use-finance-commission";
@@ -443,6 +444,7 @@ function SessionWorkspace({ sessionId, period, sessionName, settings }: { sessio
   const { data: staff } = usePayrollStaff();
   const { data: reportConfig } = useCommissionReportConfig();
   const [downloading, setDownloading] = useState(false);
+  const logDownload = useLogDownload();
 
   const staffById = useMemo(() => new Map((staff ?? []).map((s) => [s.id, s])), [staff]);
 
@@ -491,7 +493,9 @@ function SessionWorkspace({ sessionId, period, sessionName, settings }: { sessio
         };
       });
       const doc = await buildCommissionCalculatorPdf(period, sessionName, rows, reportConfig, profile?.signatureData, profile?.name);
-      doc.save(`Commission_Calculation_${period}.pdf`);
+      const filename = `Commission_Calculation_${period}.pdf`;
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     } finally {
       setDownloading(false);
     }

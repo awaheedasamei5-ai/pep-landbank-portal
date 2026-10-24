@@ -10,6 +10,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 
 import { ComposeMemoDialog, type ComposeSeed } from "./compose-memo-dialog";
 import { MemoList } from "./memo-list";
@@ -40,6 +41,7 @@ export function MemorandumScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeSeed, setComposeSeed] = useState<ComposeSeed | null>(null);
+  const logDownload = useLogDownload();
 
   useMemoRealtime(myKey);
   const { data: memos, isLoading } = useMemos(folder, myKey);
@@ -68,7 +70,9 @@ export function MemorandumScreen() {
   async function downloadPdf(m: Memo) {
     try {
       const doc = await buildMemoPdf(m);
-      doc.save(`Memo_${m.subject.replace(/[^a-z0-9]+/gi, "_").slice(0, 40)}.pdf`);
+      const filename = `Memo_${m.subject.replace(/[^a-z0-9]+/gi, "_").slice(0, 40)}.pdf`;
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     } catch {
       toast.error("Could not generate the PDF");
     }

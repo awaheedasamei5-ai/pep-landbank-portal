@@ -3,6 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildSiteVisitFormPdf, siteVisitFormFilename } from '../lib/siteVisitFormPdf';
 import type { SiteVisit } from '../../../types/domain';
 
@@ -12,6 +13,7 @@ import type { SiteVisit } from '../../../types/domain';
 // here it's a plain download the staff member can keep/forward themselves.
 export function useDownloadSiteVisitFormPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (rec: SiteVisit) => {
       let logo: string | null = null;
@@ -21,7 +23,9 @@ export function useDownloadSiteVisitFormPdf() {
         // Missing/blocked logo shouldn't stop the form from generating.
       }
       const doc = buildSiteVisitFormPdf(rec, logo, profile?.name);
-      doc.save(siteVisitFormFilename(rec.name));
+      const filename = siteVisitFormFilename(rec.name);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

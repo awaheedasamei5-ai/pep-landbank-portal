@@ -17,6 +17,7 @@ import { loadImageAsDataUri } from "@/webnext/shared/lib/image";
 import { pdfStampSignature } from "@/webnext/shared/lib/pdfSignature";
 import { pdfAccentStatRow, pdfBarChart, pdfBrandedHeader, pdfGeneratedStamp, pdfReportFooter, pdfSectionTitle, pdfSimpleTable, PDF_GOLD, PDF_INK, PDF_LEAF, PDF_MUTED, PDF_OK, PDF_PALETTE } from "@/webnext/shared/lib/pdfReport";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 
 import { CommissionCalculatorPanel } from "./commission-calculator-panel";
 import { type CommissionReportConfig, type CommissionRow, useCommissionBreakdown, useCommissionReportConfig, useRaiseCommissionConcern } from "./use-finance-commission";
@@ -192,6 +193,7 @@ function AutomatedCommissionPanel() {
   const { data: rows, isLoading } = useCommissionBreakdown(cursor);
   const { data: reportConfig } = useCommissionReportConfig();
   const [downloading, setDownloading] = useState(false);
+  const logDownload = useLogDownload();
 
   const sorted = useMemo(() => (rows ?? []).slice().sort((a, b) => b.total - a.total), [rows]);
   const myRow = rows?.find((r) => r.agentKey === profile?.key);
@@ -225,7 +227,9 @@ function AutomatedCommissionPanel() {
               setDownloading(true);
               try {
                 const doc = await buildCommissionReportPdf(cursor, sorted, profile?.name, reportConfig, profile?.signatureData);
-                doc.save(`Commission_${cursor}.pdf`);
+                const filename = `Commission_${cursor}.pdf`;
+                doc.save(filename);
+                logDownload(filename, 'pdf', doc.output('datauristring'));
               } finally {
                 setDownloading(false);
               }

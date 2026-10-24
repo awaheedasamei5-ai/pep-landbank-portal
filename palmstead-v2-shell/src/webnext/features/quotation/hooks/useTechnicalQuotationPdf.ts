@@ -3,6 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildTechnicalQuotationPdf, technicalQuotationFilename } from '../lib/technicalQuotationPdf';
 import type { QuotationClientInfo } from '../lib/quotationPdf';
 import type { Config } from '../../../types/domain';
@@ -10,6 +11,7 @@ import type { TechnicalQuotationTotals } from '../lib/quotationLogic';
 
 export function useDownloadTechnicalQuotationPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ totals, client, config }: { totals: TechnicalQuotationTotals; client: QuotationClientInfo; config: Config }) => {
       // Real user ask: a Template Settings logo upload override -- see
@@ -23,7 +25,9 @@ export function useDownloadTechnicalQuotationPdf() {
         }
       }
       const doc = buildTechnicalQuotationPdf(totals, client, config, logo, profile?.name ?? '', profile?.signatureData ?? null);
-      doc.save(technicalQuotationFilename(client.name));
+      const filename = technicalQuotationFilename(client.name);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

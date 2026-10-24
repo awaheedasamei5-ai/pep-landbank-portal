@@ -3,6 +3,7 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
 import { buildContractFromSections } from '../lib/contractSectionsPdf';
 import { resolveContractFields, resolveSections, findUnresolvedTokens } from '../lib/contractFieldResolver';
@@ -69,6 +70,7 @@ export function useGenerateContract() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
   const queryClient = useQueryClient();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride }: GenerateContractInput) => {
       if (!config) throw new Error('Config not loaded yet');
@@ -94,7 +96,9 @@ export function useGenerateContract() {
           // Missing cover image shouldn't stop the contract from generating.
         }
         const doc = buildContractFromSections(template.templateName, resolvedContent, styleSettings, templateCover);
-        doc.save(contractFilename(lead.name));
+        const templateDocFilename = contractFilename(lead.name);
+        doc.save(templateDocFilename);
+        logDownload(templateDocFilename, 'pdf', doc.output('datauristring'));
         const ds = getDataSource(demoMode);
         const pdfBlob = doc.output('blob') as Blob;
         const storagePath = `${isWalkIn ? 'walk-in' : lead.id}/${template.templateVersionId}-${Date.now()}.pdf`;
@@ -138,7 +142,9 @@ export function useGenerateContract() {
         // Missing wordmark shouldn't stop the contract from generating.
       }
       const doc = buildContractOfSalePdf(lead, config, cover, wordmark);
-      doc.save(contractFilename(lead.name));
+      const legacyDocFilename = contractFilename(lead.name);
+      doc.save(legacyDocFilename);
+      logDownload(legacyDocFilename, 'pdf', doc.output('datauristring'));
       return getDataSource(demoMode).contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
     },
     onSuccess: () => {

@@ -45,6 +45,7 @@ import {
 import { isoDateOnly, today } from "@/lib/palmstead/format";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 import {
 	pdfBrandedHeader,
 	pdfReportFooter,
@@ -272,6 +273,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 	const [comparisonMode, setComparisonMode] = useState<ComparisonMode>(initialFilters.compare);
 	const [exportSection, setExportSection] = useState<ReportExportSection>("all");
 	const [exporting, setExporting] = useState(false);
+	const logDownload = useLogDownload();
 	useEffect(() => {
 		const now = new Date();
 		const filters = parseReportFilters(new URLSearchParams(initialSearchParams), { from: startMonth(now), to: endMonth(now) }, true);
@@ -765,7 +767,9 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 
 			// This helper stamps every page; call once after the final page count is known.
 			pdfReportFooter(doc, "Palmstead");
-			doc.save(`operations-${exportSection}-${reportType}-${start}-${end}.pdf`);
+			const filename = `operations-${exportSection}-${reportType}-${start}-${end}.pdf`;
+			doc.save(filename);
+			logDownload(filename, 'pdf', doc.output('datauristring'));
 		} finally {
 			setExporting(false);
 		}

@@ -3,6 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildQuotationPdf, quotationFilename, type QuotationClientInfo } from '../lib/quotationPdf';
 import { computeLeadQuotationTotals, pricingFor } from '../lib/quotationLogic';
 import type { Config, Lead, PlotType } from '../../../types/domain';
@@ -13,6 +14,7 @@ import type { QuotationTotals } from '../lib/quotationLogic';
 // identifier, unlike the payment receipt PDF.
 export function useDownloadQuotationPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ totals, noPlots, plotType, client, config }: { totals: QuotationTotals; noPlots: number; plotType: PlotType; client: QuotationClientInfo; config: Config }) => {
       // Real user ask: a Template Settings logo upload that "would
@@ -31,7 +33,9 @@ export function useDownloadQuotationPdf() {
       // qty of the SELECTED type instead (see its own comment).
       const qtyOfType = (noPlots || 1) / pricingFor(config, plotType).eq;
       const doc = buildQuotationPdf(totals, qtyOfType, client, config, logo, profile?.name ?? '', profile?.signatureData ?? null);
-      doc.save(quotationFilename(client.name));
+      const filename = quotationFilename(client.name);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }
@@ -45,6 +49,7 @@ export function useDownloadQuotationPdf() {
 // second PDF template.
 export function useDownloadLeadQuotationPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ lead, config }: { lead: Lead; config: Config }) => {
       const totals = computeLeadQuotationTotals(config, lead);
@@ -59,7 +64,9 @@ export function useDownloadLeadQuotationPdf() {
       }
       const qtyOfType = (lead.noPlots || 1) / pricingFor(config, lead.plotType).eq;
       const doc = buildQuotationPdf(totals, qtyOfType, client, config, logo, profile?.name ?? '', profile?.signatureData ?? null);
-      doc.save(quotationFilename(lead.name));
+      const filename = quotationFilename(lead.name);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

@@ -273,7 +273,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "document-vault",
 				title: "Document Vault",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/document-vault",
 				icon: BookOpen,
 			},
 			{

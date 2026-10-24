@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import {
   buildContractProductionReport,
   buildOutstandingRequestsReport,
@@ -31,6 +32,7 @@ interface ReportData {
 export function useDownloadContractReport() {
   const profile = useSessionStore((s) => s.profile);
   const { data: config } = useConfig();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (data: ReportData) => {
       let logo: string | null = null;
@@ -63,7 +65,9 @@ export function useDownloadContractReport() {
           doc = buildDocumentStatusReport(data.requests, data.contracts, h);
           break;
       }
-      doc.save(contractReportFilename(data.kind));
+      const filename = contractReportFilename(data.kind);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

@@ -8,6 +8,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { redactPII } from '../../../shared/lib/redact';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildSveDayReportPdf, sveDayReportFilename } from '../lib/sveReportPdf';
 import type { SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
@@ -220,6 +221,7 @@ export function useSendSveDayReport() {
   const demoMode = useSessionStore((s) => s.demoMode);
   const { data: config } = useConfig();
   const queryClient = useQueryClient();
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (report: SveDayReport) => {
       const ds = getDataSource(demoMode);
@@ -249,7 +251,9 @@ export function useSendSveDayReport() {
       if (config?.companyPhone) phones.add(config.companyPhone);
       for (const phone of phones) ds.sms.send(phone, body, 'sve_report_ready', profile?.key ?? null).catch(() => {});
 
-      doc.save(sveDayReportFilename(report.visitDate));
+      const filename = sveDayReportFilename(report.visitDate);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
       return token;
     },
     onSuccess: (_token, report) => {
@@ -265,6 +269,7 @@ export function useSendSveDayReport() {
 // still-draft report and for re-downloading an already-sent one.
 export function useDownloadSveDayReportPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (report: SveDayReport) => {
       let logo: string | null = null;
@@ -275,7 +280,9 @@ export function useDownloadSveDayReportPdf() {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
       const doc = buildSveDayReportPdf(report, logo, profile?.name);
-      doc.save(sveDayReportFilename(report.visitDate));
+      const filename = sveDayReportFilename(report.visitDate);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

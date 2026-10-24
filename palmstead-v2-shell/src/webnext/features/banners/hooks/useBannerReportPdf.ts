@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { getDataSource } from '../../../data/source';
+import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildBannerReportPdf, bannerReportFilename } from '../lib/bannerReportPdf';
 import type { Banner } from '../../../types/domain';
 
@@ -14,6 +15,7 @@ import type { Banner } from '../../../types/domain';
 export function useDownloadBannerReportPdf() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (banners: Banner[]) => {
       const ds = getDataSource(demoMode);
@@ -22,7 +24,9 @@ export function useDownloadBannerReportPdf() {
         Promise.all(banners.map((b) => ds.banners.statusLog(b.id).catch(() => []))),
       ]);
       const doc = buildBannerReportPdf(banners, logs, logo, profile?.name);
-      doc.save(bannerReportFilename());
+      const filename = bannerReportFilename();
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
     },
   });
 }

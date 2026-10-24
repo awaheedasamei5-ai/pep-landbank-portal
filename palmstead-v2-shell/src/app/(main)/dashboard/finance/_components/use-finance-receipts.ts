@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
+import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
 import { buildReceiptPdf } from "@/webnext/features/payments/lib/receiptPdf";
 import type { Config, Lead, Payment as WebnextPayment } from "@/webnext/types/domain";
 
@@ -107,6 +108,7 @@ export interface ReceiptLeadInfo {
 }
 
 export function useDownloadReceipt(config: Config | undefined, issuerSignature: string | null | undefined, issuerName: string | null | undefined) {
+  const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
@@ -120,7 +122,9 @@ export function useDownloadReceipt(config: Config | undefined, issuerSignature: 
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
       });
-      doc.save(`Receipt_${receiptNumber}.pdf`);
+      const filename = `Receipt_${receiptNumber}.pdf`;
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
       return receiptNumber;
     },
   });
