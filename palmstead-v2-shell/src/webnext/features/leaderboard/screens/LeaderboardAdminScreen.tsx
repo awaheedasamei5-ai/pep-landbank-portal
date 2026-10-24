@@ -46,6 +46,14 @@ const GROUPS: { title: string; fields: WeightFieldDef[] }[] = [
       { key: 'punctuality', label: 'Per on-time day', hint: 'Signed in at or before the configured attendance cutoff.' },
     ],
   },
+  {
+    title: 'Cross-app activity',
+    fields: [
+      { key: 'quotationsSent', label: 'Per quotation sent', hint: 'A real quotation request logged in the Quotation app.' },
+      { key: 'contractsGenerated', label: 'Per contract generated', hint: 'A real Contract of Sale PDF generated for a client.' },
+      { key: 'referralsConverted', label: 'Per referral converted', hint: 'A referral this agent logged whose referred lead went on to pay.' },
+    ],
+  },
 ];
 
 function timeAgo(iso: string): string {
@@ -157,7 +165,7 @@ export function LeaderboardAdminScreen() {
         </div>
 
         <div className="space-y-4">
-          <Card className={styles.section} style={{ '--stagger-index': 3 } as React.CSSProperties}>
+          <Card className={styles.section} style={{ '--stagger-index': 4 } as React.CSSProperties}>
             <CardHeader>
               <CardTitle className="font-normal">
                 {dirty ? 'What-if preview' : 'Current standings'} <span className="font-normal text-muted-foreground">{year}</span>
@@ -184,7 +192,7 @@ export function LeaderboardAdminScreen() {
             </CardContent>
           </Card>
 
-          <Card className={styles.section} style={{ '--stagger-index': 4 } as React.CSSProperties}>
+          <Card className={styles.section} style={{ '--stagger-index': 5 } as React.CSSProperties}>
             <CardHeader>
               <CardTitle className="font-normal">Recent score changes</CardTitle>
               <CardDescription>A real audit log — one entry every time a staff member&apos;s persisted score actually changes.</CardDescription>

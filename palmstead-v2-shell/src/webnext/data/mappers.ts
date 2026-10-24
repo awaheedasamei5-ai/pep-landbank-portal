@@ -681,6 +681,9 @@ export const DEFAULT_LEADERBOARD_WEIGHTS: LeaderboardWeights = {
   taskSpeedBonus: 5,
   regularity: 2,
   punctuality: 3,
+  quotationsSent: 10,
+  contractsGenerated: 25,
+  referralsConverted: 30,
 };
 
 export function mapConfigRow(r: Record<string, unknown>): Config {
@@ -872,6 +875,9 @@ export function mapLeaderboardRawRow(r: Record<string, unknown>): Omit<Leaderboa
     todosCompleted: Number(r.todos_completed ?? 0),
     daysAttended: Number(r.days_attended ?? 0),
     onTimeDays: Number(r.on_time_days ?? 0),
+    quotationsSent: Number(r.quotations_sent ?? 0),
+    contractsGenerated: Number(r.contracts_generated ?? 0),
+    referralsConverted: Number(r.referrals_converted ?? 0),
   };
 }
 
@@ -894,6 +900,9 @@ export function mapLeaderboardScoreRow(r: Record<string, unknown>): LeaderboardR
     todosCompleted: Number(r.todos_completed ?? 0),
     daysAttended: Number(r.days_attended ?? 0),
     onTimeDays: Number(r.on_time_days ?? 0),
+    quotationsSent: Number(r.quotations_sent ?? 0),
+    contractsGenerated: Number(r.contracts_generated ?? 0),
+    referralsConverted: Number(r.referrals_converted ?? 0),
     points: Number(r.points ?? 0),
   };
 }

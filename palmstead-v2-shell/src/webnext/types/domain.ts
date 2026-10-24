@@ -532,6 +532,13 @@ export interface LeaderboardWeights {
   taskSpeedBonus: number;
   regularity: number;
   punctuality: number;
+  // docs/plans/25-leaderboard-v2-cross-app-plan.md -- real cross-app
+  // metrics (Quotation/Contract of Sale/Referrals apps), added so the
+  // Leaderboard's score formula isn't limited to Sales/Attendance/Ops
+  // Tracker alone.
+  quotationsSent: number;
+  contractsGenerated: number;
+  referralsConverted: number;
 }
 
 // Real user/spec ask (Master Spec 12.3): Eid dates cannot be reliably
@@ -832,6 +839,9 @@ export interface LeaderboardRow {
   todosCompleted: number;
   daysAttended: number;
   onTimeDays: number;
+  quotationsSent: number;
+  contractsGenerated: number;
+  referralsConverted: number;
   points: number;
 }
 

@@ -14,7 +14,6 @@ import {
 	Fingerprint,
 	Gauge,
 	Home,
-	Landmark,
 	Lightbulb,
 	ListChecks,
 	type LucideIcon,
@@ -282,19 +281,7 @@ export const sidebarItems: NavGroup[] = [
 				url: "/dashboard/my-portfolio",
 				icon: Briefcase,
 			},
-			{
-				id: "commission",
-				title: "Commission",
-				url: "/dashboard/commission",
-				icon: Landmark,
-			},
 			{ id: "analytics", title: "Analytics", url: "/dashboard/analytics", icon: Gauge },
-			{
-				id: "reports",
-				title: "Operations reports",
-				url: "/dashboard/operations/reports",
-				icon: FileText,
-			},
 			{
 				id: "leaderboard",
 				title: "Leaderboard",

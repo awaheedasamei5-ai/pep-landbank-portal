@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, Settings2, Trophy, Lightbulb } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Download, Settings2, Lightbulb } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/page-header';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs } from '../../../shared/lib/format';
 import { useLeaderboard } from '../hooks/useLeaderboard';
+import { useLeaderboardScoreHistory } from '../hooks/useLeaderboardAdmin';
+import { LeaderboardPodium } from './LeaderboardPodium';
+import { TierStrip } from './TierStrip';
+import { PointsTrendChart } from './PointsTrendChart';
+import type { LeaderboardRow } from '../../../types/domain';
 import styles from './LeaderboardScreen.module.css';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -21,9 +25,23 @@ function rank(i: number): string {
   return MEDALS[i] ?? String(i + 1);
 }
 
-function exportCsv(rows: { staffName: string; points: number; totalCollected: number; dealsClosedYear: number; siteVisits: number; tasksCompleted: number; todosCompleted: number; daysAttended: number; onTimeDays: number }[], year: number) {
-  const headers = ['Rank', 'Agent', 'Points', 'Total Collected', 'Deals Closed', 'Site Visits', 'Tasks Done', 'To-Dos Done', 'Days Attended', 'On-Time Days'];
-  const dataRows = rows.map((r, i) => [String(i + 1), r.staffName, String(r.points), String(r.totalCollected), String(r.dealsClosedYear), String(r.siteVisits), String(r.tasksCompleted), String(r.todosCompleted), String(r.daysAttended), String(r.onTimeDays)]);
+function exportCsv(rows: LeaderboardRow[], year: number) {
+  const headers = ['Rank', 'Agent', 'Points', 'Total Collected', 'Deals Closed', 'Site Visits', 'Tasks Done', 'To-Dos Done', 'Days Attended', 'On-Time Days', 'Quotations Sent', 'Contracts Generated', 'Referrals Converted'];
+  const dataRows = rows.map((r, i) => [
+    String(i + 1),
+    r.staffName,
+    String(r.points),
+    String(r.totalCollected),
+    String(r.dealsClosedYear),
+    String(r.siteVisits),
+    String(r.tasksCompleted),
+    String(r.todosCompleted),
+    String(r.daysAttended),
+    String(r.onTimeDays),
+    String(r.quotationsSent),
+    String(r.contractsGenerated),
+    String(r.referralsConverted),
+  ]);
   const csv = [headers, ...dataRows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -34,15 +52,18 @@ function exportCsv(rows: { staffName: string; points: number; totalCollected: nu
   URL.revokeObjectURL(url);
 }
 
-// docs/plans/24-leaderboard-plan.md -- real destination for v1's
-// mgrLeaderboard() (index.html:20198-20283), ported from web-next's
-// already-correct useLeaderboard() hook. Manager-only (index.html:9154
-// confirms the full ranked list is a manager tile); staff's real window
-// into the same scoring is their own rank, already live at My Portfolio.
+// docs/plans/25-leaderboard-v2-cross-app-plan.md -- real podium + tier
+// bands + points-trend chart + full ranked list, scoring now connected
+// to Quotation, Contract of Sale and Referrals (on top of the original
+// Sales/Attendance/Operations Tracker inputs). Manager-only
+// (index.html:9154 confirms the full ranked list is a manager tile);
+// staff's real window into the same scoring is their own rank, already
+// live at My Portfolio.
 export function LeaderboardScreen() {
   const profile = useSessionStore((s) => s.profile);
   const [year, setYear] = useState(new Date().getFullYear());
   const { data: rows, isLoading } = useLeaderboard(year);
+  const { data: history } = useLeaderboardScoreHistory(100);
   const yearOptions = [year, year - 1, year - 2];
 
   if (profile?.role !== 'manager') {
@@ -63,15 +84,13 @@ export function LeaderboardScreen() {
     );
   }
 
-  const leader = rows?.[0];
-  const second = rows?.[1];
-  const gap = leader && second ? leader.points - second.points : 0;
-  const catchUpPct = leader && second && leader.points > 0 ? Math.min(100, Math.round((second.points / leader.points) * 100)) : 0;
-
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <PageHeader title="Leaderboard" description="Ranked by points — money collected counts most, then deals closed, site visits, task/to-do throughput, and attendance." />
+        <PageHeader
+          title="Leaderboard"
+          description="Ranked by points — money collected, deals closed, site visits, task/to-do throughput, attendance, quotations sent, contracts generated, and referrals converted."
+        />
         <div className="flex items-center gap-2">
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
             <SelectTrigger className="w-24">
@@ -101,69 +120,52 @@ export function LeaderboardScreen() {
       {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {rows && rows.length === 0 && !isLoading && <p className="text-sm text-muted-foreground">No data yet.</p>}
 
-      {leader && (
-        <Card className={`${styles.section} ${styles.leaderCard} mb-4`} style={{ '--stagger-index': 0 } as React.CSSProperties}>
-          <CardContent className="pt-6">
-            <div className="flex flex-wrap items-center gap-4">
-              <Avatar className="size-12">
-                <AvatarFallback className="text-lg font-bold">{leader.staffName.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-[200px] flex-1">
-                <div className="flex items-center gap-1.5 text-xs font-bold tracking-wide text-amber-700 uppercase dark:text-amber-400">
-                  <Trophy className="size-3.5" />
-                  Currently leading
-                </div>
-                <div className="mt-0.5 text-xl font-extrabold">{leader.staffName}</div>
-                <div className="mt-0.5 text-sm text-muted-foreground">
-                  {ghs(leader.totalCollected)} collected · {leader.dealsClosedYear} deal{leader.dealsClosedYear === 1 ? '' : 's'} closed {year} · {leader.siteVisits} site visit{leader.siteVisits === 1 ? '' : 's'}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-3xl font-extrabold">{leader.points}</div>
-                <div className="text-xs tracking-wide text-muted-foreground uppercase">points</div>
-              </div>
-            </div>
-            {second && (
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{second.staffName} is catching up</span>
-                  <span>
-                    {gap} point{gap === 1 ? '' : 's'} behind
-                  </span>
-                </div>
-                <div className={styles.catchUpTrack}>
-                  <div className={styles.catchUpFill} style={{ width: `${catchUpPct}%` }} />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {rows && rows.length > 0 && (
-        <div className="space-y-2">
-          {rows.map((r, i) => (
-            <Card key={r.staffKey} className={styles.section} style={{ '--stagger-index': i + 1 } as React.CSSProperties}>
-              <CardContent className="flex items-center gap-3 py-3">
-                <div className={`${styles.rankBadge} ${RANK_TIER_CLASS[i] ?? ''}`}>{rank(i)}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold">{r.staffName}</div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <Badge variant="outline">{ghs(r.totalCollected)} collected</Badge>
-                    <Badge variant="outline">{r.dealsClosedYear} deals</Badge>
-                    <Badge variant="outline">{r.siteVisits} visits</Badge>
-                    <Badge variant="outline">{r.tasksCompleted} tasks</Badge>
-                    <Badge variant="outline">{r.todosCompleted} to-dos</Badge>
-                    <Badge variant="outline">
-                      {r.daysAttended} days ({r.onTimeDays} on time)
-                    </Badge>
+        <>
+          <Card className={`${styles.section} mb-4`} style={{ '--stagger-index': 0 } as React.CSSProperties}>
+            <CardContent className="pt-4">
+              <LeaderboardPodium rows={rows} />
+              <TierStrip rows={rows} />
+            </CardContent>
+          </Card>
+
+          <Card className={`${styles.section} mb-4`} style={{ '--stagger-index': 1 } as React.CSSProperties}>
+            <CardHeader>
+              <CardTitle className="font-normal">Points over time</CardTitle>
+              <CardDescription>A real trend from the score-change audit log — grows as more changes are recorded.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PointsTrendChart history={history ?? []} />
+            </CardContent>
+          </Card>
+
+          <div className="space-y-2">
+            {rows.map((r, i) => (
+              <Card key={r.staffKey} className={styles.section} style={{ '--stagger-index': i + 2 } as React.CSSProperties}>
+                <CardContent className="flex items-center gap-3 py-3">
+                  <div className={`${styles.rankBadge} ${RANK_TIER_CLASS[i] ?? ''}`}>{rank(i)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold">{r.staffName}</div>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <Badge variant="outline">{ghs(r.totalCollected)} collected</Badge>
+                      <Badge variant="outline">{r.dealsClosedYear} deals</Badge>
+                      <Badge variant="outline">{r.siteVisits} visits</Badge>
+                      <Badge variant="outline">{r.tasksCompleted} tasks</Badge>
+                      <Badge variant="outline">{r.todosCompleted} to-dos</Badge>
+                      <Badge variant="outline">
+                        {r.daysAttended} days ({r.onTimeDays} on time)
+                      </Badge>
+                      <Badge variant="outline">{r.quotationsSent} quotations</Badge>
+                      <Badge variant="outline">{r.contractsGenerated} contracts</Badge>
+                      <Badge variant="outline">{r.referralsConverted} referrals</Badge>
+                    </div>
                   </div>
-                </div>
-                <div className="font-mono text-lg font-bold">{r.points}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <div className="font-mono text-lg font-bold">{r.points}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

@@ -27,7 +27,10 @@ export function agentPoints(row: Omit<LeaderboardRow, 'points'>, weights: Leader
       row.todosCompleted * weights.todosCompleted +
       speedBonus * (row.tasksCompleted ? 1 : 0) +
       row.daysAttended * weights.regularity +
-      row.onTimeDays * weights.punctuality,
+      row.onTimeDays * weights.punctuality +
+      row.quotationsSent * weights.quotationsSent +
+      row.contractsGenerated * weights.contractsGenerated +
+      row.referralsConverted * weights.referralsConverted,
   );
 }
 
