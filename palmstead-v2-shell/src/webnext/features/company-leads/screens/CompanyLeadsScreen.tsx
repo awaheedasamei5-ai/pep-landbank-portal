@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
+import { AlertTriangle, BarChart3, Download, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
@@ -25,6 +26,7 @@ import {
 } from '../../pipeline/lib/pipelineListLogic';
 import { useAgentRoster, useAssignCompanyLead, useAssignCompanyLeadHandler, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
 import { LogCallDialog } from '../components/LogCallDialog';
+import { CompanyLeadsDashboardPanel } from '../components/CompanyLeadsDashboardPanel';
 import type { Lead } from '../../../types/domain';
 import styles from './CompanyLeadsScreen.module.css';
 
@@ -189,16 +191,16 @@ export function CompanyLeadsScreen() {
         </div>
         <div className={styles.headActions}>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/calls')}>
-            📞 Call Log
+            <Phone className="size-4" aria-hidden="true" /> Call Log
           </button>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/analytics')}>
-            📊 Analytics
+            <BarChart3 className="size-4" aria-hidden="true" /> Analytics
           </button>
           <button type="button" className={styles.iconBtn} title="Export Company Leads (.xlsx)" disabled={downloadCompanyLeads.isPending} onClick={() => downloadCompanyLeads.mutate()}>
-            ⬇
+            <Download className="size-4" aria-hidden="true" />
           </button>
           <button type="button" className={styles.iconBtn} title="Import Company Leads (.xlsx)" onClick={() => setShowImport((v) => !v)}>
-            ⬆
+            <Upload className="size-4" aria-hidden="true" />
           </button>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/new', { state: { returnTo: '/dashboard/company-leads', agentKeyOverride: 'company' } })}>
             + Add lead
@@ -208,6 +210,8 @@ export function CompanyLeadsScreen() {
 
       {downloadCompanyLeads.isError && <p className={styles.emptyMsg}>{friendlyError(downloadCompanyLeads.error, 'Could not build the export.')}</p>}
       {showImport && <StaffPipelineImportCard companyOnly />}
+
+      <CompanyLeadsDashboardPanel />
 
       <div className={styles.searchRow}>
         <input className={styles.search} placeholder="Search by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -415,7 +419,7 @@ export function CompanyLeadsScreen() {
                       <td className={`${styles.td} ${styles.tdMono}`}>{ghs(Math.max(l.grandTotal - l.amtPaid, 0))}</td>
                       <td className={`${styles.td} ${overdue ? styles.tdOverdue : ''}`}>
                         {l.nextAction || '—'}
-                        {overdue ? ' ⚠' : ''}
+                        {overdue ? <AlertTriangle className="ml-1 inline size-3.5 align-text-top" aria-hidden="true" /> : ''}
                       </td>
                       <td className={styles.td}>
                         <StageBadge stage={l.stage} />
@@ -423,7 +427,7 @@ export function CompanyLeadsScreen() {
                       <td className={styles.td}>{l.priority || 'Low'}</td>
                       <td className={styles.td}>
                         <button type="button" className={styles.editIconBtn} title="Log a call" aria-label={`Log a call with ${l.name}`} onClick={() => setCallLead(l)}>
-                          📞
+                          <Phone className="size-3.5" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -433,10 +437,10 @@ export function CompanyLeadsScreen() {
                           disabled={!config || downloadLeadQuotation.isPending}
                           onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
                         >
-                          🧾
+                          <Receipt className="size-3.5" aria-hidden="true" />
                         </button>
                         <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)}>
-                          ✎
+                          <Pencil className="size-3.5" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -445,7 +449,7 @@ export function CompanyLeadsScreen() {
                           aria-label={`Assign ${l.name} to an agent`}
                           onClick={() => setExpandedId((cur) => (cur === l.id ? null : l.id))}
                         >
-                          👤
+                          <UserPlus className="size-3.5" aria-hidden="true" />
                         </button>
                       </td>
                     </tr>
@@ -478,7 +482,7 @@ export function CompanyLeadsScreen() {
                     <div className={styles.meta}>
                       {ghs(Math.max(l.grandTotal - l.amtPaid, 0))} owed
                       {l.nextAction ? ` · ${l.nextAction}` : ''}
-                      {overdue ? ' ⚠' : ''}
+                      {overdue ? <AlertTriangle className="ml-1 inline size-3.5 align-text-top" aria-hidden="true" /> : ''}
                     </div>
                   </div>
                   <div className={styles.right}>
@@ -489,7 +493,7 @@ export function CompanyLeadsScreen() {
                   </div>
                 </div>
                 <button type="button" className={styles.editIconBtnMobile} title="Log a call" aria-label={`Log a call with ${l.name}`} onClick={() => setCallLead(l)}>
-                  📞
+                  <Phone className="size-4" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
@@ -499,7 +503,7 @@ export function CompanyLeadsScreen() {
                   disabled={!config || downloadLeadQuotation.isPending}
                   onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
                 >
-                  🧾
+                  <Receipt className="size-4" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
@@ -508,7 +512,7 @@ export function CompanyLeadsScreen() {
                   aria-label={`Assign ${l.name} to an agent`}
                   onClick={() => setExpandedId((cur) => (cur === l.id ? null : l.id))}
                 >
-                  👤
+                  <UserPlus className="size-4" aria-hidden="true" />
                 </button>
               </div>
               {l.leadSource && <span className={styles.sourceTag}>{l.leadSource}</span>}

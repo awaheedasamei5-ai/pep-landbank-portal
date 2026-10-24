@@ -31,6 +31,9 @@
 .headActions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
   border-radius: var(--r-pill);
@@ -44,6 +47,9 @@
 .iconBtn:disabled { opacity: .6; cursor: default; }
 
 .addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--c-accent);
   color: #fff;
   border: none;
@@ -178,6 +184,9 @@
 .expandedTd { white-space: normal; background: var(--c-paper); }
 
 .editIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 8px;
@@ -201,6 +210,9 @@
 .rowBody { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
 
 .editIconBtnMobile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 34px;
   height: 34px;
