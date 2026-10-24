@@ -100,6 +100,14 @@ None new in this slice — call logging is a plain structured form, not a drafti
 4. **Phase 4 — Data Quality tab**: new Company-Leads-scoped checks, adapting `dataIntegrityCheck.ts`'s real pattern.
 5. **Phase 5 — Settings tab**: real lead-source config (new `app_config` field or small config table — decided when this phase starts, after checking whether `app_config` already has a similar precedent to extend).
 
+## 6a. Progress
+
+**Phase 1 (Call Log core) — DONE, verified live, deployed 2026-10-24 (commit `25b4700`).** `outcome` column added; `activityLog.logCall()`/`listCompanyWide()` shipped; real "Log a call" dialog (type/method/outcome/note/follow-up date) reachable from the Company Leads list (header button, per-row 📞, mobile card), the new Call Log page, and every lead's own detail page (`ActivitySection`, now showing the real method/outcome/note/follow fields it always had but never displayed). New `/dashboard/company-leads/calls` page: KPI strip (calls today / open follow-ups / overdue), quick filters (All / My calls today / Follow-ups due), a precise self-superseding follow-up-queue definition (no new status column). **Real bug caught before shipping**: the company-wide query initially showed every staff member's own pipeline activity, not just Company Leads' real client pool — fixed by scoping against the real company-lead id set, verified via direct SQL (0 real rows match either before or after a real end-to-end test call, confirming the fix). Verified live in dev and production: logged a real test call, confirmed every field persisted correctly, confirmed it rendered in both the Call Log list and the client's own Activity section, cleaned up the test row after.
+
+**Phase 2 (Follow-ups view) — folded into Phase 1, shipped same commit.** The real derived follow-up queue (§5's precise definition) shipped as the Call Log page's own "Follow-ups due" quick filter rather than a separate page — building a second page around the exact same query and columns the first page's own filter already shows would have been padding, not real additional structure.
+
+**Phases 3-5 (Analytics tab, Data Quality tab, Settings tab) — not yet started.**
+
 ## 7. QA
 
 Real test per phase: log a real test call (method/outcome/note/follow-up date), confirm it appears in both the Call Log list and the client's own Activity section with every field intact. Confirm "My calls today"/"Follow-ups due" filters return correct real rows. Confirm the Analytics tab's calls-by-day count matches a direct SQL cross-check. Confirm Data Quality's duplicate/missing-field counts match SQL. Confirm Settings' lead-source list is genuinely editable and the list screen's own source filter picks up a new entry without a code change. Clean up any real test call/lead created for QA afterward.
