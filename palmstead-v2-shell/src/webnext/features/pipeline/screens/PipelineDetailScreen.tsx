@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { Check, Download, Link2 } from 'lucide-react';
 import { useBanners } from '../../banners/hooks/useBanners';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs, today } from '../../../shared/lib/format';
@@ -59,7 +60,6 @@ export function PipelineDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const profile = useSessionStore((s) => s.profile);
   // Real bug the user caught live: Master Pipeline (PipelineListScreen in
   // its company-wide mode) drills into this same shared detail screen,
   // but every close/back/delete-redirect here was hardcoded back to the
@@ -78,44 +78,18 @@ export function PipelineDetailScreen() {
   // here) -- the real two-way branch (Company Leads vs Pipeline) is
   // unchanged.
   const backTo = location.pathname.startsWith('/dashboard/company-leads') ? '/dashboard/company-leads' : '/dashboard/pipeline';
-  const canLog = useCanLogPayments();
   const { data: lead, isLoading } = useLead(id ?? '');
   const { data: payments } = usePayments(id ?? '');
   const { data: config } = useConfig();
-  const createPayment = useCreatePayment();
-  const downloadReceipt = useDownloadReceipt();
-  const issueLink = useIssueReceiptLink();
-  const [amount, setAmount] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (isLoading) return <div className={styles.wrap}>Loading…</div>;
   if (!lead) return <div className={styles.wrap}>Lead not found.</div>;
-
-  async function shareReceipt(payment: Payment) {
-    const link = await issueLink.mutateAsync({ payment, lead: lead ?? null });
-    await navigator.clipboard.writeText(link).catch(() => {});
-    setCopiedId(payment.id);
-    setTimeout(() => setCopiedId((cur) => (cur === payment.id ? null : cur)), 2500);
-  }
 
   const balance = Math.max(lead.grandTotal - lead.amtPaid, 0);
   const leadPayments = (payments ?? []).filter((p) => p.leadId === lead.id).sort((a, b) => b.date.localeCompare(a.date));
   const initials = initialsOf(lead.name);
 
-  async function submitPayment(e: React.FormEvent) {
-    e.preventDefault();
-    const n = Number(amount);
-    if (!n || n <= 0 || !id) return;
-    await createPayment.mutateAsync({ input: { leadId: id, amount: n }, leadName: lead!.name, leadAgentKey: lead!.agent });
-    setAmount('');
-  }
-
   const pctCollected = lead.grandTotal > 0 ? Math.min(100, Math.round((lead.amtPaid / lead.grandTotal) * 100)) : 0;
-  const quickAmounts = [
-    { label: '25%', value: Math.round(balance * 0.25) },
-    { label: '50%', value: Math.round(balance * 0.5) },
-    { label: 'Full balance', value: balance },
-  ].filter((q) => q.value > 0);
 
   // Premium UI Rebuild spec, Section 6.C/13: "Use a drawer/detail panel
   // for lead inspection on desktop... Details: Side drawer" (vs. mobile's
@@ -180,68 +154,7 @@ export function PipelineDetailScreen() {
         <FollowUpSection lead={lead} />
       </div>
 
-      {canLog && (
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Log a payment</h2>
-          <form onSubmit={submitPayment}>
-            {quickAmounts.length > 0 && (
-              <div className={styles.quickRow}>
-                {quickAmounts.map((q) => (
-                  <button type="button" key={q.label} className={styles.quickChip} onClick={() => setAmount(String(q.value))}>
-                    {q.label} <span className={styles.quickChipAmt}>{ghs(q.value)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className={styles.field}>
-              <label className={styles.label}>Amount (GHS)</label>
-              <input className={styles.input} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-            </div>
-            <button type="submit" className={styles.btn} disabled={createPayment.isPending || !amount}>
-              {createPayment.isPending ? 'Saving…' : 'Save payment'}
-            </button>
-            {profile?.role !== 'manager' && <p className={styles.hint}>This will be sent to Management for approval before it reflects on the balance.</p>}
-          </form>
-        </div>
-      )}
-
-      <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>Payment history</h2>
-        <div className={styles.history}>
-          {leadPayments.length === 0 && <p className={styles.emptyMsg}>No individual payments logged yet — only a starting total.</p>}
-          {leadPayments.map((p) => {
-            const status = p.status ?? 'approved';
-            const isApproved = status === 'approved';
-            return (
-              <div className={styles.historyRow} key={p.id}>
-                <div className={styles.historyMain}>
-                  <div className={styles.historyDate}>{p.date}</div>
-                  <span className={`${styles.statusPill} ${styles[`status_${status}`]}`}>{status === 'approved' ? 'Successful' : status === 'pending' ? 'Awaiting approval' : 'Declined'}</span>
-                </div>
-                <div className={styles.historyRight}>
-                  {isApproved && (
-                    <button type="button" className={styles.receiptBtn} onClick={() => downloadReceipt.mutate({ payment: p, lead })} disabled={downloadReceipt.isPending} title="Download receipt">
-                      ⬇
-                    </button>
-                  )}
-                  {isApproved && (
-                    <button
-                      type="button"
-                      className={styles.receiptBtn}
-                      onClick={() => shareReceipt(p)}
-                      disabled={issueLink.isPending}
-                      title="Copy a link the client can open to view their receipt"
-                    >
-                      {copiedId === p.id ? '✓' : '🔗'}
-                    </button>
-                  )}
-                  <span className={`${styles.historyAmt} ${!isApproved ? styles.historyAmtMuted : ''}`}>+{ghs(p.amount)}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <PaymentHistorySection lead={lead} payments={leadPayments} />
 
       <SiteVisitsSection lead={lead} />
       <ActivitySection lead={lead} />
@@ -286,7 +199,7 @@ function ScrollHelper() {
   );
 }
 
-function ClientSection({ lead }: { lead: Lead }) {
+export function ClientSection({ lead }: { lead: Lead }) {
   const update = useUpdateLead();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(lead.name);
@@ -350,10 +263,118 @@ function ClientSection({ lead }: { lead: Lead }) {
   );
 }
 
+// docs/plans/29-company-leads-full-system-blueprint.md Section 7.5/7.6 --
+// extracted verbatim out of the main screen component (previously inline
+// JSX there) so the new Company-Leads-specific layered client page
+// (CompanyLeadClientScreen.tsx) can reuse this exact real payment-history
+// + log-payment + receipt-download/share UI as its own "Payment History"
+// tab, instead of duplicating real receipt-token logic a second time.
+// Pure extraction -- no behavior change for Master Pipeline, which keeps
+// rendering this from the same spot it always has. Icons swapped from
+// emoji to lucide-react as part of this move.
+export function PaymentHistorySection({ lead, payments }: { lead: Lead; payments: Payment[] }) {
+  const profile = useSessionStore((s) => s.profile);
+  const canLog = useCanLogPayments();
+  const createPayment = useCreatePayment();
+  const downloadReceipt = useDownloadReceipt();
+  const issueLink = useIssueReceiptLink();
+  const [amount, setAmount] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const balance = Math.max(lead.grandTotal - lead.amtPaid, 0);
+  const quickAmounts = [
+    { label: '25%', value: Math.round(balance * 0.25) },
+    { label: '50%', value: Math.round(balance * 0.5) },
+    { label: 'Full balance', value: balance },
+  ].filter((q) => q.value > 0);
+
+  async function shareReceipt(payment: Payment) {
+    const link = await issueLink.mutateAsync({ payment, lead });
+    await navigator.clipboard.writeText(link).catch(() => {});
+    setCopiedId(payment.id);
+    setTimeout(() => setCopiedId((cur) => (cur === payment.id ? null : cur)), 2500);
+  }
+
+  async function submitPayment(e: React.FormEvent) {
+    e.preventDefault();
+    const n = Number(amount);
+    if (!n || n <= 0) return;
+    await createPayment.mutateAsync({ input: { leadId: lead.id, amount: n }, leadName: lead.name, leadAgentKey: lead.agent });
+    setAmount('');
+  }
+
+  return (
+    <>
+      {canLog && (
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Log a payment</h2>
+          <form onSubmit={submitPayment}>
+            {quickAmounts.length > 0 && (
+              <div className={styles.quickRow}>
+                {quickAmounts.map((q) => (
+                  <button type="button" key={q.label} className={styles.quickChip} onClick={() => setAmount(String(q.value))}>
+                    {q.label} <span className={styles.quickChipAmt}>{ghs(q.value)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className={styles.field}>
+              <label className={styles.label}>Amount (GHS)</label>
+              <input className={styles.input} type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+            </div>
+            <button type="submit" className={styles.btn} disabled={createPayment.isPending || !amount}>
+              {createPayment.isPending ? 'Saving…' : 'Save payment'}
+            </button>
+            {profile?.role !== 'manager' && <p className={styles.hint}>This will be sent to Management for approval before it reflects on the balance.</p>}
+          </form>
+        </div>
+      )}
+
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Payment history</h2>
+        <div className={styles.history}>
+          {payments.length === 0 && <p className={styles.emptyMsg}>No individual payments logged yet — only a starting total.</p>}
+          {payments.map((p) => {
+            const status = p.status ?? 'approved';
+            const isApproved = status === 'approved';
+            return (
+              <div className={styles.historyRow} key={p.id}>
+                <div className={styles.historyMain}>
+                  <div className={styles.historyDate}>{p.date}</div>
+                  <span className={`${styles.statusPill} ${styles[`status_${status}`]}`}>{status === 'approved' ? 'Successful' : status === 'pending' ? 'Awaiting approval' : 'Declined'}</span>
+                </div>
+                <div className={styles.historyRight}>
+                  {isApproved && (
+                    <button type="button" className={styles.receiptBtn} onClick={() => downloadReceipt.mutate({ payment: p, lead })} disabled={downloadReceipt.isPending} title="Download receipt">
+                      <Download className="size-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                  {isApproved && (
+                    <button
+                      type="button"
+                      className={styles.receiptBtn}
+                      onClick={() => shareReceipt(p)}
+                      disabled={issueLink.isPending}
+                      title="Copy a link the client can open to view their receipt"
+                    >
+                      {copiedId === p.id ? <Check className="size-3.5" aria-hidden="true" /> : <Link2 className="size-3.5" aria-hidden="true" />}
+                    </button>
+                  )}
+                  <span className={`${styles.historyAmt} ${!isApproved ? styles.historyAmtMuted : ''}`}>+{ghs(p.amount)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Master Spec Section 4's lead-record gap: source/priority/assigned-staff
 // are real columns (Lead.leadSource/priority/agent) with no UI anywhere
 // before now -- confirmed by grep, not assumed.
-function LeadDetailsSection({ lead }: { lead: Lead }) {
+export function LeadDetailsSection({ lead }: { lead: Lead }) {
   const profile = useSessionStore((s) => s.profile);
   const update = useUpdateLead();
   const assignLead = useAssignLead();
@@ -541,7 +562,7 @@ function LeadDetailsSection({ lead }: { lead: Lead }) {
   );
 }
 
-function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']> }) {
+export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']> }) {
   const update = useUpdateLead();
   const [editing, setEditing] = useState(false);
   const [plotType, setPlotType] = useState(lead.plotType);
@@ -712,7 +733,7 @@ function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNullable<
   );
 }
 
-function DepositScheduleSection({ lead, config, payments }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']>; payments: Payment[] }) {
+export function DepositScheduleSection({ lead, config, payments }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']>; payments: Payment[] }) {
   const update = useUpdateLead();
   const [editingTarget, setEditingTarget] = useState(false);
   const [target, setTarget] = useState('');
@@ -790,7 +811,7 @@ function DepositScheduleSection({ lead, config, payments }: { lead: Lead; config
 // at -- not just on the separate Allocations-tab picker, which now
 // enforces the exact same check (see NewRequestForm) so the threshold
 // can't be bypassed by using that entry point instead.
-function AllocationEligibilitySection({ lead, config, payments }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']>; payments: Payment[] }) {
+export function AllocationEligibilitySection({ lead, config, payments }: { lead: Lead; config: NonNullable<ReturnType<typeof useConfig>['data']>; payments: Payment[] }) {
   const navigate = useNavigate();
   const { data: requests } = useAllocationRequests();
   const create = useCreateAllocationRequest();
@@ -847,7 +868,7 @@ function AllocationEligibilitySection({ lead, config, payments }: { lead: Lead; 
   );
 }
 
-function FollowUpSection({ lead }: { lead: Lead }) {
+export function FollowUpSection({ lead }: { lead: Lead }) {
   const update = useUpdateLead();
   const logActivity = useLogActivity();
   const [editing, setEditing] = useState(false);
@@ -1015,7 +1036,7 @@ function FollowUpDraftBox({ lead }: { lead: Lead }) {
 // Master Spec Section 4's Site Visits lead-record section -- real
 // site_visits.lead_id FK (see SiteVisit.leadId's own comment), not a
 // name-match guess at read time.
-function SiteVisitsSection({ lead }: { lead: Lead }) {
+export function SiteVisitsSection({ lead }: { lead: Lead }) {
   const navigate = useNavigate();
   const { data: visits } = useSiteVisitsForLead(lead.id);
 
@@ -1056,7 +1077,7 @@ function SiteVisitsSection({ lead }: { lead: Lead }) {
 // its own "Log a call" action so a manual contact record can be added
 // from any lead's detail page, not just Company Leads' own list/Call
 // Log screens.
-function ActivitySection({ lead }: { lead: Lead }) {
+export function ActivitySection({ lead }: { lead: Lead }) {
   const { data: entries } = useActivityForLead(lead.id);
   const [logOpen, setLogOpen] = useState(false);
 
@@ -1092,7 +1113,7 @@ function ActivitySection({ lead }: { lead: Lead }) {
 // audit_events' own RLS. Merges entity_type='lead' events (archive/
 // restore) with entity_type='payment' events for this lead's own
 // payments (approve/decline/needs-correction/resubmit).
-function AuditTrailSection({ leadId, paymentIds }: { leadId: string; paymentIds: string[] }) {
+export function AuditTrailSection({ leadId, paymentIds }: { leadId: string; paymentIds: string[] }) {
   const profile = useSessionStore((s) => s.profile);
   const { data: events } = useAuditForLead(leadId, paymentIds);
 
@@ -1114,7 +1135,7 @@ function AuditTrailSection({ leadId, paymentIds }: { leadId: string; paymentIds:
   );
 }
 
-function DocumentationSection({ lead }: { lead: Lead }) {
+export function DocumentationSection({ lead }: { lead: Lead }) {
   const canView = useCanViewDocStage();
   const updateStage = useUpdateLeadDocStage();
   const [stage, setStage] = useState(lead.docStage ?? '');
@@ -1164,7 +1185,7 @@ const DELETE_REASONS = [
 ] as const;
 type DeleteReasonKey = (typeof DELETE_REASONS)[number]['key'];
 
-function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: () => void }) {
+export function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: () => void }) {
   const del = useDeleteLead();
   const { data: plots } = usePlots();
   const updatePlot = useUpdatePlot();

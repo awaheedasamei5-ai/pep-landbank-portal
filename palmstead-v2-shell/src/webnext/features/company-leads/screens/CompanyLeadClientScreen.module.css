@@ -1,0 +1,12 @@
+.tabs {
+  margin-top: 8px;
+}
+
+.tabsList {
+  flex-wrap: wrap;
+  height: auto;
+}
+
+.tabPanel {
+  margin-top: 4px;
+}
