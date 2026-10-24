@@ -1,0 +1,77 @@
+/* docs/plans/21-my-portfolio-plan.md -- adapts the same pop-in treatment
+   already established in SmartInsightsScreen.module.css (strong ease-out,
+   reduced-motion-safe) for a one-off celebratory moment: scale-in badge
+   + a CSS-only radial confetti burst, no new animation dependency. */
+
+.badgeWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px auto 4px;
+  width: 96px;
+  height: 96px;
+}
+
+.badge {
+  position: relative;
+  z-index: 1;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  background: linear-gradient(135deg, #f4d03f, #d4a017);
+  box-shadow: 0 8px 24px color-mix(in oklch, #d4a017 45%, transparent);
+  animation: badge-pop 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.burst {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in oklch, #f4d03f 55%, transparent) 0%, transparent 70%);
+  animation: burst-out 650ms cubic-bezier(0.23, 1, 0.32, 1) 80ms backwards;
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes burst-out {
+  from {
+    opacity: 0.9;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge {
+    animation: badge-pop-reduced 160ms ease;
+  }
+  .burst {
+    display: none;
+  }
+}
+
+@keyframes badge-pop-reduced {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

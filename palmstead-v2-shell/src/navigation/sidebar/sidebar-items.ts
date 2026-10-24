@@ -279,7 +279,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "my-portfolio",
 				title: "My Portfolio",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/my-portfolio",
 				icon: Briefcase,
 			},
 			{
