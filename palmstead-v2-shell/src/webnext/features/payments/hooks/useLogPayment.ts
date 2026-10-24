@@ -68,7 +68,7 @@ export function useCreatePayment() {
   const invalidate = useInvalidatePaymentEffects();
 
   return useMutation({
-    mutationFn: async ({ input, leadAgentKey }: { input: NewPaymentEntry; leadName: string; leadAgentKey: string; leadContact?: string }) => {
+    mutationFn: async ({ input, leadName, leadAgentKey, leadContact }: { input: NewPaymentEntry; leadName: string; leadAgentKey: string; leadContact?: string }) => {
       const status = profile?.role === 'manager' ? 'approved' : 'pending';
       const payment = await getDataSource(demoMode).payments.create(input, leadName, leadAgentKey, status);
       return payment;
@@ -158,4 +158,3 @@ export function useUploadPaymentProof() {
     onSuccess: invalidate,
   });
 }
-
