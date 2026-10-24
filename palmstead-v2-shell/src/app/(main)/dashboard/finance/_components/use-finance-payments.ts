@@ -12,7 +12,15 @@ import { requireSupabase } from "@/lib/supabase.client";
 // memory exists because of: a prior incident where a deleted test payment
 // kept feeding real financial figures because a write path bypassed the
 // single real source of truth.
-export const PAYMENT_METHODS = ["Ecobank", "Stanbic Bank", "MTN MoMo", "Vodafone Cash", "Hubtel", "Cash", "Other"] as const;
+export const PAYMENT_METHODS = [
+  "Ecobank",
+  "Stanbic Bank",
+  "MTN MoMo",
+  "Vodafone Cash",
+  "Hubtel",
+  "Cash",
+  "Other",
+] as const;
 
 export interface LeadOption {
   id: string;
@@ -40,6 +48,10 @@ export interface Payment {
   correctionReason: string | null;
   decidedByName: string | null;
   decidedAt: string | null;
+  paidAfterApproval: number | null;
+  balanceAfterApproval: number | null;
+  contractTotalAtApproval: number | null;
+  approvalSnapshotIsLegacy: boolean;
   paymentDate: string;
   createdAt: string;
 }
@@ -59,6 +71,10 @@ type RawPayment = {
   correction_reason: string | null;
   decided_by_name: string | null;
   decided_at: string | null;
+  paid_after_approval: number | null;
+  balance_after_approval: number | null;
+  contract_total_at_approval: number | null;
+  approval_snapshot_is_legacy: boolean;
   payment_date: string;
   created_at: string;
   leads: { name: string } | { name: string }[] | null;
@@ -87,6 +103,10 @@ function mapPayment(row: RawPayment): Payment {
     correctionReason: row.correction_reason,
     decidedByName: row.decided_by_name,
     decidedAt: row.decided_at,
+    paidAfterApproval: row.paid_after_approval == null ? null : Number(row.paid_after_approval),
+    balanceAfterApproval: row.balance_after_approval == null ? null : Number(row.balance_after_approval),
+    contractTotalAtApproval: row.contract_total_at_approval == null ? null : Number(row.contract_total_at_approval),
+    approvalSnapshotIsLegacy: row.approval_snapshot_is_legacy,
     paymentDate: row.payment_date,
     createdAt: row.created_at,
   };
@@ -112,7 +132,7 @@ export function usePayments() {
       const { data, error } = await sb
         .from("payments")
         .select(
-          "id,lead_id,agent_key,client_name,amount,payment_method,status,receipt_number,receipt_proof_path,reference_number,note,correction_reason,decided_by_name,decided_at,payment_date,created_at,leads(name)",
+          "id,lead_id,agent_key,client_name,amount,payment_method,status,receipt_number,receipt_proof_path,reference_number,note,correction_reason,decided_by_name,decided_at,paid_after_approval,balance_after_approval,contract_total_at_approval,approval_snapshot_is_legacy,payment_date,created_at,leads(name)",
         )
         .order("created_at", { ascending: false })
         .limit(300);
@@ -136,17 +156,25 @@ export function useLeadSearch(search: string) {
       if (search.trim()) query = query.ilike("name", `%${search.trim()}%`);
       const { data, error } = await query;
       if (error) throw error;
-      return ((data ?? []) as { id: string; name: string; contact: string | null; agent_key: string; plot_type: string | null; grand_total: number | null; amt_paid: number | null }[]).map(
-        (l) => ({
-          id: l.id,
-          name: l.name,
-          contact: l.contact,
-          agentKey: l.agent_key,
-          plotType: l.plot_type,
-          grandTotal: Number(l.grand_total ?? 0),
-          amtPaid: Number(l.amt_paid ?? 0),
-        }),
-      );
+      return (
+        (data ?? []) as {
+          id: string;
+          name: string;
+          contact: string | null;
+          agent_key: string;
+          plot_type: string | null;
+          grand_total: number | null;
+          amt_paid: number | null;
+        }[]
+      ).map((l) => ({
+        id: l.id,
+        name: l.name,
+        contact: l.contact,
+        agentKey: l.agent_key,
+        plotType: l.plot_type,
+        grandTotal: Number(l.grand_total ?? 0),
+        amtPaid: Number(l.amt_paid ?? 0),
+      }));
     },
     enabled: true,
   });
@@ -155,7 +183,13 @@ export function useLeadSearch(search: string) {
 export function useLogPayment(callerRole: "agent" | "manager" | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { lead: LeadOption; amount: number; paymentMethod: string; note: string; referenceNumber: string }) => {
+    mutationFn: async (input: {
+      lead: LeadOption;
+      amount: number;
+      paymentMethod: string;
+      note: string;
+      referenceNumber: string;
+    }) => {
       const sb = requireSupabase();
       const { data: inserted, error } = await sb
         .from("payments")
@@ -180,10 +214,37 @@ export function useLogPayment(callerRole: "agent" | "manager" | undefined) {
       // V1's rule that a Management-held login's own payment entries land
       // approved immediately, everyone else's land pending for review.
       let approved = false;
+      let paidAfterApproval: number | null = null;
+      let balanceAfterApproval: number | null = null;
+      let contractTotalAtApproval: number | null = null;
+      let approvalSnapshotIsLegacy = false;
       if (callerRole === "manager") {
-        const { error: approveError } = await sb.rpc("approve_payment", { p_payment_id: inserted.id });
+        const { data: approval, error: approveError } = await sb.rpc("approve_payment", { p_payment_id: inserted.id });
         if (approveError) throw approveError;
         approved = true;
+        const snapshot = approval as { new_amt_paid?: number; new_balance?: number; contract_total?: number } | null;
+        paidAfterApproval = snapshot?.new_amt_paid == null ? null : Number(snapshot.new_amt_paid);
+        balanceAfterApproval = snapshot?.new_balance == null ? null : Number(snapshot.new_balance);
+        contractTotalAtApproval = snapshot?.contract_total == null ? null : Number(snapshot.contract_total);
+        const { data: storedSnapshot } = await sb
+          .from("payments")
+          .select("paid_after_approval,balance_after_approval,contract_total_at_approval,approval_snapshot_is_legacy")
+          .eq("id", inserted.id)
+          .maybeSingle();
+        if (storedSnapshot) {
+          const row = storedSnapshot as {
+            paid_after_approval: number | null;
+            balance_after_approval: number | null;
+            contract_total_at_approval: number | null;
+            approval_snapshot_is_legacy: boolean;
+          };
+          paidAfterApproval = row.paid_after_approval == null ? paidAfterApproval : Number(row.paid_after_approval);
+          balanceAfterApproval =
+            row.balance_after_approval == null ? balanceAfterApproval : Number(row.balance_after_approval);
+          contractTotalAtApproval =
+            row.contract_total_at_approval == null ? contractTotalAtApproval : Number(row.contract_total_at_approval);
+          approvalSnapshotIsLegacy = row.approval_snapshot_is_legacy;
+        }
       }
       const payment: Payment = {
         id: inserted.id as string,
@@ -201,14 +262,20 @@ export function useLogPayment(callerRole: "agent" | "manager" | undefined) {
         correctionReason: null,
         decidedByName: null,
         decidedAt: null,
+        paidAfterApproval,
+        balanceAfterApproval,
+        contractTotalAtApproval,
+        approvalSnapshotIsLegacy,
         paymentDate: new Date().toISOString().slice(0, 10),
         createdAt: new Date().toISOString(),
       };
       return payment;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["finance-payments"] });
-      qc.invalidateQueries({ queryKey: ["finance-lead-search"] });
+      void Promise.all([
+        qc.invalidateQueries({ queryKey: ["finance-payments"] }),
+        qc.invalidateQueries({ queryKey: ["finance-lead-search"] }),
+      ]);
     },
   });
 }
@@ -220,7 +287,31 @@ export function useApprovePayment() {
       const sb = requireSupabase();
       const { data, error } = await sb.rpc("approve_payment", { p_payment_id: paymentId });
       if (error) throw error;
-      return data;
+      const result = data as { new_amt_paid?: number; new_balance?: number; contract_total?: number } | null;
+      const { data: storedSnapshot } = await sb
+        .from("payments")
+        .select("paid_after_approval,balance_after_approval,contract_total_at_approval,approval_snapshot_is_legacy")
+        .eq("id", paymentId)
+        .maybeSingle();
+      const row = storedSnapshot as {
+        paid_after_approval: number | null;
+        balance_after_approval: number | null;
+        contract_total_at_approval: number | null;
+        approval_snapshot_is_legacy: boolean;
+      } | null;
+      let paidAfterApproval = result?.new_amt_paid == null ? null : Number(result.new_amt_paid);
+      let balanceAfterApproval = result?.new_balance == null ? null : Number(result.new_balance);
+      let contractTotalAtApproval = result?.contract_total == null ? null : Number(result.contract_total);
+      if (row?.paid_after_approval != null) paidAfterApproval = Number(row.paid_after_approval);
+      if (row?.balance_after_approval != null) balanceAfterApproval = Number(row.balance_after_approval);
+      if (row?.contract_total_at_approval != null) contractTotalAtApproval = Number(row.contract_total_at_approval);
+      const approvalSnapshotIsLegacy = row?.approval_snapshot_is_legacy ?? false;
+      return {
+        paidAfterApproval,
+        balanceAfterApproval,
+        contractTotalAtApproval,
+        approvalSnapshotIsLegacy,
+      };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["finance-payments"] }),
   });
@@ -267,3 +358,4 @@ export function useResubmitPayment() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["finance-payments"] }),
   });
 }
+
