@@ -58,12 +58,12 @@ export function ReceiptModal({ payment, open, onOpenChange }: { payment: Payment
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Payment logged!</DialogTitle>
+          <DialogTitle>Payment receipt</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {payment.leadName} · {money(payment.amount)}
           <br />
-          Already saved to their payment history. Download or share the receipt below.
+          This approved payment is already in the client’s history. Download or share its receipt below.
         </p>
         <div className="flex flex-col gap-2">
           <Button
@@ -103,3 +103,4 @@ export function ReceiptModal({ payment, open, onOpenChange }: { payment: Payment
     </Dialog>
   );
 }
+

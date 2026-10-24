@@ -50,10 +50,9 @@ function useInvalidatePaymentEffects() {
 // no review needed); 'elias' logging it is always 'pending' regardless
 // of who the lead's own agent is, since elias isn't Management and the
 // real RLS/RPC gate on approve_payment requires my_role()='manager'.
-// A payment that lands 'approved' (either immediately here, or later via
-// useApprovePayment) fires the client's real thank-you SMS -- matches
-// applyApprovedPaymentToLead's own apiSendSms call (index.html:4259),
-// fire-and-forget so a failed text never blocks the payment itself.
+// Approved payments now enqueue a receipt-linked thank-you SMS in the
+// database transaction. Keep this hook from sending a second, unlinked
+// browser SMS; the durable outbox owns the single delivery attempt.
 //
 // Known gap, deliberately not closed here: a manager's own self-approved
 // entry goes through payments.create() directly, not approve_payment --
@@ -72,11 +71,6 @@ export function useCreatePayment() {
     mutationFn: async ({ input, leadName, leadAgentKey, leadContact }: { input: NewPaymentEntry; leadName: string; leadAgentKey: string; leadContact?: string }) => {
       const status = profile?.role === 'manager' ? 'approved' : 'pending';
       const payment = await getDataSource(demoMode).payments.create(input, leadName, leadAgentKey, status);
-      if (status === 'approved' && leadContact) {
-        getDataSource(demoMode)
-          .sms.send(leadContact, `Hi ${leadName}, thank you for your payment of GHS ${input.amount.toLocaleString('en-GH')} towards your plot at Royal Palm Enclave. - PEP Landbank`, 'payment_thanks', profile?.key ?? null)
-          .catch(() => {});
-      }
       return payment;
     },
     onSuccess: invalidate,
@@ -89,13 +83,8 @@ export function useApprovePayment() {
   const invalidate = useInvalidatePaymentEffects();
 
   return useMutation({
-    mutationFn: async ({ paymentId, leadName, leadContact, amount }: { paymentId: string; leadName?: string; leadContact?: string; amount?: number }) => {
+    mutationFn: async ({ paymentId }: { paymentId: string; leadName?: string; leadContact?: string; amount?: number }) => {
       const result = await getDataSource(demoMode).payments.approve(paymentId, profile?.key ?? '', profile?.name ?? '');
-      if (leadContact && leadName && amount != null) {
-        getDataSource(demoMode)
-          .sms.send(leadContact, `Hi ${leadName}, thank you for your payment of GHS ${amount.toLocaleString('en-GH')} towards your plot at Royal Palm Enclave. - PEP Landbank`, 'payment_thanks', profile?.key ?? null)
-          .catch(() => {});
-      }
       // Master Spec 7.3/7.4: this approval just pushed the lead over the
       // allocation eligibility threshold, and approve_payment (or its
       // demo equivalent) already auto-raised the allocation_requests row

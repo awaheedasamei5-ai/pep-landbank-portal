@@ -2,7 +2,7 @@
 // StreakCard slice actually touches. Widened as later phases port more of
 // index.html's DB shape (leads/payments/schedule_items/etc.).
 
-export type Role = 'agent' | 'manager';
+export type Role = "agent" | "manager";
 
 export interface Profile {
   key: string;
@@ -39,11 +39,11 @@ export interface StaffInvite {
   createdAt: string;
 }
 
-export type PlotType = 'Full Plot' | 'Half Plot';
-export type PaymentPlan = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
+export type PlotType = "Full Plot" | "Half Plot";
+export type PaymentPlan = "Full Payment" | "3 Months" | "6 Months" | "9 Months" | "12 Months";
 // Internal stage codes -- displayed to staff via the flipped
 // DISPLAY_STAGE_CODE mapping (index.html:17138), never shown raw.
-export type Stage = '1' | '2A' | '2B' | '3' | '4' | 'Lost';
+export type Stage = "1" | "2A" | "2B" | "3" | "4" | "Lost";
 
 export interface Lead {
   id: string;
@@ -249,14 +249,14 @@ export interface NewLead {
 
 // Real distinct values seen on production's payment_method column
 // (index.html's PAYMENT_METHODS constant, confirmed still the live set).
-export type PaymentMethod = 'Ecobank' | 'Stanbic Bank' | 'MTN MoMo' | 'Vodafone Cash' | 'Hubtel' | 'Cash' | 'Other';
+export type PaymentMethod = "Ecobank" | "Stanbic Bank" | "MTN MoMo" | "Vodafone Cash" | "Hubtel" | "Cash" | "Other";
 // 'needs_correction' -- Master Spec Section 6: a manager can send a
 // pending payment back for correction instead of declining it outright
 // (e.g. a typo'd amount/method), via flag_payment_needs_correction(); the
 // logging staff member (or manager) then edits and resubmit_payment()s it,
 // which resets status to 'pending' for a fresh review. Neither RPC is a
 // raw client UPDATE, matching the existing approve/decline pattern.
-export type PaymentStatus = 'pending' | 'approved' | 'declined' | 'needs_correction';
+export type PaymentStatus = "pending" | "approved" | "declined" | "needs_correction";
 
 // Extended in place (not a parallel type) since this is the same real
 // `payments` table "My pipeline"/pipeline detail already read from --
@@ -280,6 +280,10 @@ export interface Payment {
   decidedBy?: string | null;
   decidedByName?: string | null;
   decidedAt?: string | null;
+  paidAfterApproval?: number | null;
+  balanceAfterApproval?: number | null;
+  contractTotalAtApproval?: number | null;
+  approvalSnapshotIsLegacy?: boolean;
   receiptNumber?: string | null;
   // Real column receipt_proof_path (new this session) -- the storage path
   // of a photo the logging agent attaches as proof, so a manager can
@@ -342,12 +346,12 @@ export interface PaymentDecisionResult {
 // exists in the live constraint but has no product definition anywhere
 // in the spec or this app yet -- deliberately not surfaced here until it
 // does; TS will reject anyone trying to set it by accident.
-export type ScheduleItemStatus = 'open' | 'in_progress' | 'blocked' | 'closed' | 'cancelled' | 'rescheduled';
+export type ScheduleItemStatus = "open" | "in_progress" | "blocked" | "closed" | "cancelled" | "rescheduled";
 
-export type ScheduleItemKind = 'todo' | 'task' | 'meeting';
+export type ScheduleItemKind = "todo" | "task" | "meeting";
 
 // Real DB check constraint (schedule_items_recurs_freq_check).
-export type RecurrenceFreq = 'daily' | 'weekly' | 'monthly';
+export type RecurrenceFreq = "daily" | "weekly" | "monthly";
 
 // Master Spec Section 10.2's full task model, plus 10.3's Meetings (a
 // meeting is a third `kind` on this SAME table, per the spec's own "My
@@ -473,7 +477,7 @@ export interface ScheduleItemInvitee {
   scheduleItemId: string;
   staffKey: string;
   staffName: string | null;
-  status: 'invited' | 'accepted' | 'declined';
+  status: "invited" | "accepted" | "declined";
   respondedAt: string | null;
   createdAt: string;
 }
@@ -748,8 +752,8 @@ export interface LeaveRequestLog {
 // instead of the only-ever-reactive off-site reason box on the sign-in
 // form itself. Not yet wired into computeOffSite()/the sign-in flow --
 // see project-attendance-v3-chapter01-gap memory.
-export type AttendanceExceptionType = 'errand' | 'site_visit' | 'field_assignment' | 'other';
-export type AttendanceExceptionStatus = 'pending' | 'approved' | 'declined';
+export type AttendanceExceptionType = "errand" | "site_visit" | "field_assignment" | "other";
+export type AttendanceExceptionStatus = "pending" | "approved" | "declined";
 
 export interface AttendanceException {
   id: string;
@@ -878,8 +882,17 @@ export interface LeaderboardScoreHistoryEntry {
 // half_sale() has always set status='Subdivided' on the parent, but that
 // value was never in the allowed list, so every real split silently failed
 // its own final UPDATE.
-export type PlotStatus = 'Available' | 'Running Search' | 'Allocated' | 'Subdivided' | 'Reserved' | 'Held for Approval' | 'Blocked' | 'Disputed' | 'Archived';
-export type PlotUnitKind = 'whole' | 'half';
+export type PlotStatus =
+  | "Available"
+  | "Running Search"
+  | "Allocated"
+  | "Subdivided"
+  | "Reserved"
+  | "Held for Approval"
+  | "Blocked"
+  | "Disputed"
+  | "Archived";
+export type PlotUnitKind = "whole" | "half";
 
 // Deliberately its own type, not a reuse of PlotType above -- that one
 // is the SALES unit a client buys (Full/Half, drives pricing/quotation/
@@ -890,7 +903,7 @@ export type PlotUnitKind = 'whole' | 'half';
 // proportionally to the parcel's real area, without ever needing
 // pricingFor()/contract logic to learn a third sales unit they don't
 // actually have a defined price/contract clause for.
-export type PlotClassification = 'Full Plot' | 'Half Plot' | 'Partial Plot';
+export type PlotClassification = "Full Plot" | "Half Plot" | "Partial Plot";
 
 // Real RLS on this table (confirmed live) restricts read/write to manager
 // or specifically the 'elias'/'emmanuel' staff keys -- not every agent.
@@ -1285,7 +1298,7 @@ export interface AttendanceNote {
   id: string;
   staffKey: string;
   staffName: string;
-  kind: 'praise' | 'warning';
+  kind: "praise" | "warning";
   reason: string;
   workDate: string;
   createdBy: string;
@@ -1304,9 +1317,9 @@ export interface AttendanceReview {
   attendanceLogId: string;
   staffKey: string;
   staffName: string;
-  reviewType: 'exception';
-  status: 'pending' | 'reviewed';
-  classification: 'authorized' | 'exception' | null;
+  reviewType: "exception";
+  status: "pending" | "reviewed";
+  classification: "authorized" | "exception" | null;
   note: string | null;
   reviewedBy: string | null;
   reviewedByName: string | null;
@@ -1354,7 +1367,7 @@ export interface NewMemo {
   toName: string;
   subject: string;
   bodyHtml: string;
-  status: 'draft' | 'sent';
+  status: "draft" | "sent";
   cc?: { key: string; name: string }[];
 }
 
@@ -1403,7 +1416,7 @@ export interface SiteVisitInvite {
   alreadySubmitted: boolean;
 }
 
-export type SveSubmitResult = 'ok' | 'already_submitted' | 'not_found';
+export type SveSubmitResult = "ok" | "already_submitted" | "not_found";
 
 export interface SveSubmissionInput {
   fullName: string;
@@ -1494,19 +1507,37 @@ export interface SveVisitStatus {
 // "make sure the ai doesn't write basic English that doesn't make any
 // technical sense."
 export const SVE_REVIEW_QUESTIONS = [
-  { key: 'communication', label: 'How would you rate your communication with this client during the visit?', type: 'rating' },
-  { key: 'clientFeedback', label: "What was the client's overall feedback about the site?", type: 'textarea' },
-  { key: 'objections', label: 'Did the client raise any concerns or objections? If so, what were they?', type: 'textarea' },
-  { key: 'howHandled', label: 'How did you personally address those concerns?', type: 'textarea' },
-  { key: 'questionsAsked', label: 'What specific questions did the client ask?', type: 'textarea' },
-  { key: 'interestLevel', label: "What is the client's current level of interest?", type: 'select', options: ['Very interested', 'Somewhat interested', 'Undecided', 'Not interested'] },
-  { key: 'followUp', label: 'What follow-up actions were agreed with the client?', type: 'textarea' },
-  { key: 'riskFactors', label: 'Any red flags or risk factors for this client?', type: 'textarea' },
-  { key: 'confidenceToClose', label: 'How confident are you this client will proceed to purchase?', type: 'rating' },
-  { key: 'additionalNotes', label: 'Any additional notes for Management?', type: 'textarea' },
-] as const satisfies readonly { key: string; label: string; type: 'rating' | 'textarea' | 'select'; options?: string[] }[];
+  {
+    key: "communication",
+    label: "How would you rate your communication with this client during the visit?",
+    type: "rating",
+  },
+  { key: "clientFeedback", label: "What was the client's overall feedback about the site?", type: "textarea" },
+  {
+    key: "objections",
+    label: "Did the client raise any concerns or objections? If so, what were they?",
+    type: "textarea",
+  },
+  { key: "howHandled", label: "How did you personally address those concerns?", type: "textarea" },
+  { key: "questionsAsked", label: "What specific questions did the client ask?", type: "textarea" },
+  {
+    key: "interestLevel",
+    label: "What is the client's current level of interest?",
+    type: "select",
+    options: ["Very interested", "Somewhat interested", "Undecided", "Not interested"],
+  },
+  { key: "followUp", label: "What follow-up actions were agreed with the client?", type: "textarea" },
+  { key: "riskFactors", label: "Any red flags or risk factors for this client?", type: "textarea" },
+  { key: "confidenceToClose", label: "How confident are you this client will proceed to purchase?", type: "rating" },
+  { key: "additionalNotes", label: "Any additional notes for Management?", type: "textarea" },
+] as const satisfies readonly {
+  key: string;
+  label: string;
+  type: "rating" | "textarea" | "select";
+  options?: string[];
+}[];
 
-export type SveReviewAnswers = Partial<Record<(typeof SVE_REVIEW_QUESTIONS)[number]['key'], string | number>>;
+export type SveReviewAnswers = Partial<Record<(typeof SVE_REVIEW_QUESTIONS)[number]["key"], string | number>>;
 
 // Real table `sve_day_reports` (added 2026-09-05) -- one row per real
 // site-visit day, covering every client who visited that day. Replaces
@@ -1542,7 +1573,7 @@ export interface SveDayReport {
   entries: SveDayReportEntry[];
   siteSummary: string | null;
   siteSummaryAi: string | null;
-  status: 'draft' | 'sent';
+  status: "draft" | "sent";
   reportPdfPath: string | null;
   sentAt: string | null;
   createdAt: string;
@@ -1671,7 +1702,7 @@ export interface ContractRequest {
   requestedBy: string;
   requestedByName: string;
   note: string | null;
-  status: 'pending' | 'fulfilled';
+  status: "pending" | "fulfilled";
   createdAt: string;
   fulfilledAt: string | null;
   // docs/plans/29-company-leads-full-system-blueprint.md Phase F -- which
@@ -1725,7 +1756,7 @@ export interface NewContractTemplate {
   description?: string;
 }
 
-export type ContractSectionKind = 'heading' | 'paragraph' | 'clause' | 'signature_block' | 'image' | 'footer';
+export type ContractSectionKind = "heading" | "paragraph" | "clause" | "signature_block" | "image" | "footer";
 
 export interface ContractSection {
   id: string;
@@ -1740,7 +1771,7 @@ export interface ContractSection {
   pageBreakBefore?: boolean;
 }
 
-export type ContractTemplateVersionStatus = 'draft' | 'in_review' | 'published' | 'archived';
+export type ContractTemplateVersionStatus = "draft" | "in_review" | "published" | "archived";
 
 export interface ContractTemplateVersion {
   id: string;
@@ -1780,7 +1811,7 @@ export interface NewContractClause {
 // The token catalog (§7) -- a field is just a validated camelCase name +
 // scope, matching the real Syncfusion Document Template Studio pattern
 // this was modeled on directly.
-export type ContractFieldScope = 'common' | 'template';
+export type ContractFieldScope = "common" | "template";
 
 export interface ContractField {
   id: string;
@@ -1820,7 +1851,7 @@ export interface ContractGeneration {
 // started but hasn't generated yet (docs/plans/16-contract-of-sale-build-plan.md
 // §1.2). Distinct from ContractRequest (a request for someone ELSE to act)
 // and ContractGeneration (an already-issued snapshot).
-export type ContractDraftStatus = 'in_progress' | 'ready_to_generate';
+export type ContractDraftStatus = "in_progress" | "ready_to_generate";
 
 export interface ContractDraft {
   id: string;
@@ -1875,7 +1906,7 @@ export interface ContractStyleSettingsPatch {
   ceoName?: string | null;
 }
 
-export type ContractApprovalStatus = 'approved' | 'rejected';
+export type ContractApprovalStatus = "approved" | "rejected";
 
 export interface ContractApproval {
   id: string;
@@ -1909,7 +1940,7 @@ export interface LeaveRequest {
   // status 'planned' -> 'pending' -> approved/declined/rescheduled) --
   // Master Spec 12.1's "save a plan as Draft and later submit it" maps
   // directly onto it, ported here under the same name v1 uses.
-  status: 'planned' | 'pending' | 'approved' | 'declined' | 'rescheduled';
+  status: "planned" | "pending" | "approved" | "declined" | "rescheduled";
   createdAt: string;
   autoSubmittedAt: string | null;
   decidedAt: string | null;
@@ -1993,7 +2024,7 @@ export interface AllocationRequest {
   percentPaid: number | null;
   grandTotal: number | null;
   amtPaid: number | null;
-  status: 'Pending' | 'Awaiting Authorization' | 'Allocated';
+  status: "Pending" | "Awaiting Authorization" | "Allocated";
   plotNumber: string | null;
   suggestedPlots: string | null;
   note: string | null;
@@ -2012,7 +2043,7 @@ export interface AllocationRequest {
   authDocPhotoPath: string | null;
   authDocUploadedBy: string | null;
   authDocUploadedAt: string | null;
-  authDocAiStatus: 'pending' | 'pass' | 'mismatch' | 'unavailable' | null;
+  authDocAiStatus: "pending" | "pass" | "mismatch" | "unavailable" | null;
   authDocAiNote: string | null;
 }
 
@@ -2049,7 +2080,7 @@ export interface NewNote {
 // deliberately out of scope for this pass (Leaflet-based, a separate,
 // much larger geo feature) -- kept nullable/unused here rather than
 // invented.
-export type BannerStatus = 'placed' | 'needs_maintenance' | 'location_only' | 'being_replaced';
+export type BannerStatus = "placed" | "needs_maintenance" | "location_only" | "being_replaced";
 
 export interface Banner {
   id: string;
@@ -2091,8 +2122,8 @@ export interface PricingHistoryEntry {
 // type and auto-fills discount/unit price when one matches.
 export interface PricingPromotion {
   id: string;
-  plotType: 'Both' | PlotType;
-  mode: 'discount' | 'increase';
+  plotType: "Both" | PlotType;
+  mode: "discount" | "increase";
   amountPerPlot: number;
   dateFrom: string;
   dateTo: string;
@@ -2142,8 +2173,8 @@ export interface BannerStatusLogEntry {
 // app's own UI at all right now. Log Expense/Daily Balance/Categories/
 // Recurring/Dashboard tabs, and "Log actual spend" against an approved
 // request, are all out of scope here for that reason, not an oversight.
-export type FundRequestType = 'budget' | 'specific';
-export type FundRequestStatus = 'pending' | 'approved' | 'rejected';
+export type FundRequestType = "budget" | "specific";
+export type FundRequestStatus = "pending" | "approved" | "rejected";
 
 export interface FundRequest {
   id: string;
@@ -2179,7 +2210,7 @@ export interface NewFundRequest {
 // deletes the underlying site_visits row entirely, a more destructive
 // action than fits this pass) are deliberately deferred, same scoping
 // discipline as this session's other gap fixes.
-export type WeeklyVisitFormStatus = 'Open' | 'Finalized';
+export type WeeklyVisitFormStatus = "Open" | "Finalized";
 
 export interface WeeklyVisitForm {
   id: string;
@@ -2275,7 +2306,15 @@ export interface NewImportBatch {
 // behalf), enforced by a real unique(staff_key, achievement_id)
 // constraint that makes re-awarding an already-earned one a silent
 // no-op.
-export type AchievementCriteriaType = 'tasksCompleted' | 'siteVisits' | 'dealsClosedYear' | 'onTimeDays' | 'daysAttended' | 'referralConversions' | 'todosCompleted' | 'totalCollected';
+export type AchievementCriteriaType =
+  | "tasksCompleted"
+  | "siteVisits"
+  | "dealsClosedYear"
+  | "onTimeDays"
+  | "daysAttended"
+  | "referralConversions"
+  | "todosCompleted"
+  | "totalCollected";
 
 export interface AchievementDef {
   id: string;
@@ -2304,8 +2343,8 @@ export interface StaffAchievement {
 // production since 2026-08-22). RLS: manager-only SELECT, zero INSERT
 // policies -- the RPC (SECURITY DEFINER) is the sole write path, so there's
 // no client-writable `id`/`actorKey`/`createdAt` to worry about matching.
-export type AuditCategory = 'audit' | 'integrity' | 'error' | 'cron';
-export type AuditSeverity = 'info' | 'warning' | 'critical';
+export type AuditCategory = "audit" | "integrity" | "error" | "cron";
+export type AuditSeverity = "info" | "warning" | "critical";
 
 export interface AuditEvent {
   id: number;
@@ -2334,8 +2373,8 @@ export interface ReportArchiveEntry {
   reportDate: string;
   generatedAt: string;
   recipients: string | null;
-  generationStatus: 'success' | 'failed';
-  emailStatus: 'sent' | 'skipped' | 'failed' | null;
+  generationStatus: "success" | "failed";
+  emailStatus: "sent" | "skipped" | "failed" | null;
   checksum: string | null;
   errorDetail: string | null;
   retryCount: number;
@@ -2394,3 +2433,4 @@ export interface DataCheckDismissal {
   dismissedAt: string;
   isCompanyWide: boolean;
 }
+
