@@ -1,32 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
-
-import { Check, Download, Link2 } from "lucide-react";
-// biome-ignore lint/correctness/noUndeclaredDependencies: the project resolves this import through the local webnext shim.
-import { useNavigate, useParams } from "react-router";
-
-import { fmtLongDate, ghs } from "../../../shared/lib/format";
-import { Icon, type IconName } from "../../../shared/ui/Icon";
-import { useDownloadReceipt, useIssueReceiptLink } from "../../payments/hooks/useReceipt";
-import { StageBadge } from "../../pipeline/components/StageBadge";
-import { useLeads } from "../../pipeline/hooks/useLeads";
-import { qtyOfType } from "../../pipeline/lib/pipelineLogic";
-import { useClientRelatedData } from "../hooks/useClientRelatedData";
-import { useClients } from "../hooks/useClients";
-import { clientKey } from "../lib/groupClients";
-import styles from "./ClientDetailScreen.module.css";
+import { useMemo, useState } from 'react';
+import { Check, Download, Link2 } from 'lucide-react';
+// biome-ignore lint/correctness/noUndeclaredDependencies: this resolves through the local webnext router shim.
+import { useNavigate, useParams } from 'react-router';
+import { ghs, fmtLongDate } from '../../../shared/lib/format';
+import { Icon, type IconName } from '../../../shared/ui/Icon';
+import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
+import { StageBadge } from '../../pipeline/components/StageBadge';
+import { qtyOfType } from '../../pipeline/lib/pipelineLogic';
+import { useLeads } from '../../pipeline/hooks/useLeads';
+import { useClients } from '../hooks/useClients';
+import { useClientRelatedData } from '../hooks/useClientRelatedData';
+import { clientKey } from '../lib/groupClients';
+import styles from './ClientDetailScreen.module.css';
 
 function initials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
-function StatusChip({ tone, children }: { tone: "ok" | "warn" | "dgr" | "muted"; children: React.ReactNode }) {
+function StatusChip({ tone, children }: { tone: 'ok' | 'warn' | 'dgr' | 'muted'; children: React.ReactNode }) {
   return <span className={`${styles.chip} ${styles[`chip_${tone}`]}`}>{children}</span>;
 }
 
@@ -40,7 +38,7 @@ function StatusChip({ tone, children }: { tone: "ok" | "warn" | "dgr" | "muted";
 export function ClientDetailScreen() {
   const navigate = useNavigate();
   const { key: rawKey } = useParams<{ key: string }>();
-  const key = rawKey ? decodeURIComponent(rawKey) : "";
+  const key = rawKey ? decodeURIComponent(rawKey) : '';
   const { data: clients } = useClients();
   const { data: leads } = useLeads();
   const { data: related } = useClientRelatedData();
@@ -53,37 +51,19 @@ export function ClientDetailScreen() {
   const clientLeads = useMemo(() => (leads ?? []).filter((l) => client?.leadIds.includes(l.id)), [leads, client]);
   const leadIdSet = useMemo(() => new Set(client?.leadIds ?? []), [client]);
 
-  const payments = useMemo(
-    () => (related?.payments ?? []).filter((p) => leadIdSet.has(p.leadId)),
-    [related, leadIdSet],
-  );
+  const payments = useMemo(() => (related?.payments ?? []).filter((p) => leadIdSet.has(p.leadId)), [related, leadIdSet]);
   const siteVisits = useMemo(
-    () =>
-      (related?.siteVisits ?? []).filter((v) =>
-        v.leadId ? leadIdSet.has(v.leadId) : client && clientKey(v.name, v.contact) === key,
-      ),
-    [related, leadIdSet, client, key],
+    () => (related?.siteVisits ?? []).filter((v) => (v.leadId ? leadIdSet.has(v.leadId) : client && clientKey(v.name, v.contact) === key)),
+    [related, leadIdSet, client, key]
   );
-  const allocations = useMemo(
-    () => (related?.allocations ?? []).filter((a) => leadIdSet.has(a.leadId)),
-    [related, leadIdSet],
-  );
-  const contractRequests = useMemo(
-    () => (related?.contractRequests ?? []).filter((r) => leadIdSet.has(r.leadId)),
-    [related, leadIdSet],
-  );
+  const allocations = useMemo(() => (related?.allocations ?? []).filter((a) => leadIdSet.has(a.leadId)), [related, leadIdSet]);
+  const contractRequests = useMemo(() => (related?.contractRequests ?? []).filter((r) => leadIdSet.has(r.leadId)), [related, leadIdSet]);
   // contracts.list() is unscoped (no agent-scoped variant exists -- see
   // useClientRelatedData's own comment) -- filtering by this client's own
   // leadIds here is the only thing standing between this render and
   // showing a colleague's contract. Never remove this filter.
-  const contracts = useMemo(
-    () => (related?.contracts ?? []).filter((c) => leadIdSet.has(c.leadId)),
-    [related, leadIdSet],
-  );
-  const complaints = useMemo(
-    () => (related?.complaints ?? []).filter((co) => client && clientKey(co.name ?? "", co.contact ?? "") === key),
-    [related, client, key],
-  );
+  const contracts = useMemo(() => (related?.contracts ?? []).filter((c) => leadIdSet.has(c.leadId)), [related, leadIdSet]);
+  const complaints = useMemo(() => (related?.complaints ?? []).filter((co) => client && clientKey(co.name ?? '', co.contact ?? '') === key), [related, client, key]);
 
   async function shareReceipt(paymentId: string, leadId: string) {
     const payment = payments.find((item) => item.id === paymentId);
@@ -103,13 +83,7 @@ export function ClientDetailScreen() {
   return (
     <div className={styles.drawerBackdrop}>
       <div className={styles.drawerPanel}>
-        <button
-          type="button"
-          className={styles.closeDrawerBtn}
-          onClick={() => navigate("/dashboard/clients")}
-          aria-label="Close"
-          title="Close"
-        >
+        <button type="button" className={styles.closeDrawerBtn} onClick={() => navigate('/dashboard/clients')} aria-label="Close" title="Close">
           ✕
         </button>
 
@@ -146,16 +120,11 @@ export function ClientDetailScreen() {
             <Section title="Leads" count={clientLeads.length} icon="briefcase2">
               {clientLeads.length === 0 && <EmptyRow text="No leads on file." />}
               {clientLeads.map((l) => (
-                <button
-                  type="button"
-                  key={l.id}
-                  className={styles.row}
-                  onClick={() => navigate(`/dashboard/pipeline/${l.id}`)}
-                >
+                <button type="button" key={l.id} className={styles.row} onClick={() => navigate(`/dashboard/pipeline/${l.id}`)}>
                   <div className={styles.rowMain}>
                     <div className={styles.rowTitle}>
                       {l.plotType}
-                      {qtyOfType(l.plotType, l.noPlots) > 1 ? ` ×${qtyOfType(l.plotType, l.noPlots)}` : ""}
+                      {qtyOfType(l.plotType, l.noPlots) > 1 ? ` ×${qtyOfType(l.plotType, l.noPlots)}` : ''}
                     </div>
                     <div className={styles.rowSub}>
                       {l.date}
@@ -170,7 +139,7 @@ export function ClientDetailScreen() {
                           invisible in Customer 360 just because the two
                           don't sync to each other (a separate, real
                           cross-app-sync item, not this). */}
-                      {l.siteVisit === "Yes" ? " · Site visited" : ""}
+                      {l.siteVisit === 'Yes' ? ' · Site visited' : ''}
                     </div>
                   </div>
                   <div className={styles.rowRight}>
@@ -184,7 +153,7 @@ export function ClientDetailScreen() {
             <Section title="Payments" count={payments.length} icon="wallet">
               {payments.length === 0 && <EmptyRow text="No payments logged yet." />}
               {payments.map((p) => {
-                const approved = (p.status ?? "approved") === "approved";
+                const approved = (p.status ?? 'approved') === 'approved';
                 const lead = clientLeads.find((item) => item.id === p.leadId);
                 return (
                   <div key={p.id} className={`${styles.rowStatic} ${styles.paymentRow}`}>
@@ -192,8 +161,8 @@ export function ClientDetailScreen() {
                       <div className={styles.rowTitle}>{ghs(p.amount)}</div>
                       <div className={styles.rowSub}>
                         {fmtLongDate(p.date)}
-                        {p.paymentMethod ? ` · ${p.paymentMethod}` : ""}
-                        {p.receiptNumber ? ` · ${p.receiptNumber}` : ""}
+                        {p.paymentMethod ? ` · ${p.paymentMethod}` : ''}
+                        {p.receiptNumber ? ` · ${p.receiptNumber}` : ''}
                       </div>
                     </div>
                     <div className={styles.paymentRight}>
@@ -205,7 +174,7 @@ export function ClientDetailScreen() {
                             className={styles.receiptAction}
                             onClick={() => downloadReceipt.mutate({ payment: p, lead })}
                             disabled={downloadReceipt.isPending}
-                            aria-label={`Download receipt${p.receiptNumber ? ` ${p.receiptNumber}` : ""}`}
+                            aria-label={`Download receipt${p.receiptNumber ? ` ${p.receiptNumber}` : ''}`}
                             title="Download receipt PDF"
                           >
                             <Download size={15} aria-hidden="true" />
@@ -215,20 +184,11 @@ export function ClientDetailScreen() {
                             className={styles.receiptAction}
                             onClick={() => void shareReceipt(p.id, lead.id).catch(() => setCopiedReceiptId(null))}
                             disabled={issueReceiptLink.isPending}
-                            aria-label={copiedReceiptId === p.id ? "Receipt link copied" : "Copy secure receipt link"}
-                            title={copiedReceiptId === p.id ? "Receipt link copied" : "Copy secure receipt link"}
+                            aria-label={copiedReceiptId === p.id ? 'Receipt link copied' : 'Copy secure receipt link'}
+                            title={copiedReceiptId === p.id ? 'Receipt link copied' : 'Copy secure receipt link'}
                           >
-                            {copiedReceiptId === p.id ? (
-                              <Check size={15} aria-hidden="true" />
-                            ) : (
-                              <Link2 size={15} aria-hidden="true" />
-                            )}
+                            {copiedReceiptId === p.id ? <Check size={15} aria-hidden="true" /> : <Link2 size={15} aria-hidden="true" />}
                           </button>
-                          {copiedReceiptId === p.id && (
-                            <span className={styles.receiptFeedback} role="status">
-                              Link copied
-                            </span>
-                          )}
                         </div>
                       )}
                       {approved && receiptLinks[p.id] && (
@@ -242,9 +202,7 @@ export function ClientDetailScreen() {
               })}
               {(downloadReceipt.error || issueReceiptLink.error) && (
                 <div className={styles.receiptError} role="alert">
-                  {downloadReceipt.error?.message ??
-                    issueReceiptLink.error?.message ??
-                    "The receipt could not be prepared. Please try again."}
+                  {downloadReceipt.error?.message ?? issueReceiptLink.error?.message ?? 'The receipt could not be prepared. Please try again.'}
                 </div>
               )}
             </Section>
@@ -257,9 +215,7 @@ export function ClientDetailScreen() {
                     <div className={styles.rowTitle}>{v.site}</div>
                     <div className={styles.rowSub}>{fmtLongDate(v.visitDate)}</div>
                   </div>
-                  <StatusChip tone={v.status === "completed" ? "ok" : v.status === "cancelled" ? "dgr" : "muted"}>
-                    {v.status}
-                  </StatusChip>
+                  <StatusChip tone={v.status === 'completed' ? 'ok' : v.status === 'cancelled' ? 'dgr' : 'muted'}>{v.status}</StatusChip>
                 </div>
               ))}
             </Section>
@@ -269,14 +225,10 @@ export function ClientDetailScreen() {
               {allocations.map((a) => (
                 <div key={a.id} className={styles.rowStatic}>
                   <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>{a.plotNumber || "Plot not yet picked"}</div>
+                    <div className={styles.rowTitle}>{a.plotNumber || 'Plot not yet picked'}</div>
                     <div className={styles.rowSub}>{fmtLongDate(a.createdAt)}</div>
                   </div>
-                  <StatusChip
-                    tone={a.status === "Allocated" ? "ok" : a.status === "Awaiting Authorization" ? "warn" : "muted"}
-                  >
-                    {a.status}
-                  </StatusChip>
+                  <StatusChip tone={a.status === 'Allocated' ? 'ok' : a.status === 'Awaiting Authorization' ? 'warn' : 'muted'}>{a.status}</StatusChip>
                 </div>
               ))}
             </Section>
@@ -293,7 +245,7 @@ export function ClientDetailScreen() {
                 </div>
               ))}
               {contractRequests
-                .filter((r) => r.status === "pending")
+                .filter((r) => r.status === 'pending')
                 .map((r) => (
                   <div key={r.id} className={styles.rowStatic}>
                     <div className={styles.rowMain}>
@@ -310,12 +262,10 @@ export function ClientDetailScreen() {
               {complaints.map((co) => (
                 <div key={co.id} className={styles.rowStatic}>
                   <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>{co.category || "Complaint"}</div>
+                    <div className={styles.rowTitle}>{co.category || 'Complaint'}</div>
                     <div className={styles.rowSub}>{fmtLongDate(co.createdAt)}</div>
                   </div>
-                  <StatusChip tone={co.status === "resolved" ? "ok" : co.status === "open" ? "warn" : "muted"}>
-                    {co.status}
-                  </StatusChip>
+                  <StatusChip tone={co.status === 'resolved' ? 'ok' : co.status === 'open' ? 'warn' : 'muted'}>{co.status}</StatusChip>
                 </div>
               ))}
             </Section>
@@ -323,7 +273,7 @@ export function ClientDetailScreen() {
             {/* Mobile has no visible closeDrawerBtn (desktop-only) -- same
                 real back affordance Pipeline's own detail screen gives
                 mobile users, at the bottom of the content. */}
-            <button type="button" className={styles.backBtn} onClick={() => navigate("/dashboard/clients")}>
+            <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/clients')}>
               ← Back
             </button>
           </div>
@@ -333,17 +283,7 @@ export function ClientDetailScreen() {
   );
 }
 
-function Section({
-  title,
-  count,
-  icon,
-  children,
-}: {
-  title: string;
-  count: number;
-  icon: IconName;
-  children: React.ReactNode;
-}) {
+function Section({ title, count, icon, children }: { title: string; count: number; icon: IconName; children: React.ReactNode }) {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHead}>
@@ -363,7 +303,6 @@ function EmptyRow({ text }: { text: string }) {
 }
 
 function PaymentStatusChip({ status }: { status?: string }) {
-  const tone = status === "approved" ? "ok" : status === "needs_correction" ? "dgr" : "warn";
-  return <StatusChip tone={tone}>{status ?? "pending"}</StatusChip>;
+  const tone = status === 'approved' ? 'ok' : status === 'needs_correction' ? 'dgr' : 'warn';
+  return <StatusChip tone={tone}>{status ?? 'pending'}</StatusChip>;
 }
-
