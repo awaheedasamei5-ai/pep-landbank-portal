@@ -25,11 +25,10 @@ import {
 	useRespondToScheduleMeeting,
 	useUpdateScheduleMeeting,
 } from "./use-schedule-meetings";
+import { workspaceDateOnly } from "./schedule-time.ts";
 
 function todayDate() {
-	const date = new Date();
-	const offset = date.getTimezoneOffset();
-	return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+	return workspaceDateOnly(new Date());
 }
 
 export function ScheduleMeetingComposer({
