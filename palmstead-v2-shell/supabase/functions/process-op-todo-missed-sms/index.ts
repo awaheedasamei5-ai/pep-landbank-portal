@@ -1,5 +1,12 @@
+import {
+  classifyProviderResponse,
+  type DeliveryOutcome,
+  missedTaskMessage,
+  normalizeGhanaPhone,
+  taskDeadlineUtc,
+  taskScheduledUtc,
+} from "./delivery.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
-import { classifyProviderResponse, normalizeGhanaPhone, type DeliveryOutcome } from "./delivery.ts";
 
 type OutboxRow = {
   id: string;
@@ -7,6 +14,7 @@ type OutboxRow = {
   recipient_key: string;
   message_body: string;
   attempt_count: number;
+  scheduled_for: string;
 };
 
 Deno.serve(async (request) => {
@@ -27,6 +35,15 @@ Deno.serve(async (request) => {
   });
   if (tokenError || validToken !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { data: settings, error: settingsError } = await supabase
+    .from("op_todo_reminder_settings")
+    .select("missed_grace_minutes")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (settingsError || !settings)
+    return Response.json({ error: "Reminder policy could not be loaded" }, { status: 503 });
+  const missedGraceMinutes = settings.missed_grace_minutes;
+
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
   const { data, error } = await supabase.rpc("claim_op_todo_sms_outbox", { p_limit: 10 });
   if (error) return Response.json({ error: "Could not claim queued messages" }, { status: 500 });
@@ -36,39 +53,98 @@ Deno.serve(async (request) => {
   let failed = 0;
   let needsReview = 0;
   let retryQueued = 0;
+  let deferredUntilTaskEnd = 0;
   let persistenceErrors = 0;
 
   for (const row of rows) {
     // Recheck the task and the current profile number immediately before
     // delivery so a completion, reassignment, or phone change cancels stale SMS.
     const [{ data: todo, error: todoError }, { data: profile, error: profileError }] = await Promise.all([
-      supabase.from("op_todos").select("id,status,assigned_to,sms_missed_notified_at").eq("id", row.todo_id).maybeSingle(),
+      supabase
+        .from("op_todos")
+        .select("id,title,status,assigned_to,sms_missed_notified_at,item_date,start_time,end_time")
+        .eq("id", row.todo_id)
+        .maybeSingle(),
       supabase.from("profiles").select("phone").eq("agent_key", row.recipient_key).maybeSingle(),
     ]);
 
     let outcome: DeliveryOutcome;
     let phone: string | null = null;
+    let renderedMessage = row.message_body;
     let providerStatus: Record<string, unknown> | null = null;
     if (todoError || profileError) {
-      outcome = { status: "needs_review", providerReference: null, error: "Task or staff delivery details could not be rechecked." };
-    } else if (!todo || todo.status !== "open" || todo.assigned_to !== row.recipient_key || todo.sms_missed_notified_at) {
-      const { error: cancelError } = await supabase.from("op_todo_sms_outbox")
-        .update({ status: "cancelled", lease_until: null, last_error: "Task was completed, reassigned, or no longer needs a reminder.", updated_at: new Date().toISOString() })
-        .eq("id", row.id).eq("status", "sending").eq("attempt_count", row.attempt_count);
+      outcome = {
+        status: "needs_review",
+        providerReference: null,
+        error: "Task or staff delivery details could not be rechecked.",
+      };
+    } else if (
+      todo?.status !== "open" ||
+      todo.assigned_to !== row.recipient_key ||
+      todo.sms_missed_notified_at ||
+      taskScheduledUtc(todo.item_date, todo.start_time) !== Date.parse(row.scheduled_for)
+    ) {
+      const { error: cancelError } = await supabase
+        .from("op_todo_sms_outbox")
+        .update({
+          status: "cancelled",
+          lease_until: null,
+          last_error: "Task was completed, reassigned, or no longer needs a reminder.",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("status", "sending")
+        .eq("attempt_count", row.attempt_count);
       if (cancelError) persistenceErrors += 1;
       continue;
     } else {
+      const deadline = taskDeadlineUtc(todo.item_date, todo.start_time, todo.end_time);
+      if (deadline === null) {
+        const { error: cancelError } = await supabase
+          .from("op_todo_sms_outbox")
+          .update({ status: "cancelled", lease_until: null, last_error: "Task no longer has a timed deadline." })
+          .eq("id", row.id)
+          .eq("status", "sending")
+          .eq("attempt_count", row.attempt_count);
+        if (cancelError) persistenceErrors += 1;
+        continue;
+      }
+      const messageBody = missedTaskMessage(todo.title, deadline);
+      renderedMessage = messageBody;
+      const retryAt = deadline + missedGraceMinutes * 60_000;
+      if (Date.now() < retryAt) {
+        const { error: deferError } = await supabase
+          .from("op_todo_sms_outbox")
+          .update({
+            status: "queued",
+            attempt_count: Math.max(0, row.attempt_count - 1),
+            next_attempt_at: new Date(retryAt).toISOString(),
+            lease_until: null,
+            message_body: messageBody,
+            last_error: null,
+          })
+          .eq("id", row.id)
+          .eq("status", "sending")
+          .eq("attempt_count", row.attempt_count);
+        if (deferError) persistenceErrors += 1;
+        else deferredUntilTaskEnd += 1;
+        continue;
+      }
       phone = normalizeGhanaPhone(profile?.phone ?? null);
       if (!apiKey) {
         outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server." };
       } else if (!phone) {
-        outcome = { status: "failed", providerReference: null, error: "The assigned staff member has no valid Ghana mobile number on file." };
+        outcome = {
+          status: "failed",
+          providerReference: null,
+          error: "The assigned staff member has no valid Ghana mobile number on file.",
+        };
       } else {
         try {
           const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
             method: "POST",
             headers: { "api-key": apiKey, "Content-Type": "application/json" },
-            body: JSON.stringify({ sender: "Palmstead", message: row.message_body, recipients: [phone] }),
+            body: JSON.stringify({ sender: "Palmstead", message: messageBody, recipients: [phone] }),
             signal: AbortSignal.timeout(12_000),
           });
           const body: unknown = await response.json().catch(() => null);
@@ -77,17 +153,26 @@ Deno.serve(async (request) => {
         } catch {
           // A timeout may occur after provider acceptance; do not retry and risk
           // sending a duplicate real SMS without provider confirmation.
-          outcome = { status: "needs_review", providerReference: null, error: "SMS outcome is uncertain. Check the provider history before retrying." };
+          outcome = {
+            status: "needs_review",
+            providerReference: null,
+            error: "SMS outcome is uncertain. Check the provider history before retrying.",
+          };
         }
       }
     }
 
     if (outcome.status === "queued" && row.attempt_count >= 5) {
-      outcome = { status: "failed", providerReference: null, error: "SMS provider rate limit persisted after five attempts." };
+      outcome = {
+        status: "failed",
+        providerReference: null,
+        error: "SMS provider rate limit persisted after five attempts.",
+      };
     }
     const backoffSeconds = Math.min(2 ** row.attempt_count * 60, 21_600);
     const now = new Date().toISOString();
-    const { error: updateError } = await supabase.from("op_todo_sms_outbox")
+    const { error: updateError } = await supabase
+      .from("op_todo_sms_outbox")
       .update({
         status: outcome.status,
         next_attempt_at: new Date(Date.now() + backoffSeconds * 1000).toISOString(),
@@ -96,18 +181,24 @@ Deno.serve(async (request) => {
         provider_reference: outcome.providerReference,
         last_error: outcome.error,
         provider_status: providerStatus,
+        message_body: renderedMessage,
         updated_at: now,
       })
-      .eq("id", row.id).eq("status", "sending").eq("attempt_count", row.attempt_count);
+      .eq("id", row.id)
+      .eq("status", "sending")
+      .eq("attempt_count", row.attempt_count);
     if (updateError) {
       persistenceErrors += 1;
       continue;
     }
 
     if (outcome.status === "accepted") {
-      const { error: todoUpdateError } = await supabase.from("op_todos")
+      const { error: todoUpdateError } = await supabase
+        .from("op_todos")
         .update({ sms_missed_notified_at: now })
-        .eq("id", row.todo_id).eq("status", "open").eq("assigned_to", row.recipient_key)
+        .eq("id", row.todo_id)
+        .eq("status", "open")
+        .eq("assigned_to", row.recipient_key)
         .is("sms_missed_notified_at", null);
       if (todoUpdateError) persistenceErrors += 1;
       accepted += 1;
@@ -117,7 +208,15 @@ Deno.serve(async (request) => {
   }
 
   return Response.json(
-    { claimed: rows.length, providerAccepted: accepted, failed, needsReview, retryQueued, persistenceErrors },
+    {
+      claimed: rows.length,
+      providerAccepted: accepted,
+      failed,
+      needsReview,
+      retryQueued,
+      deferredUntilTaskEnd,
+      persistenceErrors,
+    },
     { status: persistenceErrors ? 503 : 200 },
   );
 });

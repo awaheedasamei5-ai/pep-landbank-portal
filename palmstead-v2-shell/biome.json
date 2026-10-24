@@ -109,6 +109,7 @@
     }
   },
   "javascript": {
+    "globals": ["Deno"],
     "formatter": {
       "jsxQuoteStyle": "double",
       "quoteProperties": "asNeeded",

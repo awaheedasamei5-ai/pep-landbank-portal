@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 import type {
   DateClickInfo,
   DateSelectInfo,
@@ -13,8 +15,19 @@ import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
 import listPlugin from "@fullcalendar/react/list";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
-import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Plus, Trash2, X, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  BellRing,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+  X,
+  XIcon,
+} from "lucide-react";
+
 import { EventCalendarViews } from "@/components/calendar/event-calendar-views";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
@@ -29,6 +42,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
+
+import { ScheduleMeetingComposer, ScheduleMeetingDetails } from "./schedule-meetings-dialogs";
 import {
   addScheduleDays,
   calendarDateOnly,
@@ -38,7 +53,6 @@ import {
 } from "./schedule-time.ts";
 import { getScheduleUrgency } from "./schedule-urgency";
 import { isVisibleScheduleMeeting, isVisibleScheduleTodo } from "./schedule-visibility";
-import { ScheduleMeetingComposer, ScheduleMeetingDetails } from "./schedule-meetings-dialogs";
 import {
   checkScheduleConflicts,
   type RecurFreq,
@@ -134,7 +148,12 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
     setAssignmentError(null);
     setIsAssigning(true);
     try {
-      await reassignTodo.mutateAsync({ id: todo.id, toKey: target.key, toName: target.name, note: "Assigned by management" });
+      await reassignTodo.mutateAsync({
+        id: todo.id,
+        toKey: target.key,
+        toName: target.name,
+        note: "Assigned by management",
+      });
       onClose();
     } catch (error) {
       setAssignmentError(error instanceof Error ? error.message : "Could not assign this task. Try again.");
@@ -263,16 +282,32 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
                   </SelectTrigger>
                   <SelectContent>
                     {(staffQuery.data ?? []).map((person) => (
-                      <SelectItem key={person.key} value={person.key}>{person.name}{person.department ? ` · ${person.department}` : ""}</SelectItem>
+                      <SelectItem key={person.key} value={person.key}>
+                        {person.name}
+                        {person.department ? ` · ${person.department}` : ""}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="outline" disabled={isAssigning || assignee === todo.assignedTo || staffQuery.isLoading} onClick={saveAssignment}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isAssigning || assignee === todo.assignedTo || staffQuery.isLoading}
+                  onClick={saveAssignment}
+                >
                   {isAssigning ? "Assigning…" : "Assign task"}
                 </Button>
               </div>
-              {staffQuery.error && <p role="alert" className="text-xs text-destructive">Could not load staff list. Refresh and try again.</p>}
-              {assignmentError && <p role="alert" className="text-xs text-destructive">{assignmentError}</p>}
+              {staffQuery.error && (
+                <p role="alert" className="text-xs text-destructive">
+                  Could not load staff list. Refresh and try again.
+                </p>
+              )}
+              {assignmentError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {assignmentError}
+                </p>
+              )}
             </div>
           )}
           {todo.recursFreq && <Badge variant="outline">Repeats {todo.recursFreq}</Badge>}
@@ -363,7 +398,12 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
     setConflictCheckError(null);
     const timer = setTimeout(async () => {
       try {
-        const hits = await checkScheduleConflicts(repeat ? profile.key : assignee || profile.key, date, startTime || "", endTime || "");
+        const hits = await checkScheduleConflicts(
+          repeat ? profile.key : assignee || profile.key,
+          date,
+          startTime || "",
+          endTime || "",
+        );
         if (!cancelled) setConflict(hits[0] ?? null);
       } catch {
         if (!cancelled) {
@@ -409,11 +449,21 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
         const created = await createTodo.mutateAsync(input);
         if (profile?.role === "manager" && assignee && assignee !== profile.key) {
           const target = staffQuery.data?.find((person) => person.key === assignee);
-          if (!target) throw new Error("The task was created for you, but the selected staff member is no longer active. Open the task to assign it.");
+          if (!target)
+            throw new Error(
+              "The task was created for you, but the selected staff member is no longer active. Open the task to assign it.",
+            );
           try {
-            await reassignTodo.mutateAsync({ id: created.id, toKey: target.key, toName: target.name, note: "Assigned by management" });
+            await reassignTodo.mutateAsync({
+              id: created.id,
+              toKey: target.key,
+              toName: target.name,
+              note: "Assigned by management",
+            });
           } catch (error) {
-            throw new Error(`The task was created in your schedule, but could not be assigned to ${target.name}. Open it from your schedule and retry. ${error instanceof Error ? error.message : ""}`);
+            throw new Error(
+              `The task was created in your schedule, but could not be assigned to ${target.name}. Open it from your schedule and retry. ${error instanceof Error ? error.message : ""}`,
+            );
           }
         }
       }
@@ -457,14 +507,23 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
           <div className="grid gap-1.5 text-sm font-medium">
             <label htmlFor="todo-new-assignee">Assign to</label>
             <Select value={assignee} onValueChange={setAssignee}>
-              <SelectTrigger id="todo-new-assignee"><SelectValue placeholder="Choose active staff" /></SelectTrigger>
+              <SelectTrigger id="todo-new-assignee">
+                <SelectValue placeholder="Choose active staff" />
+              </SelectTrigger>
               <SelectContent>
                 {(staffQuery.data ?? []).map((person) => (
-                  <SelectItem key={person.key} value={person.key}>{person.name}{person.department ? ` · ${person.department}` : ""}</SelectItem>
+                  <SelectItem key={person.key} value={person.key}>
+                    {person.name}
+                    {person.department ? ` · ${person.department}` : ""}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {staffQuery.error && <p role="alert" className="text-xs text-destructive">Could not load staff. Refresh before assigning this task.</p>}
+            {staffQuery.error && (
+              <p role="alert" className="text-xs text-destructive">
+                Could not load staff. Refresh before assigning this task.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">Assigned tasks appear in that person’s schedule after sync.</p>
           </div>
         )}
@@ -482,6 +541,15 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
             <Input id="todo-new-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
+        <Alert>
+          <BellRing />
+          <AlertTitle>Automatic task reminders</AlertTitle>
+          <AlertDescription>
+            Timed tasks send an SMS to the assigned staff member at the scheduled start. If it remains open, one
+            missed-task SMS follows after the end time and grace period. All-day tasks have no timed SMS reminders.
+            Messages use the staff member’s phone number on their profile.
+          </AlertDescription>
+        </Alert>
         <div className="grid gap-1.5 text-sm font-medium">
           <label htmlFor="todo-new-contact">Related client or reference (optional)</label>
           <Input
@@ -597,7 +665,11 @@ export function MyScheduleScreen() {
     data: todos,
     isLoading: todosLoading,
     isError: todosError,
-  } = useMySchedule(profile?.role === "manager" && teamScheduleKey ? teamScheduleKey : profile?.key, range.from, range.to);
+  } = useMySchedule(
+    profile?.role === "manager" && teamScheduleKey ? teamScheduleKey : profile?.key,
+    range.from,
+    range.to,
+  );
   const today = workspaceDateOnly(now);
   const triageTodos = useMySchedule(
     profile?.role === "manager" && teamScheduleKey ? teamScheduleKey : profile?.key,
@@ -612,9 +684,7 @@ export function MyScheduleScreen() {
       ...(todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).map(toEventInput),
       ...(meetings ?? [])
         .filter((meeting) => isVisibleScheduleMeeting(meeting.status))
-        .map((meeting) =>
-        toMeetingEvent(meeting, profile?.role === "manager" || meeting.ownerKey === profile?.key),
-      ),
+        .map((meeting) => toMeetingEvent(meeting, profile?.role === "manager" || meeting.ownerKey === profile?.key)),
     ],
     [meetings, profile?.key, profile?.role, todos],
   );
@@ -795,14 +865,20 @@ export function MyScheduleScreen() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {profile?.role === "manager" && (
-              <Select value={teamScheduleKey || "__mine"} onValueChange={(value) => setTeamScheduleKey(value === "__mine" ? "" : value)}>
+              <Select
+                value={teamScheduleKey || "__mine"}
+                onValueChange={(value) => setTeamScheduleKey(value === "__mine" ? "" : value)}
+              >
                 <SelectTrigger aria-label="Choose schedule to view" className="w-full sm:w-52">
                   <SelectValue placeholder="My schedule" />
                 </SelectTrigger>
                 <SelectContent align="end">
                   <SelectItem value="__mine">My schedule</SelectItem>
                   {(staffQuery.data ?? []).map((person) => (
-                    <SelectItem key={person.key} value={person.key}>{person.name}{person.department ? ` · ${person.department}` : ""}</SelectItem>
+                    <SelectItem key={person.key} value={person.key}>
+                      {person.name}
+                      {person.department ? ` · ${person.department}` : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -837,7 +913,7 @@ export function MyScheduleScreen() {
               }}
             >
               <Plus />
-              To-do
+              Schedule task
             </Button>
             <Button
               variant="outline"
@@ -858,7 +934,8 @@ export function MyScheduleScreen() {
             <QuickAddForm
               defaultDate={quickAddDate}
               onDone={(assignedTo) => {
-                if (profile?.role === "manager" && assignedTo) setTeamScheduleKey(assignedTo === profile.key ? "" : assignedTo);
+                if (profile?.role === "manager" && assignedTo)
+                  setTeamScheduleKey(assignedTo === profile.key ? "" : assignedTo);
                 setShowForm(false);
               }}
             />
@@ -886,8 +963,8 @@ export function MyScheduleScreen() {
               <div>
                 <p className="font-medium">Nothing scheduled for this period</p>
                 <p className="text-sm text-muted-foreground">
-                  Create a to-do with a due date and optional time, notes, and client reference. Use Week or Agenda to
-                  focus on upcoming work.
+                  Add a task with its due date, time, assignee, notes, and client reference. Timed tasks can notify the
+                  assignee by SMS. Use Week or Agenda to focus on upcoming work.
                 </p>
               </div>
               <Button
@@ -897,7 +974,7 @@ export function MyScheduleScreen() {
                 }}
               >
                 <Plus />
-                Create a to-do
+                Schedule a task
               </Button>
             </div>
           )}
