@@ -1,5 +1,5 @@
 export type DeliveryOutcome = {
-  status: "accepted" | "failed" | "queued" | "needs_review";
+  status: "accepted" | "failed" | "queued" | "needs_review" | "blocked";
   providerReference: string | null;
   error: string | null;
 };
@@ -27,6 +27,18 @@ export function missedTaskMessage(title: string, deadline: number): string {
     hour12: false,
   }).format(new Date(deadline));
   return `Missed Operations task: "${title.slice(0, 90)}" was due ${label} and is still open. Please update it in Palmstead.`;
+}
+
+export function dueTaskMessage(title: string, scheduledAt: number): string {
+  const label = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Accra",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(scheduledAt));
+  return `Reminder: "${title.slice(0, 90)}" is due now (${label}).`;
 }
 
 function object(value: unknown): Record<string, unknown> | null {

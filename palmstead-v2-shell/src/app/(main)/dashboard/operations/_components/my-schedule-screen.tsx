@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import Link from "next/link";
+
 import type {
   DateClickInfo,
   DateSelectInfo,
@@ -882,6 +884,13 @@ export function MyScheduleScreen() {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            {profile?.role === "manager" && (
+              <Button asChild variant="outline">
+                <Link href="/dashboard/operations/reminders">
+                  <BellRing /> SMS delivery
+                </Link>
+              </Button>
             )}
             <ButtonGroup>
               <Button size="icon" variant="outline" onClick={() => controller.prev()}>

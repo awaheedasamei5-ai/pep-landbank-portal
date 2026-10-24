@@ -1,6 +1,7 @@
 import {
   classifyProviderResponse,
   type DeliveryOutcome,
+  dueTaskMessage,
   missedTaskMessage,
   normalizeGhanaPhone,
   taskDeadlineUtc,
@@ -15,6 +16,7 @@ type OutboxRow = {
   message_body: string;
   attempt_count: number;
   scheduled_for: string;
+  event_kind: "due" | "missed";
 };
 
 Deno.serve(async (request) => {
@@ -62,7 +64,7 @@ Deno.serve(async (request) => {
     const [{ data: todo, error: todoError }, { data: profile, error: profileError }] = await Promise.all([
       supabase
         .from("op_todos")
-        .select("id,title,status,assigned_to,sms_missed_notified_at,item_date,start_time,end_time")
+        .select("id,title,status,assigned_to,sms_notified_at,sms_missed_notified_at,item_date,start_time,end_time")
         .eq("id", row.todo_id)
         .maybeSingle(),
       supabase.from("profiles").select("phone").eq("agent_key", row.recipient_key).maybeSingle(),
@@ -81,7 +83,7 @@ Deno.serve(async (request) => {
     } else if (
       todo?.status !== "open" ||
       todo.assigned_to !== row.recipient_key ||
-      todo.sms_missed_notified_at ||
+      (row.event_kind === "missed" ? todo.sms_missed_notified_at : todo.sms_notified_at) ||
       taskScheduledUtc(todo.item_date, todo.start_time) !== Date.parse(row.scheduled_for)
     ) {
       const { error: cancelError } = await supabase
@@ -99,7 +101,8 @@ Deno.serve(async (request) => {
       continue;
     } else {
       const deadline = taskDeadlineUtc(todo.item_date, todo.start_time, todo.end_time);
-      if (deadline === null) {
+      const scheduledAt = taskScheduledUtc(todo.item_date, todo.start_time);
+      if (deadline === null || scheduledAt === null) {
         const { error: cancelError } = await supabase
           .from("op_todo_sms_outbox")
           .update({ status: "cancelled", lease_until: null, last_error: "Task no longer has a timed deadline." })
@@ -109,16 +112,17 @@ Deno.serve(async (request) => {
         if (cancelError) persistenceErrors += 1;
         continue;
       }
-      const messageBody = missedTaskMessage(todo.title, deadline);
+      const messageBody =
+        row.event_kind === "due" ? dueTaskMessage(todo.title, scheduledAt) : missedTaskMessage(todo.title, deadline);
       renderedMessage = messageBody;
-      const retryAt = deadline + missedGraceMinutes * 60_000;
-      if (Date.now() < retryAt) {
+      const deliverAfter = row.event_kind === "due" ? scheduledAt : deadline + missedGraceMinutes * 60_000;
+      if (Date.now() < deliverAfter) {
         const { error: deferError } = await supabase
           .from("op_todo_sms_outbox")
           .update({
             status: "queued",
             attempt_count: Math.max(0, row.attempt_count - 1),
-            next_attempt_at: new Date(retryAt).toISOString(),
+            next_attempt_at: new Date(deliverAfter).toISOString(),
             lease_until: null,
             message_body: messageBody,
             last_error: null,
@@ -135,7 +139,7 @@ Deno.serve(async (request) => {
         outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server." };
       } else if (!phone) {
         outcome = {
-          status: "failed",
+          status: "blocked",
           providerReference: null,
           error: "The assigned staff member has no valid Ghana mobile number on file.",
         };
@@ -195,11 +199,11 @@ Deno.serve(async (request) => {
     if (outcome.status === "accepted") {
       const { error: todoUpdateError } = await supabase
         .from("op_todos")
-        .update({ sms_missed_notified_at: now })
+        .update(row.event_kind === "due" ? { sms_notified_at: now } : { sms_missed_notified_at: now })
         .eq("id", row.todo_id)
         .eq("status", "open")
         .eq("assigned_to", row.recipient_key)
-        .is("sms_missed_notified_at", null);
+        .is(row.event_kind === "due" ? "sms_notified_at" : "sms_missed_notified_at", null);
       if (todoUpdateError) persistenceErrors += 1;
       accepted += 1;
     } else if (outcome.status === "needs_review") needsReview += 1;
