@@ -15,16 +15,11 @@ export interface ClientRelatedData {
 }
 
 // Master Rebuild Spec 17.2: "Open customer -> all related leads, payments,
-// visits, allocations, contracts and complaints." Every fetch here uses the
-// same agent-scoped call the rest of the app already relies on -- payments/
-// siteVisits/complaints via listForAgent(agentKey), allocations/
-// contractRequests via list(viewerKey, role) -- so this screen can never
-// leak a colleague's record just because the app now surfaces more of it
-// (Section 11's own "never reuse a generic all-X query for a personal
-// screen" warning). ds.contracts.list() has no agent-scoped variant at all
-// (confirmed in data/source.ts), so it's fetched broad and the caller MUST
-// filter it down to the client's own leadIds before rendering -- never
-// render this array directly.
+// visits, allocations, contracts and complaints." Staff fetch their own
+// payments; Management fetches company-visible payments under the existing
+// payments RLS policy. The client detail screen filters every result to this
+// customer's lead IDs before rendering. Contracts have no agent-scoped
+// variant, so the caller must apply that same client filter to them too.
 export function useClientRelatedData() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -32,12 +27,12 @@ export function useClientRelatedData() {
   const role = profile?.role ?? 'agent';
 
   return useQuery({
-    queryKey: ['clientRelatedData', agentKey],
+    queryKey: ['clientRelatedData', agentKey, role],
     enabled: !!agentKey,
     queryFn: async (): Promise<ClientRelatedData> => {
       const ds = getDataSource(demoMode);
       const [payments, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
-        ds.payments.listForAgent(agentKey),
+        role === 'manager' ? ds.payments.listAll() : ds.payments.listForAgent(agentKey),
         ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
