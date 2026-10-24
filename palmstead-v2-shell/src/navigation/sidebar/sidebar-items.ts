@@ -285,7 +285,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "commission",
 				title: "Commission",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/commission",
 				icon: Landmark,
 			},
 			{ id: "analytics", title: "Analytics", url: NOT_BUILT_YET, icon: Gauge },
