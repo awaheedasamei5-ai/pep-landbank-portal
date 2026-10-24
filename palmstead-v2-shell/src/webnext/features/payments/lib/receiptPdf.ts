@@ -1,8 +1,9 @@
-import { jsPDF } from 'jspdf';
-import { ghs } from '../../../shared/lib/format';
-import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
-import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
-import type { Config, Lead, Payment } from '../../../types/domain';
+import { jsPDF } from "jspdf";
+
+import { ghs } from "../../../shared/lib/format";
+import { pdfGeneratedStamp } from "../../../shared/lib/pdfReport";
+import { pdfStampSignature } from "../../../shared/lib/pdfSignature";
+import type { Config, Lead, Payment } from "../../../types/domain";
 
 // Port of index.html's buildReceiptPDF()/pdfReceiptHeaderBand()/
 // pdfReceiptRow() (index.html:17607-17780) -- same navy/gold branded
@@ -22,8 +23,8 @@ const LINE: [number, number, number] = [222, 230, 234];
 const PAPER: [number, number, number] = [250, 251, 252];
 
 function fitText(doc: jsPDF, text: string, maxW: number): string {
-  const s = String(text ?? '');
-  if (!s) return '';
+  const s = String(text ?? "");
+  if (!s) return "";
   if (doc.getTextWidth(s) <= maxW) return s;
   let t = s;
   while (t.length > 1 && doc.getTextWidth(`${t}…`) > maxW) t = t.slice(0, -1);
@@ -31,11 +32,11 @@ function fitText(doc: jsPDF, text: string, maxW: number): string {
 }
 
 function receiptRow(doc: jsPDF, x: number, y: number, colW: number, label: string, value: string) {
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(6.8);
   doc.setTextColor(...GRAY);
   doc.text(label.toUpperCase(), x, y);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(...DARK);
   doc.text(fitText(doc, value, colW), x, y + 4.8);
@@ -44,22 +45,22 @@ function receiptRow(doc: jsPDF, x: number, y: number, colW: number, label: strin
 function headerBand(doc: jsPDF, pageW: number, ref: string, dateStr: string, companyName: string): number {
   const bandH = 40;
   doc.setFillColor(...INK);
-  doc.rect(0, 0, pageW, bandH, 'F');
+  doc.rect(0, 0, pageW, bandH, "F");
   doc.setFillColor(...GOLD);
-  doc.rect(0, bandH, pageW, 1.1, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.rect(0, bandH, pageW, 1.1, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(21);
   doc.setTextColor(255, 255, 255);
-  doc.text('PAYMENT RECEIPT', 14, 19);
-  doc.setFont('helvetica', 'normal');
+  doc.text("PAYMENT RECEIPT", 14, 19);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   doc.setTextColor(...GOLD2);
   doc.text(companyName, 14, 27);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(205, 213, 222);
   doc.text(`Receipt No. ${ref}`, 14, 34);
-  doc.text(dateStr, pageW - 14, 34, { align: 'right' });
+  doc.text(dateStr, pageW - 14, 34, { align: "right" });
   return bandH + 1.1;
 }
 
@@ -69,19 +70,34 @@ export interface BuildReceiptParams {
   lead: Lead | null;
   receiptNumber: string;
   config: Config;
-  paidAsOf?: number;
+  paidAsOf?: number | null;
+  balanceAsOf?: number | null;
+  contractTotalAsOf?: number | null;
   issuerSignature?: string | null;
   issuerName?: string | null;
 }
 
-export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, config, paidAsOf, issuerSignature, issuerName }: BuildReceiptParams): jsPDF {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+export function buildReceiptPdf({
+  clientName,
+  payment,
+  lead,
+  receiptNumber,
+  config,
+  paidAsOf,
+  balanceAsOf,
+  contractTotalAsOf,
+  issuerSignature,
+  issuerName,
+}: BuildReceiptParams): jsPDF {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const ref = receiptNumber;
-  const dateStr = payment.date ? new Date(`${payment.date}T00:00:00`).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
-  const siteName = config.quoteSiteName || 'Royal Palm Enclave, Tsopoli';
-  const companyName = config.quoteCompanyName || 'Trulander JSF Limited';
+  const dateStr = payment.date
+    ? new Date(`${payment.date}T00:00:00`).toLocaleDateString("en-GB")
+    : new Date().toLocaleDateString("en-GB");
+  const siteName = config.quoteSiteName || "Royal Palm Enclave, Tsopoli";
+  const companyName = config.quoteCompanyName || "Trulander JSF Limited";
   const L = 14;
   const R = 196;
   const colW = (R - L - 10) / 2;
@@ -89,12 +105,12 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   const colRx = L + colW + 10;
 
   doc.setFillColor(...PAPER);
-  doc.rect(0, 0, pageW, pageH, 'F');
+  doc.rect(0, 0, pageW, pageH, "F");
   let y = headerBand(doc, pageW, ref, dateStr, companyName);
   doc.setTextColor(...DARK);
   y += 10;
   if (config.companyTin) {
-    doc.setFont('helvetica', 'normal');
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...GRAY);
     doc.text(`Tax ID: ${config.companyTin}`, L, y);
@@ -103,11 +119,11 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
     y += 2;
   }
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...INK);
-  doc.text('BILL TO', colLx, y);
-  doc.text('ISSUED BY', colRx, y);
+  doc.text("BILL TO", colLx, y);
+  doc.text("ISSUED BY", colRx, y);
   doc.setDrawColor(...GOLD);
   doc.setLineWidth(0.6);
   doc.line(colLx, y + 1.5, colLx + 16, y + 1.5);
@@ -119,73 +135,71 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   // facing receipt reads better showing how many of the ACTUAL type they
   // bought ("Half Plot x 1", not the confusing "Half Plot x 0.5"), so
   // this converts back to qty-of-type for display only.
-  const eqPerUnit = lead?.plotType === 'Half Plot' ? 0.5 : 1;
+  const eqPerUnit = lead?.plotType === "Half Plot" ? 0.5 : 1;
   const qtyOfType = lead ? (lead.noPlots || eqPerUnit) / eqPerUnit : 1;
   const billRows: [string, string][] = [
-    ['Name', clientName],
-    ['Plot', lead ? `${lead.plotType || 'Plot'} × ${qtyOfType}` : '—'],
-    ['Phone', lead?.contact || '—'],
-    ['Email', '—'],
+    ["Name", clientName],
+    ["Plot", lead ? `${lead.plotType || "Plot"} × ${qtyOfType}` : "—"],
+    ["Phone", lead?.contact ?? "—"],
   ];
   const issuedRows: [string, string][] = [
-    ['Name', companyName],
-    ['Address', config.quoteFooterAddress || siteName],
-    ['Phone', config.companyPhone || '—'],
-    ['Email', config.companyEmail || '—'],
+    ["Name", companyName],
+    ["Address", config.quoteFooterAddress || siteName],
+    ["Phone", config.companyPhone || "—"],
+    ["Email", config.companyEmail || "—"],
   ];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < billRows.length; i++) {
     receiptRow(doc, colLx, y + i * rowH, colW, billRows[i][0], billRows[i][1]);
+  }
+  for (let i = 0; i < issuedRows.length; i++) {
     receiptRow(doc, colRx, y + i * rowH, colW, issuedRows[i][0], issuedRows[i][1]);
   }
   y += 4 * rowH + 4;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...INK);
-  doc.text('PAYMENT DETAILS', L, y);
+  doc.text("PAYMENT DETAILS", L, y);
   doc.setDrawColor(...GOLD);
   doc.line(L, y + 1.5, L + 16, y + 1.5);
   y += 6;
-  const tblX = [L, 98, 120, 158];
-  const tblW = [84, 22, 38, 38];
+  const tblX = [L, L + 78, L + 110, L + 152];
+  const tblW = [78, 32, 42, 30];
   doc.setFillColor(...INK);
-  doc.rect(L, y, R - L, 8, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.rect(L, y, R - L, 8, "F");
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('DESCRIPTION', tblX[0] + 3, y + 5.3);
-  // Numeric columns' headers right-align to sit directly above their own
-  // values (fixed real bug: headers used to be left-aligned while QTY/
-  // UNIT PRICE/TOTAL values are right-aligned, so each amount visually
-  // "drifted" away from its own column header instead of sitting under it).
-  doc.text('QTY', tblX[1] + tblW[1] - 3, y + 5.3, { align: 'right' });
-  doc.text('UNIT PRICE', tblX[2] + tblW[2] - 3, y + 5.3, { align: 'right' });
-  doc.text('TOTAL', tblX[3] + tblW[3] - 3, y + 5.3, { align: 'right' });
+  doc.text("PAYMENT", tblX[0] + 3, y + 5.3);
+  doc.text("METHOD", tblX[1] + 3, y + 5.3);
+  doc.text("TRANSACTION REF.", tblX[2] + 3, y + 5.3);
+  doc.text("AMOUNT", tblX[3] + tblW[3] - 3, y + 5.3, { align: "right" });
   y += 8;
-  const grand = lead?.grandTotal ?? 0;
-  const desc = lead ? `${lead.plotType || 'Plot'} — ${siteName}` : 'Payment received';
-  const unitPrice = lead ? ghs(grand / qtyOfType) : '—';
+  const grand = contractTotalAsOf === undefined ? (lead?.grandTotal ?? 0) : (contractTotalAsOf ?? 0);
+  const desc = lead ? `Installment toward ${lead.plotType ?? "plot"} — ${siteName}` : "Payment received";
+  const reference = payment.referenceNumber?.trim() || "Not provided";
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
-  doc.rect(L, y, R - L, 9.5);
-  doc.setFont('helvetica', 'normal');
+  doc.rect(L, y, R - L, 11);
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...DARK);
-  doc.text(fitText(doc, desc, tblW[0] - 6), tblX[0] + 3, y + 6.2);
-  doc.text(String(qtyOfType), tblX[1] + tblW[1] - 3, y + 6.2, { align: 'right' });
-  doc.text(unitPrice, tblX[2] + tblW[2] - 3, y + 6.2, { align: 'right' });
-  doc.setFont('helvetica', 'bold');
-  doc.text(ghs(payment.amount), tblX[3] + tblW[3] - 3, y + 6.2, { align: 'right' });
-  y += 9.5 + 4;
+  doc.text(fitText(doc, desc, tblW[0] - 6), tblX[0] + 3, y + 6.8);
+  doc.text(fitText(doc, payment.paymentMethod ?? "—", tblW[1] - 6), tblX[1] + 3, y + 6.8);
+  doc.text(fitText(doc, reference, tblW[2] - 6), tblX[2] + 3, y + 6.8);
+  doc.setFont("helvetica", "bold");
+  doc.text(ghs(payment.amount), tblX[3] + tblW[3] - 3, y + 6.8, { align: "right" });
+  y += 11 + 4;
 
-  if (lead) {
-    const paid = paidAsOf ?? lead.amtPaid;
-    const bal = Math.max(grand - paid, 0);
+  const hasBalanceSnapshot = Boolean(lead) && paidAsOf !== null && balanceAsOf !== null && contractTotalAsOf !== null;
+  const paid = paidAsOf === undefined ? (lead?.amtPaid ?? 0) : (paidAsOf ?? 0);
+  const bal = balanceAsOf === undefined ? Math.max(grand - paid, 0) : (balanceAsOf ?? 0);
+  if (lead && hasBalanceSnapshot) {
     const boxX = tblX[2];
     const totRows: [string, string, boolean][] = [
-      ['Total contract price', ghs(grand), false],
-      ['Paid to date', ghs(paid), false],
-      [bal <= 0 ? 'Status' : 'Balance remaining', bal <= 0 ? 'PAID IN FULL' : ghs(bal), true],
+      ["Total contract price", ghs(grand), false],
+      ["Paid to date", ghs(paid), false],
+      [bal <= 0 ? "Status" : "Balance remaining", bal <= 0 ? "PAID IN FULL" : ghs(bal), true],
     ];
     totRows.forEach((row, i) => {
       const ry = y + i * 7.8;
@@ -193,48 +207,60 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
         doc.setDrawColor(...LINE);
         doc.line(boxX, ry - 5.2, R, ry - 5.2);
       }
-      doc.setFont('helvetica', 'normal');
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(...GRAY);
       doc.text(row[0], boxX + 3, ry);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(row[2] ? 11 : 9.5);
       if (row[2]) doc.setTextColor(...GOLD);
       else doc.setTextColor(...DARK);
-      doc.text(row[1], R - 3, ry, { align: 'right' });
+      doc.text(row[1], R - 3, ry, { align: "right" });
     });
     y += 3 * 7.8 + 8;
   } else {
     y += 8;
   }
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...INK);
-  doc.text('PAYMENT INFORMATION', colLx, y);
-  doc.text('NOTES', colRx, y);
+  doc.text("PAYMENT INFORMATION", colLx, y);
+  doc.text("NOTES", colRx, y);
   doc.setDrawColor(...GOLD);
   doc.line(colLx, y + 1.5, colLx + 16, y + 1.5);
   doc.line(colRx, y + 1.5, colRx + 16, y + 1.5);
   y += 8;
-  const balNow = lead ? Math.max(grand - (paidAsOf ?? lead.amtPaid), 0) : 0;
+  const balNow = bal;
+  let receiptStatus = "PAYMENT APPROVED";
+  if (lead && hasBalanceSnapshot) receiptStatus = balNow <= 0 ? "PAID IN FULL" : "PARTIAL PAYMENT";
   const payRows: [string, string][] = [
-    ['Payment Method', payment.paymentMethod || '—'],
-    ['Reference No.', ref],
-    ['Payment Date', dateStr],
-    ['Status', lead ? (balNow <= 0 ? 'PAID IN FULL' : 'PARTIAL PAYMENT') : 'RECEIVED'],
+    ["Payment Method", payment.paymentMethod ?? "—"],
+    ["Transaction Ref.", reference],
+    ["Payment Date", dateStr],
+    ["Status", receiptStatus],
   ];
-  payRows.forEach((row, i) => receiptRow(doc, colLx, y + i * rowH, colW, row[0], row[1]));
+  payRows.forEach((row, i) => {
+    receiptRow(doc, colLx, y + i * rowH, colW, row[0], row[1]);
+  });
 
-  const notes = [config.receiptThanksText || 'This receipt confirms the amount above was received by us and applied to your account.', 'Please keep this document for your records.'];
-  notes.push(`For inquiries, contact us at ${config.companyEmail || config.companyPhone || 'the office'}`);
+  const notes = [
+    config.receiptThanksText ||
+      "Thank you. This receipt confirms that the payment above was received and applied to your account.",
+    "Please keep this document for your records.",
+  ];
+  if (lead && !hasBalanceSnapshot)
+    notes.push(
+      "The historic balance for this payment is unavailable. This receipt confirms the payment shown and does not restate your current balance.",
+    );
+  notes.push(`For inquiries, contact us at ${config.companyEmail || config.companyPhone || "the office"}`);
   let ny = y;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...DARK);
   notes.forEach((n) => {
     doc.setFillColor(...GOLD);
-    doc.circle(colRx + 1, ny - 1.4, 0.8, 'F');
+    doc.circle(colRx + 1, ny - 1.4, 0.8, "F");
     const lines = doc.splitTextToSize(n, colW - 6);
     doc.text(lines, colRx + 5, ny);
     ny += lines.length * 4.2 + 2.4;
@@ -246,12 +272,12 @@ export function buildReceiptPdf({ clientName, payment, lead, receiptNumber, conf
   doc.setLineWidth(0.6);
   doc.line(L, y, L + 65, y);
   y += 5;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(...GRAY);
-  doc.text('Authorized Signature', L, y);
+  doc.text("Authorized Signature", L, y);
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...GRAY);
   doc.text(`${companyName} — ${siteName}`, L, pageH - 8);

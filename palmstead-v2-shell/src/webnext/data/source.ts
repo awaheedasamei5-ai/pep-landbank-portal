@@ -1,60 +1,165 @@
-import type { AchievementDef, ActivityLogEntry, AllocationHistoryEvent, AllocationRequest, AttendanceNote, AttendanceRecord, AttendanceReview, AuditEvent, BackupRecord, Banner, BannerStatus, BannerStatusLogEntry, ChatConversation, ChatMessage, Complaint, ComplaintUpdate, Config, Contract, ContractApproval, ContractApprovalStatus, ContractClause, ContractDraft, NewContractDraft, DataCheckDismissal, ContractStyleSettings, ContractStyleSettingsPatch, ContractField, ContractFieldScope, ContractGeneration, ContractRequest, ContractSection, ContractTemplate, ContractTemplateVersion, ContractTemplateVersionStatus, DownloadRecord, Enquiry, EnquiryUpdate, FundRequest, ImportBatch, Lead, LeadUpdate, AttendanceException, AttendancePolicy, LeaderboardRow, LeaderboardScoreHistoryEntry, LeaveRequest, LeaveHoliday, LeaveRequestLog, NewLeaveHoliday, NewAttendanceException, NewOfficeLocation, OfficeLocation, ManagerOverview, Memo, NewAllocationRequest, NewBanner, NewComplaint, NewContractClause, NewContractRequest, NewContractTemplate, NewEnquiry, NewFundRequest, NewImportBatch, NewLead, NewLeaveRequest, NewMemo, NewNote, NewPaymentEntry, NewPlot, PaymentMethod, NewReferral, NewSiteVisit, NewTask, Note, Payment, PaymentDecisionResult, PaymentStatus, PermissionDef, PermissionOverride, Plot, PlotUpdate, PricingHistoryEntry, PricingPromotion, Profile, Referral, ReportArchiveEntry, ScheduleItem, ScheduleItemStatus, SignInInput, SignOutInput, SiteVisit, StaffAchievement, StaffInvite, NewMeeting, ScheduleItemAttachment, ScheduleItemInvitee, ScheduleItemPatch, SveDayReport, SveDayReportPatch, SveInviteRecord, SveVisitStatus, StreakRow, TaskEvent, WeeklyVisitForm, WeeklyVisitFormCostPatch } from '../types/domain';
-import { deriveStageFromPayment, computeGrandTotal, STAGES } from '../features/pipeline/lib/pipelineLogic';
-import { agentPoints } from '../features/manager/lib/leaderboardLogic';
-import { requireLeaveSelectionYear } from '../features/leave/lib/leaveDates';
-import type { LeaveReminderHealth } from '../features/leave/lib/leaveReminderTypes';
-import { today, monthKey, shiftMonth } from '../shared/lib/format';
-import { getSupabaseClient } from './client';
-import { friendlyErrorObj } from '../shared/lib/friendlyError';
+import { requireLeaveSelectionYear } from "../features/leave/lib/leaveDates";
+import type { LeaveReminderHealth } from "../features/leave/lib/leaveReminderTypes";
+import { agentPoints } from "../features/manager/lib/leaderboardLogic";
+import { computeGrandTotal, deriveStageFromPayment, STAGES } from "../features/pipeline/lib/pipelineLogic";
+import { monthKey, shiftMonth, today } from "../shared/lib/format";
+import { friendlyErrorObj } from "../shared/lib/friendlyError";
+import type {
+  AchievementDef,
+  ActivityLogEntry,
+  AllocationHistoryEvent,
+  AllocationRequest,
+  AttendanceException,
+  AttendanceNote,
+  AttendancePolicy,
+  AttendanceRecord,
+  AttendanceReview,
+  AuditEvent,
+  BackupRecord,
+  Banner,
+  BannerStatus,
+  BannerStatusLogEntry,
+  ChatConversation,
+  ChatMessage,
+  Complaint,
+  ComplaintUpdate,
+  Config,
+  Contract,
+  ContractApproval,
+  ContractApprovalStatus,
+  ContractClause,
+  ContractDraft,
+  ContractField,
+  ContractFieldScope,
+  ContractGeneration,
+  ContractRequest,
+  ContractSection,
+  ContractStyleSettings,
+  ContractStyleSettingsPatch,
+  ContractTemplate,
+  ContractTemplateVersion,
+  ContractTemplateVersionStatus,
+  DataCheckDismissal,
+  DownloadRecord,
+  Enquiry,
+  EnquiryUpdate,
+  FundRequest,
+  ImportBatch,
+  Lead,
+  LeaderboardRow,
+  LeaderboardScoreHistoryEntry,
+  LeadUpdate,
+  LeaveHoliday,
+  LeaveRequest,
+  LeaveRequestLog,
+  ManagerOverview,
+  Memo,
+  NewAllocationRequest,
+  NewAttendanceException,
+  NewBanner,
+  NewComplaint,
+  NewContractClause,
+  NewContractDraft,
+  NewContractRequest,
+  NewContractTemplate,
+  NewEnquiry,
+  NewFundRequest,
+  NewImportBatch,
+  NewLead,
+  NewLeaveHoliday,
+  NewLeaveRequest,
+  NewMeeting,
+  NewMemo,
+  NewNote,
+  NewOfficeLocation,
+  NewPaymentEntry,
+  NewPlot,
+  NewReferral,
+  NewSiteVisit,
+  NewTask,
+  Note,
+  OfficeLocation,
+  Payment,
+  PaymentDecisionResult,
+  PaymentMethod,
+  PaymentStatus,
+  PermissionDef,
+  PermissionOverride,
+  Plot,
+  PlotUpdate,
+  PricingHistoryEntry,
+  PricingPromotion,
+  Profile,
+  Referral,
+  ReportArchiveEntry,
+  ScheduleItem,
+  ScheduleItemAttachment,
+  ScheduleItemInvitee,
+  ScheduleItemPatch,
+  ScheduleItemStatus,
+  SignInInput,
+  SignOutInput,
+  SiteVisit,
+  StaffAchievement,
+  StaffInvite,
+  StreakRow,
+  SveDayReport,
+  SveDayReportPatch,
+  SveInviteRecord,
+  SveVisitStatus,
+  TaskEvent,
+  WeeklyVisitForm,
+  WeeklyVisitFormCostPatch,
+} from "../types/domain";
+import { getSupabaseClient } from "./client";
 import {
-  mapContractStyleSettingsRow,
-  mapContractDraftRow,
+  domainStatusToDb,
   mapAchievementDefRow,
   mapActivityLogRow,
   mapAllocationRequestRow,
   mapAttendanceComparisonRow,
+  mapAttendanceExceptionRow,
   mapAttendanceNoteRow,
-  mapAttendanceRow,
+  mapAttendancePolicyRow,
   mapAttendanceReviewRow,
+  mapAttendanceRow,
   mapAuditEventRow,
   mapBackupRow,
   mapBannerRow,
   mapBannerStatusLogRow,
-  mapPricingHistoryRow,
-  mapPricingPromotionRow,
-  mapPermissionDefRow,
-  mapPermissionOverrideRow,
-  mapFundRequestRow,
-  mapWeeklyVisitFormRow,
   mapChatMessageRow,
   mapComplaintRow,
-  mapContractRequestRow,
+  mapConfigRow,
   mapContractApprovalRow,
-  mapDataCheckDismissalRow,
   mapContractClauseRow,
+  mapContractDraftRow,
   mapContractFieldRow,
   mapContractGenerationRow,
+  mapContractRequestRow,
   mapContractRow,
+  mapContractStyleSettingsRow,
   mapContractTemplateRow,
   mapContractTemplateVersionRow,
+  mapDataCheckDismissalRow,
   mapDownloadRow,
   mapEnquiryRow,
-  mapStaffAchievementRow,
-  mapAttendanceExceptionRow,
-  mapAttendancePolicyRow,
+  mapFundRequestRow,
   mapLeaderboardRawRow,
   mapLeaderboardScoreHistoryRow,
   mapLeaderboardScoreRow,
   mapLeadRow,
-  mapOfficeLocationRow,
   mapLeaveHolidayRow,
   mapLeaveRequestLogRow,
   mapLeaveRequestRow,
   mapMemoRow,
   mapNoteRow,
+  mapOfficeLocationRow,
   mapPaymentRow,
+  mapPermissionDefRow,
+  mapPermissionOverrideRow,
   mapPlotRow,
-  mapStaffInviteRow,
+  mapPricingHistoryRow,
+  mapPricingPromotionRow,
   mapProfileRow,
   mapReferralRow,
   mapReportArchiveRow,
@@ -62,14 +167,15 @@ import {
   mapScheduleItemInviteeRow,
   mapScheduleItemRow,
   mapSiteVisitRow,
+  mapStaffAchievementRow,
+  mapStaffInviteRow,
+  mapStreakRow,
   mapSveDayReportRow,
   mapSveInviteRow,
   mapSveSubmissionRow,
-  mapStreakRow,
   mapTaskEventRow,
-  mapConfigRow,
-  domainStatusToDb,
-} from './mappers';
+  mapWeeklyVisitFormRow,
+} from "./mappers";
 
 // Shared by leads.update() and the two import-atomicity methods below
 // (createWithFollowup/reassignAndUpdate) -- same LeadUpdate-to-column
@@ -78,29 +184,30 @@ import {
 // risking drift from the one real, already-battle-tested mapping.
 function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   const dbPatch: Record<string, unknown> = {};
-  if ('name' in patch) dbPatch.name = patch.name;
-  if ('contact' in patch) dbPatch.contact = patch.contact;
-  if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
-  if ('noPlots' in patch) dbPatch.no_plots = patch.noPlots;
-  if ('unitPrice' in patch) dbPatch.unit_price = patch.unitPrice;
-  if ('discount' in patch) dbPatch.discount = patch.discount;
-  if ('netTotal' in patch) dbPatch.net_total = patch.netTotal;
-  if ('grandTotal' in patch) dbPatch.grand_total = patch.grandTotal;
-  if ('paymentPlan' in patch) dbPatch.payment_plan = patch.paymentPlan;
-  if ('amtPaid' in patch) dbPatch.amt_paid = patch.amtPaid;
-  if ('stage' in patch) dbPatch.stage = patch.stage;
-  if ('nextAction' in patch) dbPatch.next_action = patch.nextAction;
-  if ('nextActionDate' in patch) dbPatch.next_action_date = patch.nextActionDate;
-  if ('notes' in patch) dbPatch.notes = patch.notes;
-  if ('tags' in patch) dbPatch.tags = patch.tags;
-  if ('siteVisit' in patch) dbPatch.site_visit = patch.siteVisit;
-  if ('depositTarget' in patch) dbPatch.deposit_target = patch.depositTarget;
-  if ('priority' in patch) dbPatch.priority = patch.priority;
-  if ('leadSource' in patch) dbPatch.lead_source = patch.leadSource;
-  if ('bannerId' in patch) dbPatch.banner_id = patch.bannerId;
-  if ('address' in patch) dbPatch.address = patch.address;
-  if ('kyc' in patch) dbPatch.kyc = patch.kyc;
-  if ('amtPaid' in patch && 'grandTotal' in patch) dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
+  if ("name" in patch) dbPatch.name = patch.name;
+  if ("contact" in patch) dbPatch.contact = patch.contact;
+  if ("plotType" in patch) dbPatch.plot_type = patch.plotType;
+  if ("noPlots" in patch) dbPatch.no_plots = patch.noPlots;
+  if ("unitPrice" in patch) dbPatch.unit_price = patch.unitPrice;
+  if ("discount" in patch) dbPatch.discount = patch.discount;
+  if ("netTotal" in patch) dbPatch.net_total = patch.netTotal;
+  if ("grandTotal" in patch) dbPatch.grand_total = patch.grandTotal;
+  if ("paymentPlan" in patch) dbPatch.payment_plan = patch.paymentPlan;
+  if ("amtPaid" in patch) dbPatch.amt_paid = patch.amtPaid;
+  if ("stage" in patch) dbPatch.stage = patch.stage;
+  if ("nextAction" in patch) dbPatch.next_action = patch.nextAction;
+  if ("nextActionDate" in patch) dbPatch.next_action_date = patch.nextActionDate;
+  if ("notes" in patch) dbPatch.notes = patch.notes;
+  if ("tags" in patch) dbPatch.tags = patch.tags;
+  if ("siteVisit" in patch) dbPatch.site_visit = patch.siteVisit;
+  if ("depositTarget" in patch) dbPatch.deposit_target = patch.depositTarget;
+  if ("priority" in patch) dbPatch.priority = patch.priority;
+  if ("leadSource" in patch) dbPatch.lead_source = patch.leadSource;
+  if ("bannerId" in patch) dbPatch.banner_id = patch.bannerId;
+  if ("address" in patch) dbPatch.address = patch.address;
+  if ("kyc" in patch) dbPatch.kyc = patch.kyc;
+  if ("amtPaid" in patch && "grandTotal" in patch)
+    dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
   return dbPatch;
 }
 
@@ -108,10 +215,10 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
 // duplicating history." Advances a date by one recurrence step -- used
 // by scheduleItems.updateStatus (both demo and real) when a recurring
 // task is closed, to compute the next instance's due date.
-function nextRecurrenceDate(dateIso: string, freq: 'daily' | 'weekly' | 'monthly', interval: number): string {
+function nextRecurrenceDate(dateIso: string, freq: "daily" | "weekly" | "monthly", interval: number): string {
   const d = new Date(`${dateIso}T00:00:00`);
-  if (freq === 'daily') d.setDate(d.getDate() + interval);
-  else if (freq === 'weekly') d.setDate(d.getDate() + interval * 7);
+  if (freq === "daily") d.setDate(d.getDate() + interval);
+  else if (freq === "weekly") d.setDate(d.getDate() + interval * 7);
   else d.setMonth(d.getMonth() + interval);
   return d.toISOString().slice(0, 10);
 }
@@ -256,7 +363,12 @@ export interface DataSource {
     // payment to sum per-lead, not one lead or one agent at a time.
     listAll(): Promise<Payment[]>;
     listPending(): Promise<Payment[]>;
-    create(input: NewPaymentEntry, leadName: string, leadAgentKey: string, requestedStatus: PaymentStatus): Promise<Payment>;
+    create(
+      input: NewPaymentEntry,
+      leadName: string,
+      leadAgentKey: string,
+      requestedStatus: PaymentStatus,
+    ): Promise<Payment>;
     approve(paymentId: string, decidedBy: string, decidedByName: string): Promise<PaymentDecisionResult>;
     decline(paymentId: string, decidedBy: string, decidedByName: string, reason?: string): Promise<void>;
     // Master Spec Section 6's Needs-Correction workflow -- a middle ground
@@ -268,7 +380,15 @@ export interface DataSource {
     // approve/decline's own reasoning exactly.
     listNeedsCorrection(): Promise<Payment[]>;
     flagNeedsCorrection(paymentId: string, reason: string): Promise<void>;
-    resubmit(paymentId: string, input: { amount: number; paymentMethod?: PaymentMethod | null; note?: string | null; receiptProofPath?: string | null }): Promise<void>;
+    resubmit(
+      paymentId: string,
+      input: {
+        amount: number;
+        paymentMethod?: PaymentMethod | null;
+        note?: string | null;
+        receiptProofPath?: string | null;
+      },
+    ): Promise<void>;
     // Real SECURITY DEFINER RPC `ensure_receipt_number` (confirmed live,
     // authenticated-only -- staging had this over-permissively granted to
     // anon too, fixed to match production, same drift class as
@@ -360,7 +480,14 @@ export interface DataSource {
     // assigned_by/assigned_by_name so a reassign is attributable, per the
     // master spec's "records who reassigned and why" -- reason is now
     // collected and logged to task_events (real gap closed 2026-09-06).
-    reassignTask(id: string, toKey: string, toName: string, byKey: string, byName: string, reason: string): Promise<ScheduleItem>;
+    reassignTask(
+      id: string,
+      toKey: string,
+      toName: string,
+      byKey: string,
+      byName: string,
+      reason: string,
+    ): Promise<ScheduleItem>;
     // Master Spec 10.3 Meetings -- one schedule_items row (kind='meeting')
     // plus one schedule_item_invitees row per invited staff member.
     createMeeting(ownerKey: string, ownerName: string, input: NewMeeting): Promise<ScheduleItem>;
@@ -371,25 +498,50 @@ export interface DataSource {
     // non-manager organizer has no RLS visibility into a colleague's
     // actual schedule (same real limitation useColleagueAvailability.ts
     // already documented for task counts).
-    checkConflicts(staffKeys: string[], date: string, startTime: string, endTime: string, excludeId?: string): Promise<{ staffKey: string; hasConflict: boolean }[]>;
+    checkConflicts(
+      staffKeys: string[],
+      date: string,
+      startTime: string,
+      endTime: string,
+      excludeId?: string,
+    ): Promise<{ staffKey: string; hasConflict: boolean }[]>;
   };
   scheduleItemInvitees: {
     listForItem(scheduleItemId: string): Promise<ScheduleItemInvitee[]>;
-    respond(inviteeId: string, status: 'accepted' | 'declined'): Promise<ScheduleItemInvitee>;
+    respond(inviteeId: string, status: "accepted" | "declined"): Promise<ScheduleItemInvitee>;
   };
   // Real table `task_events` (discovered live 2026-09-06, RLS already in
   // place from an earlier phase, zero application code touched it before
   // now) -- Master Spec 10.2's "activity history."
   taskEvents: {
     listForTask(taskId: string): Promise<TaskEvent[]>;
-    log(taskId: string, type: string, actorKey: string, actorName: string, extra?: { fromKey?: string | null; fromName?: string | null; toKey?: string | null; toName?: string | null; note?: string | null }): Promise<void>;
+    log(
+      taskId: string,
+      type: string,
+      actorKey: string,
+      actorName: string,
+      extra?: {
+        fromKey?: string | null;
+        fromName?: string | null;
+        toKey?: string | null;
+        toName?: string | null;
+        note?: string | null;
+      },
+    ): Promise<void>;
   };
   // Real table `schedule_item_attachments` (added 2026-09-06) -- Master
   // Spec 10.2's "attachments." Storage path convention
   // `{scheduleItemId}/{filename}` in the `task-attachments` bucket.
   scheduleItemAttachments: {
     listForItem(scheduleItemId: string): Promise<ScheduleItemAttachment[]>;
-    upload(scheduleItemId: string, file: Blob, fileName: string, contentType: string, uploadedBy: string, uploadedByName: string): Promise<ScheduleItemAttachment>;
+    upload(
+      scheduleItemId: string,
+      file: Blob,
+      fileName: string,
+      contentType: string,
+      uploadedBy: string,
+      uploadedByName: string,
+    ): Promise<ScheduleItemAttachment>;
     getUrl(storagePath: string): Promise<string | null>;
     remove(attachmentId: string, storagePath: string): Promise<void>;
   };
@@ -401,7 +553,10 @@ export interface DataSource {
     // don't independently keep a streak alive), and this always targets
     // TODAY's row -- see computeRunningStreakLength for why writing it can't
     // move the headline number until the day actually rolls over.
-    markToday(staffKey: string, patch: { todoLogged: boolean; leadAdded: boolean; siteVisitBooked: boolean }): Promise<StreakRow>;
+    markToday(
+      staffKey: string,
+      patch: { todoLogged: boolean; leadAdded: boolean; siteVisitBooked: boolean },
+    ): Promise<StreakRow>;
   };
   config: {
     get(): Promise<Config>;
@@ -413,62 +568,62 @@ export interface DataSource {
       patch: Partial<
         Pick<
           Config,
-          | 'leaderboardWeights'
-          | 'commissionFullCap'
-          | 'commissionHalfCap'
-          | 'commissionPoolPerPlot'
-          | 'allocationThresholdPct'
-          | 'fullPrice'
-          | 'halfPrice'
-          | 'fullDiscount'
-          | 'halfDiscount'
-          | 'int3'
-          | 'int6'
-          | 'int9'
-          | 'int12'
-          | 'techFullPlotLengthFt'
-          | 'techFullPlotWidthFt'
-          | 'techHalfPlotLengthFt'
-          | 'techHalfPlotWidthFt'
-          | 'officeLat'
-          | 'officeLng'
-          | 'officeRadiusMeters'
-          | 'attendanceCutoffTime'
-          | 'workStartTime'
-          | 'workEndTime'
-          | 'workDays'
-          | 'leaveTotalDays'
-          | 'eidObservingStaff'
-          | 'eidWindows'
+          | "leaderboardWeights"
+          | "commissionFullCap"
+          | "commissionHalfCap"
+          | "commissionPoolPerPlot"
+          | "allocationThresholdPct"
+          | "fullPrice"
+          | "halfPrice"
+          | "fullDiscount"
+          | "halfDiscount"
+          | "int3"
+          | "int6"
+          | "int9"
+          | "int12"
+          | "techFullPlotLengthFt"
+          | "techFullPlotWidthFt"
+          | "techHalfPlotLengthFt"
+          | "techHalfPlotWidthFt"
+          | "officeLat"
+          | "officeLng"
+          | "officeRadiusMeters"
+          | "attendanceCutoffTime"
+          | "workStartTime"
+          | "workEndTime"
+          | "workDays"
+          | "leaveTotalDays"
+          | "eidObservingStaff"
+          | "eidWindows"
           // Real bug fixed 2026-09-11 (see the implementation's own
           // comment): these were already read by mapConfigRow and shown
           // on real PDFs, but never whitelisted here for writing at all --
           // no settings UI built against this interface could ever have
           // saved them.
-          | 'quoteCompanyName'
-          | 'quoteSiteName'
-          | 'companyPhone'
-          | 'companyEmail'
-          | 'companyTin'
-          | 'quoteFooterAddress'
-          | 'receiptThanksText'
-          | 'receiptLogoImage'
-          | 'quoteDocTypeText'
-          | 'quoteNotesText'
-          | 'quoteLandNoteText'
-          | 'quoteLogoImage'
-          | 'quoteAccentColor'
+          | "quoteCompanyName"
+          | "quoteSiteName"
+          | "companyPhone"
+          | "companyEmail"
+          | "companyTin"
+          | "quoteFooterAddress"
+          | "receiptThanksText"
+          | "receiptLogoImage"
+          | "quoteDocTypeText"
+          | "quoteNotesText"
+          | "quoteLandNoteText"
+          | "quoteLogoImage"
+          | "quoteAccentColor"
           // Real columns, read by mapConfigRow and rendered on the real
           // Contract of Sale PDF (contractPdf.ts), never whitelisted for
           // writing -- the exact same silently-dropped-write bug this
           // function's own comments already describe twice above, now
           // fixed for the Style & Text page (docs/plans/16-contract-of-
           // sale-build-plan.md §4).
-          | 'contractCeoName'
-          | 'contractCoverImage'
-          | 'contractWordmarkImage'
+          | "contractCeoName"
+          | "contractCoverImage"
+          | "contractWordmarkImage"
         >
-      >
+      >,
     ): Promise<Config>;
   };
   // Real RLS restricts this to manager + specifically the 'elias'/
@@ -519,7 +674,13 @@ export interface DataSource {
     // Site Visits list, and Pipeline/Company Leads/Client Database's
     // per-lead Site Visits section, both keyed off the same real
     // site_visits.lead_id FK -- no separate propagation write needed).
-    reschedule(id: string, newDate: string, newTime: string | null, rescheduledBy: string, rescheduledByName: string): Promise<SiteVisit>;
+    reschedule(
+      id: string,
+      newDate: string,
+      newTime: string | null,
+      rescheduledBy: string,
+      rescheduledByName: string,
+    ): Promise<SiteVisit>;
   };
   // Master Spec Section 4's "combined activity timeline" lead-record
   // section. Real activity_log.lead_id FK (added this session, see
@@ -541,8 +702,25 @@ export interface DataSource {
   // it correctly, same as every other company-wide list in this app.
   activityLog: {
     listForLead(leadId: string): Promise<ActivityLogEntry[]>;
-    log(agentKey: string, agentName: string, client: string, action: string, detail?: string | null, leadId?: string | null): Promise<void>;
-    logCall(input: { agentKey: string; agentName: string; client: string; leadId: string; action: string; outcome: string | null; method: string | null; note: string | null; follow: string | null }): Promise<ActivityLogEntry>;
+    log(
+      agentKey: string,
+      agentName: string,
+      client: string,
+      action: string,
+      detail?: string | null,
+      leadId?: string | null,
+    ): Promise<void>;
+    logCall(input: {
+      agentKey: string;
+      agentName: string;
+      client: string;
+      leadId: string;
+      action: string;
+      outcome: string | null;
+      method: string | null;
+      note: string | null;
+      follow: string | null;
+    }): Promise<ActivityLogEntry>;
     listCompanyWide(): Promise<ActivityLogEntry[]>;
   };
   // Deliberately read-only-plus-create: no "mark cleared"/payout method
@@ -626,7 +804,13 @@ export interface DataSource {
   // screen, itself gated to canManageContracts-equivalent staff.
   contracts: {
     list(): Promise<Contract[]>;
-    create(leadId: string, clientName: string, agentKey: string, createdBy: string, createdByName: string): Promise<Contract>;
+    create(
+      leadId: string,
+      clientName: string,
+      agentKey: string,
+      createdBy: string,
+      createdByName: string,
+    ): Promise<Contract>;
   };
   // Real table `contract_drafts` (docs/plans/16-contract-of-sale-build-plan.md
   // §1.2) -- an in-progress contract saved before generation. RLS: owner
@@ -654,8 +838,16 @@ export interface DataSource {
     // across all templates, for the generator's template picker (a manager
     // may only ever generate from a published version, never a draft).
     listPublished(): Promise<ContractTemplateVersion[]>;
-    create(templateId: string, versionNumber: number, createdBy: string, createdByName: string): Promise<ContractTemplateVersion>;
-    update(id: string, patch: { content?: ContractSection[]; status?: ContractTemplateVersionStatus }): Promise<ContractTemplateVersion>;
+    create(
+      templateId: string,
+      versionNumber: number,
+      createdBy: string,
+      createdByName: string,
+    ): Promise<ContractTemplateVersion>;
+    update(
+      id: string,
+      patch: { content?: ContractSection[]; status?: ContractTemplateVersionStatus },
+    ): Promise<ContractTemplateVersion>;
     // Real SECURITY DEFINER RPC (set_contract_template_version_published)
     // -- atomically publishes this version and archives any other
     // published version of the same template, mirroring
@@ -670,7 +862,10 @@ export interface DataSource {
     // place -- editing here never retroactively changes a template that
     // already copied the clause's body inline (see insertClause in
     // TemplateDetailScreen.tsx).
-    update(id: string, patch: Partial<{ name: string; category: string | null; body: string; isActive: boolean }>): Promise<ContractClause>;
+    update(
+      id: string,
+      patch: Partial<{ name: string; category: string | null; body: string; isActive: boolean }>,
+    ): Promise<ContractClause>;
   };
   // Real table `contract_style_settings` -- one active row, same pattern
   // as attendance_policy. SELECT is open (every staff's generated PDF
@@ -681,7 +876,12 @@ export interface DataSource {
   };
   contractFields: {
     list(): Promise<ContractField[]>;
-    create(createdBy: string, key: string, scope: ContractFieldScope, templateId: string | null): Promise<ContractField>;
+    create(
+      createdBy: string,
+      key: string,
+      scope: ContractFieldScope,
+      templateId: string | null,
+    ): Promise<ContractField>;
   };
   contractGenerations: {
     list(): Promise<ContractGeneration[]>;
@@ -706,14 +906,26 @@ export interface DataSource {
   };
   contractApprovals: {
     listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
-    decide(templateVersionId: string, status: ContractApprovalStatus, reason: string | null, decidedBy: string, decidedByName: string): Promise<ContractApproval>;
+    decide(
+      templateVersionId: string,
+      status: ContractApprovalStatus,
+      reason: string | null,
+      decidedBy: string,
+      decidedByName: string,
+    ): Promise<ContractApproval>;
   };
   // docs/plans/19-data-check-plan.md -- real server-side Data Check
   // dismiss state. RLS already scopes list() to "mine or company-wide"
   // (data_check_dismissals_sel) -- no agent filter needed client-side.
   dataCheckDismissals: {
     list(): Promise<DataCheckDismissal[]>;
-    create(leadId: string, issueType: string, dismissedBy: string, dismissedByName: string, isCompanyWide: boolean): Promise<DataCheckDismissal>;
+    create(
+      leadId: string,
+      issueType: string,
+      dismissedBy: string,
+      dismissedByName: string,
+      isCompanyWide: boolean,
+    ): Promise<DataCheckDismissal>;
   };
   // Real table `leave_requests` (confirmed live). Staff reads are owner-
   // scoped by RLS; Management sees the company queue. Date-only team
@@ -733,7 +945,15 @@ export interface DataSource {
     // reschedule_note column, same as v1); deductQuota is Management's
     // explicit call at approval time (12.4's "normally yes, Management can
     // choose no for exceptional cases"), left unchanged when omitted.
-    decide(id: string, outcome: 'approved' | 'declined', decidedBy: string, decidedByName: string, decidedSignature: string | null, note?: string, deductQuota?: boolean): Promise<LeaveRequest>;
+    decide(
+      id: string,
+      outcome: "approved" | "declined",
+      decidedBy: string,
+      decidedByName: string,
+      decidedSignature: string | null,
+      note?: string,
+      deductQuota?: boolean,
+    ): Promise<LeaveRequest>;
     // Exact port of v1's apiRescheduleLeaveRequest (index.html:5513-5532).
     // Two real outcomes: newDates given (Management picked the actual
     // replacement date(s) via the calendar in the reschedule UI) -- this
@@ -742,7 +962,15 @@ export interface DataSource {
     // newDates omitted/empty -- Management just needs different dates from
     // the staff member while retaining the existing reservation until
     // replacement dates are submitted on that same request.
-    reschedule(id: string, note: string | undefined, newDates: string[] | null, decidedBy: string, decidedByName: string, decidedSignature: string | null, deductQuota?: boolean): Promise<LeaveRequest>;
+    reschedule(
+      id: string,
+      note: string | undefined,
+      newDates: string[] | null,
+      decidedBy: string,
+      decidedByName: string,
+      decidedSignature: string | null,
+      deductQuota?: boolean,
+    ): Promise<LeaveRequest>;
     // v1's real "planned -> pending" transition (index.html's
     // sendPlannedLeaveNow) -- a private draft becomes a real request
     // Management can see/act on.
@@ -789,7 +1017,12 @@ export interface DataSource {
     // update" form (area is a direct field update, independent of the
     // append-only status_log history).
     updateArea(id: string, area: string): Promise<Banner>;
-    logStatusUpdate(bannerId: string, changedBy: string, changedByName: string, patch: { status: BannerStatus; note: string; images: string[] }): Promise<BannerStatusLogEntry>;
+    logStatusUpdate(
+      bannerId: string,
+      changedBy: string,
+      changedByName: string,
+      patch: { status: BannerStatus; note: string; images: string[] },
+    ): Promise<BannerStatusLogEntry>;
     statusLog(bannerId: string): Promise<BannerStatusLogEntry[]>;
     // Real production capability (viewBannerDetail's "Delete this
     // banner"): a hard delete, unlike site_visits' soft-cancel pattern --
@@ -805,7 +1038,14 @@ export interface DataSource {
   // inside config.update() itself), never automatically.
   pricingHistory: {
     list(): Promise<PricingHistoryEntry[]>;
-    log(changedBy: string, changedByName: string, field: string, fieldLabel: string, oldValue: number, newValue: number): Promise<PricingHistoryEntry>;
+    log(
+      changedBy: string,
+      changedByName: string,
+      field: string,
+      fieldLabel: string,
+      oldValue: number,
+      newValue: number,
+    ): Promise<PricingHistoryEntry>;
   };
   // Real table `pricing_promotions` -- a promo window Management sets up
   // (plot type, discount/increase, amount, date range) that only ever
@@ -817,7 +1057,11 @@ export interface DataSource {
   // always small and the match logic (date range + plot type) is trivial.
   pricingPromotions: {
     list(): Promise<PricingPromotion[]>;
-    create(createdBy: string, createdByName: string, input: Omit<PricingPromotion, 'id' | 'createdBy' | 'createdByName' | 'createdAt'>): Promise<PricingPromotion>;
+    create(
+      createdBy: string,
+      createdByName: string,
+      input: Omit<PricingPromotion, "id" | "createdBy" | "createdByName" | "createdAt">,
+    ): Promise<PricingPromotion>;
     remove(id: string): Promise<void>;
   };
   // Real V3 chapter-01 entity (office_locations table, new 2026-09-10) --
@@ -847,7 +1091,11 @@ export interface DataSource {
   attendancePolicy: {
     current(): Promise<AttendancePolicy | null>;
     history(): Promise<AttendancePolicy[]>;
-    update(createdBy: string, createdByName: string, input: { workStartTime: string; workEndTime: string; graceMinutes: number; workDays: number[] }): Promise<AttendancePolicy>;
+    update(
+      createdBy: string,
+      createdByName: string,
+      input: { workStartTime: string; workEndTime: string; graceMinutes: number; workDays: number[] },
+    ): Promise<AttendancePolicy>;
   };
   // Real V3 chapter-01 entity (attendance_exceptions table) -- see
   // AttendanceException's own doc comment in types/domain.ts. list()
@@ -856,7 +1104,12 @@ export interface DataSource {
   attendanceExceptions: {
     list(): Promise<AttendanceException[]>;
     create(agentKey: string, agentName: string, input: NewAttendanceException): Promise<AttendanceException>;
-    decide(id: string, status: 'approved' | 'declined', decidedBy: string, decidedByName: string): Promise<AttendanceException>;
+    decide(
+      id: string,
+      status: "approved" | "declined",
+      decidedBy: string,
+      decidedByName: string,
+    ): Promise<AttendanceException>;
   };
   // Real table `fund_requests` -- see the FundRequest type's comment in
   // types/domain.ts for the real reason this is only ever the request/
@@ -878,7 +1131,12 @@ export interface DataSource {
   weeklyVisitForms: {
     getOrCreate(weekStart: string, visitDate: string): Promise<WeeklyVisitForm>;
     saveCosts(id: string, patch: WeeklyVisitFormCostPatch): Promise<WeeklyVisitForm>;
-    finalize(id: string, approvedBy: string, approvedByName: string, signature: string | null): Promise<WeeklyVisitForm>;
+    finalize(
+      id: string,
+      approvedBy: string,
+      approvedByName: string,
+      signature: string | null,
+    ): Promise<WeeklyVisitForm>;
   };
   // Real table `downloads` (confirmed live, both projects) -- every PDF/
   // Excel report a staff member generates gets logged here with its full
@@ -888,7 +1146,13 @@ export interface DataSource {
   // client-side filtering in live mode, RLS already does it.
   downloads: {
     list(viewerKey: string, viewerRole: string): Promise<DownloadRecord[]>;
-    log(userKey: string, userName: string, filename: string, kind: string, fileData: string | null): Promise<DownloadRecord>;
+    log(
+      userKey: string,
+      userName: string,
+      filename: string,
+      kind: string,
+      fileData: string | null,
+    ): Promise<DownloadRecord>;
   };
   // Real table `import_batches` (ported to staging 2026-09-03 -- see
   // PHASE0_INVENTORY.md; already live on production). Archives every
@@ -920,7 +1184,12 @@ export interface DataSource {
   achievements: {
     listDefs(): Promise<AchievementDef[]>;
     listEarned(staffKeys: string[]): Promise<StaffAchievement[]>;
-    award(staffKey: string, staffName: string, achievementId: string, progress: { value: number; threshold: number }): Promise<StaffAchievement | null>;
+    award(
+      staffKey: string,
+      staffName: string,
+      achievementId: string,
+      progress: { value: number; threshold: number },
+    ): Promise<StaffAchievement | null>;
   };
   // Real table `audit_events` + RPC `record_audit_event` (ported to
   // staging this session -- see web-next/docs/PHASE0_INVENTORY.md; live on
@@ -934,8 +1203,20 @@ export interface DataSource {
     // Trail section. Manager-only per audit_events' own RLS (unchanged);
     // the UI calls this once for entityType='lead' and once for
     // entityType='payment' (that lead's own payment ids) and merges.
-    list(filter?: { category?: string; criticalOnly?: boolean; entityType?: string; entityIds?: string[] }): Promise<AuditEvent[]>;
-    log(eventType: string, severity: AuditEvent['severity'], summary: string, detail?: Record<string, unknown> | null, entityType?: string | null, entityId?: string | null): Promise<void>;
+    list(filter?: {
+      category?: string;
+      criticalOnly?: boolean;
+      entityType?: string;
+      entityIds?: string[];
+    }): Promise<AuditEvent[]>;
+    log(
+      eventType: string,
+      severity: AuditEvent["severity"],
+      summary: string,
+      detail?: Record<string, unknown> | null,
+      entityType?: string | null,
+      entityId?: string | null,
+    ): Promise<void>;
   };
   // Real table `push_subscriptions` (confirmed live on both projects with
   // full RLS -- ps_ins_staff/ps_upd_staff gated on owner_kind='staff' AND
@@ -944,7 +1225,11 @@ export interface DataSource {
   // resubscribe (same device, new push service registration) must
   // replace the old row rather than duplicate it.
   pushSubscriptions: {
-    save(ownerKind: 'staff' | 'client', ownerId: string, sub: { endpoint: string; p256dh: string; auth: string }): Promise<void>;
+    save(
+      ownerKind: "staff" | "client",
+      ownerId: string,
+      sub: { endpoint: string; p256dh: string; auth: string },
+    ): Promise<void>;
   };
   // Real Edge Function `send-sms` (Arkesel proxy, already live and used
   // elsewhere -- payment reminders, SVE invites) + table `sms_log`
@@ -1094,7 +1379,10 @@ export interface DataSource {
     // client-side the way the blueprint first assumed. Aggregate-only,
     // same privacy shape as the leaderboard rankings already visible to
     // every staff member (no coordinates/photos/reasons).
-    monthComparison(monthKey: string, cutoff: string): Promise<{ staffKey: string; staffName: string; daysAttended: number; onTimeDays: number }[]>;
+    monthComparison(
+      monthKey: string,
+      cutoff: string,
+    ): Promise<{ staffKey: string; staffName: string; daysAttended: number; onTimeDays: number }[]>;
     // ATTENDANCE_BLUEPRINT.md §9 -- Management-only, company-wide, deletes
     // every attendance_log row. Real `al_del_mgr` RLS already permits a
     // manager to delete any row; no new policy needed, the client just
@@ -1112,7 +1400,15 @@ export interface DataSource {
   // unfiltered-then-RLS-scoped shape as leaveRequests.list().
   attendanceNotes: {
     list(): Promise<AttendanceNote[]>;
-    issue(staffKey: string, staffName: string, kind: AttendanceNote['kind'], reason: string, workDate: string, createdBy: string, createdByName: string): Promise<AttendanceNote>;
+    issue(
+      staffKey: string,
+      staffName: string,
+      kind: AttendanceNote["kind"],
+      reason: string,
+      workDate: string,
+      createdBy: string,
+      createdByName: string,
+    ): Promise<AttendanceNote>;
   };
   // ATTENDANCE_BLUEPRINT.md §13 -- post-hoc classification of an off-site
   // sign-in/out, distinct from attendanceExceptions (ask permission ahead
@@ -1125,7 +1421,15 @@ export interface DataSource {
   // separate update() method is needed yet.
   attendanceReviews: {
     list(): Promise<AttendanceReview[]>;
-    decide(attendanceLogId: string, staffKey: string, staffName: string, classification: 'authorized' | 'exception', note: string, reviewedBy: string, reviewedByName: string): Promise<AttendanceReview>;
+    decide(
+      attendanceLogId: string,
+      staffKey: string,
+      staffName: string,
+      classification: "authorized" | "exception",
+      note: string,
+      reviewedBy: string,
+      reviewedByName: string,
+    ): Promise<AttendanceReview>;
   };
   // Real `profiles` table -- needed as a recipient/CC picker for
   // Memorandum. RLS (p_profiles_sel) lets any authenticated staff member
@@ -1189,7 +1493,7 @@ export interface DataSource {
     // agentPoints()). Matches index.html's own real DEMO_MODE behavior:
     // the demo store has no multi-agent staff roster to rank, so this
     // returns [] in demo, same as apiLoadLeaderboardRows() always has.
-    leaderboardRows(fromDate: string, toDate: string): Promise<Omit<LeaderboardRow, 'points'>[]>;
+    leaderboardRows(fromDate: string, toDate: string): Promise<Omit<LeaderboardRow, "points">[]>;
     // Server-authoritative scored rows -- calls recompute_leaderboard_
     // scores(), a SECURITY DEFINER SQL function that computes `points`
     // itself (same formula as the old client-side agentPoints(), now
@@ -1235,7 +1539,12 @@ export interface DataSource {
   // column default), never passed in from the client.
   sve: {
     listVisitsWithStatus(): Promise<SveVisitStatus[]>;
-    createInvite(siteVisitId: string, clientName: string, clientContact: string, sentBy: string): Promise<SveInviteRecord>;
+    createInvite(
+      siteVisitId: string,
+      clientName: string,
+      clientContact: string,
+      sentBy: string,
+    ): Promise<SveInviteRecord>;
     // Real table `sve_report_links` -- mirrors payments.issueReceiptLink()
     // exactly (upload the PDF, insert a row, return its server-generated
     // token) for the AI-assisted report a staff member sends Management
@@ -1274,7 +1583,13 @@ export interface DataSource {
   chat: {
     listConversations(myKey: string): Promise<ChatConversation[]>;
     listThread(myKey: string, otherKey: string): Promise<ChatMessage[]>;
-    send(myKey: string, myName: string, otherKey: string, body: string, replyToId?: string | null): Promise<ChatMessage>;
+    send(
+      myKey: string,
+      myName: string,
+      otherKey: string,
+      body: string,
+      replyToId?: string | null,
+    ): Promise<ChatMessage>;
     markThreadRead(myKey: string, otherKey: string): Promise<void>;
   };
   // The system-notification half of the same `messages` table chat.*
@@ -1292,7 +1607,15 @@ export interface DataSource {
     unreadCount(myKey: string): Promise<number>;
     markRead(id: string): Promise<void>;
     markAllRead(myKey: string): Promise<void>;
-    notify(fromKey: string, fromName: string, toKeys: string[], body: string, kind: string, refType?: string | null, refId?: string | null): Promise<void>;
+    notify(
+      fromKey: string,
+      fromName: string,
+      toKeys: string[],
+      body: string,
+      kind: string,
+      refType?: string | null,
+      refId?: string | null,
+    ): Promise<void>;
   };
 }
 
@@ -1313,7 +1636,10 @@ export function getDataSource(_demoMode?: boolean): DataSource {
 function createLiveDataSource(): DataSource {
   function requireClient() {
     const client = getSupabaseClient();
-    if (!client) throw new Error('Supabase is not configured -- set VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY (see .env.local.example).');
+    if (!client)
+      throw new Error(
+        "Supabase is not configured -- set VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY (see .env.local.example).",
+      );
     return client;
   }
 
@@ -1327,7 +1653,11 @@ function createLiveDataSource(): DataSource {
         // Allocations' own "Request allocation" search caught a
         // leftover archived test lead this way. Same fix already applied
         // to listCompany()/manager.overview() earlier this session.
-        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey).is('deleted_at', null);
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .eq("agent_key", agentKey)
+          .is("deleted_at", null);
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
@@ -1341,7 +1671,7 @@ function createLiveDataSource(): DataSource {
         // payments.create() a real leadId).
         const grandTotal = input.grandTotal ?? computeGrandTotal(input.unitPrice, input.noPlots);
         const { data, error } = await requireClient()
-          .from('leads')
+          .from("leads")
           .insert({
             agent_key: agentKey,
             name: input.name,
@@ -1387,7 +1717,7 @@ function createLiveDataSource(): DataSource {
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
         const followupCols = buildLeadDbPatch(followupPatch);
         const { data, error } = await requireClient()
-          .from('leads')
+          .from("leads")
           .insert({
             agent_key: agentKey,
             name: input.name,
@@ -1414,12 +1744,17 @@ function createLiveDataSource(): DataSource {
       async reassignAndUpdate(id, agentKey, patch) {
         const dbPatch = buildLeadDbPatch(patch);
         if (agentKey) dbPatch.agent_key = agentKey;
-        const { data, error } = await requireClient().from('leads').update(dbPatch).eq('id', id).select().single();
+        const { data, error } = await requireClient().from("leads").update(dbPatch).eq("id", id).select().single();
         if (error) throw error;
         return mapLeadRow(data);
       },
       async get(agentKey, id) {
-        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', agentKey).eq('id', id).maybeSingle();
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .eq("agent_key", agentKey)
+          .eq("id", id)
+          .maybeSingle();
         if (error) throw error;
         return data ? mapLeadRow(data) : undefined;
       },
@@ -1433,27 +1768,47 @@ function createLiveDataSource(): DataSource {
         // than Home. useLead()'s own fallback through this same method
         // already documents the intended behavior: a deleted lead should
         // "vanish from a subsequent refetch," not keep appearing here.
-        const { data, error } = await requireClient().from('leads').select('*').is('deleted_at', null).order('name');
+        const { data, error } = await requireClient().from("leads").select("*").is("deleted_at", null).order("name");
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
       async listCompany() {
-        const { data, error } = await requireClient().from('leads').select('*').eq('agent_key', 'company').is('deleted_at', null).order('date_added', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .eq("agent_key", "company")
+          .is("deleted_at", null)
+          .order("date_added", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
       async assign(id, agentKey) {
-        const { data, error } = await requireClient().from('leads').update({ agent_key: agentKey }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("leads")
+          .update({ agent_key: agentKey })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapLeadRow(data);
       },
       async assignHandler(id, agentKey) {
-        const { data, error } = await requireClient().from('leads').update({ assigned_agent_key: agentKey }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("leads")
+          .update({ assigned_agent_key: agentKey })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapLeadRow(data);
       },
       async setSource(id, source) {
-        const { data, error } = await requireClient().from('leads').update({ lead_source: source }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("leads")
+          .update({ lead_source: source })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapLeadRow(data);
       },
@@ -1466,17 +1821,20 @@ function createLiveDataSource(): DataSource {
         // and this UPDATE affects zero rows, so .single() throws PGRST116
         // ("no rows"), which we translate into a real stale_version conflict
         // rather than letting the caller silently overwrite unseen changes.
-        let query = requireClient().from('leads').update(dbPatch).eq('id', id);
-        if (patch.expectedVersion != null) query = query.eq('version', patch.expectedVersion);
+        let query = requireClient().from("leads").update(dbPatch).eq("id", id);
+        if (patch.expectedVersion != null) query = query.eq("version", patch.expectedVersion);
         const { data, error } = await query.select().single();
         if (error) {
-          if (patch.expectedVersion != null && error.code === 'PGRST116') throw friendlyErrorObj('This record has already been updated by another user. Refresh and review the latest version before saving.');
+          if (patch.expectedVersion != null && error.code === "PGRST116")
+            throw friendlyErrorObj(
+              "This record has already been updated by another user. Refresh and review the latest version before saving.",
+            );
           throw error;
         }
         return mapLeadRow(data);
       },
       async updateDocStage(id, stage) {
-        const { error } = await requireClient().rpc('update_lead_doc_stage', { p_lead_id: id, p_stage: stage });
+        const { error } = await requireClient().rpc("update_lead_doc_stage", { p_lead_id: id, p_stage: stage });
         if (error) throw error;
       },
       async remove(id, reason, deletedBy, deletedByName) {
@@ -1491,17 +1849,31 @@ function createLiveDataSource(): DataSource {
         // actual delete path never did it). Also writes the audit event
         // itself now (was a separate fire-and-forget RPC call before),
         // so archiving and vacating are one atomic transaction.
-        const { error } = await requireClient().rpc('archive_lead_and_vacate', { p_lead_id: id, p_reason: reason, p_deleted_by: deletedBy, p_deleted_by_name: deletedByName });
+        const { error } = await requireClient().rpc("archive_lead_and_vacate", {
+          p_lead_id: id,
+          p_reason: reason,
+          p_deleted_by: deletedBy,
+          p_deleted_by_name: deletedByName,
+        });
         if (error) throw error;
       },
       async removeAllForAgent(agentKey, reason, deletedBy, deletedByName) {
         const client = requireClient();
-        const { data: mine, error: listErr } = await client.from('leads').select('id').eq('agent_key', agentKey).is('deleted_at', null);
+        const { data: mine, error: listErr } = await client
+          .from("leads")
+          .select("id")
+          .eq("agent_key", agentKey)
+          .is("deleted_at", null);
         if (listErr) throw listErr;
         const ids = (mine ?? []).map((r) => r.id as string);
         let archived = 0;
         for (const id of ids) {
-          const { error } = await client.rpc('archive_lead_and_vacate', { p_lead_id: id, p_reason: reason, p_deleted_by: deletedBy, p_deleted_by_name: deletedByName });
+          const { error } = await client.rpc("archive_lead_and_vacate", {
+            p_lead_id: id,
+            p_reason: reason,
+            p_deleted_by: deletedBy,
+            p_deleted_by_name: deletedByName,
+          });
           // One lead failing (e.g. a race with a concurrent edit) must not
           // abort the rest of the pipeline delete -- matches remove()'s
           // own per-lead atomicity, just not all-or-nothing across leads.
@@ -1514,45 +1886,67 @@ function createLiveDataSource(): DataSource {
         // this to managers -- leads_sel's own WHERE lets BOTH active and
         // archived rows through for a manager, so a plain select('*')
         // would mix them.
-        const { data, error } = await requireClient().from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .not("deleted_at", "is", null)
+          .order("deleted_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapLeadRow);
       },
       async restore(id) {
-        const { data, error } = await requireClient().from('leads').update({ deleted_at: null }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("leads")
+          .update({ deleted_at: null })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         requireClient()
-          .rpc('record_audit_event', { p_category: 'audit', p_event_type: 'lead.restored', p_severity: 'info', p_entity_type: 'lead', p_entity_id: id, p_summary: `${data.name} was restored from the archive`, p_detail: null })
+          .rpc("record_audit_event", {
+            p_category: "audit",
+            p_event_type: "lead.restored",
+            p_severity: "info",
+            p_entity_type: "lead",
+            p_entity_id: id,
+            p_summary: `${data.name} was restored from the archive`,
+            p_detail: null,
+          })
           .then(({ error: auditError }) => {
-            if (auditError) console.error('record_audit_event failed', auditError);
+            if (auditError) console.error("record_audit_event failed", auditError);
           });
         return mapLeadRow(data);
       },
     },
     payments: {
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('payments').select('*').eq('agent_key', agentKey);
+        const { data, error } = await requireClient().from("payments").select("*").eq("agent_key", agentKey);
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
       async listForLead(leadId) {
-        const { data, error } = await requireClient().from('payments').select('*').eq('lead_id', leadId);
+        const { data, error } = await requireClient().from("payments").select("*").eq("lead_id", leadId);
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('payments').select('*');
+        const { data, error } = await requireClient().from("payments").select("*");
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
       async listPending() {
-        const { data, error } = await requireClient().from('payments').select('*').eq('status', 'pending').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("payments")
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
       async create(input, leadName, leadAgentKey, requestedStatus) {
-        const { data, error } = await requireClient()
-          .from('payments')
+        const client = requireClient();
+        const { data, error } = await client
+          .from("payments")
           .insert({
             lead_id: input.leadId,
             agent_key: leadAgentKey,
@@ -1561,28 +1955,27 @@ function createLiveDataSource(): DataSource {
             payment_date: input.paymentDate ?? new Date().toISOString().slice(0, 10),
             payment_method: input.paymentMethod ?? null,
             note: input.note ?? null,
-            status: requestedStatus,
+            // Every real approval must pass through the same atomic RPC,
+            // including a manager's own payment entry. Inserting it as
+            // pending first keeps the RPC as the single balance/snapshot
+            // authority and leaves a reviewable pending row if approval fails.
+            status: "pending",
             reference_number: input.referenceNumber ?? null,
           })
           .select()
           .single();
         if (error) throw error;
-        const payment = mapPaymentRow(data);
-        // Mirrors applyApprovedPaymentToLead() exactly for the manager-
-        // self-approves case -- allocation_requests creation and the
-        // client thank-you SMS are the RPC's job for the review-and-
-        // approve path below, deliberately not replicated here (no SMS
-        // provider wired anywhere in this app; allocation_requests is a
-        // distinct, larger unbuilt feature).
-        if (requestedStatus === 'approved') {
-          const { data: leadRow, error: leadError } = await requireClient().from('leads').select('amt_paid,grand_total').eq('id', input.leadId).single();
-          if (leadError) throw leadError;
-          const newAmtPaid = Number(leadRow.amt_paid ?? 0) + input.amount;
-          const grandTotal = Number(leadRow.grand_total ?? 0);
-          const newBalance = Math.max(grandTotal - newAmtPaid, 0);
-          const newStage = deriveStageFromPayment(newAmtPaid, grandTotal);
-          const { error: updError } = await requireClient().from('leads').update({ amt_paid: newAmtPaid, balance: newBalance, stage: newStage }).eq('id', input.leadId);
-          if (updError) throw updError;
+        let payment = mapPaymentRow(data);
+        if (requestedStatus === "approved") {
+          const { error: approveError } = await client.rpc("approve_payment", { p_payment_id: payment.id });
+          if (approveError) throw approveError;
+          const { data: approvedRow, error: readError } = await client
+            .from("payments")
+            .select("*")
+            .eq("id", payment.id)
+            .single();
+          if (readError) throw readError;
+          payment = mapPaymentRow(approvedRow);
         }
         return payment;
       },
@@ -1595,7 +1988,7 @@ function createLiveDataSource(): DataSource {
       // server-side -- exactly the class of bug this project's own
       // history warns about.
       async approve(paymentId) {
-        const { data, error } = await requireClient().rpc('approve_payment', { p_payment_id: paymentId });
+        const { data, error } = await requireClient().rpc("approve_payment", { p_payment_id: paymentId });
         if (error) throw error;
         const a = data.allocation;
         return {
@@ -1604,25 +1997,42 @@ function createLiveDataSource(): DataSource {
           newAmtPaid: Number(data.new_amt_paid),
           newBalance: Number(data.new_balance),
           autoAllocation: a
-            ? { id: a.id, leadId: a.leadId, clientName: a.clientName, agentKey: a.agentKey, agentName: a.agentName, agentPhone: a.agentPhone ?? null }
+            ? {
+                id: a.id,
+                leadId: a.leadId,
+                clientName: a.clientName,
+                agentKey: a.agentKey,
+                agentName: a.agentName,
+                agentPhone: a.agentPhone ?? null,
+              }
             : undefined,
         };
       },
       async decline(paymentId, _decidedBy, _decidedByName, reason) {
-        const { error } = await requireClient().rpc('decline_payment', { p_payment_id: paymentId, p_reason: reason ?? null });
+        const { error } = await requireClient().rpc("decline_payment", {
+          p_payment_id: paymentId,
+          p_reason: reason ?? null,
+        });
         if (error) throw error;
       },
       async listNeedsCorrection() {
-        const { data, error } = await requireClient().from('payments').select('*').eq('status', 'needs_correction').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("payments")
+          .select("*")
+          .eq("status", "needs_correction")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapPaymentRow);
       },
       async flagNeedsCorrection(paymentId, reason) {
-        const { error } = await requireClient().rpc('flag_payment_needs_correction', { p_payment_id: paymentId, p_reason: reason });
+        const { error } = await requireClient().rpc("flag_payment_needs_correction", {
+          p_payment_id: paymentId,
+          p_reason: reason,
+        });
         if (error) throw error;
       },
       async resubmit(paymentId, input) {
-        const { error } = await requireClient().rpc('resubmit_payment', {
+        const { error } = await requireClient().rpc("resubmit_payment", {
           p_payment_id: paymentId,
           p_amount: input.amount,
           p_payment_method: input.paymentMethod ?? null,
@@ -1632,61 +2042,89 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
       },
       async ensureReceiptNumber(paymentId) {
-        const { data, error } = await requireClient().rpc('ensure_receipt_number', { p_payment_id: paymentId, p_channel: 'download' });
+        const { data, error } = await requireClient().rpc("ensure_receipt_number", {
+          p_payment_id: paymentId,
+          p_channel: "download",
+        });
         if (error) throw error;
         return data as string;
       },
       async uploadProof(paymentId, agentKey, file) {
         const client = requireClient();
-        const ext = file.name.split('.').pop() || 'jpg';
+        const ext = file.name.split(".").pop() || "jpg";
         const path = `${agentKey}/${paymentId}.${ext}`;
-        const { error: uploadError } = await client.storage.from('payment-proofs').upload(path, file, { upsert: true });
+        const { error: uploadError } = await client.storage.from("payment-proofs").upload(path, file, { upsert: true });
         if (uploadError) throw uploadError;
-        const { error: updError } = await client.from('payments').update({ receipt_proof_path: path }).eq('id', paymentId);
+        const { error: updError } = await client
+          .from("payments")
+          .update({ receipt_proof_path: path })
+          .eq("id", paymentId);
         if (updError) throw updError;
         return path;
       },
       async resolveProofUrl(path) {
-        if (path.startsWith('data:')) return path;
-        const { data, error } = await requireClient().storage.from('payment-proofs').createSignedUrl(path, 300);
+        if (path.startsWith("data:")) return path;
+        const { data, error } = await requireClient().storage.from("payment-proofs").createSignedUrl(path, 300);
         if (error) throw error;
         return data?.signedUrl ?? null;
       },
       async issueReceiptLink(paymentId, pdfBlob, createdBy) {
         const client = requireClient();
         const path = `${paymentId}/receipt-${Date.now()}.pdf`;
-        const { error: uploadError } = await client.storage.from('payment-receipts').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        const { error: uploadError } = await client.storage
+          .from("payment-receipts")
+          .upload(path, pdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError) throw uploadError;
-        const { data, error } = await client.from('receipt_share_links').insert({ payment_id: paymentId, storage_path: path, created_by: createdBy }).select('token').single();
+        const { data, error } = await client
+          .from("receipt_share_links")
+          .insert({ payment_id: paymentId, storage_path: path, created_by: createdBy })
+          .select("token")
+          .single();
         if (error) throw error;
         return data.token as string;
       },
     },
     scheduleItems: {
       async listForAgentOnDate(agentKey, date) {
-        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'todo').eq('assigned_to', agentKey).eq('item_date', date);
+        const { data, error } = await requireClient()
+          .from("schedule_items")
+          .select("*")
+          .eq("kind", "todo")
+          .eq("assigned_to", agentKey)
+          .eq("item_date", date);
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
       async listForAgentInRange(agentKey, fromDate, toDate) {
         const { data, error } = await requireClient()
-          .from('schedule_items')
-          .select('*')
+          .from("schedule_items")
+          .select("*")
           .or(`assigned_to.eq.${agentKey},owner_key.eq.${agentKey}`)
-          .gte('item_date', fromDate)
-          .lte('item_date', toDate);
+          .gte("item_date", fromDate)
+          .lte("item_date", toDate);
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
       async listAllInRange(fromDate, toDate) {
-        const { data, error } = await requireClient().from('schedule_items').select('*').gte('item_date', fromDate).lte('item_date', toDate);
+        const { data, error } = await requireClient()
+          .from("schedule_items")
+          .select("*")
+          .gte("item_date", fromDate)
+          .lte("item_date", toDate);
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
       async create(agentKey, date, title, assignedTo) {
         const { data, error } = await requireClient()
-          .from('schedule_items')
-          .insert({ kind: 'todo', owner_key: agentKey, assigned_to: assignedTo ?? agentKey, item_date: date, title, status: 'open' })
+          .from("schedule_items")
+          .insert({
+            kind: "todo",
+            owner_key: agentKey,
+            assigned_to: assignedTo ?? agentKey,
+            item_date: date,
+            title,
+            status: "open",
+          })
           .select()
           .single();
         if (error) throw error;
@@ -1694,58 +2132,80 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const dbPatch: Record<string, unknown> = {};
-        if ('title' in patch) dbPatch.title = patch.title;
-        if ('description' in patch) dbPatch.description = patch.description;
-        if ('notes' in patch) dbPatch.notes = patch.notes;
-        if ('category' in patch) dbPatch.category = patch.category;
-        if ('priority' in patch) dbPatch.priority = patch.priority;
-        if ('date' in patch) dbPatch.item_date = patch.date;
-        if ('dueDate' in patch) dbPatch.due_date = patch.dueDate;
-        if ('startTime' in patch) dbPatch.start_time = patch.startTime;
-        if ('endTime' in patch) dbPatch.end_time = patch.endTime;
-        if ('linkedLeadId' in patch) dbPatch.linked_lead_id = patch.linkedLeadId;
-        if ('linkedSiteVisitId' in patch) dbPatch.linked_site_visit_id = patch.linkedSiteVisitId;
-        if ('blockedById' in patch) dbPatch.blocked_by_id = patch.blockedById;
-        const { data, error } = await requireClient().from('schedule_items').update(dbPatch).eq('id', id).select().single();
+        if ("title" in patch) dbPatch.title = patch.title;
+        if ("description" in patch) dbPatch.description = patch.description;
+        if ("notes" in patch) dbPatch.notes = patch.notes;
+        if ("category" in patch) dbPatch.category = patch.category;
+        if ("priority" in patch) dbPatch.priority = patch.priority;
+        if ("date" in patch) dbPatch.item_date = patch.date;
+        if ("dueDate" in patch) dbPatch.due_date = patch.dueDate;
+        if ("startTime" in patch) dbPatch.start_time = patch.startTime;
+        if ("endTime" in patch) dbPatch.end_time = patch.endTime;
+        if ("linkedLeadId" in patch) dbPatch.linked_lead_id = patch.linkedLeadId;
+        if ("linkedSiteVisitId" in patch) dbPatch.linked_site_visit_id = patch.linkedSiteVisitId;
+        if ("blockedById" in patch) dbPatch.blocked_by_id = patch.blockedById;
+        const { data, error } = await requireClient()
+          .from("schedule_items")
+          .update(dbPatch)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapScheduleItemRow(data);
       },
       async updateStatus(id, status, actorKey, actorName) {
         const client = requireClient();
-        const existing = await client.from('schedule_items').select('*').eq('id', id).single();
+        const existing = await client.from("schedule_items").select("*").eq("id", id).single();
         if (existing.error) throw existing.error;
         const fromDbStatus = existing.data.status as string;
         const dbStatus = domainStatusToDb(status);
         const patch: Record<string, unknown> = { status: dbStatus };
-        if (dbStatus === 'done') patch.completed_at = new Date().toISOString();
-        else if (fromDbStatus === 'done') patch.completed_at = null;
-        if (dbStatus === 'cancelled') patch.cancelled_at = new Date().toISOString();
-        const { data, error } = await client.from('schedule_items').update(patch).eq('id', id).select().single();
+        if (dbStatus === "done") patch.completed_at = new Date().toISOString();
+        else if (fromDbStatus === "done") patch.completed_at = null;
+        if (dbStatus === "cancelled") patch.cancelled_at = new Date().toISOString();
+        const { data, error } = await client.from("schedule_items").update(patch).eq("id", id).select().single();
         if (error) throw error;
-        await client.from('task_events').insert({ task_id: id, type: 'status_changed', actor_key: actorKey, actor_name: actorName, from_key: fromDbStatus, to_key: dbStatus }).then(
-          () => {},
-          () => {}
-        );
-        if (dbStatus === 'done') {
+        await client
+          .from("task_events")
+          .insert({
+            task_id: id,
+            type: "status_changed",
+            actor_key: actorKey,
+            actor_name: actorName,
+            from_key: fromDbStatus,
+            to_key: dbStatus,
+          })
+          .then(
+            () => {},
+            () => {},
+          );
+        if (dbStatus === "done") {
           // Real enforcement of Master Spec 10.2's dependency gate in
           // reverse: a task blocked on this one becomes ready the moment
           // this one is actually done, not left stuck on 'blocked' forever.
-          await client.from('schedule_items').update({ status: 'open' }).eq('blocked_by_id', id).eq('status', 'blocked');
+          await client
+            .from("schedule_items")
+            .update({ status: "open" })
+            .eq("blocked_by_id", id)
+            .eq("status", "blocked");
 
           // Real spawn of the next recurring instance -- a fresh row with
           // its own id (so its own task_events/attachments start empty,
           // "without duplicating history"), recurs_parent_id pointing at
           // the ORIGINAL instance (not this one, if this itself was
           // already a spawned instance) so the whole series stays linkable.
-          const freq = existing.data.recurs_freq as 'daily' | 'weekly' | 'monthly' | null;
+          const freq = existing.data.recurs_freq as "daily" | "weekly" | "monthly" | null;
           if (freq) {
-            const baseDate = (existing.data.item_date as string) ?? (existing.data.due_date as string) ?? new Date().toISOString().slice(0, 10);
+            const baseDate =
+              (existing.data.item_date as string) ??
+              (existing.data.due_date as string) ??
+              new Date().toISOString().slice(0, 10);
             const interval = Number(existing.data.recurs_interval ?? 1) || 1;
             const nextDate = nextRecurrenceDate(baseDate, freq, interval);
             const until = existing.data.recurs_until as string | null;
             if (!until || nextDate <= until) {
               const spawn = await client
-                .from('schedule_items')
+                .from("schedule_items")
                 .insert({
                   kind: existing.data.kind,
                   owner_key: existing.data.owner_key,
@@ -1767,15 +2227,24 @@ function createLiveDataSource(): DataSource {
                   recurs_interval: interval,
                   recurs_until: until,
                   recurs_parent_id: (existing.data.recurs_parent_id as string | null) ?? id,
-                  status: 'open',
+                  status: "open",
                 })
                 .select()
                 .single();
               if (!spawn.error) {
-                await client.from('task_events').insert({ task_id: spawn.data.id, type: 'created', actor_key: actorKey, actor_name: actorName, note: 'Recurring instance' }).then(
-                  () => {},
-                  () => {}
-                );
+                await client
+                  .from("task_events")
+                  .insert({
+                    task_id: spawn.data.id,
+                    type: "created",
+                    actor_key: actorKey,
+                    actor_name: actorName,
+                    note: "Recurring instance",
+                  })
+                  .then(
+                    () => {},
+                    () => {},
+                  );
               }
             }
           }
@@ -1783,26 +2252,35 @@ function createLiveDataSource(): DataSource {
         return mapScheduleItemRow(data);
       },
       async listTasksForAgent(agentKey) {
-        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'task').eq('assigned_to', agentKey).order('due_date', { ascending: true, nullsFirst: false });
+        const { data, error } = await requireClient()
+          .from("schedule_items")
+          .select("*")
+          .eq("kind", "task")
+          .eq("assigned_to", agentKey)
+          .order("due_date", { ascending: true, nullsFirst: false });
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
       async listAllTasks() {
-        const { data, error } = await requireClient().from('schedule_items').select('*').eq('kind', 'task').order('due_date', { ascending: true, nullsFirst: false });
+        const { data, error } = await requireClient()
+          .from("schedule_items")
+          .select("*")
+          .eq("kind", "task")
+          .order("due_date", { ascending: true, nullsFirst: false });
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemRow);
       },
       async createTask(ownerKey, ownerName, input) {
         const client = requireClient();
-        let initialStatus = 'open';
+        let initialStatus = "open";
         if (input.blockedById) {
-          const pred = await client.from('schedule_items').select('status').eq('id', input.blockedById).maybeSingle();
-          if (pred.data && pred.data.status !== 'done') initialStatus = 'blocked';
+          const pred = await client.from("schedule_items").select("status").eq("id", input.blockedById).maybeSingle();
+          if (pred.data && pred.data.status !== "done") initialStatus = "blocked";
         }
         const { data, error } = await client
-          .from('schedule_items')
+          .from("schedule_items")
           .insert({
-            kind: 'task',
+            kind: "task",
             owner_key: ownerKey,
             owner_name: ownerName,
             assigned_to: input.assignedTo,
@@ -1829,38 +2307,55 @@ function createLiveDataSource(): DataSource {
           .select()
           .single();
         if (error) throw error;
-        await client.from('task_events').insert({ task_id: data.id, type: 'created', actor_key: ownerKey, actor_name: ownerName }).then(
-          () => {},
-          () => {}
-        );
+        await client
+          .from("task_events")
+          .insert({ task_id: data.id, type: "created", actor_key: ownerKey, actor_name: ownerName })
+          .then(
+            () => {},
+            () => {},
+          );
         return mapScheduleItemRow(data);
       },
       async reassignTask(id, toKey, toName, byKey, byName, reason) {
         const client = requireClient();
-        const existing = await client.from('schedule_items').select('assigned_to,assigned_to_name').eq('id', id).single();
+        const existing = await client
+          .from("schedule_items")
+          .select("assigned_to,assigned_to_name")
+          .eq("id", id)
+          .single();
         if (existing.error) throw existing.error;
         const { data, error } = await client
-          .from('schedule_items')
+          .from("schedule_items")
           .update({ assigned_to: toKey, assigned_to_name: toName, assigned_by: byKey, assigned_by_name: byName })
-          .eq('id', id)
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
         await client
-          .from('task_events')
-          .insert({ task_id: id, type: 'reassigned', actor_key: byKey, actor_name: byName, from_key: existing.data.assigned_to, from_name: existing.data.assigned_to_name, to_key: toKey, to_name: toName, note: reason || null })
+          .from("task_events")
+          .insert({
+            task_id: id,
+            type: "reassigned",
+            actor_key: byKey,
+            actor_name: byName,
+            from_key: existing.data.assigned_to,
+            from_name: existing.data.assigned_to_name,
+            to_key: toKey,
+            to_name: toName,
+            note: reason || null,
+          })
           .then(
             () => {},
-            () => {}
+            () => {},
           );
         return mapScheduleItemRow(data);
       },
       async createMeeting(ownerKey, ownerName, input) {
         const client = requireClient();
         const { data, error } = await client
-          .from('schedule_items')
+          .from("schedule_items")
           .insert({
-            kind: 'meeting',
+            kind: "meeting",
             owner_key: ownerKey,
             owner_name: ownerName,
             assigned_to: ownerKey,
@@ -1871,13 +2366,15 @@ function createLiveDataSource(): DataSource {
             start_time: input.startTime,
             end_time: input.endTime,
             meeting_location: input.meetingLocation ?? null,
-            status: 'open',
+            status: "open",
           })
           .select()
           .single();
         if (error) throw error;
         if (input.inviteeKeys.length > 0) {
-          const { error: inviteErr } = await client.from('schedule_item_invitees').insert(input.inviteeKeys.map((staffKey) => ({ schedule_item_id: data.id, staff_key: staffKey })));
+          const { error: inviteErr } = await client
+            .from("schedule_item_invitees")
+            .insert(input.inviteeKeys.map((staffKey) => ({ schedule_item_id: data.id, staff_key: staffKey })));
           if (inviteErr) throw inviteErr;
         }
         return mapScheduleItemRow(data);
@@ -1885,15 +2382,27 @@ function createLiveDataSource(): DataSource {
       async listMeetingsForAgent(agentKey, fromDate, toDate) {
         const client = requireClient();
         const [ownedRes, inviteeRes] = await Promise.all([
-          client.from('schedule_items').select('*').eq('kind', 'meeting').eq('owner_key', agentKey).gte('item_date', fromDate).lte('item_date', toDate),
-          client.from('schedule_item_invitees').select('schedule_item_id').eq('staff_key', agentKey),
+          client
+            .from("schedule_items")
+            .select("*")
+            .eq("kind", "meeting")
+            .eq("owner_key", agentKey)
+            .gte("item_date", fromDate)
+            .lte("item_date", toDate),
+          client.from("schedule_item_invitees").select("schedule_item_id").eq("staff_key", agentKey),
         ]);
         if (ownedRes.error) throw ownedRes.error;
         if (inviteeRes.error) throw inviteeRes.error;
         const invitedIds = (inviteeRes.data ?? []).map((r) => r.schedule_item_id as string);
         let invited: Record<string, unknown>[] = [];
         if (invitedIds.length > 0) {
-          const invitedRes = await client.from('schedule_items').select('*').eq('kind', 'meeting').in('id', invitedIds).gte('item_date', fromDate).lte('item_date', toDate);
+          const invitedRes = await client
+            .from("schedule_items")
+            .select("*")
+            .eq("kind", "meeting")
+            .in("id", invitedIds)
+            .gte("item_date", fromDate)
+            .lte("item_date", toDate);
           if (invitedRes.error) throw invitedRes.error;
           invited = invitedRes.data ?? [];
         }
@@ -1902,7 +2411,7 @@ function createLiveDataSource(): DataSource {
         return [...byId.values()].map(mapScheduleItemRow);
       },
       async checkConflicts(staffKeys, date, startTime, endTime, excludeId) {
-        const { data, error } = await requireClient().rpc('check_schedule_conflicts', {
+        const { data, error } = await requireClient().rpc("check_schedule_conflicts", {
           p_staff_keys: staffKeys,
           p_date: date,
           p_start: startTime,
@@ -1910,62 +2419,102 @@ function createLiveDataSource(): DataSource {
           p_exclude_id: excludeId ?? null,
         });
         if (error) throw error;
-        return (data ?? []).map((r: { staff_key: string; has_conflict: boolean }) => ({ staffKey: r.staff_key, hasConflict: !!r.has_conflict }));
+        return (data ?? []).map((r: { staff_key: string; has_conflict: boolean }) => ({
+          staffKey: r.staff_key,
+          hasConflict: !!r.has_conflict,
+        }));
       },
     },
     scheduleItemInvitees: {
       async listForItem(scheduleItemId) {
-        const { data, error } = await requireClient().from('schedule_item_invitees').select('*').eq('schedule_item_id', scheduleItemId);
+        const { data, error } = await requireClient()
+          .from("schedule_item_invitees")
+          .select("*")
+          .eq("schedule_item_id", scheduleItemId);
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemInviteeRow);
       },
       async respond(inviteeId, status) {
-        const { data, error } = await requireClient().from('schedule_item_invitees').update({ status, responded_at: new Date().toISOString() }).eq('id', inviteeId).select().single();
+        const { data, error } = await requireClient()
+          .from("schedule_item_invitees")
+          .update({ status, responded_at: new Date().toISOString() })
+          .eq("id", inviteeId)
+          .select()
+          .single();
         if (error) throw error;
         return mapScheduleItemInviteeRow(data);
       },
     },
     taskEvents: {
       async listForTask(taskId) {
-        const { data, error } = await requireClient().from('task_events').select('*').eq('task_id', taskId).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("task_events")
+          .select("*")
+          .eq("task_id", taskId)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapTaskEventRow);
       },
       async log(taskId, type, actorKey, actorName, extra) {
         const { error } = await requireClient()
-          .from('task_events')
-          .insert({ task_id: taskId, type, actor_key: actorKey, actor_name: actorName, from_key: extra?.fromKey ?? null, from_name: extra?.fromName ?? null, to_key: extra?.toKey ?? null, to_name: extra?.toName ?? null, note: extra?.note ?? null });
+          .from("task_events")
+          .insert({
+            task_id: taskId,
+            type,
+            actor_key: actorKey,
+            actor_name: actorName,
+            from_key: extra?.fromKey ?? null,
+            from_name: extra?.fromName ?? null,
+            to_key: extra?.toKey ?? null,
+            to_name: extra?.toName ?? null,
+            note: extra?.note ?? null,
+          });
         if (error) throw error;
       },
     },
     scheduleItemAttachments: {
       async listForItem(scheduleItemId) {
-        const { data, error } = await requireClient().from('schedule_item_attachments').select('*').eq('schedule_item_id', scheduleItemId).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("schedule_item_attachments")
+          .select("*")
+          .eq("schedule_item_id", scheduleItemId)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapScheduleItemAttachmentRow);
       },
       async upload(scheduleItemId, file, fileName, contentType, uploadedBy, uploadedByName) {
         const client = requireClient();
         const path = `${scheduleItemId}/${Date.now()}-${fileName}`;
-        const { error: uploadError } = await client.storage.from('task-attachments').upload(path, file, { contentType, upsert: false });
+        const { error: uploadError } = await client.storage
+          .from("task-attachments")
+          .upload(path, file, { contentType, upsert: false });
         if (uploadError) throw uploadError;
         const { data, error } = await client
-          .from('schedule_item_attachments')
-          .insert({ schedule_item_id: scheduleItemId, file_name: fileName, storage_path: path, content_type: contentType, uploaded_by: uploadedBy, uploaded_by_name: uploadedByName })
+          .from("schedule_item_attachments")
+          .insert({
+            schedule_item_id: scheduleItemId,
+            file_name: fileName,
+            storage_path: path,
+            content_type: contentType,
+            uploaded_by: uploadedBy,
+            uploaded_by_name: uploadedByName,
+          })
           .select()
           .single();
         if (error) throw error;
         return mapScheduleItemAttachmentRow(data);
       },
       async getUrl(storagePath) {
-        const { data, error } = await requireClient().storage.from('task-attachments').createSignedUrl(storagePath, 300);
+        const { data, error } = await requireClient()
+          .storage.from("task-attachments")
+          .createSignedUrl(storagePath, 300);
         if (error) return null;
         return data?.signedUrl ?? null;
       },
       async remove(attachmentId, storagePath) {
         const client = requireClient();
-        await client.storage.from('task-attachments').remove([storagePath]);
-        const { error } = await client.from('schedule_item_attachments').delete().eq('id', attachmentId);
+        await client.storage.from("task-attachments").remove([storagePath]);
+        const { error } = await client.from("schedule_item_attachments").delete().eq("id", attachmentId);
         if (error) throw error;
       },
     },
@@ -1974,7 +2523,11 @@ function createLiveDataSource(): DataSource {
         const from = new Date();
         from.setDate(from.getDate() - days);
         const fromIso = from.toISOString().slice(0, 10);
-        const { data, error } = await requireClient().from('staff_streaks').select('*').eq('staff_key', staffKey).gte('streak_date', fromIso);
+        const { data, error } = await requireClient()
+          .from("staff_streaks")
+          .select("*")
+          .eq("staff_key", staffKey)
+          .gte("streak_date", fromIso);
         if (error) throw error;
         return (data ?? []).map(mapStreakRow);
       },
@@ -1982,7 +2535,7 @@ function createLiveDataSource(): DataSource {
         const t = today();
         const dayMet = !!patch.todoLogged;
         const { data, error } = await requireClient()
-          .from('staff_streaks')
+          .from("staff_streaks")
           .upsert(
             {
               staff_key: staffKey,
@@ -1993,7 +2546,7 @@ function createLiveDataSource(): DataSource {
               streak_day_met: dayMet,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: 'staff_key,streak_date' },
+            { onConflict: "staff_key,streak_date" },
           )
           .select()
           .single();
@@ -2003,7 +2556,7 @@ function createLiveDataSource(): DataSource {
     },
     config: {
       async get() {
-        const { data, error } = await requireClient().from('app_config').select('*').eq('id', 1).single();
+        const { data, error } = await requireClient().from("app_config").select("*").eq("id", 1).single();
         if (error) throw error;
         return mapConfigRow(data);
       },
@@ -2069,21 +2622,36 @@ function createLiveDataSource(): DataSource {
         if (patch.contractCeoName !== undefined) dbPatch.contract_ceo_name = patch.contractCeoName;
         if (patch.contractCoverImage !== undefined) dbPatch.contract_cover_image = patch.contractCoverImage;
         if (patch.contractWordmarkImage !== undefined) dbPatch.contract_wordmark_image = patch.contractWordmarkImage;
-        const { data, error } = await requireClient().from('app_config').update(dbPatch).eq('id', 1).select().single();
+        const { data, error } = await requireClient().from("app_config").update(dbPatch).eq("id", 1).select().single();
         if (error) throw error;
         return mapConfigRow(data);
       },
     },
     plots: {
       async list() {
-        const { data, error } = await requireClient().from('plots').select('*').order('site').order('plot_number');
+        const { data, error } = await requireClient().from("plots").select("*").order("site").order("plot_number");
         if (error) throw error;
         return (data ?? []).map(mapPlotRow);
       },
       async create(input) {
         const { data, error } = await requireClient()
-          .from('plots')
-          .insert({ site: input.site, plot_number: input.plotNumber, plot_type: input.plotType, status: input.status, price: input.price ?? null, client_name: input.clientName ?? null, client_contact: input.clientContact ?? null, agent_key: input.agentKey ?? null, notes: input.notes ?? null, section: input.section ?? null, width_ft: input.widthFt ?? null, length_ft: input.lengthFt ?? null, factor: input.factor ?? null, customer_code: input.customerCode ?? null })
+          .from("plots")
+          .insert({
+            site: input.site,
+            plot_number: input.plotNumber,
+            plot_type: input.plotType,
+            status: input.status,
+            price: input.price ?? null,
+            client_name: input.clientName ?? null,
+            client_contact: input.clientContact ?? null,
+            agent_key: input.agentKey ?? null,
+            notes: input.notes ?? null,
+            section: input.section ?? null,
+            width_ft: input.widthFt ?? null,
+            length_ft: input.lengthFt ?? null,
+            factor: input.factor ?? null,
+            customer_code: input.customerCode ?? null,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2091,44 +2659,48 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if ('status' in patch) dbPatch.status = patch.status;
-        if ('plotType' in patch) dbPatch.plot_type = patch.plotType;
-        if ('price' in patch) dbPatch.price = patch.price;
-        if ('clientName' in patch) dbPatch.client_name = patch.clientName;
-        if ('clientContact' in patch) dbPatch.client_contact = patch.clientContact;
-        if ('agentKey' in patch) dbPatch.agent_key = patch.agentKey;
-        if ('notes' in patch) dbPatch.notes = patch.notes;
-        if ('section' in patch) dbPatch.section = patch.section;
-        if ('widthFt' in patch) dbPatch.width_ft = patch.widthFt;
-        if ('lengthFt' in patch) dbPatch.length_ft = patch.lengthFt;
-        if ('factor' in patch) dbPatch.factor = patch.factor;
-        if ('customerCode' in patch) dbPatch.customer_code = patch.customerCode;
-        const { data, error } = await requireClient().from('plots').update(dbPatch).eq('id', id).select().single();
+        if ("status" in patch) dbPatch.status = patch.status;
+        if ("plotType" in patch) dbPatch.plot_type = patch.plotType;
+        if ("price" in patch) dbPatch.price = patch.price;
+        if ("clientName" in patch) dbPatch.client_name = patch.clientName;
+        if ("clientContact" in patch) dbPatch.client_contact = patch.clientContact;
+        if ("agentKey" in patch) dbPatch.agent_key = patch.agentKey;
+        if ("notes" in patch) dbPatch.notes = patch.notes;
+        if ("section" in patch) dbPatch.section = patch.section;
+        if ("widthFt" in patch) dbPatch.width_ft = patch.widthFt;
+        if ("lengthFt" in patch) dbPatch.length_ft = patch.lengthFt;
+        if ("factor" in patch) dbPatch.factor = patch.factor;
+        if ("customerCode" in patch) dbPatch.customer_code = patch.customerCode;
+        const { data, error } = await requireClient().from("plots").update(dbPatch).eq("id", id).select().single();
         if (error) throw error;
         return mapPlotRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('plots').delete().eq('id', id);
+        const { error } = await requireClient().from("plots").delete().eq("id", id);
         if (error) throw error;
       },
       async split(plotId) {
-        const { data, error } = await requireClient().rpc('split_plot_for_half_sale', { p_plot_id: plotId });
+        const { data, error } = await requireClient().rpc("split_plot_for_half_sale", { p_plot_id: plotId });
         if (error) throw error;
-        const r = data as { alreadySplit: boolean; plotA: Record<string, unknown> | null; plotB: Record<string, unknown> | null };
+        const r = data as {
+          alreadySplit: boolean;
+          plotA: Record<string, unknown> | null;
+          plotB: Record<string, unknown> | null;
+        };
         const norm = (x: Record<string, unknown> | null): Plot | null =>
           x
             ? {
                 id: x.id as string,
                 plotNumber: x.plotNumber as string,
-                status: x.status as Plot['status'],
-                plotType: x.plotType as Plot['plotType'],
+                status: x.status as Plot["status"],
+                plotType: x.plotType as Plot["plotType"],
                 price: x.price == null ? null : Number(x.price),
-                site: '',
+                site: "",
                 clientName: null,
                 clientContact: null,
                 agentKey: null,
                 notes: null,
-                unitKind: 'half',
+                unitKind: "half",
                 parentPlotId: plotId,
                 // Dimensions deliberately null on both halves -- same
                 // reasoning as the demo-mode split (see that code's own
@@ -2146,18 +2718,27 @@ function createLiveDataSource(): DataSource {
     },
     siteVisits: {
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('site_visits').select('*').eq('agent_key', agentKey).is('deleted_at', null).order('visit_date', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("site_visits")
+          .select("*")
+          .eq("agent_key", agentKey)
+          .is("deleted_at", null)
+          .order("visit_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('site_visits').select('*').is('deleted_at', null).order('visit_date', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("site_visits")
+          .select("*")
+          .is("deleted_at", null)
+          .order("visit_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
-          .from('site_visits')
+          .from("site_visits")
           .insert({
             agent_key: agentKey,
             agent_name: agentName,
@@ -2189,15 +2770,25 @@ function createLiveDataSource(): DataSource {
         return mapSiteVisitRow(data);
       },
       async listForLead(leadId) {
-        const { data, error } = await requireClient().from('site_visits').select('*').eq('lead_id', leadId).is('deleted_at', null).order('visit_date', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("site_visits")
+          .select("*")
+          .eq("lead_id", leadId)
+          .is("deleted_at", null)
+          .order("visit_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSiteVisitRow);
       },
       async cancel(id, reason, deletedBy, deletedByName) {
         const { data, error } = await requireClient()
-          .from('site_visits')
-          .update({ deleted_at: new Date().toISOString(), deleted_by: deletedBy, deleted_by_name: deletedByName, cancellation_reason: reason })
-          .eq('id', id)
+          .from("site_visits")
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: deletedBy,
+            deleted_by_name: deletedByName,
+            cancellation_reason: reason,
+          })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -2205,20 +2796,24 @@ function createLiveDataSource(): DataSource {
       },
       async reschedule(id, newDate, newTime, rescheduledBy, rescheduledByName) {
         const client = requireClient();
-        const { data: existing, error: readErr } = await client.from('site_visits').select('visit_date').eq('id', id).single();
+        const { data: existing, error: readErr } = await client
+          .from("site_visits")
+          .select("visit_date")
+          .eq("id", id)
+          .single();
         if (readErr) throw readErr;
         const { data, error } = await client
-          .from('site_visits')
+          .from("site_visits")
           .update({
             visit_date: newDate,
             visit_time: newTime,
-            status: 'Rescheduled',
+            status: "Rescheduled",
             previous_visit_date: existing?.visit_date ?? null,
             rescheduled_at: new Date().toISOString(),
             rescheduled_by: rescheduledBy,
             rescheduled_by_name: rescheduledByName,
           })
-          .eq('id', id)
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -2227,20 +2822,31 @@ function createLiveDataSource(): DataSource {
     },
     activityLog: {
       async listForLead(leadId) {
-        const { data, error } = await requireClient().from('activity_log').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("activity_log")
+          .select("*")
+          .eq("lead_id", leadId)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapActivityLogRow);
       },
       async log(agentKey, agentName, client, action, detail, leadId) {
         const { error } = await requireClient()
-          .from('activity_log')
-          .insert({ agent_key: agentKey, agent_name: agentName, client, action, detail: detail ?? null, lead_id: leadId ?? null });
+          .from("activity_log")
+          .insert({
+            agent_key: agentKey,
+            agent_name: agentName,
+            client,
+            action,
+            detail: detail ?? null,
+            lead_id: leadId ?? null,
+          });
         // Never blocks the calling flow, same discipline as audit.log().
-        if (error) console.error('activity_log insert failed', error);
+        if (error) console.error("activity_log insert failed", error);
       },
       async logCall(input) {
         const { data, error } = await requireClient()
-          .from('activity_log')
+          .from("activity_log")
           .insert({
             agent_key: input.agentKey,
             agent_name: input.agentName,
@@ -2258,7 +2864,12 @@ function createLiveDataSource(): DataSource {
         return mapActivityLogRow(data);
       },
       async listCompanyWide() {
-        const { data, error } = await requireClient().from('activity_log').select('*').not('lead_id', 'is', null).order('created_at', { ascending: false }).limit(1000);
+        const { data, error } = await requireClient()
+          .from("activity_log")
+          .select("*")
+          .not("lead_id", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1000);
         if (error) throw error;
         return (data ?? []).map(mapActivityLogRow);
       },
@@ -2269,26 +2880,39 @@ function createLiveDataSource(): DataSource {
       // belongs to one of their own leads, so a plain select('*') is
       // correct here, not a gap. See the Referral type's comment.
       async listForAgent() {
-        const { data, error } = await requireClient().from('referrals').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("referrals")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapReferralRow);
       },
       async linkLead(id, leadId) {
-        const { data, error } = await requireClient().from('referrals').update({ referred_lead_id: leadId }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("referrals")
+          .update({ referred_lead_id: leadId })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapReferralRow(data);
       },
       async clear(id, points) {
-        const { data, error } = await requireClient().rpc('clear_referral', { p_referral_id: id, p_points: points });
+        const { data, error } = await requireClient().rpc("clear_referral", { p_referral_id: id, p_points: points });
         if (error) throw error;
         return mapReferralRow(data as Record<string, unknown>);
       },
       async create(agentKey, input) {
         const client = requireClient();
-        const { data: lead, error: leadError } = await client.from('leads').select('name,contact').eq('id', input.referrerLeadId).eq('agent_key', agentKey).single();
+        const { data: lead, error: leadError } = await client
+          .from("leads")
+          .select("name,contact")
+          .eq("id", input.referrerLeadId)
+          .eq("agent_key", agentKey)
+          .single();
         if (leadError) throw leadError;
         const { data, error } = await client
-          .from('referrals')
+          .from("referrals")
           .insert({
             referrer_lead_id: input.referrerLeadId,
             referrer_name: lead.name,
@@ -2310,25 +2934,32 @@ function createLiveDataSource(): DataSource {
       // must reach that colleague's own view (RLS updated the same day
       // to match, not just this client-side filter).
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('enquiries').select('*').or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("enquiries")
+          .select("*")
+          .or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapEnquiryRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('enquiries').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("enquiries")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapEnquiryRow);
       },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
-          .from('enquiries')
+          .from("enquiries")
           .insert({
             agent_key: agentKey,
             agent_name: agentName,
             name: input.name,
             contact: input.contact,
             location: input.location ?? null,
-            types: input.types && input.types.length > 0 ? input.types.join(',') : null,
+            types: input.types && input.types.length > 0 ? input.types.join(",") : null,
             plot: input.plot ?? null,
             source: input.source ?? null,
             details: input.details ?? null,
@@ -2342,21 +2973,21 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const { data, error } = await requireClient()
-          .from('enquiries')
+          .from("enquiries")
           .update({
             status: patch.status,
             owner: patch.owner,
             follow: patch.follow,
             follow_date: patch.followDate,
           })
-          .eq('id', id)
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
         return mapEnquiryRow(data);
       },
       async delete(id) {
-        const { error } = await requireClient().from('enquiries').delete().eq('id', id);
+        const { error } = await requireClient().from("enquiries").delete().eq("id", id);
         if (error) throw error;
       },
     },
@@ -2364,18 +2995,25 @@ function createLiveDataSource(): DataSource {
       // Same real fix as demo mode above -- a complaint whose `owner` was
       // reassigned to a colleague must reach that colleague's own view too.
       async listForAgent(agentKey) {
-        const { data, error } = await requireClient().from('complaints').select('*').or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("complaints")
+          .select("*")
+          .or(`agent_key.eq.${agentKey},owner.eq.${agentKey}`)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapComplaintRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('complaints').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("complaints")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapComplaintRow);
       },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
-          .from('complaints')
+          .from("complaints")
           .insert({
             agent_key: agentKey,
             agent_name: agentName,
@@ -2393,21 +3031,21 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const { data, error } = await requireClient()
-          .from('complaints')
+          .from("complaints")
           .update({
             status: patch.status,
             resolution: patch.resolution,
             priority: patch.priority,
             owner: patch.owner,
           })
-          .eq('id', id)
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
         return mapComplaintRow(data);
       },
       async delete(id) {
-        const { error } = await requireClient().from('complaints').delete().eq('id', id);
+        const { error } = await requireClient().from("complaints").delete().eq("id", id);
         if (error) throw error;
       },
     },
@@ -2417,20 +3055,23 @@ function createLiveDataSource(): DataSource {
         // this correctly per real session (own requests, or every request
         // for manager/elizabeth). viewerKey/viewerRole are unused here,
         // kept only so the interface matches demo mode's explicit scoping.
-        const { data, error } = await requireClient().from('contract_requests').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_requests")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractRequestRow);
       },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
-          .from('contract_requests')
+          .from("contract_requests")
           .insert({
             lead_id: input.leadId,
             client_name: input.clientName,
             requested_by: agentKey,
             requested_by_name: agentName,
             note: input.note ?? null,
-            source: 'staff',
+            source: "staff",
           })
           .select()
           .single();
@@ -2438,21 +3079,35 @@ function createLiveDataSource(): DataSource {
         return mapContractRequestRow(data);
       },
       async fulfil(id) {
-        const { data, error } = await requireClient().from('contract_requests').update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("contract_requests")
+          .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractRequestRow(data);
       },
     },
     contracts: {
       async list() {
-        const { data, error } = await requireClient().from('contracts').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contracts")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractRow);
       },
       async create(leadId, clientName, agentKey, createdBy, createdByName) {
         const { data, error } = await requireClient()
-          .from('contracts')
-          .insert({ lead_id: leadId, client_name: clientName, agent_key: agentKey, created_by: createdBy, created_by_name: createdByName })
+          .from("contracts")
+          .insert({
+            lead_id: leadId,
+            client_name: clientName,
+            agent_key: agentKey,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2461,19 +3116,22 @@ function createLiveDataSource(): DataSource {
     },
     contractDrafts: {
       async list() {
-        const { data, error } = await requireClient().from('contract_drafts').select('*').order('updated_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_drafts")
+          .select("*")
+          .order("updated_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractDraftRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('contract_drafts')
+          .from("contract_drafts")
           .insert({
             lead_id: input.leadId ?? null,
             client_name: input.clientName,
             template_id: input.templateId ?? null,
             field_values: input.fieldValues ?? {},
-            status: input.status ?? 'in_progress',
+            status: input.status ?? "in_progress",
             created_by: createdBy,
             created_by_name: createdByName,
           })
@@ -2489,25 +3147,38 @@ function createLiveDataSource(): DataSource {
         if (patch.templateId !== undefined) payload.template_id = patch.templateId;
         if (patch.fieldValues !== undefined) payload.field_values = patch.fieldValues;
         if (patch.status !== undefined) payload.status = patch.status;
-        const { data, error } = await requireClient().from('contract_drafts').update(payload).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("contract_drafts")
+          .update(payload)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractDraftRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('contract_drafts').delete().eq('id', id);
+        const { error } = await requireClient().from("contract_drafts").delete().eq("id", id);
         if (error) throw error;
       },
     },
     contractTemplates: {
       async list() {
-        const { data, error } = await requireClient().from('contract_templates').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_templates")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractTemplateRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('contract_templates')
-          .insert({ name: input.name, description: input.description ?? null, created_by: createdBy, created_by_name: createdByName })
+          .from("contract_templates")
+          .insert({
+            name: input.name,
+            description: input.description ?? null,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2515,29 +3186,48 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const dbPatch: Record<string, unknown> = {};
-        if ('name' in patch) dbPatch.name = patch.name;
-        if ('description' in patch) dbPatch.description = patch.description;
-        if ('isActive' in patch) dbPatch.is_active = patch.isActive;
-        const { data, error } = await requireClient().from('contract_templates').update(dbPatch).eq('id', id).select().single();
+        if ("name" in patch) dbPatch.name = patch.name;
+        if ("description" in patch) dbPatch.description = patch.description;
+        if ("isActive" in patch) dbPatch.is_active = patch.isActive;
+        const { data, error } = await requireClient()
+          .from("contract_templates")
+          .update(dbPatch)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractTemplateRow(data);
       },
     },
     contractTemplateVersions: {
       async listForTemplate(templateId) {
-        const { data, error } = await requireClient().from('contract_template_versions').select('*').eq('template_id', templateId).order('version_number', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_template_versions")
+          .select("*")
+          .eq("template_id", templateId)
+          .order("version_number", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractTemplateVersionRow);
       },
       async listPublished() {
-        const { data, error } = await requireClient().from('contract_template_versions').select('*').eq('status', 'published');
+        const { data, error } = await requireClient()
+          .from("contract_template_versions")
+          .select("*")
+          .eq("status", "published");
         if (error) throw error;
         return (data ?? []).map(mapContractTemplateVersionRow);
       },
       async create(templateId, versionNumber, createdBy, createdByName) {
         const { data, error } = await requireClient()
-          .from('contract_template_versions')
-          .insert({ template_id: templateId, version_number: versionNumber, status: 'draft', content: [], created_by: createdBy, created_by_name: createdByName })
+          .from("contract_template_versions")
+          .insert({
+            template_id: templateId,
+            version_number: versionNumber,
+            status: "draft",
+            content: [],
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2545,28 +3235,45 @@ function createLiveDataSource(): DataSource {
       },
       async update(id, patch) {
         const dbPatch: Record<string, unknown> = {};
-        if ('content' in patch) dbPatch.content = patch.content;
-        if ('status' in patch) dbPatch.status = patch.status;
-        const { data, error } = await requireClient().from('contract_template_versions').update(dbPatch).eq('id', id).select().single();
+        if ("content" in patch) dbPatch.content = patch.content;
+        if ("status" in patch) dbPatch.status = patch.status;
+        const { data, error } = await requireClient()
+          .from("contract_template_versions")
+          .update(dbPatch)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractTemplateVersionRow(data);
       },
       async publish(id) {
-        const { data, error } = await requireClient().rpc('set_contract_template_version_published', { p_version_id: id });
+        const { data, error } = await requireClient().rpc("set_contract_template_version_published", {
+          p_version_id: id,
+        });
         if (error) throw error;
         return mapContractTemplateVersionRow(data);
       },
     },
     contractClauses: {
       async list() {
-        const { data, error } = await requireClient().from('contract_clauses').select('*').eq('is_active', true).order('name', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("contract_clauses")
+          .select("*")
+          .eq("is_active", true)
+          .order("name", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapContractClauseRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('contract_clauses')
-          .insert({ name: input.name, category: input.category ?? null, body: input.body, created_by: createdBy, created_by_name: createdByName })
+          .from("contract_clauses")
+          .insert({
+            name: input.name,
+            category: input.category ?? null,
+            body: input.body,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2578,19 +3285,33 @@ function createLiveDataSource(): DataSource {
         if (patch.category !== undefined) payload.category = patch.category;
         if (patch.body !== undefined) payload.body = patch.body;
         if (patch.isActive !== undefined) payload.is_active = patch.isActive;
-        const { data, error } = await requireClient().from('contract_clauses').update(payload).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("contract_clauses")
+          .update(payload)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractClauseRow(data);
       },
     },
     contractStyleSettings: {
       async get() {
-        const { data, error } = await requireClient().from('contract_style_settings').select('*').eq('is_active', true).limit(1).maybeSingle();
+        const { data, error } = await requireClient()
+          .from("contract_style_settings")
+          .select("*")
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
         if (error) throw error;
         return data ? mapContractStyleSettingsRow(data) : null;
       },
       async update(patch, updatedBy, updatedByName) {
-        const payload: Record<string, unknown> = { updated_by: updatedBy, updated_by_name: updatedByName, updated_at: new Date().toISOString() };
+        const payload: Record<string, unknown> = {
+          updated_by: updatedBy,
+          updated_by_name: updatedByName,
+          updated_at: new Date().toISOString(),
+        };
         if (patch.headingFont !== undefined) payload.heading_font = patch.headingFont;
         if (patch.bodyFont !== undefined) payload.body_font = patch.bodyFont;
         if (patch.monoFont !== undefined) payload.mono_font = patch.monoFont;
@@ -2600,20 +3321,25 @@ function createLiveDataSource(): DataSource {
         if (patch.coverImagePath !== undefined) payload.cover_image_path = patch.coverImagePath;
         if (patch.wordmarkImagePath !== undefined) payload.wordmark_image_path = patch.wordmarkImagePath;
         if (patch.ceoName !== undefined) payload.ceo_name = patch.ceoName;
-        const { data, error } = await requireClient().from('contract_style_settings').update(payload).eq('is_active', true).select().single();
+        const { data, error } = await requireClient()
+          .from("contract_style_settings")
+          .update(payload)
+          .eq("is_active", true)
+          .select()
+          .single();
         if (error) throw error;
         return mapContractStyleSettingsRow(data);
       },
     },
     contractFields: {
       async list() {
-        const { data, error } = await requireClient().from('contract_fields').select('*');
+        const { data, error } = await requireClient().from("contract_fields").select("*");
         if (error) throw error;
         return (data ?? []).map(mapContractFieldRow);
       },
       async create(createdBy, key, scope, templateId) {
         const { data, error } = await requireClient()
-          .from('contract_fields')
+          .from("contract_fields")
           .insert({ key, scope, template_id: templateId, created_by: createdBy })
           .select()
           .single();
@@ -2623,13 +3349,16 @@ function createLiveDataSource(): DataSource {
     },
     contractGenerations: {
       async list() {
-        const { data, error } = await requireClient().from('contract_generations').select('*').order('generated_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_generations")
+          .select("*")
+          .order("generated_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractGenerationRow);
       },
       async create(input) {
         const { data, error } = await requireClient()
-          .from('contract_generations')
+          .from("contract_generations")
           .insert({
             contract_request_id: input.contractRequestId,
             lead_id: input.leadId,
@@ -2650,21 +3379,33 @@ function createLiveDataSource(): DataSource {
       },
       async uploadPdf(path, blob) {
         const client = requireClient();
-        const { error: uploadError } = await client.storage.from('contract-pdfs').upload(path, blob, { contentType: 'application/pdf', upsert: true });
+        const { error: uploadError } = await client.storage
+          .from("contract-pdfs")
+          .upload(path, blob, { contentType: "application/pdf", upsert: true });
         if (uploadError) throw uploadError;
         return path;
       },
     },
     contractApprovals: {
       async listForVersion(templateVersionId) {
-        const { data, error } = await requireClient().from('contract_approvals').select('*').eq('template_version_id', templateVersionId).order('decided_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("contract_approvals")
+          .select("*")
+          .eq("template_version_id", templateVersionId)
+          .order("decided_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractApprovalRow);
       },
       async decide(templateVersionId, status, reason, decidedBy, decidedByName) {
         const { data, error } = await requireClient()
-          .from('contract_approvals')
-          .insert({ template_version_id: templateVersionId, status, reason, decided_by: decidedBy, decided_by_name: decidedByName })
+          .from("contract_approvals")
+          .insert({
+            template_version_id: templateVersionId,
+            status,
+            reason,
+            decided_by: decidedBy,
+            decided_by_name: decidedByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2673,14 +3414,20 @@ function createLiveDataSource(): DataSource {
     },
     dataCheckDismissals: {
       async list() {
-        const { data, error } = await requireClient().from('data_check_dismissals').select('*');
+        const { data, error } = await requireClient().from("data_check_dismissals").select("*");
         if (error) throw error;
         return (data ?? []).map(mapDataCheckDismissalRow);
       },
       async create(leadId, issueType, dismissedBy, dismissedByName, isCompanyWide) {
         const { data, error } = await requireClient()
-          .from('data_check_dismissals')
-          .insert({ lead_id: leadId, issue_type: issueType, dismissed_by: dismissedBy, dismissed_by_name: dismissedByName, is_company_wide: isCompanyWide })
+          .from("data_check_dismissals")
+          .insert({
+            lead_id: leadId,
+            issue_type: issueType,
+            dismissed_by: dismissedBy,
+            dismissed_by_name: dismissedByName,
+            is_company_wide: isCompanyWide,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2689,21 +3436,24 @@ function createLiveDataSource(): DataSource {
     },
     leaveRequests: {
       async reminderHealth() {
-        const { data, error } = await requireClient().rpc('get_leave_reminder_health');
+        const { data, error } = await requireClient().rpc("get_leave_reminder_health");
         if (error) throw error;
         return data as LeaveReminderHealth;
       },
       async retryFailedReminder(id) {
-        const { error } = await requireClient().rpc('retry_failed_leave_sms', { p_message_id: id });
+        const { error } = await requireClient().rpc("retry_failed_leave_sms", { p_message_id: id });
         if (error) throw error;
       },
       async list() {
-        const { data, error } = await requireClient().from('leave_requests').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("leave_requests")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapLeaveRequestRow);
       },
       async conflictDates(startDate, endDate, excludeRequestId) {
-        const { data, error } = await requireClient().rpc('get_leave_conflict_dates', {
+        const { data, error } = await requireClient().rpc("get_leave_conflict_dates", {
           p_start_date: startDate,
           p_end_date: endDate,
           p_exclude_request_id: excludeRequestId ?? null,
@@ -2714,10 +3464,10 @@ function createLiveDataSource(): DataSource {
       async create(agentKey, agentName, input) {
         const client = requireClient();
         const year = requireLeaveSelectionYear(input.dates);
-        const { data: requestNo, error: rpcError } = await client.rpc('next_leave_request_no');
+        const { data: requestNo, error: rpcError } = await client.rpc("next_leave_request_no");
         if (rpcError) throw rpcError;
         const { data, error } = await client
-          .from('leave_requests')
+          .from("leave_requests")
           .insert({
             agent_key: agentKey,
             agent_name: agentName,
@@ -2725,7 +3475,7 @@ function createLiveDataSource(): DataSource {
             dates: input.dates,
             days_count: input.dates.length,
             letter_text: input.letterText ?? null,
-            status: input.asDraft ? 'planned' : 'pending',
+            status: input.asDraft ? "planned" : "pending",
             is_emergency: input.isEmergency ?? false,
             deduct_quota: true,
             request_no: requestNo,
@@ -2741,11 +3491,17 @@ function createLiveDataSource(): DataSource {
           decided_at: new Date().toISOString(),
           decided_by: decidedBy,
           decided_by_name: decidedByName,
-          decided_signature: outcome === 'approved' ? decidedSignature : null,
+          decided_signature: outcome === "approved" ? decidedSignature : null,
         };
         if (note !== undefined) dbPatch.reschedule_note = note;
         if (deductQuota !== undefined) dbPatch.deduct_quota = deductQuota;
-        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).eq('status', 'pending').select().single();
+        const { data, error } = await requireClient()
+          .from("leave_requests")
+          .update(dbPatch)
+          .eq("id", id)
+          .eq("status", "pending")
+          .select()
+          .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
@@ -2753,7 +3509,7 @@ function createLiveDataSource(): DataSource {
         const dbPatch: Record<string, unknown> =
           newDates && newDates.length
             ? {
-                status: 'approved',
+                status: "approved",
                 dates: newDates,
                 days_count: newDates.length,
                 year: requireLeaveSelectionYear(newDates),
@@ -2763,32 +3519,66 @@ function createLiveDataSource(): DataSource {
                 decided_by_name: decidedByName,
                 decided_signature: decidedSignature,
               }
-            : { status: 'rescheduled', reschedule_note: note ?? null, decided_at: new Date().toISOString(), decided_by: decidedBy, decided_by_name: decidedByName };
+            : {
+                status: "rescheduled",
+                reschedule_note: note ?? null,
+                decided_at: new Date().toISOString(),
+                decided_by: decidedBy,
+                decided_by_name: decidedByName,
+              };
         if (newDates?.length && deductQuota !== undefined) dbPatch.deduct_quota = deductQuota;
-        const { data, error } = await requireClient().from('leave_requests').update(dbPatch).eq('id', id).eq('status', 'pending').select().single();
+        const { data, error } = await requireClient()
+          .from("leave_requests")
+          .update(dbPatch)
+          .eq("id", id)
+          .eq("status", "pending")
+          .select()
+          .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async sendPlanned(id) {
-        const { data, error } = await requireClient().from('leave_requests').update({ status: 'pending' }).eq('id', id).eq('status', 'planned').select().single();
+        const { data, error } = await requireClient()
+          .from("leave_requests")
+          .update({ status: "pending" })
+          .eq("id", id)
+          .eq("status", "planned")
+          .select()
+          .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('leave_requests').delete().eq('id', id).eq('status', 'planned').select('id').single();
+        const { error } = await requireClient()
+          .from("leave_requests")
+          .delete()
+          .eq("id", id)
+          .eq("status", "planned")
+          .select("id")
+          .single();
         if (error) throw error;
       },
       async confirmUsed(id) {
-        const { data, error } = await requireClient().from('leave_requests').update({ used_confirmed_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("leave_requests")
+          .update({ used_confirmed_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async updatePlanned(id, patch) {
         const { data, error } = await requireClient()
-          .from('leave_requests')
-          .update({ dates: patch.dates, days_count: patch.dates.length, year: requireLeaveSelectionYear(patch.dates), letter_text: patch.letterText })
-          .eq('id', id)
-          .eq('status', 'planned')
+          .from("leave_requests")
+          .update({
+            dates: patch.dates,
+            days_count: patch.dates.length,
+            year: requireLeaveSelectionYear(patch.dates),
+            letter_text: patch.letterText,
+          })
+          .eq("id", id)
+          .eq("status", "planned")
           .select()
           .single();
         if (error) throw error;
@@ -2796,40 +3586,47 @@ function createLiveDataSource(): DataSource {
       },
       async updateRescheduledByStaff(id, patch) {
         const { data, error } = await requireClient()
-          .from('leave_requests')
+          .from("leave_requests")
           .update({
             dates: patch.dates,
             days_count: patch.dates.length,
             year: requireLeaveSelectionYear(patch.dates),
-            status: 'pending',
+            status: "pending",
             decided_at: null,
             decided_by: null,
             decided_by_name: null,
             decided_signature: null,
             reschedule_note: null,
           })
-          .eq('id', id)
-          .eq('status', 'rescheduled')
+          .eq("id", id)
+          .eq("status", "rescheduled")
           .select()
           .single();
         if (error) throw error;
         return mapLeaveRequestRow(data);
       },
       async logs(requestId) {
-        const { data, error } = await requireClient().from('leave_request_logs').select('*').eq('request_id', requestId).order('created_at', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("leave_request_logs")
+          .select("*")
+          .eq("request_id", requestId)
+          .order("created_at", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapLeaveRequestLogRow);
       },
     },
     banners: {
       async list() {
-        const { data, error } = await requireClient().from('banners').select('*').order('updated_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("banners")
+          .select("*")
+          .order("updated_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapBannerRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('banners')
+          .from("banners")
           .insert({
             name: input.name,
             area: input.area,
@@ -2847,24 +3644,41 @@ function createLiveDataSource(): DataSource {
         return mapBannerRow(data);
       },
       async updateStatus(id, status) {
-        const { data, error } = await requireClient().from('banners').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("banners")
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapBannerRow(data);
       },
       async updateArea(id, area) {
-        const { data, error } = await requireClient().from('banners').update({ area, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("banners")
+          .update({ area, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapBannerRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('banners').delete().eq('id', id);
+        const { error } = await requireClient().from("banners").delete().eq("id", id);
         if (error) throw error;
       },
       async logStatusUpdate(bannerId, changedBy, changedByName, patch) {
         const client = requireClient();
         const { data, error } = await client
-          .from('banner_status_log')
-          .insert({ banner_id: bannerId, status: patch.status, note: patch.note || null, images: patch.images, changed_by: changedBy, changed_by_name: changedByName })
+          .from("banner_status_log")
+          .insert({
+            banner_id: bannerId,
+            status: patch.status,
+            note: patch.note || null,
+            images: patch.images,
+            changed_by: changedBy,
+            changed_by_name: changedByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2873,26 +3687,41 @@ function createLiveDataSource(): DataSource {
         // latest logged update, not left stale until some separate save.
         const bannerPatch: Record<string, unknown> = { status: patch.status, updated_at: new Date().toISOString() };
         if (patch.images.length) bannerPatch.image = patch.images[0];
-        const { error: updError } = await client.from('banners').update(bannerPatch).eq('id', bannerId);
+        const { error: updError } = await client.from("banners").update(bannerPatch).eq("id", bannerId);
         if (updError) throw updError;
         return mapBannerStatusLogRow(data);
       },
       async statusLog(bannerId) {
-        const { data, error } = await requireClient().from('banner_status_log').select('*').eq('banner_id', bannerId).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("banner_status_log")
+          .select("*")
+          .eq("banner_id", bannerId)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapBannerStatusLogRow);
       },
     },
     pricingHistory: {
       async list() {
-        const { data, error } = await requireClient().from('pricing_history').select('*').order('changed_at', { ascending: false }).limit(30);
+        const { data, error } = await requireClient()
+          .from("pricing_history")
+          .select("*")
+          .order("changed_at", { ascending: false })
+          .limit(30);
         if (error) throw error;
         return (data ?? []).map(mapPricingHistoryRow);
       },
       async log(changedBy, changedByName, field, fieldLabel, oldValue, newValue) {
         const { data, error } = await requireClient()
-          .from('pricing_history')
-          .insert({ changed_by: changedBy, changed_by_name: changedByName, field, field_label: fieldLabel, old_value: oldValue, new_value: newValue })
+          .from("pricing_history")
+          .insert({
+            changed_by: changedBy,
+            changed_by_name: changedByName,
+            field,
+            field_label: fieldLabel,
+            old_value: oldValue,
+            new_value: newValue,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -2901,13 +3730,16 @@ function createLiveDataSource(): DataSource {
     },
     pricingPromotions: {
       async list() {
-        const { data, error } = await requireClient().from('pricing_promotions').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("pricing_promotions")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapPricingPromotionRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('pricing_promotions')
+          .from("pricing_promotions")
           .insert({
             plot_type: input.plotType,
             mode: input.mode,
@@ -2923,21 +3755,31 @@ function createLiveDataSource(): DataSource {
         return mapPricingPromotionRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('pricing_promotions').delete().eq('id', id);
+        const { error } = await requireClient().from("pricing_promotions").delete().eq("id", id);
         if (error) throw error;
       },
     },
     officeLocations: {
       async list() {
-        const { data, error } = await requireClient().from('office_locations').select('*').order('created_at', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("office_locations")
+          .select("*")
+          .order("created_at", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapOfficeLocationRow);
       },
       async create(createdBy, createdByName, input) {
         const { data, error } = await requireClient()
-          .from('office_locations')
-          .insert({ name: input.name, lat: input.lat, lng: input.lng, radius_meters: input.radiusMeters, created_by: createdBy, created_by_name: createdByName })
-          .select('*')
+          .from("office_locations")
+          .insert({
+            name: input.name,
+            lat: input.lat,
+            lng: input.lng,
+            radius_meters: input.radiusMeters,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
+          .select("*")
           .single();
         if (error) throw error;
         return mapOfficeLocationRow(data);
@@ -2949,48 +3791,68 @@ function createLiveDataSource(): DataSource {
         if (patch.lng !== undefined) dbPatch.lng = patch.lng;
         if (patch.radiusMeters !== undefined) dbPatch.radius_meters = patch.radiusMeters;
         if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
-        const { data, error } = await requireClient().from('office_locations').update(dbPatch).eq('id', id).select('*').single();
+        const { data, error } = await requireClient()
+          .from("office_locations")
+          .update(dbPatch)
+          .eq("id", id)
+          .select("*")
+          .single();
         if (error) throw error;
         return mapOfficeLocationRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('office_locations').delete().eq('id', id);
+        const { error } = await requireClient().from("office_locations").delete().eq("id", id);
         if (error) throw error;
       },
     },
     leaveHolidays: {
       async list() {
-        const { data, error } = await requireClient().from('leave_holidays').select('*').order('holiday_date', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("leave_holidays")
+          .select("*")
+          .order("holiday_date", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapLeaveHolidayRow);
       },
       async create(createdBy, input) {
         const { data, error } = await requireClient()
-          .from('leave_holidays')
-          .insert({ holiday_date: input.holidayDate, name: input.name, is_recurring_eid: input.isRecurringEid, created_by: createdBy })
-          .select('*')
+          .from("leave_holidays")
+          .insert({
+            holiday_date: input.holidayDate,
+            name: input.name,
+            is_recurring_eid: input.isRecurringEid,
+            created_by: createdBy,
+          })
+          .select("*")
           .single();
         if (error) throw error;
         return mapLeaveHolidayRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('leave_holidays').delete().eq('id', id);
+        const { error } = await requireClient().from("leave_holidays").delete().eq("id", id);
         if (error) throw error;
       },
     },
     attendancePolicy: {
       async current() {
-        const { data, error } = await requireClient().from('attendance_policy').select('*').eq('is_active', true).maybeSingle();
+        const { data, error } = await requireClient()
+          .from("attendance_policy")
+          .select("*")
+          .eq("is_active", true)
+          .maybeSingle();
         if (error) throw error;
         return data ? mapAttendancePolicyRow(data) : null;
       },
       async history() {
-        const { data, error } = await requireClient().from('attendance_policy').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("attendance_policy")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAttendancePolicyRow);
       },
       async update(_createdBy, _createdByName, input) {
-        const { data, error } = await requireClient().rpc('set_attendance_policy', {
+        const { data, error } = await requireClient().rpc("set_attendance_policy", {
           p_work_start_time: input.workStartTime,
           p_work_end_time: input.workEndTime,
           p_grace_minutes: input.graceMinutes,
@@ -3002,13 +3864,16 @@ function createLiveDataSource(): DataSource {
     },
     attendanceExceptions: {
       async list() {
-        const { data, error } = await requireClient().from('attendance_exceptions').select('*').order('exception_date', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("attendance_exceptions")
+          .select("*")
+          .order("exception_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceExceptionRow);
       },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
-          .from('attendance_exceptions')
+          .from("attendance_exceptions")
           .insert({
             staff_key: agentKey,
             staff_name: agentName,
@@ -3025,9 +3890,14 @@ function createLiveDataSource(): DataSource {
       },
       async decide(id, status, decidedBy, decidedByName) {
         const { data, error } = await requireClient()
-          .from('attendance_exceptions')
-          .update({ status, decided_by: decidedBy, decided_by_name: decidedByName, decided_at: new Date().toISOString() })
-          .eq('id', id)
+          .from("attendance_exceptions")
+          .update({
+            status,
+            decided_by: decidedBy,
+            decided_by_name: decidedByName,
+            decided_at: new Date().toISOString(),
+          })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -3037,7 +3907,11 @@ function createLiveDataSource(): DataSource {
     async leadBannerCounts() {
       // Same real deleted_at gap as listForAgent()/listCompany() -- an
       // archived lead shouldn't still count toward a banner's real totals.
-      const { data, error } = await requireClient().from('leads').select('banner_id').not('banner_id', 'is', null).is('deleted_at', null);
+      const { data, error } = await requireClient()
+        .from("leads")
+        .select("banner_id")
+        .not("banner_id", "is", null)
+        .is("deleted_at", null);
       if (error) return {};
       const counts: Record<string, number> = {};
       (data ?? []).forEach((r: { banner_id: string | null }) => {
@@ -3049,14 +3923,25 @@ function createLiveDataSource(): DataSource {
       async list() {
         // Unfiltered on purpose -- fundreq_sel RLS already scopes this
         // correctly per real session (own rows, or every row for manager).
-        const { data, error } = await requireClient().from('fund_requests').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("fund_requests")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapFundRequestRow);
       },
       async create(requestedBy, requestedByName, input) {
         const { data, error } = await requireClient()
-          .from('fund_requests')
-          .insert({ req_type: input.type, amount: input.amount, purpose: input.purpose, requested_by: requestedBy, requested_by_name: requestedByName, receipt_data: input.receiptData ?? null, receipt_name: input.receiptName ?? null })
+          .from("fund_requests")
+          .insert({
+            req_type: input.type,
+            amount: input.amount,
+            purpose: input.purpose,
+            requested_by: requestedBy,
+            requested_by_name: requestedByName,
+            receipt_data: input.receiptData ?? null,
+            receipt_name: input.receiptName ?? null,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -3064,9 +3949,15 @@ function createLiveDataSource(): DataSource {
       },
       async decide(id, approve, decidedBy, decidedByName, note) {
         const { data, error } = await requireClient()
-          .from('fund_requests')
-          .update({ status: approve ? 'approved' : 'rejected', decided_by: decidedBy, decided_by_name: decidedByName, decided_at: new Date().toISOString(), decision_note: note ?? null })
-          .eq('id', id)
+          .from("fund_requests")
+          .update({
+            status: approve ? "approved" : "rejected",
+            decided_by: decidedBy,
+            decided_by_name: decidedByName,
+            decided_at: new Date().toISOString(),
+            decision_note: note ?? null,
+          })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -3076,17 +3967,31 @@ function createLiveDataSource(): DataSource {
     weeklyVisitForms: {
       async getOrCreate(weekStart, visitDate) {
         const client = requireClient();
-        const { data, error } = await client.from('weekly_visit_forms').select('*').eq('week_start', weekStart).eq('visit_date', visitDate).maybeSingle();
+        const { data, error } = await client
+          .from("weekly_visit_forms")
+          .select("*")
+          .eq("week_start", weekStart)
+          .eq("visit_date", visitDate)
+          .maybeSingle();
         if (error) throw error;
         if (data) return mapWeeklyVisitFormRow(data);
-        const ins = await client.from('weekly_visit_forms').insert({ week_start: weekStart, visit_date: visitDate }).select().single();
+        const ins = await client
+          .from("weekly_visit_forms")
+          .insert({ week_start: weekStart, visit_date: visitDate })
+          .select()
+          .single();
         if (ins.error) {
           // Real race guard, matching index.html's own retry-on-conflict --
           // the unique index on (week_start, visit_date) means a second
           // staff member opening the same day at the same moment can lose
           // the insert race; the row they were racing against already
           // exists, so just re-select it instead of surfacing an error.
-          const retry = await client.from('weekly_visit_forms').select('*').eq('week_start', weekStart).eq('visit_date', visitDate).maybeSingle();
+          const retry = await client
+            .from("weekly_visit_forms")
+            .select("*")
+            .eq("week_start", weekStart)
+            .eq("visit_date", visitDate)
+            .maybeSingle();
           if (retry.error || !retry.data) throw retry.error ?? ins.error;
           return mapWeeklyVisitFormRow(retry.data);
         }
@@ -3094,26 +3999,37 @@ function createLiveDataSource(): DataSource {
       },
       async saveCosts(id, patch) {
         const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if ('vehicleRentalEst' in patch) dbPatch.vehicle_rental_est = patch.vehicleRentalEst;
-        if ('driversTipEst' in patch) dbPatch.drivers_tip_est = patch.driversTipEst;
-        if ('fuelEst' in patch) dbPatch.fuel_est = patch.fuelEst;
-        if ('refreshmentEst' in patch) dbPatch.refreshment_est = patch.refreshmentEst;
-        if ('tntEst' in patch) dbPatch.tnt_est = patch.tntEst;
-        if ('vehicleRentalAct' in patch) dbPatch.vehicle_rental_act = patch.vehicleRentalAct;
-        if ('driversTipAct' in patch) dbPatch.drivers_tip_act = patch.driversTipAct;
-        if ('fuelAct' in patch) dbPatch.fuel_act = patch.fuelAct;
-        if ('refreshmentAct' in patch) dbPatch.refreshment_act = patch.refreshmentAct;
-        if ('tntAct' in patch) dbPatch.tnt_act = patch.tntAct;
-        if ('siteManagerName' in patch) dbPatch.site_manager_name = patch.siteManagerName;
-        const { data, error } = await requireClient().from('weekly_visit_forms').update(dbPatch).eq('id', id).select().single();
+        if ("vehicleRentalEst" in patch) dbPatch.vehicle_rental_est = patch.vehicleRentalEst;
+        if ("driversTipEst" in patch) dbPatch.drivers_tip_est = patch.driversTipEst;
+        if ("fuelEst" in patch) dbPatch.fuel_est = patch.fuelEst;
+        if ("refreshmentEst" in patch) dbPatch.refreshment_est = patch.refreshmentEst;
+        if ("tntEst" in patch) dbPatch.tnt_est = patch.tntEst;
+        if ("vehicleRentalAct" in patch) dbPatch.vehicle_rental_act = patch.vehicleRentalAct;
+        if ("driversTipAct" in patch) dbPatch.drivers_tip_act = patch.driversTipAct;
+        if ("fuelAct" in patch) dbPatch.fuel_act = patch.fuelAct;
+        if ("refreshmentAct" in patch) dbPatch.refreshment_act = patch.refreshmentAct;
+        if ("tntAct" in patch) dbPatch.tnt_act = patch.tntAct;
+        if ("siteManagerName" in patch) dbPatch.site_manager_name = patch.siteManagerName;
+        const { data, error } = await requireClient()
+          .from("weekly_visit_forms")
+          .update(dbPatch)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapWeeklyVisitFormRow(data);
       },
       async finalize(id, approvedBy, approvedByName, signature) {
         const { data, error } = await requireClient()
-          .from('weekly_visit_forms')
-          .update({ status: 'Finalized', approved_by: approvedBy, approved_by_name: approvedByName, approved_signature: signature, finalized_at: new Date().toISOString() })
-          .eq('id', id)
+          .from("weekly_visit_forms")
+          .update({
+            status: "Finalized",
+            approved_by: approvedBy,
+            approved_by_name: approvedByName,
+            approved_signature: signature,
+            finalized_at: new Date().toISOString(),
+          })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -3126,51 +4042,64 @@ function createLiveDataSource(): DataSource {
         // scopes this correctly per real session (own rows, or every row
         // for manager), kept only so the interface matches demo mode's
         // explicit scoping.
-        const { data, error } = await requireClient().from('downloads').select('id,user_key,user_name,filename,kind,created_at').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("downloads")
+          .select("id,user_key,user_name,filename,kind,created_at")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapDownloadRow);
       },
       async log(userKey, userName, filename, kind, fileData) {
-        const { data, error } = await requireClient().from('downloads').insert({ user_key: userKey, user_name: userName, filename, kind, file_data: fileData }).select().single();
+        const { data, error } = await requireClient()
+          .from("downloads")
+          .insert({ user_key: userKey, user_name: userName, filename, kind, file_data: fileData })
+          .select()
+          .single();
         if (error) throw error;
         return mapDownloadRow(data);
       },
     },
     importBatches: {
       async create(importedBy, importedByName, batch) {
-        const { error } = await requireClient()
-          .from('import_batches')
-          .insert({
-            imported_by: importedBy,
-            imported_by_name: importedByName,
-            source_label: batch.sourceLabel,
-            added_count: batch.addedCount,
-            updated_count: batch.updatedCount,
-            unchanged_count: batch.unchangedCount,
-            skipped_count: batch.skippedCount,
-            conflict_count: batch.conflictCount,
-            error_count: batch.errorCount,
-            payment_changes_ignored_count: batch.paymentChangesIgnoredCount,
-            details: batch.details,
-          });
+        const { error } = await requireClient().from("import_batches").insert({
+          imported_by: importedBy,
+          imported_by_name: importedByName,
+          source_label: batch.sourceLabel,
+          added_count: batch.addedCount,
+          updated_count: batch.updatedCount,
+          unchanged_count: batch.unchangedCount,
+          skipped_count: batch.skippedCount,
+          conflict_count: batch.conflictCount,
+          error_count: batch.errorCount,
+          payment_changes_ignored_count: batch.paymentChangesIgnoredCount,
+          details: batch.details,
+        });
         if (error) throw error;
       },
     },
     reportArchive: {
       async list(limit = 30) {
-        const { data, error } = await requireClient().from('report_archive').select('*').order('generated_at', { ascending: false }).limit(limit);
+        const { data, error } = await requireClient()
+          .from("report_archive")
+          .select("*")
+          .order("generated_at", { ascending: false })
+          .limit(limit);
         if (error) throw error;
         return (data ?? []).map(mapReportArchiveRow);
       },
     },
     achievements: {
       async listDefs() {
-        const { data, error } = await requireClient().from('achievement_definitions').select('*').eq('active', true).order('created_at');
+        const { data, error } = await requireClient()
+          .from("achievement_definitions")
+          .select("*")
+          .eq("active", true)
+          .order("created_at");
         if (error) throw error;
         return (data ?? []).map(mapAchievementDefRow);
       },
       async listEarned(staffKeys) {
-        const { data, error } = await requireClient().from('staff_achievements').select('*').in('staff_key', staffKeys);
+        const { data, error } = await requireClient().from("staff_achievements").select("*").in("staff_key", staffKeys);
         if (error) throw error;
         return (data ?? []).map(mapStaffAchievementRow);
       },
@@ -3181,8 +4110,11 @@ function createLiveDataSource(): DataSource {
         // silent no-op (maybeSingle() returns null, not an error), so
         // this is safe to call every time evaluation runs.
         const { data, error } = await requireClient()
-          .from('staff_achievements')
-          .upsert({ staff_key: staffKey, staff_name: staffName, achievement_id: achievementId, progress }, { onConflict: 'staff_key,achievement_id', ignoreDuplicates: true })
+          .from("staff_achievements")
+          .upsert(
+            { staff_key: staffKey, staff_name: staffName, achievement_id: achievementId, progress },
+            { onConflict: "staff_key,achievement_id", ignoreDuplicates: true },
+          )
           .select()
           .maybeSingle();
         if (error) throw error;
@@ -3191,18 +4123,18 @@ function createLiveDataSource(): DataSource {
     },
     audit: {
       async list(filter) {
-        let q = requireClient().from('audit_events').select('*').order('created_at', { ascending: false }).limit(200);
-        if (filter?.category && filter.category !== 'all') q = q.eq('category', filter.category);
-        if (filter?.criticalOnly) q = q.eq('severity', 'critical');
-        if (filter?.entityType) q = q.eq('entity_type', filter.entityType);
-        if (filter?.entityIds) q = q.in('entity_id', filter.entityIds);
+        let q = requireClient().from("audit_events").select("*").order("created_at", { ascending: false }).limit(200);
+        if (filter?.category && filter.category !== "all") q = q.eq("category", filter.category);
+        if (filter?.criticalOnly) q = q.eq("severity", "critical");
+        if (filter?.entityType) q = q.eq("entity_type", filter.entityType);
+        if (filter?.entityIds) q = q.in("entity_id", filter.entityIds);
         const { data, error } = await q;
         if (error) throw error;
         return (data ?? []).map(mapAuditEventRow);
       },
       async log(eventType, severity, summary, detail, entityType, entityId) {
-        const { error } = await requireClient().rpc('record_audit_event', {
-          p_category: 'audit',
+        const { error } = await requireClient().rpc("record_audit_event", {
+          p_category: "audit",
           p_event_type: eventType,
           p_severity: severity,
           p_entity_type: entityType ?? null,
@@ -3212,14 +4144,17 @@ function createLiveDataSource(): DataSource {
         });
         // Auditing must never break the calling flow -- matches
         // logAudit()'s own try/catch in index.html.
-        if (error) console.error('record_audit_event failed', error);
+        if (error) console.error("record_audit_event failed", error);
       },
     },
     pushSubscriptions: {
       async save(ownerKind, ownerId, sub) {
         const { error } = await requireClient()
-          .from('push_subscriptions')
-          .upsert({ owner_kind: ownerKind, owner_id: ownerId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth }, { onConflict: 'endpoint' });
+          .from("push_subscriptions")
+          .upsert(
+            { owner_kind: ownerKind, owner_id: ownerId, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+            { onConflict: "endpoint" },
+          );
         if (error) throw error;
       },
     },
@@ -3229,17 +4164,26 @@ function createLiveDataSource(): DataSource {
         let ok = false;
         let errMsg: string | null = null;
         try {
-          const { data, error } = await requireClient().functions.invoke('send-sms', { body: { to, message, sender: 'Trulander' } });
+          const { data, error } = await requireClient().functions.invoke("send-sms", {
+            body: { to, message, sender: "Trulander" },
+          });
           if (error) throw error;
           ok = !!data?.ok;
-          if (!ok) errMsg = data?.data?.message ? String(data.data.message) : 'SMS provider rejected the request';
+          if (!ok) errMsg = data?.data?.message ? String(data.data.message) : "SMS provider rejected the request";
         } catch (e) {
           errMsg = e instanceof Error ? e.message : String(e);
         }
         try {
           await requireClient()
-            .from('sms_log')
-            .insert({ recipient: to, message, trigger: trigger || null, sent_by: sentByKey, status: ok ? 'sent' : 'failed', error: errMsg });
+            .from("sms_log")
+            .insert({
+              recipient: to,
+              message,
+              trigger: trigger || null,
+              sent_by: sentByKey,
+              status: ok ? "sent" : "failed",
+              error: errMsg,
+            });
         } catch {
           // Logging the send is best-effort too -- never let a sms_log
           // insert failure mask the real send result the caller needs.
@@ -3249,39 +4193,61 @@ function createLiveDataSource(): DataSource {
     },
     backups: {
       async list() {
-        const { data, error } = await requireClient().from('backups').select('id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("backups")
+          .select("id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapBackupRow);
       },
       async createNow(triggeredBy, triggeredByName) {
-        const { data: id, error } = await requireClient().rpc('create_backup', { p_trigger: 'manual', p_by: triggeredBy, p_by_name: triggeredByName });
+        const { data: id, error } = await requireClient().rpc("create_backup", {
+          p_trigger: "manual",
+          p_by: triggeredBy,
+          p_by_name: triggeredByName,
+        });
         if (error) throw error;
-        const { data, error: selError } = await requireClient().from('backups').select('id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum').eq('id', id).single();
+        const { data, error: selError } = await requireClient()
+          .from("backups")
+          .select("id,created_at,trigger_type,triggered_by,triggered_by_name,table_counts,size_bytes,checksum")
+          .eq("id", id)
+          .single();
         if (selError) throw selError;
         return mapBackupRow(data);
       },
       async restore(backupId, triggeredBy, triggeredByName) {
-        const { error } = await requireClient().rpc('restore_backup', { p_backup_id: backupId, p_by: triggeredBy, p_by_name: triggeredByName });
+        const { error } = await requireClient().rpc("restore_backup", {
+          p_backup_id: backupId,
+          p_by: triggeredBy,
+          p_by_name: triggeredByName,
+        });
         if (error) throw error;
       },
     },
     permissions: {
       async listDefs() {
-        const { data, error } = await requireClient().from('permissions').select('*').order('key');
+        const { data, error } = await requireClient().from("permissions").select("*").order("key");
         if (error) throw error;
         return (data ?? []).map(mapPermissionDefRow);
       },
       async listOverrides() {
-        const { data, error } = await requireClient().from('staff_permission_overrides').select('*');
+        const { data, error } = await requireClient().from("staff_permission_overrides").select("*");
         if (error) throw error;
         return (data ?? []).map(mapPermissionOverrideRow);
       },
       async grant(staffKey, permissionKey) {
-        const { error } = await requireClient().rpc('set_permission_override', { p_staff_key: staffKey, p_permission_key: permissionKey, p_granted: true });
+        const { error } = await requireClient().rpc("set_permission_override", {
+          p_staff_key: staffKey,
+          p_permission_key: permissionKey,
+          p_granted: true,
+        });
         if (error) throw error;
       },
       async clear(staffKey, permissionKey) {
-        const { error } = await requireClient().rpc('clear_permission_override', { p_staff_key: staffKey, p_permission_key: permissionKey });
+        const { error } = await requireClient().rpc("clear_permission_override", {
+          p_staff_key: staffKey,
+          p_permission_key: permissionKey,
+        });
         if (error) throw error;
       },
     },
@@ -3291,17 +4257,25 @@ function createLiveDataSource(): DataSource {
         // correctly per real session (own rows, or every row for manager/
         // elias/emmanuel). viewerKey/viewerRole are unused here, kept only
         // so the interface matches demo mode's explicit scoping.
-        const { data, error } = await requireClient().from('allocation_requests').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("allocation_requests")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAllocationRequestRow);
       },
       async create(agentKey, agentName, input) {
-        const { data: leadRow, error: leadError } = await requireClient().from('leads').select('name,grand_total,amt_paid').eq('id', input.leadId).eq('agent_key', agentKey).single();
+        const { data: leadRow, error: leadError } = await requireClient()
+          .from("leads")
+          .select("name,grand_total,amt_paid")
+          .eq("id", input.leadId)
+          .eq("agent_key", agentKey)
+          .single();
         if (leadError) throw leadError;
         const grandTotal = Number(leadRow.grand_total ?? 0);
         const amtPaid = Number(leadRow.amt_paid ?? 0);
         const { data, error } = await requireClient()
-          .from('allocation_requests')
+          .from("allocation_requests")
           .insert({
             lead_id: input.leadId,
             client_name: leadRow.name,
@@ -3310,7 +4284,7 @@ function createLiveDataSource(): DataSource {
             percent_paid: grandTotal > 0 ? Math.round((amtPaid / grandTotal) * 1000) / 10 : null,
             grand_total: grandTotal,
             amt_paid: amtPaid,
-            status: 'Pending',
+            status: "Pending",
             agent_seen: true,
           })
           .select()
@@ -3320,9 +4294,9 @@ function createLiveDataSource(): DataSource {
       },
       async suggest(id, plotNumbers) {
         const { data, error } = await requireClient()
-          .from('allocation_requests')
-          .update({ status: 'Awaiting Authorization', suggested_plots: plotNumbers.join(',') })
-          .eq('id', id)
+          .from("allocation_requests")
+          .update({ status: "Awaiting Authorization", suggested_plots: plotNumbers.join(",") })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -3336,45 +4310,80 @@ function createLiveDataSource(): DataSource {
       // passed here -- fewer params than the interface is a valid
       // structural implementation, same pattern list() above already uses.
       async confirm(id, plotNumber, note) {
-        const { error } = await requireClient().rpc('confirm_allocation', { p_allocation_id: id, p_plot_number: plotNumber, p_note: note ?? null });
+        const { error } = await requireClient().rpc("confirm_allocation", {
+          p_allocation_id: id,
+          p_plot_number: plotNumber,
+          p_note: note ?? null,
+        });
         if (error) throw error;
-        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        const { data, error: selError } = await requireClient()
+          .from("allocation_requests")
+          .select("*")
+          .eq("id", id)
+          .single();
         if (selError) throw selError;
         return mapAllocationRequestRow(data);
       },
       async revert(id) {
-        const { error } = await requireClient().rpc('revert_allocation', { p_allocation_id: id });
+        const { error } = await requireClient().rpc("revert_allocation", { p_allocation_id: id });
         if (error) throw error;
-        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        const { data, error: selError } = await requireClient()
+          .from("allocation_requests")
+          .select("*")
+          .eq("id", id)
+          .single();
         if (selError) throw selError;
         return mapAllocationRequestRow(data);
       },
       async editPlot(id, newPlotNumber) {
-        const { error } = await requireClient().rpc('edit_allocated_plot', { p_allocation_id: id, p_new_plot_number: newPlotNumber });
+        const { error } = await requireClient().rpc("edit_allocated_plot", {
+          p_allocation_id: id,
+          p_new_plot_number: newPlotNumber,
+        });
         if (error) throw error;
-        const { data, error: selError } = await requireClient().from('allocation_requests').select('*').eq('id', id).single();
+        const { data, error: selError } = await requireClient()
+          .from("allocation_requests")
+          .select("*")
+          .eq("id", id)
+          .single();
         if (selError) throw selError;
         return mapAllocationRequestRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().rpc('delete_allocation', { p_allocation_id: id });
+        const { error } = await requireClient().rpc("delete_allocation", { p_allocation_id: id });
         if (error) throw error;
       },
       async flag(id, reason, flaggedBy) {
-        const { data, error } = await requireClient().from('allocation_requests').update({ flag_reason: reason, flagged_by: flaggedBy, flagged_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("allocation_requests")
+          .update({ flag_reason: reason, flagged_by: flaggedBy, flagged_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
       },
       async resolveFlag(id) {
-        const { data, error } = await requireClient().from('allocation_requests').update({ flag_reason: null, flagged_by: null, flagged_at: null }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("allocation_requests")
+          .update({ flag_reason: null, flagged_by: null, flagged_at: null })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapAllocationRequestRow(data);
       },
       async sendBack(id, reason, sentBackBy) {
         const { data, error } = await requireClient()
-          .from('allocation_requests')
-          .update({ status: 'Pending', suggested_plots: null, flag_reason: reason, flagged_by: sentBackBy, flagged_at: new Date().toISOString() })
-          .eq('id', id)
+          .from("allocation_requests")
+          .update({
+            status: "Pending",
+            suggested_plots: null,
+            flag_reason: reason,
+            flagged_by: sentBackBy,
+            flagged_at: new Date().toISOString(),
+          })
+          .eq("id", id)
           .select()
           .single();
         if (error) throw error;
@@ -3382,32 +4391,42 @@ function createLiveDataSource(): DataSource {
       },
       async uploadAuthDoc(id, agentKey, file) {
         const client = requireClient();
-        const ext = file.name.split('.').pop() || 'jpg';
+        const ext = file.name.split(".").pop() || "jpg";
         const path = `${agentKey}/${id}.${ext}`;
-        const { error: uploadError } = await client.storage.from('allocation-auth-docs').upload(path, file, { upsert: true });
+        const { error: uploadError } = await client.storage
+          .from("allocation-auth-docs")
+          .upload(path, file, { upsert: true });
         if (uploadError) throw uploadError;
         const { error: updError } = await client
-          .from('allocation_requests')
-          .update({ auth_doc_photo_path: path, auth_doc_uploaded_by: agentKey, auth_doc_uploaded_at: new Date().toISOString(), auth_doc_ai_status: null, auth_doc_ai_note: null })
-          .eq('id', id);
+          .from("allocation_requests")
+          .update({
+            auth_doc_photo_path: path,
+            auth_doc_uploaded_by: agentKey,
+            auth_doc_uploaded_at: new Date().toISOString(),
+            auth_doc_ai_status: null,
+            auth_doc_ai_note: null,
+          })
+          .eq("id", id);
         if (updError) throw updError;
         return path;
       },
       async resolveAuthDocUrl(path) {
-        const { data, error } = await requireClient().storage.from('allocation-auth-docs').createSignedUrl(path, 300);
+        const { data, error } = await requireClient().storage.from("allocation-auth-docs").createSignedUrl(path, 300);
         if (error) throw error;
         return data?.signedUrl ?? null;
       },
       async analyzeAuthDoc(id, imageUrl, clientName, plotNumber) {
         const client = requireClient();
-        const { data, error } = await client.functions.invoke('ai-insights', { body: { kind: 'allocation_doc_verify', context: { imageUrl, clientName, plotNumber } } });
+        const { data, error } = await client.functions.invoke("ai-insights", {
+          body: { kind: "allocation_doc_verify", context: { imageUrl, clientName, plotNumber } },
+        });
         if (error) throw error;
-        const status = (data?.status ?? 'unavailable') as AllocationRequest['authDocAiStatus'];
-        const note = String(data?.note ?? 'The AI did not return a clear result.');
+        const status = (data?.status ?? "unavailable") as AllocationRequest["authDocAiStatus"];
+        const note = String(data?.note ?? "The AI did not return a clear result.");
         const { data: row, error: updError } = await client
-          .from('allocation_requests')
+          .from("allocation_requests")
           .update({ auth_doc_ai_status: status, auth_doc_ai_note: note })
-          .eq('id', id)
+          .eq("id", id)
           .select()
           .single();
         if (updError) throw updError;
@@ -3416,29 +4435,47 @@ function createLiveDataSource(): DataSource {
     },
     notes: {
       async listForOwner(ownerKey) {
-        const { data, error } = await requireClient().from('notes').select('*').eq('owner_key', ownerKey).order('updated_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("notes")
+          .select("*")
+          .eq("owner_key", ownerKey)
+          .order("updated_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapNoteRow);
       },
       async create(ownerKey, input) {
-        const { data, error } = await requireClient().from('notes').insert({ owner_key: ownerKey, title: input.title, body: input.body }).select().single();
+        const { data, error } = await requireClient()
+          .from("notes")
+          .insert({ owner_key: ownerKey, title: input.title, body: input.body })
+          .select()
+          .single();
         if (error) throw error;
         return mapNoteRow(data);
       },
       async update(id, input) {
-        const { data, error } = await requireClient().from('notes').update({ title: input.title, body: input.body, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("notes")
+          .update({ title: input.title, body: input.body, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapNoteRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('notes').delete().eq('id', id);
+        const { error } = await requireClient().from("notes").delete().eq("id", id);
         if (error) throw error;
       },
     },
     attendance: {
       async today(staffKey) {
         const workDate = new Date().toISOString().slice(0, 10);
-        const { data, error } = await requireClient().from('attendance_log').select('*').eq('staff_key', staffKey).eq('work_date', workDate).maybeSingle();
+        const { data, error } = await requireClient()
+          .from("attendance_log")
+          .select("*")
+          .eq("staff_key", staffKey)
+          .eq("work_date", workDate)
+          .maybeSingle();
         if (error) throw error;
         return data ? mapAttendanceRow(data) : null;
       },
@@ -3447,17 +4484,21 @@ function createLiveDataSource(): DataSource {
         from.setDate(from.getDate() - days);
         const fromIso = from.toISOString().slice(0, 10);
         const { data, error } = await requireClient()
-          .from('attendance_log')
-          .select('*')
-          .eq('staff_key', staffKey)
-          .gte('work_date', fromIso)
-          .order('work_date', { ascending: false });
+          .from("attendance_log")
+          .select("*")
+          .eq("staff_key", staffKey)
+          .gte("work_date", fromIso)
+          .order("work_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceRow);
       },
       async listToday() {
         const workDate = new Date().toISOString().slice(0, 10);
-        const { data, error } = await requireClient().from('attendance_log').select('*').eq('work_date', workDate).order('sign_in_at', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("attendance_log")
+          .select("*")
+          .eq("work_date", workDate)
+          .order("sign_in_at", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceRow);
       },
@@ -3465,23 +4506,37 @@ function createLiveDataSource(): DataSource {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - days);
         const cutoffIso = cutoff.toISOString().slice(0, 10);
-        const { data, error } = await requireClient().from('attendance_log').select('*').gte('work_date', cutoffIso).order('work_date', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("attendance_log")
+          .select("*")
+          .gte("work_date", cutoffIso)
+          .order("work_date", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceRow);
       },
       async listBetween(startDate, endDate) {
-        const { data, error } = await requireClient().from('attendance_log').select('*').gte('work_date', startDate).lte('work_date', endDate).order('work_date', { ascending: true });
+        const { data, error } = await requireClient()
+          .from("attendance_log")
+          .select("*")
+          .gte("work_date", startDate)
+          .lte("work_date", endDate)
+          .order("work_date", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceRow);
       },
       async signIn(staffKey, staffName, input) {
         const client = requireClient();
         const workDate = new Date().toISOString().slice(0, 10);
-        const { data: existing, error: existingError } = await client.from('attendance_log').select('id').eq('staff_key', staffKey).eq('work_date', workDate).maybeSingle();
+        const { data: existing, error: existingError } = await client
+          .from("attendance_log")
+          .select("id")
+          .eq("staff_key", staffKey)
+          .eq("work_date", workDate)
+          .maybeSingle();
         if (existingError) throw existingError;
         if (existing) throw new Error("You've already signed in today");
         const { data, error } = await client
-          .from('attendance_log')
+          .from("attendance_log")
           .insert({
             staff_key: staffKey,
             staff_name: staffName,
@@ -3503,11 +4558,16 @@ function createLiveDataSource(): DataSource {
       },
       async signOut(staffKey, id, input) {
         const client = requireClient();
-        const { data: existing, error: existingError } = await client.from('attendance_log').select('sign_out_at').eq('id', id).eq('staff_key', staffKey).single();
+        const { data: existing, error: existingError } = await client
+          .from("attendance_log")
+          .select("sign_out_at")
+          .eq("id", id)
+          .eq("staff_key", staffKey)
+          .single();
         if (existingError) throw existingError;
         if (existing.sign_out_at) throw new Error("You've already signed out today");
         const { data, error } = await client
-          .from('attendance_log')
+          .from("attendance_log")
           .update({
             sign_out_at: new Date().toISOString(),
             sign_out_lat: input.lat ?? null,
@@ -3516,8 +4576,8 @@ function createLiveDataSource(): DataSource {
             sign_out_reason: input.offSite ? (input.reason ?? null) : null,
             sign_out_accuracy_meters: input.accuracy ?? null,
           })
-          .eq('id', id)
-          .eq('staff_key', staffKey)
+          .eq("id", id)
+          .eq("staff_key", staffKey)
           .select()
           .single();
         if (error) throw error;
@@ -3533,34 +4593,53 @@ function createLiveDataSource(): DataSource {
         const dbPatch: Record<string, string | null> = {};
         if (patch.signInAt !== undefined) dbPatch.sign_in_at = patch.signInAt;
         if (patch.signOutAt !== undefined) dbPatch.sign_out_at = patch.signOutAt;
-        const { data, error } = await requireClient().from('attendance_log').update(dbPatch).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("attendance_log")
+          .update(dbPatch)
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapAttendanceRow(data);
       },
       async remove(id) {
-        const { error } = await requireClient().from('attendance_log').delete().eq('id', id);
+        const { error } = await requireClient().from("attendance_log").delete().eq("id", id);
         if (error) throw error;
       },
       async monthComparison(monthKey, cutoff) {
-        const { data, error } = await requireClient().rpc('get_attendance_month_comparison', { p_month_key: monthKey, p_cutoff: cutoff });
+        const { data, error } = await requireClient().rpc("get_attendance_month_comparison", {
+          p_month_key: monthKey,
+          p_cutoff: cutoff,
+        });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceComparisonRow);
       },
       async resetAll() {
-        const { error } = await requireClient().from('attendance_log').delete().gte('work_date', '1900-01-01');
+        const { error } = await requireClient().from("attendance_log").delete().gte("work_date", "1900-01-01");
         if (error) throw error;
       },
     },
     attendanceNotes: {
       async list() {
-        const { data, error } = await requireClient().from('attendance_notes').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("attendance_notes")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceNoteRow);
       },
       async issue(staffKey, staffName, kind, reason, workDate, createdBy, createdByName) {
         const { data, error } = await requireClient()
-          .from('attendance_notes')
-          .insert({ staff_key: staffKey, staff_name: staffName, kind, reason, work_date: workDate, created_by: createdBy, created_by_name: createdByName })
+          .from("attendance_notes")
+          .insert({
+            staff_key: staffKey,
+            staff_name: staffName,
+            kind,
+            reason,
+            work_date: workDate,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
           .select()
           .single();
         if (error) throw error;
@@ -3569,19 +4648,22 @@ function createLiveDataSource(): DataSource {
     },
     attendanceReviews: {
       async list() {
-        const { data, error } = await requireClient().from('attendance_reviews').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("attendance_reviews")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapAttendanceReviewRow);
       },
       async decide(attendanceLogId, staffKey, staffName, classification, note, reviewedBy, reviewedByName) {
         const { data, error } = await requireClient()
-          .from('attendance_reviews')
+          .from("attendance_reviews")
           .insert({
             attendance_log_id: attendanceLogId,
             staff_key: staffKey,
             staff_name: staffName,
-            review_type: 'exception',
-            status: 'reviewed',
+            review_type: "exception",
+            status: "reviewed",
             classification,
             note: note || null,
             reviewed_by: reviewedBy,
@@ -3596,70 +4678,114 @@ function createLiveDataSource(): DataSource {
     },
     staff: {
       async list() {
-        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active,phone').eq('active', true);
+        const { data, error } = await requireClient()
+          .from("profiles")
+          .select("agent_key,name,role,email,active,phone")
+          .eq("active", true);
         if (error) throw error;
         return (data ?? []).map(mapProfileRow);
       },
       async listAll() {
-        const { data, error } = await requireClient().from('profiles').select('agent_key,name,role,email,active,phone');
+        const { data, error } = await requireClient().from("profiles").select("agent_key,name,role,email,active,phone");
         if (error) throw error;
         return (data ?? []).map(mapProfileRow);
       },
       async setActive(key, active) {
-        const { data, error } = await requireClient().from('profiles').update({ active }).eq('agent_key', key).select().single();
+        const { data, error } = await requireClient()
+          .from("profiles")
+          .update({ active })
+          .eq("agent_key", key)
+          .select()
+          .single();
         if (error) throw error;
         return mapProfileRow(data);
       },
       async updateSignature(key, dataUrl) {
-        const { data, error } = await requireClient().from('profiles').update({ signature_data: dataUrl }).eq('agent_key', key).select().single();
+        const { data, error } = await requireClient()
+          .from("profiles")
+          .update({ signature_data: dataUrl })
+          .eq("agent_key", key)
+          .select()
+          .single();
         if (error) throw error;
         return mapProfileRow(data);
       },
     },
     staffInvites: {
       async list() {
-        const { data, error } = await requireClient().from('allowed_emails').select('*').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("allowed_emails")
+          .select("*")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapStaffInviteRow);
       },
       async create(email, name, invitedBy) {
-        const { error } = await requireClient().from('allowed_emails').insert({ email: email.toLowerCase(), name, invited_by: invitedBy });
+        const { error } = await requireClient()
+          .from("allowed_emails")
+          .insert({ email: email.toLowerCase(), name, invited_by: invitedBy });
         if (error) throw error;
       },
       async remove(email) {
-        const { error } = await requireClient().from('allowed_emails').delete().eq('email', email.toLowerCase());
+        const { error } = await requireClient().from("allowed_emails").delete().eq("email", email.toLowerCase());
         if (error) throw error;
       },
     },
     memos: {
       async sent(myKey) {
-        const { data, error } = await requireClient().from('memos').select('*').eq('from_key', myKey).order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("memos")
+          .select("*")
+          .eq("from_key", myKey)
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapMemoRow);
       },
       async drafts(myKey) {
-        const { data, error } = await requireClient().from('memos').select('*').eq('from_key', myKey).eq('status', 'draft').order('created_at', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("memos")
+          .select("*")
+          .eq("from_key", myKey)
+          .eq("status", "draft")
+          .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapMemoRow);
       },
       async received(myKey) {
         const client = requireClient();
-        const { data: directData, error: directError } = await client.from('memos').select('*').eq('to_key', myKey).neq('status', 'draft');
+        const { data: directData, error: directError } = await client
+          .from("memos")
+          .select("*")
+          .eq("to_key", myKey)
+          .neq("status", "draft");
         if (directError) throw directError;
-        const direct: ReceivedMemo[] = (directData ?? []).map((m) => ({ memo: mapMemoRow(m), viaCC: false, recipientRowId: null }));
+        const direct: ReceivedMemo[] = (directData ?? []).map((m) => ({
+          memo: mapMemoRow(m),
+          viaCC: false,
+          recipientRowId: null,
+        }));
 
-        const { data: ccData, error: ccError } = await client.from('memo_recipients').select('*, memo:memos(*)').eq('staff_key', myKey);
+        const { data: ccData, error: ccError } = await client
+          .from("memo_recipients")
+          .select("*, memo:memos(*)")
+          .eq("staff_key", myKey);
         if (ccError) throw ccError;
-        const viaCc: ReceivedMemo[] = ((ccData ?? []) as (Record<string, unknown> & { memo?: Record<string, unknown> })[])
+        const viaCc: ReceivedMemo[] = (
+          (ccData ?? []) as (Record<string, unknown> & { memo?: Record<string, unknown> })[]
+        )
           .filter((r) => r.memo)
-          .map((r) => ({ memo: mapMemoRow(r.memo as Record<string, unknown>), viaCC: true, recipientRowId: r.id as string }));
+          .map((r) => ({
+            memo: mapMemoRow(r.memo as Record<string, unknown>),
+            viaCC: true,
+            recipientRowId: r.id as string,
+          }));
 
         return [...direct, ...viaCc].sort((a, b) => (a.memo.createdAt < b.memo.createdAt ? 1 : -1));
       },
       async create(fromKey, fromName, input) {
         const client = requireClient();
         const { data, error } = await client
-          .from('memos')
+          .from("memos")
           .insert({
             from_key: fromKey,
             from_name: fromName,
@@ -3674,23 +4800,30 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         const memo = mapMemoRow(data);
         if (input.cc && input.cc.length > 0) {
-          const { error: ccError } = await client.from('memo_recipients').insert(input.cc.map((c) => ({ memo_id: memo.id, staff_key: c.key, staff_name: c.name })));
+          const { error: ccError } = await client
+            .from("memo_recipients")
+            .insert(input.cc.map((c) => ({ memo_id: memo.id, staff_key: c.key, staff_name: c.name })));
           if (ccError) throw ccError;
         }
         return memo;
       },
       async send(id) {
-        const { data, error } = await requireClient().from('memos').update({ status: 'sent' }).eq('id', id).select().single();
+        const { data, error } = await requireClient()
+          .from("memos")
+          .update({ status: "sent" })
+          .eq("id", id)
+          .select()
+          .single();
         if (error) throw error;
         return mapMemoRow(data);
       },
       async markRead(item) {
         const client = requireClient();
         if (item.viaCC && item.recipientRowId) {
-          const { error } = await client.from('memo_recipients').update({ read: true }).eq('id', item.recipientRowId);
+          const { error } = await client.from("memo_recipients").update({ read: true }).eq("id", item.recipientRowId);
           if (error) throw error;
         } else {
-          const { error } = await client.from('memos').update({ read: true }).eq('id', item.memo.id);
+          const { error } = await client.from("memos").update({ read: true }).eq("id", item.memo.id);
           if (error) throw error;
         }
       },
@@ -3700,24 +4833,28 @@ function createLiveDataSource(): DataSource {
         // row; any CC rows referencing it become orphaned, matching a
         // real limitation of the production schema, not a bug to route
         // around from the client.
-        const { data, error } = await requireClient().from('memos').delete().eq('id', id).select('id');
+        const { data, error } = await requireClient().from("memos").delete().eq("id", id).select("id");
         if (error) throw error;
-        if (!data || data.length === 0) throw new Error('You can only delete memos you sent (or ask a manager to).');
+        if (!data || data.length === 0) throw new Error("You can only delete memos you sent (or ask a manager to).");
       },
     },
     manager: {
       async overview() {
         const client = requireClient();
-        const sixMonthsAgo = shiftMonth(today().slice(0, 7), -5) + '-01';
+        const sixMonthsAgo = shiftMonth(today().slice(0, 7), -5) + "-01";
         const [leadsRes, complaintsRes, visitsRes, staffRes, paymentsRes] = await Promise.all([
-          client.from('leads').select('*'),
-          client.from('complaints').select('status'),
-          client.from('site_visits').select('id'),
-          client.from('profiles').select('agent_key,name,role,email').eq('active', true),
+          client.from("leads").select("*"),
+          client.from("complaints").select("status"),
+          client.from("site_visits").select("id"),
+          client.from("profiles").select("agent_key,name,role,email").eq("active", true),
           // status='approved' matches the real app-wide rule (also enforced
           // in Data Check's Ledger mismatch check) that a pending payment
           // must not count as collected until a manager approves it.
-          client.from('payments').select('amount,payment_date').eq('status', 'approved').gte('payment_date', sixMonthsAgo),
+          client
+            .from("payments")
+            .select("amount,payment_date")
+            .eq("status", "approved")
+            .gte("payment_date", sixMonthsAgo),
         ]);
         if (leadsRes.error) throw leadsRes.error;
         if (complaintsRes.error) throw complaintsRes.error;
@@ -3750,31 +4887,46 @@ function createLiveDataSource(): DataSource {
           collected,
           outstanding: Math.max(pipelineValue - collected, 0),
           fullyPaidCount: leads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal).length,
-          openComplaints: (complaintsRes.data ?? []).filter((c) => c.status !== 'Resolved').length,
+          openComplaints: (complaintsRes.data ?? []).filter((c) => c.status !== "Resolved").length,
           siteVisitsCount: (visitsRes.data ?? []).length,
           stageFunnel,
           byAgent: [...byAgentMap.values()].sort((a, b) => b.value - a.value),
-          collectedTrend: computeMonthlyTrend((paymentsRes.data ?? []).map((r) => ({ date: r.payment_date as string, amount: Number(r.amount ?? 0) }) as Payment)),
+          collectedTrend: computeMonthlyTrend(
+            (paymentsRes.data ?? []).map(
+              (r) => ({ date: r.payment_date as string, amount: Number(r.amount ?? 0) }) as Payment,
+            ),
+          ),
         };
       },
       async leaderboardRows(fromDate, toDate) {
-        const { data, error } = await requireClient().rpc('leaderboard_rows', { p_from: fromDate, p_to: toDate });
+        const { data, error } = await requireClient().rpc("leaderboard_rows", { p_from: fromDate, p_to: toDate });
         if (error) throw error;
         return (data ?? []).map(mapLeaderboardRawRow);
       },
       async leaderboardScores(fromDate, toDate) {
-        const { data, error } = await requireClient().rpc('recompute_leaderboard_scores', { p_from: fromDate, p_to: toDate });
+        const { data, error } = await requireClient().rpc("recompute_leaderboard_scores", {
+          p_from: fromDate,
+          p_to: toDate,
+        });
         if (error) throw error;
         return (data ?? []).map(mapLeaderboardScoreRow);
       },
       async leaderboardScoreHistory(limit) {
-        const { data, error } = await requireClient().from('leaderboard_score_history').select('*').order('changed_at', { ascending: false }).limit(limit);
+        const { data, error } = await requireClient()
+          .from("leaderboard_score_history")
+          .select("*")
+          .order("changed_at", { ascending: false })
+          .limit(limit);
         if (error) throw error;
         return (data ?? []).map(mapLeaderboardScoreHistoryRow);
       },
       async commissionData() {
         const client = requireClient();
-        const [paymentsRes, leadsRes, staffRes] = await Promise.all([client.from('payments').select('*'), client.from('leads').select('*'), client.from('profiles').select('agent_key,name').eq('role', 'agent')]);
+        const [paymentsRes, leadsRes, staffRes] = await Promise.all([
+          client.from("payments").select("*"),
+          client.from("leads").select("*"),
+          client.from("profiles").select("agent_key,name").eq("role", "agent"),
+        ]);
         if (paymentsRes.error) throw paymentsRes.error;
         if (leadsRes.error) throw leadsRes.error;
         if (staffRes.error) throw staffRes.error;
@@ -3785,18 +4937,24 @@ function createLiveDataSource(): DataSource {
         };
       },
       async referralConversions(fromDate, toDate) {
-        const { data, error } = await requireClient().rpc('staff_referral_conversions', { p_from: fromDate, p_to: toDate });
+        const { data, error } = await requireClient().rpc("staff_referral_conversions", {
+          p_from: fromDate,
+          p_to: toDate,
+        });
         if (error) throw error;
-        return (data ?? []).map((r: Record<string, unknown>) => ({ staffKey: r.staff_key as string, referralConversions: Number(r.referral_conversions ?? 0) }));
+        return (data ?? []).map((r: Record<string, unknown>) => ({
+          staffKey: r.staff_key as string,
+          referralConversions: Number(r.referral_conversions ?? 0),
+        }));
       },
     },
     sve: {
       async listVisitsWithStatus() {
         const client = requireClient();
         const [visitsRes, invitesRes, submissionsRes] = await Promise.all([
-          client.from('site_visits').select('*').order('visit_date', { ascending: false }),
-          client.from('site_visit_experience_invites').select('*'),
-          client.from('site_visit_experience_submissions').select('*'),
+          client.from("site_visits").select("*").order("visit_date", { ascending: false }),
+          client.from("site_visit_experience_invites").select("*"),
+          client.from("site_visit_experience_submissions").select("*"),
         ]);
         if (visitsRes.error) throw visitsRes.error;
         if (invitesRes.error) throw invitesRes.error;
@@ -3813,13 +4971,13 @@ function createLiveDataSource(): DataSource {
       },
       async createInvite(siteVisitId, clientName, clientContact, sentBy) {
         const { data, error } = await requireClient()
-          .from('site_visit_experience_invites')
+          .from("site_visit_experience_invites")
           .insert({
             site_visit_id: siteVisitId,
             client_name: clientName,
             client_contact: clientContact,
             sent_at: new Date().toISOString(),
-            sent_via: 'link',
+            sent_via: "link",
             sent_by: sentBy,
           })
           .select()
@@ -3830,20 +4988,31 @@ function createLiveDataSource(): DataSource {
       async issueReportLink(submissionId, pdfBlob, createdBy, createdByName) {
         const client = requireClient();
         const path = `${submissionId}/report-${Date.now()}.pdf`;
-        const { error: uploadError } = await client.storage.from('sve-reports').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        const { error: uploadError } = await client.storage
+          .from("sve-reports")
+          .upload(path, pdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError) throw uploadError;
-        const { data, error } = await client.from('sve_report_links').insert({ submission_id: submissionId, storage_path: path, created_by: createdBy, created_by_name: createdByName }).select('token').single();
+        const { data, error } = await client
+          .from("sve_report_links")
+          .insert({
+            submission_id: submissionId,
+            storage_path: path,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
+          .select("token")
+          .single();
         if (error) throw error;
         const { error: updError } = await client
-          .from('site_visit_experience_submissions')
+          .from("site_visit_experience_submissions")
           .update({ report_pdf_path: path, report_sent_at: new Date().toISOString() })
-          .eq('id', submissionId);
+          .eq("id", submissionId);
         if (updError) throw updError;
         return data.token as string;
       },
       async getOrCreateDayReport(visitDate) {
         const client = requireClient();
-        const existing = await client.from('sve_day_reports').select('*').eq('visit_date', visitDate).maybeSingle();
+        const existing = await client.from("sve_day_reports").select("*").eq("visit_date", visitDate).maybeSingle();
         if (existing.error) throw existing.error;
         if (existing.data) return mapSveDayReportRow(existing.data);
 
@@ -3852,15 +5021,15 @@ function createLiveDataSource(): DataSource {
         // already exists for them (if any) -- the AI feedback summary
         // itself is generated later, on demand, not auto-filled here.
         const [visitsRes, invitesRes, submissionsRes] = await Promise.all([
-          client.from('site_visits').select('*').eq('visit_date', visitDate).is('deleted_at', null),
-          client.from('site_visit_experience_invites').select('*'),
-          client.from('site_visit_experience_submissions').select('id,invite_id'),
+          client.from("site_visits").select("*").eq("visit_date", visitDate).is("deleted_at", null),
+          client.from("site_visit_experience_invites").select("*"),
+          client.from("site_visit_experience_submissions").select("id,invite_id"),
         ]);
         if (visitsRes.error) throw visitsRes.error;
         if (invitesRes.error) throw invitesRes.error;
         if (submissionsRes.error) throw submissionsRes.error;
         const visits = (visitsRes.data ?? []).map(mapSiteVisitRow);
-        const entries: SveDayReport['entries'] = visits.map((v) => {
+        const entries: SveDayReport["entries"] = visits.map((v) => {
           const invite = (invitesRes.data ?? []).find((i) => i.site_visit_id === v.id) ?? null;
           const submission = invite ? (submissionsRes.data ?? []).find((s) => s.invite_id === invite.id) : null;
           return {
@@ -3874,15 +5043,15 @@ function createLiveDataSource(): DataSource {
           };
         });
         const ins = await client
-          .from('sve_day_reports')
-          .insert({ visit_date: visitDate, site: visits[0]?.site ?? 'Royal Palm Enclave', entries })
+          .from("sve_day_reports")
+          .insert({ visit_date: visitDate, site: visits[0]?.site ?? "Royal Palm Enclave", entries })
           .select()
           .single();
         if (ins.error) {
           // Same unique-index race guard as weeklyVisitForms.getOrCreate --
           // two staff opening the same day's report at once shouldn't error
           // out, just fall back to whichever row won the insert race.
-          const retry = await client.from('sve_day_reports').select('*').eq('visit_date', visitDate).maybeSingle();
+          const retry = await client.from("sve_day_reports").select("*").eq("visit_date", visitDate).maybeSingle();
           if (retry.error || !retry.data) throw retry.error ?? ins.error;
           return mapSveDayReportRow(retry.data);
         }
@@ -3891,37 +5060,54 @@ function createLiveDataSource(): DataSource {
       async saveDayReport(id, patch) {
         const client = requireClient();
         const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if ('entries' in patch) dbPatch.entries = patch.entries;
-        if ('siteSummary' in patch) dbPatch.site_summary = patch.siteSummary;
-        if ('siteSummaryAi' in patch) dbPatch.site_summary_ai = patch.siteSummaryAi;
-        if ('preparedBy' in patch) dbPatch.prepared_by = patch.preparedBy;
-        if ('preparedByName' in patch) dbPatch.prepared_by_name = patch.preparedByName;
-        const { data, error } = await client.from('sve_day_reports').update(dbPatch).eq('id', id).select().single();
+        if ("entries" in patch) dbPatch.entries = patch.entries;
+        if ("siteSummary" in patch) dbPatch.site_summary = patch.siteSummary;
+        if ("siteSummaryAi" in patch) dbPatch.site_summary_ai = patch.siteSummaryAi;
+        if ("preparedBy" in patch) dbPatch.prepared_by = patch.preparedBy;
+        if ("preparedByName" in patch) dbPatch.prepared_by_name = patch.preparedByName;
+        const { data, error } = await client.from("sve_day_reports").update(dbPatch).eq("id", id).select().single();
         if (error) throw error;
         return mapSveDayReportRow(data);
       },
       async listDayReports() {
-        const { data, error } = await requireClient().from('sve_day_reports').select('*').order('visit_date', { ascending: false });
+        const { data, error } = await requireClient()
+          .from("sve_day_reports")
+          .select("*")
+          .order("visit_date", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapSveDayReportRow);
       },
       async deleteInviteAndSubmission(siteVisitId, submissionId) {
         const client = requireClient();
         if (submissionId) {
-          const { error } = await client.from('site_visit_experience_submissions').delete().eq('id', submissionId);
+          const { error } = await client.from("site_visit_experience_submissions").delete().eq("id", submissionId);
           if (error) throw error;
         }
-        const { error } = await client.from('site_visit_experience_invites').delete().eq('site_visit_id', siteVisitId);
+        const { error } = await client.from("site_visit_experience_invites").delete().eq("site_visit_id", siteVisitId);
         if (error) throw error;
       },
       async issueDayReportLink(dayReportId, pdfBlob, createdBy, createdByName) {
         const client = requireClient();
         const path = `day-reports/${dayReportId}/report-${Date.now()}.pdf`;
-        const { error: uploadError } = await client.storage.from('sve-reports').upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true });
+        const { error: uploadError } = await client.storage
+          .from("sve-reports")
+          .upload(path, pdfBlob, { contentType: "application/pdf", upsert: true });
         if (uploadError) throw uploadError;
-        const { data, error } = await client.from('sve_report_links').insert({ day_report_id: dayReportId, storage_path: path, created_by: createdBy, created_by_name: createdByName }).select('token').single();
+        const { data, error } = await client
+          .from("sve_report_links")
+          .insert({
+            day_report_id: dayReportId,
+            storage_path: path,
+            created_by: createdBy,
+            created_by_name: createdByName,
+          })
+          .select("token")
+          .single();
         if (error) throw error;
-        const { error: updError } = await client.from('sve_day_reports').update({ status: 'sent', report_pdf_path: path, sent_at: new Date().toISOString() }).eq('id', dayReportId);
+        const { error: updError } = await client
+          .from("sve_day_reports")
+          .update({ status: "sent", report_pdf_path: path, sent_at: new Date().toISOString() })
+          .eq("id", dayReportId);
         if (updError) throw updError;
         return data.token as string;
       },
@@ -3930,8 +5116,13 @@ function createLiveDataSource(): DataSource {
       async listConversations(myKey) {
         const client = requireClient();
         const [messagesRes, staffRes] = await Promise.all([
-          client.from('messages').select('*').is('kind', null).or(`sender_key.eq.${myKey},recipient_key.eq.${myKey}`).order('created_at', { ascending: false }),
-          client.from('profiles').select('agent_key,name,role,email').eq('active', true),
+          client
+            .from("messages")
+            .select("*")
+            .is("kind", null)
+            .or(`sender_key.eq.${myKey},recipient_key.eq.${myKey}`)
+            .order("created_at", { ascending: false }),
+          client.from("profiles").select("agent_key,name,role,email").eq("active", true),
         ]);
         if (messagesRes.error) throw messagesRes.error;
         if (staffRes.error) throw staffRes.error;
@@ -3940,7 +5131,7 @@ function createLiveDataSource(): DataSource {
         const mine = (messagesRes.data ?? []).map(mapChatMessageRow);
         const byOther = new Map<string, ChatMessage[]>();
         for (const m of mine) {
-          const other = m.senderKey === myKey ? (m.recipientKey ?? '') : m.senderKey;
+          const other = m.senderKey === myKey ? (m.recipientKey ?? "") : m.senderKey;
           if (!other) continue;
           const arr = byOther.get(other) ?? [];
           arr.push(m);
@@ -3959,63 +5150,91 @@ function createLiveDataSource(): DataSource {
       },
       async listThread(myKey, otherKey) {
         const { data, error } = await requireClient()
-          .from('messages')
-          .select('*')
-          .is('kind', null)
-          .or(`and(sender_key.eq.${myKey},recipient_key.eq.${otherKey}),and(sender_key.eq.${otherKey},recipient_key.eq.${myKey})`)
-          .order('created_at', { ascending: true });
+          .from("messages")
+          .select("*")
+          .is("kind", null)
+          .or(
+            `and(sender_key.eq.${myKey},recipient_key.eq.${otherKey}),and(sender_key.eq.${otherKey},recipient_key.eq.${myKey})`,
+          )
+          .order("created_at", { ascending: true });
         if (error) throw error;
         return (data ?? []).map(mapChatMessageRow);
       },
       async send(myKey, myName, otherKey, body, replyToId) {
         const { data, error } = await requireClient()
-          .from('messages')
-          .insert({ sender_key: myKey, sender_name: myName, recipient_key: otherKey, body, reply_to_id: replyToId ?? null })
+          .from("messages")
+          .insert({
+            sender_key: myKey,
+            sender_name: myName,
+            recipient_key: otherKey,
+            body,
+            reply_to_id: replyToId ?? null,
+          })
           .select()
           .single();
         if (error) throw error;
         return mapChatMessageRow(data);
       },
       async markThreadRead(myKey, otherKey) {
-        const { error } = await requireClient().from('messages').update({ read: true }).eq('recipient_key', myKey).eq('sender_key', otherKey).eq('read', false);
+        const { error } = await requireClient()
+          .from("messages")
+          .update({ read: true })
+          .eq("recipient_key", myKey)
+          .eq("sender_key", otherKey)
+          .eq("read", false);
         if (error) throw error;
       },
     },
     notifications: {
       async list(myKey) {
         const { data, error } = await requireClient()
-          .from('messages')
-          .select('*')
-          .not('kind', 'is', null)
-          .eq('recipient_key', myKey)
-          .order('created_at', { ascending: false })
+          .from("messages")
+          .select("*")
+          .not("kind", "is", null)
+          .eq("recipient_key", myKey)
+          .order("created_at", { ascending: false })
           .limit(50);
         if (error) throw error;
         return (data ?? []).map(mapChatMessageRow);
       },
       async unreadCount(myKey) {
         const { count, error } = await requireClient()
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .not('kind', 'is', null)
-          .eq('recipient_key', myKey)
-          .eq('read', false);
+          .from("messages")
+          .select("id", { count: "exact", head: true })
+          .not("kind", "is", null)
+          .eq("recipient_key", myKey)
+          .eq("read", false);
         if (error) throw error;
         return count ?? 0;
       },
       async markRead(id) {
-        const { error } = await requireClient().from('messages').update({ read: true }).eq('id', id);
+        const { error } = await requireClient().from("messages").update({ read: true }).eq("id", id);
         if (error) throw error;
       },
       async markAllRead(myKey) {
-        const { error } = await requireClient().from('messages').update({ read: true }).eq('recipient_key', myKey).not('kind', 'is', null).eq('read', false);
+        const { error } = await requireClient()
+          .from("messages")
+          .update({ read: true })
+          .eq("recipient_key", myKey)
+          .not("kind", "is", null)
+          .eq("read", false);
         if (error) throw error;
       },
       async notify(fromKey, fromName, toKeys, body, kind, refType, refId) {
         if (toKeys.length === 0) return;
         const { error } = await requireClient()
-          .from('messages')
-          .insert(toKeys.map((toKey) => ({ sender_key: fromKey, sender_name: fromName, recipient_key: toKey, body, kind, ref_type: refType ?? null, ref_id: refId ?? null })));
+          .from("messages")
+          .insert(
+            toKeys.map((toKey) => ({
+              sender_key: fromKey,
+              sender_name: fromName,
+              recipient_key: toKey,
+              body,
+              kind,
+              ref_type: refType ?? null,
+              ref_id: refId ?? null,
+            })),
+          );
         if (error) throw error;
       },
     },

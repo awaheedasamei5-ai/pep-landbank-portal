@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+
 import { AlertTriangle, Check, Loader2, Plus, X } from "lucide-react";
 
+import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SubmitButton } from "@/components/submit-button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -28,8 +29,8 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 import { ReceiptModal } from "./receipt-modal";
 import {
   type LeadOption,
-  type Payment,
   PAYMENT_METHODS,
+  type Payment,
   useApprovePayment,
   useDeclinePayment,
   useFlagPaymentCorrection,
@@ -91,7 +92,13 @@ function LogPaymentDialog({
     if (!selectedLead) return;
     const parsed = Number(amount);
     if (!parsed || parsed <= 0) return;
-    const result = await logPayment.mutateAsync({ lead: selectedLead, amount: parsed, paymentMethod: method, note, referenceNumber: reference });
+    const result = await logPayment.mutateAsync({
+      lead: selectedLead,
+      amount: parsed,
+      paymentMethod: method,
+      note,
+      referenceNumber: reference,
+    });
     reset();
     setOpen(false);
     if (result.status === "approved") onApproved(result);
@@ -125,7 +132,8 @@ function LogPaymentDialog({
                 <div>
                   <div className="font-medium">{selectedLead.name}</div>
                   <div className="text-muted-foreground text-xs">
-                    {selectedLead.plotType ?? "—"} · Paid {money(selectedLead.amtPaid)} of {money(selectedLead.grandTotal)}
+                    {selectedLead.plotType ?? "—"} · Paid {money(selectedLead.amtPaid)} of{" "}
+                    {money(selectedLead.grandTotal)}
                   </div>
                 </div>
                 <Button variant="ghost" size="icon-xs" onClick={() => setSelectedLead(null)}>
@@ -161,7 +169,15 @@ function LogPaymentDialog({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="payment-amount">Amount (GHS)</Label>
-            <Input id="payment-amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+            <Input
+              id="payment-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -182,7 +198,12 @@ function LogPaymentDialog({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="payment-reference">Reference number (optional)</Label>
-            <Input id="payment-reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Transaction / receipt ref" />
+            <Input
+              id="payment-reference"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="Transaction / receipt ref"
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -259,7 +280,12 @@ function FlagCorrectionDialog({ paymentId }: { paymentId: string }) {
         <DialogHeader>
           <DialogTitle>Flag for correction</DialogTitle>
         </DialogHeader>
-        <Textarea placeholder="What needs to change?" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
+        <Textarea
+          placeholder="What needs to change?"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+        />
         <DialogFooter>
           <SubmitButton
             loading={flag.isPending}
@@ -320,7 +346,12 @@ function ResubmitDialog({ payment }: { payment: Payment }) {
           <SubmitButton
             loading={resubmit.isPending}
             onClick={async () => {
-              await resubmit.mutateAsync({ paymentId: payment.id, amount: Number(amount), paymentMethod: method, note });
+              await resubmit.mutateAsync({
+                paymentId: payment.id,
+                amount: Number(amount),
+                paymentMethod: method,
+                note,
+              });
               setOpen(false);
             }}
           >
@@ -361,7 +392,9 @@ export function PaymentsPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium">Payments ledger</h2>
-          <p className="text-sm text-muted-foreground">{canManage ? "Every payment across all agents." : "Your own leads' payment history."}</p>
+          <p className="text-sm text-muted-foreground">
+            {canManage ? "Every payment across all agents." : "Your own leads' payment history."}
+          </p>
         </div>
         <LogPaymentDialog canManage={!!canManage} callerRole={profile?.role} onApproved={setReceiptPayment} />
       </div>
@@ -374,7 +407,10 @@ export function PaymentsPanel() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {pendingQueue.map((p) => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+              >
                 <div>
                   <div className="font-medium">{p.leadName}</div>
                   <div className="text-muted-foreground text-xs">
@@ -385,8 +421,8 @@ export function PaymentsPanel() {
                   <Button
                     size="sm"
                     onClick={async () => {
-                      await approve.mutateAsync(p.id);
-                      setReceiptPayment({ ...p, status: "approved" });
+                      const snapshot = await approve.mutateAsync(p.id);
+                      setReceiptPayment({ ...p, status: "approved", ...snapshot });
                     }}
                     disabled={approve.isPending}
                   >
@@ -430,11 +466,17 @@ export function PaymentsPanel() {
                   <TableCell>{p.paymentMethod ?? "—"}</TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[p.status]}>{STATUS_LABEL[p.status]}</Badge>
-                    {p.status === "declined" && <div className="mt-1 text-xs text-muted-foreground">{p.correctionReason}</div>}
+                    {p.status === "declined" && (
+                      <div className="mt-1 text-xs text-muted-foreground">{p.correctionReason}</div>
+                    )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(p.paymentDate).toLocaleDateString("en-GB")}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(p.paymentDate).toLocaleDateString("en-GB")}
+                  </TableCell>
                   <TableCell className="text-right">
-                    {p.status === "needs_correction" && (profile?.role === "manager" || profile?.key === "elias") && <ResubmitDialog payment={p} />}
+                    {p.status === "needs_correction" && (profile?.role === "manager" || profile?.key === "elias") && (
+                      <ResubmitDialog payment={p} />
+                    )}
                     {p.status === "approved" && (
                       <Button size="sm" variant="ghost" onClick={() => setReceiptPayment(p)}>
                         Receipt
@@ -448,7 +490,11 @@ export function PaymentsPanel() {
         </CardContent>
       </Card>
 
-      <ReceiptModal payment={receiptPayment} open={!!receiptPayment} onOpenChange={(next) => !next && setReceiptPayment(null)} />
+      <ReceiptModal
+        payment={receiptPayment}
+        open={!!receiptPayment}
+        onOpenChange={(next) => !next && setReceiptPayment(null)}
+      />
     </div>
   );
 }
