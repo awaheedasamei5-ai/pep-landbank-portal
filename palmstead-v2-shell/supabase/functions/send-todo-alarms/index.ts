@@ -234,6 +234,14 @@ Deno.serve(async (request) => {
 
   try {
     const sb = createClient(projectUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    const workerToken = request.headers.get("x-operations-push-token");
+    const { data: authorized, error: authorizationError } = await sb.rpc("verify_op_todo_push_worker_token", {
+      p_token: workerToken,
+    });
+    if (authorizationError || authorized !== true) {
+      return Response.json({ error: "Not authorized" }, { status: 401 });
+    }
+
     const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
     const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
     const [outbox, legacy] = await Promise.all([
@@ -245,3 +253,4 @@ Deno.serve(async (request) => {
     return Response.json({ error: "Push reminder worker could not complete its scheduled run." }, { status: 500 });
   }
 });
+

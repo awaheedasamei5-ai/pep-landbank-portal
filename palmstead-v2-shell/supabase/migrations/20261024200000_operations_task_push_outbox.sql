@@ -238,6 +238,71 @@ $$;
 revoke all on function public.finish_op_todo_push_delivery(uuid, integer, text, integer, text) from public, anon, authenticated;
 grant execute on function public.finish_op_todo_push_delivery(uuid, integer, text, integer, text) to service_role;
 
+-- The cron's existing Authorization header is the public project key, so it
+-- is not enough to authorize a service-role worker. Add a second secret known
+-- only to Vault and the scheduled caller; Edge JWT verification remains on.
+create or replace function public.verify_op_todo_push_worker_token(p_token text)
+returns boolean
+language sql
+security definer
+set search_path = ''
+set row_security = off
+as $$
+  select p_token is not null
+    and p_token = (
+      select decrypted_secret
+      from vault.decrypted_secrets
+      where name = 'operations_push_worker_token'
+      limit 1
+    )
+$$;
+
+revoke all on function public.verify_op_todo_push_worker_token(text) from public, anon, authenticated;
+grant execute on function public.verify_op_todo_push_worker_token(text) to service_role;
+
+do $$
+declare
+  v_job_id bigint;
+  v_authorization text;
+  v_command text;
+begin
+  if not exists (select 1 from vault.secrets where name = 'operations_push_worker_token') then
+    perform vault.create_secret(
+      encode(extensions.gen_random_bytes(32), 'hex'),
+      'operations_push_worker_token',
+      'Internal authentication token for the Operations Web Push worker'
+    );
+  end if;
+
+  select jobid, substring(command from '''Authorization'',''Bearer ([^'']+)''')
+  into v_job_id, v_authorization
+  from cron.job
+  where jobname = 'send-todo-alarms-every-minute'
+  limit 1;
+
+  if v_job_id is null or v_authorization is null then
+    raise exception 'The existing Operations alarm cron job could not be safely authenticated.';
+  end if;
+
+  perform cron.unschedule(v_job_id);
+  v_command := format($command$
+    select net.http_post(
+      url := 'https://sbydzrlzqxcdbudjaube.supabase.co/functions/v1/send-todo-alarms',
+      headers := jsonb_build_object(
+        'Authorization', 'Bearer %s',
+        'Content-Type', 'application/json',
+        'x-operations-push-token', (
+          select decrypted_secret from vault.decrypted_secrets
+          where name = 'operations_push_worker_token' limit 1
+        )
+      ),
+      body := '{}'::jsonb
+    );
+  $command$, v_authorization);
+  perform cron.schedule('send-todo-alarms-every-minute', '* * * * *', v_command);
+end;
+$$;
+
 -- Reclaim an abandoned worker lease without duplicating the event.
 update public.op_todo_push_outbox
 set status = case when attempt_count < 5 then 'retry' else 'failed' end,
@@ -247,3 +312,4 @@ where status = 'sending' and lease_until < clock_timestamp();
 
 comment on table public.op_todo_push_outbox is
   'Private server queue for opt-in due-time and missed-task Web Push reminders. Payloads contain no staff phone number.';
+
