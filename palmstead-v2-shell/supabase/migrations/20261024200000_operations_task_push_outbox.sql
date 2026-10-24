@@ -260,36 +260,24 @@ $$;
 revoke all on function public.verify_op_todo_push_worker_token(text) from public, anon, authenticated;
 grant execute on function public.verify_op_todo_push_worker_token(text) to service_role;
 
-do $$
-declare
-  v_job_id bigint;
-  v_authorization text;
-  v_command text;
-begin
-  if not exists (select 1 from vault.secrets where name = 'operations_push_worker_token') then
-    perform vault.create_secret(
-      encode(extensions.gen_random_bytes(32), 'hex'),
-      'operations_push_worker_token',
-      'Internal authentication token for the Operations Web Push worker'
-    );
-  end if;
+select vault.create_secret(
+  encode(extensions.gen_random_bytes(32), 'hex'),
+  'operations_push_worker_token',
+  'Internal authentication token for the Operations Web Push worker'
+)
+where not exists (select 1 from vault.secrets where name = 'operations_push_worker_token');
 
-  select jobid, substring(command from '''Authorization'',''Bearer ([^'']+)''')
-  into v_job_id, v_authorization
-  from cron.job
-  where jobname = 'send-todo-alarms-every-minute'
-  limit 1;
+select cron.unschedule(jobid)
+from cron.job
+where jobname = 'send-todo-alarms-every-minute';
 
-  if v_job_id is null or v_authorization is null then
-    raise exception 'The existing Operations alarm cron job could not be safely authenticated.';
-  end if;
-
-  perform cron.unschedule(v_job_id);
-  v_command := format($command$
+select cron.schedule(
+  'send-todo-alarms-every-minute',
+  '* * * * *',
+  $command$
     select net.http_post(
       url := 'https://sbydzrlzqxcdbudjaube.supabase.co/functions/v1/send-todo-alarms',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer %s',
         'Content-Type', 'application/json',
         'x-operations-push-token', (
           select decrypted_secret from vault.decrypted_secrets
@@ -298,11 +286,8 @@ begin
       ),
       body := '{}'::jsonb
     );
-  $command$, v_authorization);
-  perform cron.schedule('send-todo-alarms-every-minute', '* * * * *', v_command);
-end;
-$$;
-
+  $command$
+);
 -- Reclaim an abandoned worker lease without duplicating the event.
 update public.op_todo_push_outbox
 set status = case when attempt_count < 5 then 'retry' else 'failed' end,
