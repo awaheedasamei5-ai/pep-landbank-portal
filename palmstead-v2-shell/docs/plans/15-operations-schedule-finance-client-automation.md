@@ -1,6 +1,6 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
-**Status: discovery complete; implementation plan approved for phased work.** This plan covers the next linked product slice across Operations, Finance, CRM, allocations, and plot inventory. It is based on a read-only review of the V2 source tree and the connected V2 Supabase project `sbydzrlzqxcdbudjaube`. No business rows, SMS messages, client records, or production schema were changed during discovery.
+**Status: phased implementation in progress.** This plan covers the next linked product slice across Operations, Finance, CRM, allocations, and plot inventory. It is based on a read-only review of the V2 source tree and the connected V2 Supabase project `sbydzrlzqxcdbudjaube`. No business rows, SMS messages, client records, or production schema were changed during discovery or the first schedule slice.
 
 ## Outcome
 
@@ -130,7 +130,8 @@ The existing schema confirms `leads.payment_plan` but not a payment schedule led
 | Slice | Evidence | State |
 |---|---|---|
 | Operations Reports | Branch `codex/operations-reports-release-current`, PR #15 merged to `rebuild` as `9bfdfb1`; Vercel production deployment `dpl_GADQ7YNLU9pTWCTwxgGrqfD3mdUt` Ready; Staff production view loaded with self-only data and active exports. | Management production account check still to repeat after deploy; both roles passed on exact preview previously. |
-| Schedule reminders | Live schema/functions/cron inspected read-only; task-source mismatch, UTC behavior, and delivery-state gaps confirmed. | Not implemented or provider-tested. |
+| Operations schedule urgency | Added a calendar-independent 90-day overdue and 3-day due-soon queue, time-aware deadline sorting, clickable task details, and focused tests. Commit `d8951ab`; PR #16 draft. Vercel preview build H4hz5r1y… is Ready. Staff preview loaded on the `My Schedule` tab; viewport width 390 had no page overflow. Staff had no scheduled rows, so the urgency UI was covered by unit fixtures rather than live task records. | Preview verified; not merged or deployed to production. Management preview role check and real reminder delivery remain open. |
+| Durable schedule reminders | Live schema/functions/cron inspected read-only; task-source mismatch, UTC behavior, and delivery-state gaps confirmed. A second attempt to create an isolated Supabase branch returned `INVALID_ARGUMENT`; no branch or database change was created. | Not implemented or provider-tested. Requires an isolated database for migration/RPC and delivery tests. |
 | Finance/client automation | Approval RPC and allocation threshold workflow inspected; receipt PDF/share-link infrastructure verified in source; no monthly schedule ledger found in queried tables. | Planned; no SMS or schema changes. |
 
 
