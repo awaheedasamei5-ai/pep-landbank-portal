@@ -1,5 +1,6 @@
 import {
   classifyProviderResponse,
+  dueTaskMessage,
   missedTaskMessage,
   normalizeGhanaPhone,
   taskDeadlineUtc,
@@ -13,6 +14,10 @@ test("missed-task reminders use the scheduled end, falling back to start time", 
   assert.equal(taskDeadlineUtc("2026-10-24", "09:00", null), Date.parse("2026-10-24T09:00:00Z"));
   assert.equal(taskDeadlineUtc("2026-10-24", null, null), null);
   assert.equal(taskScheduledUtc("2026-10-24", "09:00"), Date.parse("2026-10-24T09:00:00Z"));
+  assert.match(
+    dueTaskMessage("Review site plan", Date.parse("2026-10-24T09:00:00Z")),
+    /Review site plan.*due now \(24 Oct, 09:00\)/,
+  );
   assert.match(missedTaskMessage("Review site plan", Date.parse("2026-10-24T11:30:00Z")), /24 Oct, 11:30/);
 });
 
