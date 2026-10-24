@@ -29,6 +29,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EventCalendarViews } from "@/components/calendar/event-calendar-views";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SubmitButton } from "@/components/submit-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -52,6 +53,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { isoDateOnly } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { getScheduleUrgency } from "./schedule-urgency";
 import {
 	ScheduleMeetingComposer,
 	ScheduleMeetingDetails,
@@ -411,6 +413,7 @@ export function MyScheduleScreen() {
 	const [showForm, setShowForm] = useState(false);
 	const [showMeetingForm, setShowMeetingForm] = useState(false);
 	const [selected, setSelected] = useState<Todo | null>(null);
+	const [now, setNow] = useState(() => new Date());
 	const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(
 		null,
 	);
@@ -425,11 +428,21 @@ export function MyScheduleScreen() {
 		from: isoDateOnly(startOfMonth(new Date())),
 		to: isoDateOnly(endOfMonth(new Date())),
 	}));
+	useEffect(() => {
+		const timer = window.setInterval(() => setNow(new Date()), 60_000);
+		return () => window.clearInterval(timer);
+	}, []);
 
-	// Widened +/-7 days past the visible range so conflict checks and the
-	// "due soon" banner below see a little past/future the calendar grid
-	// doesn't currently render.
+	// Keep the action queue anchored to today even when the calendar is
+	// browsed to another month. This query is bounded to recent overdue work
+	// and near-term tasks, independent of the visible calendar range.
 	const { data: todos } = useMySchedule(profile?.key, range.from, range.to);
+	const today = isoDateOnly(now);
+	const triageTodos = useMySchedule(
+		profile?.key,
+		isoDateOnly(addDays(now, -90)),
+		isoDateOnly(addDays(now, 3)),
+	);
 	const meetingsQuery = useScheduleMeetings(profile?.key, range.from, range.to);
 	const meetings = meetingsQuery.data;
 
@@ -448,14 +461,17 @@ export function MyScheduleScreen() {
 	const selectedMeeting =
 		meetings?.find((meeting) => meeting.id === selectedMeetingId) ?? null;
 
-	const today = isoDateOnly(new Date());
-	const in3Days = isoDateOnly(addDays(new Date(), 3));
-	const dueSoon = (todos ?? []).filter(
-		(t) => t.status === "open" && t.date >= today && t.date <= in3Days,
+	const urgency = useMemo(
+		() =>
+			getScheduleUrgency(
+				triageTodos.data ?? [],
+				now,
+				addDays(now, 3),
+			),
+		[triageTodos.data, now],
 	);
-	const overdue = (todos ?? []).filter(
-		(t) => t.status === "open" && t.date < today,
-	);
+	const overdue = urgency.overdue;
+	const dueSoon = urgency.dueSoon;
 
 	async function handleEventDrop(info: EventDropInfo) {
 		const props = info.event.extendedProps as {
@@ -559,21 +575,69 @@ export function MyScheduleScreen() {
 	return (
 		<div className="grid gap-4">
 			{overdue.length > 0 && (
-				<Card className="border-destructive/50 bg-destructive/5">
-					<CardContent className="flex items-center gap-2 pt-6 text-destructive text-sm">
-						<AlertTriangle className="size-4" />
-						{overdue.length} overdue item{overdue.length === 1 ? "" : "s"}:{" "}
-						{overdue.map((t) => t.title).join(", ")}
-					</CardContent>
-				</Card>
+				<Alert
+					variant="destructive"
+					className="border-destructive/40 bg-destructive/5"
+				>
+					<AlertTriangle />
+					<AlertTitle>
+						{overdue.length} overdue task{overdue.length === 1 ? "" : "s"}
+					</AlertTitle>
+					<AlertDescription className="flex flex-wrap gap-2">
+						{overdue.slice(0, 5).map((todo) => (
+							<Button
+								key={todo.id}
+								variant="outline"
+								size="sm"
+								className="max-w-full"
+								onClick={() => setSelected(todo)}
+								aria-label={`Open ${todo.title}, due ${todo.date}`}
+							>
+								<span className="truncate">{todo.title}</span>
+								<span className="shrink-0 text-muted-foreground">
+									{todo.date}
+									{todo.endTime || todo.startTime
+										? ` · ${todo.endTime || todo.startTime}`
+										: ""}
+								</span>
+							</Button>
+						))}
+						{overdue.length > 5 && (
+							<span>
+								+{overdue.length - 5} more from the last 90 days
+							</span>
+						)}
+					</AlertDescription>
+				</Alert>
 			)}
 			{dueSoon.length > 0 && (
-				<Card>
-					<CardContent className="pt-6 text-sm">
-						<span className="font-medium">Coming up: </span>
-						{dueSoon.map((t) => `${t.title} (${t.date})`).join(", ")}
-					</CardContent>
-				</Card>
+				<Alert>
+					<CalendarDays />
+					<AlertTitle>Due in the next three days</AlertTitle>
+					<AlertDescription className="flex flex-wrap gap-2">
+						{dueSoon.slice(0, 5).map((todo) => (
+							<Button
+								key={todo.id}
+								variant="outline"
+								size="sm"
+								className="max-w-full"
+								onClick={() => setSelected(todo)}
+								aria-label={`Open ${todo.title}, due ${todo.date}`}
+							>
+								<span className="truncate">{todo.title}</span>
+								<span className="shrink-0 text-muted-foreground">
+									{todo.date}
+									{todo.endTime || todo.startTime
+										? ` · ${todo.endTime || todo.startTime}`
+										: ""}
+								</span>
+							</Button>
+						))}
+						{dueSoon.length > 5 && (
+							<span>+{dueSoon.length - 5} more coming up</span>
+						)}
+					</AlertDescription>
+				</Alert>
 			)}
 
 			<div className="flex flex-col overflow-hidden rounded-md border">
@@ -726,3 +790,4 @@ export function MyScheduleScreen() {
 		</div>
 	);
 }
+
