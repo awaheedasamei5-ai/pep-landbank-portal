@@ -617,6 +617,11 @@ export interface DataSource {
     list(viewerKey: string, viewerRole: string): Promise<ContractRequest[]>;
     create(agentKey: string, agentName: string, input: NewContractRequest): Promise<ContractRequest>;
     fulfil(id: string): Promise<ContractRequest>;
+    // docs/plans/29-company-leads-full-system-blueprint.md Phase F --
+    // records which real generation satisfied this request (also marks it
+    // fulfilled, same real transition fulfil() makes, so a caller never
+    // needs both calls).
+    markGenerated(id: string, contractGenerationId: string | null): Promise<ContractRequest>;
   };
   // Real table `contracts` (confirmed live) -- metadata-only record of a
   // generated Contract of Sale PDF (no blob stored, see the Contract
@@ -707,6 +712,16 @@ export interface DataSource {
   contractApprovals: {
     listForVersion(templateVersionId: string): Promise<ContractApproval[]>;
     decide(templateVersionId: string, status: ContractApprovalStatus, reason: string | null, decidedBy: string, decidedByName: string): Promise<ContractApproval>;
+  };
+  // docs/plans/29-company-leads-full-system-blueprint.md Phase F -- real
+  // table `contract_share_links` (new, mirrors `receipt_share_links`
+  // exactly: closed-to-anon RLS, resolved only via the get-contract edge
+  // function's service role). Exactly one of contractGenerationId/
+  // contractId is set -- the template-studio generate path writes a
+  // contract_generations row, the v1-parity path writes a contracts row,
+  // and a share link can point at either one's stored PDF.
+  contractShareLinks: {
+    create(input: { contractGenerationId: string | null; contractId: string | null; leadId: string; storagePath: string; createdBy: string }): Promise<string>;
   };
   // docs/plans/19-data-check-plan.md -- real server-side Data Check
   // dismiss state. RLS already scopes list() to "mine or company-wide"
@@ -2442,6 +2457,16 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return mapContractRequestRow(data);
       },
+      async markGenerated(id, contractGenerationId) {
+        const { data, error } = await requireClient()
+          .from('contract_requests')
+          .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString(), contract_generation_id: contractGenerationId, generated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractRequestRow(data);
+      },
     },
     contracts: {
       async list() {
@@ -2669,6 +2694,23 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapContractApprovalRow(data);
+      },
+    },
+    contractShareLinks: {
+      async create(input) {
+        const { data, error } = await requireClient()
+          .from('contract_share_links')
+          .insert({
+            contract_generation_id: input.contractGenerationId,
+            contract_id: input.contractId,
+            lead_id: input.leadId,
+            storage_path: input.storagePath,
+            created_by: input.createdBy,
+          })
+          .select('token')
+          .single();
+        if (error) throw error;
+        return data.token as string;
       },
     },
     dataCheckDismissals: {

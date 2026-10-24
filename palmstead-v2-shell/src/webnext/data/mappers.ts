@@ -568,6 +568,8 @@ export function mapContractRequestRow(r: Record<string, unknown>): ContractReque
     status: (r.status as ContractRequest['status']) ?? 'pending',
     createdAt: r.created_at as string,
     fulfilledAt: (r.fulfilled_at as string) ?? null,
+    contractGenerationId: (r.contract_generation_id as string) ?? null,
+    generatedAt: (r.generated_at as string) ?? null,
   };
 }
 

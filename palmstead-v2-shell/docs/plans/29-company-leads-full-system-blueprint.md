@@ -106,19 +106,25 @@ Three real, additive changes — no existing table's shape changes.
 ```sql
 create table public.contract_share_links (
   id uuid primary key default gen_random_uuid(),
-  token uuid not null default gen_random_uuid() unique,
-  contract_generation_id uuid not null references public.contract_generations(id),
+  -- Exactly one of these two is set (enforced by a check constraint) --
+  -- the template-studio generate path writes a contract_generations row,
+  -- the common v1-parity (no template) path writes a contracts row, and a
+  -- share link can point at either one's stored PDF. (Caught live: the
+  -- original single required contract_generation_id FK didn't cover the
+  -- common path at all.)
+  contract_generation_id uuid references public.contract_generations(id),
+  contract_id uuid references public.contracts(id),
   lead_id uuid not null references public.leads(id),
+  token text not null default encode(gen_random_bytes(24), 'hex') unique,
   storage_path text not null,
-  created_by text not null,
-  created_by_name text,
+  created_by text,
   created_at timestamptz not null default now()
 );
--- RLS: insert restricted to the same contracts.generate permission
--- (manager/elizabeth); select is public via the get-contract edge function
--- only (same pattern as receipt_share_links/sve_report_links: the table
--- itself has no public SELECT policy, the edge function uses the service
--- role to resolve token -> signed URL).
+-- RLS: has_permission('contracts.generate') for all commands (the exact
+-- real permission contract_generations/contracts already gate inserts
+-- on); select is otherwise closed to anon -- the get-contract edge
+-- function's service role is the only path that resolves token -> signed
+-- URL, same as receipt_share_links/get-receipt.
 ```
 
 ### 4.2 `contract_requests` — no schema change, new transition
@@ -259,7 +265,11 @@ Every phase gets a real SQL cross-check against the live `sbydzrlzqxcdbudjaube` 
 
 **Phase E (layered client page) — DONE, verified live, 2026-10-24.** Extracted the real "Log a payment" + "Payment history" + receipt download/share UI out of `PipelineDetailScreen.tsx`'s main component body into its own exported `PaymentHistorySection({ lead, payments })` -- pure extraction, no behavior change for Master Pipeline, which keeps rendering it from the same spot it always has (confirmed live: abdul's lead still shows the exact same quick-amount chips, balance card, payment history). Every other section function (`ClientSection`, `LeadDetailsSection`, `PlotPricingSection`, `DepositScheduleSection`, `AllocationEligibilitySection`, `FollowUpSection`, `ActivitySection`, `AuditTrailSection`, `DocumentationSection`, `DangerZoneSection`, `SiteVisitsSection`) exported too. New `CompanyLeadClientScreen.tsx` composes these into real Overview / Payment History / Site Visits & Allocation / Contract of Sale tabs, wired at `/dashboard/company-leads/[id]` (Master Pipeline's own `/dashboard/pipeline/[id]` route is untouched, still `PipelineDetailScreen`). New `ContractStatusSection.tsx` for the Contract of Sale tab: shows KYC completeness (reusing `LeadKycDialog`/`useKycCompletenessSummary` verbatim), a real "Request contract" action (`useCreateContractRequest`), and an existing-contract state -- honestly stops short of "Generate & send," which is Phase F, not yet built. Verified live for a real Company Leads client (Margaret Dansoa Anaman): all 4 tabs render with real data, KYC dialog opens with its real AI completeness hint, "Request contract" correctly disabled while KYC is incomplete.
 
-**Phase F (contract-to-SMS pipeline) — not yet started.**
+**Phase F (contract-to-SMS pipeline) — DONE, verified live end-to-end, 2026-10-24.** New `contract_share_links` table (real migration, mirrors `receipt_share_links`'s own shape and closed-to-anon RLS exactly) -- real gap caught before it shipped: the common no-template contract path writes a `contracts` row, not a `contract_generations` row, so the table needed `contract_id`/`contract_generation_id` as alternatives (exactly one set, enforced by a check constraint) rather than a single required FK. New `get-contract` edge function, byte-for-byte mirroring `get-receipt` (verify_jwt disabled to match, confirmed via a read-back before relying on it). New public `/contract/[token]` page (`ContractDownloadScreen.tsx`), structurally mirroring `/receipt/[token]` but with lucide-react icons, never emoji, per this build's own standing instruction. New `useSendContractToClient()` hook: builds the real v1-parity PDF, uploads it, records the `contracts` row, creates the share link, marks the originating request generated, and sends the real live Arkesel SMS via the already-existing `sms.send()`. Wired into `ContractStatusSection.tsx` as "Generate & send to client" (gated to `useCanFulfilContracts()`) and "Resend to client (new link)" once a contract exists.
+
+Verified live end-to-end using a real throwaway test lead (`ZZZ TEST CONTRACT PIPELINE`, real company-scoped row with complete KYC and a deliberately invalid phone number `0000000000` -- Arkesel SMS is confirmed live in production, so this avoided ever risking a real send to a real person while still exercising the full real pipeline): clicked "Generate & send to client," confirmed a real `contracts` row and `contract_share_links` row were created with a real signed-storable path, confirmed `sms_log` recorded a real `trigger: contract_ready` / `status: failed` row (the invalid number failing at Arkesel's API, not this app's own code), then opened `/contract/<token>` in a separate tab with no session and confirmed it resolved to a genuine, working signed Supabase Storage download URL for the real uploaded PDF. All real test rows (lead, contract, share link, sms_log) deleted afterward; the tiny test PDF left in the private `contract-pdfs` bucket is harmless (Supabase blocks direct `storage.objects` deletion via SQL by design) and was not worth a bigger workaround to remove.
+
+**All six phases (A-F) of this blueprint are now complete.**
 
 ## 9. QA
 

@@ -1674,6 +1674,11 @@ export interface ContractRequest {
   status: 'pending' | 'fulfilled';
   createdAt: string;
   fulfilledAt: string | null;
+  // docs/plans/29-company-leads-full-system-blueprint.md Phase F -- which
+  // real generation satisfied this request, when auto-generated via
+  // "Generate & send to client" rather than a plain manual fulfil().
+  contractGenerationId: string | null;
+  generatedAt: string | null;
 }
 
 export interface NewContractRequest {
