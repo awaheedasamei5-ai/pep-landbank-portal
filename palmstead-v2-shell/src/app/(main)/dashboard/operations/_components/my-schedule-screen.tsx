@@ -37,6 +37,7 @@ import {
   workspaceMonthRange,
 } from "./schedule-time.ts";
 import { getScheduleUrgency } from "./schedule-urgency";
+import { isVisibleScheduleMeeting, isVisibleScheduleTodo } from "./schedule-visibility";
 import { ScheduleMeetingComposer, ScheduleMeetingDetails } from "./schedule-meetings-dialogs";
 import {
   checkScheduleConflicts,
@@ -608,8 +609,10 @@ export function MyScheduleScreen() {
 
   const events = useMemo(
     () => [
-      ...(todos ?? []).map(toEventInput),
-      ...(meetings ?? []).map((meeting) =>
+      ...(todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).map(toEventInput),
+      ...(meetings ?? [])
+        .filter((meeting) => isVisibleScheduleMeeting(meeting.status))
+        .map((meeting) =>
         toMeetingEvent(meeting, profile?.role === "manager" || meeting.ownerKey === profile?.key),
       ),
     ],
@@ -778,8 +781,8 @@ export function MyScheduleScreen() {
           <div className="flex min-w-0 shrink-0 flex-col gap-1">
             <div className="font-medium text-lg leading-none">{range.title}</div>
             <p className="text-muted-foreground text-sm">
-              {(todos ?? []).filter((t) => t.status !== "rescheduled" && t.status !== "cancelled").length +
-                (meetings ?? []).filter((meeting) => meeting.status !== "cancelled").length}{" "}
+              {(todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).length +
+                (meetings ?? []).filter((meeting) => isVisibleScheduleMeeting(meeting.status)).length}{" "}
               scheduled items
               {(todosLoading || meetingsQuery.isFetching) && <span className="ml-2">· syncing</span>}
             </p>
@@ -877,8 +880,8 @@ export function MyScheduleScreen() {
           !todosError &&
           !meetingsQuery.isLoading &&
           !meetingsQuery.isError &&
-          (todos ?? []).filter((t) => t.status !== "rescheduled" && t.status !== "cancelled").length === 0 &&
-          (meetings ?? []).filter((m) => m.status !== "cancelled").length === 0 && (
+          (todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).length === 0 &&
+          (meetings ?? []).filter((meeting) => isVisibleScheduleMeeting(meeting.status)).length === 0 && (
             <div className="mx-4 my-4 flex flex-col gap-3 rounded-lg border border-dashed bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium">Nothing scheduled for this period</p>
