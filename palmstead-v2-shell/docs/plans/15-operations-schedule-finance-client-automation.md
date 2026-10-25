@@ -1,5 +1,28 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-25 meeting availability slice
+
+Google Calendar compares the organizer and guests' availability when choosing a meeting
+time, while keeping private event details hidden according to permissions. Palmstead's
+task editor already checked collisions; the meeting composer, time editor, and invitee
+editor did not. The new `check_schedule_meeting_availability` RPC reads task and meeting
+intervals for selected active staff and returns only busy counts. Half-open time ranges
+allow adjacent slots, declined invitations do not make a staff member busy, and the
+edited meeting is excluded from its own check. The composer and meeting editors show
+busy staff, prevent an organizer from selecting an overlapping slot, and require an
+explicit choice before inviting or rescheduling a busy attendee. Each save rechecks
+availability. Removing an invitee does not require a new availability check.
+
+This is a scheduling warning and organizer guard in the application, not a serializable
+booking lock. Concurrent writes or direct database clients could still make overlapping
+items. A later phase should move the organizer invariant into one transactional write
+path and add a free-time suggestion view. Verify the Management and Adams UI flows on
+preview and production, including a temporary overlap, before calling this slice complete.
+
+References: [Google Calendar Find a time](https://support.google.com/calendar/answer/6294878?hl=en-uk),
+[Google Calendar private and busy events](https://support.google.com/a/users/answer/9282964?hl=en),
+and the open-source [ai-calendar conflict and availability design](https://github.com/damanjz/ai-calendar).
+
 ## 2026-10-25 device reminder account check
 
 The older push assessment below predates the task and meeting outbox migrations. The active
