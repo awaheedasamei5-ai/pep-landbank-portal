@@ -38,7 +38,7 @@ This document consolidates three parallel deep-dive audits (full app inventory, 
 - **Phase 2**: add the ownership check to `payments.uploadProof()`.
 - **Phase 3 (deferred to the user's own stated next step)**: build the real Settings/permissions UI, then revert `has_permission()` to its real role-based body (preserved verbatim in the migration's own comment) and the `contract_requests_upd`/`useCanFulfilContracts()` widening.
 - **Phase 4**: delete the 27 orphaned demo-template routes (`academy`, `ecommerce`, `kanban`, `crm`, `invoice`, `file-manager`, `calendar`, `infrastructure`, `logistics`, `mail`, `patient-monitoring`, `productivity`, `roles`, `tasks`, `users`, and others) — closes a real reachable-dead-code surface and shrinks the bundle.
-- **Phase 5**: tighten CORS on public edge functions to the real production origin.
+- ~~**Phase 5**: tighten CORS on public edge functions to the real production origin.~~ **INVESTIGATED 2026-10-25, DECLINED** — read all 5 public-facing edge functions (`get-contract`, `get-receipt`, `client-login`, `get-sve-report`'s pattern, `public-stats`). None use cookie/ambient-credential auth — every one is explicit token-in-body/URL, verified server-side with the service role; CORS doesn't gate direct navigation, which is how every SMS/share-link flow here is actually consumed; and `public-stats` is *explicitly, deliberately* built to be embedded on arbitrary external pages (the homepage widget) — `Access-Control-Allow-Origin: *` is required there by design, not an oversight. Tightening CORS on these functions would be security theater with real regression risk and no measurable benefit. Recorded here so this isn't re-flagged in a future audit.
 
 ### 2.3 Security architecture going forward
 
