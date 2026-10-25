@@ -17,6 +17,7 @@ ERPNext's open-source Payment Reconciliation separates payment entries, referenc
 ## UI and behavior
 
 - Place the review directly before the Data Check issue register, where Management already sees the ledger warning and can reach each pipeline lead.
+- Add a Management-only shortcut in Accounting Overview, so the exception queue is reachable from the app that owns payment work. Staff do not see this company-wide shortcut.
 - Sort by absolute discrepancy. Each record shows stored paid amount, approved-entry total, difference direction, owner and lead ID. Expand to inspect dates, methods, references and legacy markers. Provide Client 360 and pipeline links.
 - Cards form one vertical review list at small widths and a compact three-column amount summary at wider widths. Use shell tokens in both themes.
 - Never offer a one-click balance overwrite or receipt from this panel. The user must compare bank or legacy source evidence first.
