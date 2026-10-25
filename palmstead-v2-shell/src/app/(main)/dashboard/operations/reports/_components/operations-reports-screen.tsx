@@ -65,6 +65,7 @@ import {
 	type OperationsReportFilters,
 	writeReportFilters,
 } from "./operations-report-model";
+import { OperationsScheduleReport } from "./operations-schedule-report";
 
 type RawIssue = {
 	id: string;
@@ -1022,6 +1023,7 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#comparison">Comparison</a>
 					{manager && personKey === "all" && <a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#workload">Workload</a>}
 					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#register">Issue register</a>
+					<a className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" href="#schedule-report">Schedule</a>
 				</nav>
 			)}
 			{!error && (
@@ -1194,6 +1196,14 @@ export function OperationsReportsScreen({ initialSearchParams }: { initialSearch
 								</Table>
 							</CardContent>
 						</Card>
+						{profileKey && <OperationsScheduleReport
+							start={start}
+							end={end}
+							profileKey={profileKey}
+							manager={manager}
+							personKey={personKey}
+							personName={scopeLabel}
+						/>}
 						{!manager && (
 							<p className="text-muted-foreground text-xs">
 								This view contains only work assigned to your account.
