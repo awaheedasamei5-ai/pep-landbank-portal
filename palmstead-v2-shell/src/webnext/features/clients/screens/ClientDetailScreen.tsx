@@ -157,6 +157,17 @@ export function ClientDetailScreen() {
   const leadIdSet = useMemo(() => new Set(client?.leadIds ?? []), [client]);
 
   const payments = useMemo(() => (related?.payments ?? []).filter((p) => leadIdSet.has(p.leadId)), [related, leadIdSet]);
+  const ledgerGaps = useMemo(() => {
+    if (!related) return [];
+    return clientLeads.flatMap((lead) => {
+      const approvedTotal = payments
+        .filter((payment) => payment.leadId === lead.id && (payment.status ?? 'approved') === 'approved')
+        .reduce((total, payment) => total + payment.amount, 0);
+      return Math.abs(approvedTotal - lead.amtPaid) > 1
+        ? [{ leadId: lead.id, plotType: lead.plotType, approvedTotal, recordedTotal: lead.amtPaid }]
+        : [];
+    });
+  }, [clientLeads, payments, related]);
   const siteVisits = useMemo(
     () => (related?.siteVisits ?? []).filter((v) => (v.leadId ? leadIdSet.has(v.leadId) : client && clientKey(v.name, v.contact) === key)),
     [related, leadIdSet, client, key]
@@ -257,6 +268,19 @@ export function ClientDetailScreen() {
               </div>
             </div>
 
+            {!relatedLoading && !relatedError && ledgerGaps.length > 0 && (
+              <div className={styles.ledgerWarning} role="note">
+                <strong>Payment balance needs review</strong>
+                <p>The approved payment entries and recorded paid balance differ. Check the source records before changing a balance or issuing a new receipt.</p>
+                {ledgerGaps.map((gap) => (
+                  <div className={styles.ledgerGap} key={gap.leadId}>
+                    <span>{gap.plotType}: entries {ghs(gap.approvedTotal)} · recorded {ghs(gap.recordedTotal)}</span>
+                    <button type="button" onClick={() => navigate(`/dashboard/pipeline/${gap.leadId}`)}>Review lead</button>
+                  </div>
+                ))}
+                {profile?.role === 'manager' && <button type="button" className={styles.ledgerCheckLink} onClick={() => navigate('/dashboard/data-check')}>Open Data Check</button>}
+              </div>
+            )}
             {relatedError && <div className={styles.receiptError} role="alert">Some client records could not be loaded. Refresh the page to try again.</div>}
             <ClientJourney events={journey} loading={relatedLoading} />
 
