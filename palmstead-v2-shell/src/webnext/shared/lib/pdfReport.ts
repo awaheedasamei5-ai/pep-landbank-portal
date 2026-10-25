@@ -229,7 +229,7 @@ export function pdfLedgerSection(doc: jsPDF, y: number, pageW: number, title: st
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.3);
-  if (lines.length === 0) {
+  if (lines.length === 0 && !options?.emphasize) {
     doc.setTextColor(...PDF_MUTED);
     doc.text('No entries', 16, y + 1);
     y += 6.5;
