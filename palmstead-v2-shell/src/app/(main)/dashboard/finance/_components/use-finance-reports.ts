@@ -29,18 +29,19 @@ export interface PaymentsReportRow {
   paymentDate: string;
 }
 
-export function usePaymentsReport(range: DateRange, enabled: boolean) {
+export function usePaymentsReport(range: DateRange, enabled: boolean, agentKey?: string) {
   return useQuery({
-    queryKey: ["report-payments", range],
+    queryKey: ["report-payments", range, agentKey ?? "company"],
     enabled,
     queryFn: async (): Promise<PaymentsReportRow[]> => {
       const sb = requireSupabase();
-      const { data, error } = await sb
+      let query = sb
         .from("payments")
         .select("client_name,agent_key,amount,payment_method,status,payment_date,leads(name)")
         .gte("payment_date", range.start)
-        .lte("payment_date", range.end)
-        .order("payment_date");
+        .lte("payment_date", range.end);
+      if (agentKey) query = query.eq("agent_key", agentKey);
+      const { data, error } = await query.order("payment_date");
       if (error) throw error;
       type Raw = { client_name: string | null; agent_key: string; amount: number; payment_method: string | null; status: string; payment_date: string; leads: { name: string } | { name: string }[] | null };
       return ((data ?? []) as unknown as Raw[]).map((r) => ({
@@ -64,18 +65,19 @@ export interface ExpensesReportRow {
   loggedByName: string | null;
 }
 
-export function useExpensesReport(range: DateRange, enabled: boolean) {
+export function useExpensesReport(range: DateRange, enabled: boolean, loggedBy?: string) {
   return useQuery({
-    queryKey: ["report-expenses", range],
+    queryKey: ["report-expenses", range, loggedBy ?? "company"],
     enabled,
     queryFn: async (): Promise<ExpensesReportRow[]> => {
       const sb = requireSupabase();
-      const { data, error } = await sb
+      let query = sb
         .from("expenses")
         .select("category,amount,payment_method,status,expense_date,logged_by_name")
         .gte("expense_date", range.start)
-        .lte("expense_date", range.end)
-        .order("expense_date");
+        .lte("expense_date", range.end);
+      if (loggedBy) query = query.eq("logged_by", loggedBy);
+      const { data, error } = await query.order("expense_date");
       if (error) throw error;
       return ((data ?? []) as { category: string; amount: number; payment_method: string; status: string; expense_date: string; logged_by_name: string | null }[]).map((r) => ({
         category: r.category,
