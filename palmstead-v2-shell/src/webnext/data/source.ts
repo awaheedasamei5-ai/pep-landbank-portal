@@ -2066,6 +2066,24 @@ function createLiveDataSource(): DataSource {
       },
       async uploadProof(paymentId, agentKey, file) {
         const client = requireClient();
+        // Real gate, mirrored from the payments_ins/payments_upd RLS
+        // (has_permission('payments.manage'), i.e. manager or 'elias' --
+        // see useCanLogPayments()). Checked here independently of RLS
+        // because has_permission() is temporarily forced to true for the
+        // user's own ongoing all-access testing phase (see
+        // docs/plans/30-master-system-audit-and-unification-plan.md),
+        // and because every other sensitive write path in this codebase
+        // (approve_payment, restore_backup, generate_payroll_run) carries
+        // its own role guard independent of RLS -- this one didn't.
+        const { data: caller, error: callerError } = await client
+          .from("profiles")
+          .select("role, key")
+          .eq("key", agentKey)
+          .maybeSingle();
+        if (callerError) throw callerError;
+        if (!caller || (caller.role !== "manager" && caller.key !== "elias")) {
+          throw new Error("You are not authorized to upload payment proof.");
+        }
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${agentKey}/${paymentId}.${ext}`;
         const { error: uploadError } = await client.storage.from("payment-proofs").upload(path, file, { upsert: true });
