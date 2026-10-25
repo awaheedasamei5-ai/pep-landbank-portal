@@ -38,6 +38,7 @@ type MeetingRow = {
 type InviteRow = {
   schedule_item_id: string;
   staff_key: string;
+  staff_name: string | null;
   status: string;
 };
 type ScheduleData = { todos: TodoRow[]; meetings: MeetingRow[]; invites: InviteRow[] };
@@ -87,7 +88,7 @@ async function loadSchedule(start: string, end: string, key: string, manager: bo
       ...(await allPages<InviteRow>((from, to) => {
         const query = sb
           .from("schedule_item_invitees")
-          .select("schedule_item_id,staff_key,status")
+          .select("schedule_item_id,staff_key,staff_name,status")
           .in("schedule_item_id", ids)
           .order("schedule_item_id")
           .order("staff_key");
@@ -164,6 +165,9 @@ export function OperationsScheduleReport({
     const meeting = meetings.find((item) => item.id === invite.schedule_item_id);
     return meeting && (!selected || invite.staff_key === selected);
   });
+  const acceptedInvites = inviteStatuses.filter((invite) => invite.status === "accepted").length;
+  const awaitingInvites = inviteStatuses.filter((invite) => invite.status === "invited").length;
+  const declinedInvites = inviteStatuses.filter((invite) => invite.status === "declined").length;
   let scope = "My schedule";
   if (manager) scope = selected ? personName : "Company schedule";
   const rows = [
@@ -183,7 +187,9 @@ export function OperationsScheduleReport({
       meeting.start_time?.slice(0, 5) ?? "",
       meeting.status,
       meeting.owner_name ?? meeting.owner_key,
-      meeting.invitees.length ? meeting.invitees.map((invite) => invite.status).join("; ") : "—",
+      meeting.invitees.length
+        ? meeting.invitees.map((invite) => `${invite.staff_name ?? invite.staff_key}: ${invite.status}`).join("; ")
+        : "—",
     ]),
   ].sort((a, b) => a[2].localeCompare(b[2]) || a[3].localeCompare(b[3]));
   const headings = ["Type", "Title", "Scheduled date", "Start", "Status", "Assigned to / Host", "Completed / RSVP"];
@@ -207,6 +213,21 @@ export function OperationsScheduleReport({
         startY: y,
         head: [["Tasks", "Open", "Done", "Overdue", "Meetings", "Upcoming"]],
         body: [[todos.length, open, done, overdue, meetings.length, upcoming]],
+        styles: { fontSize: 8 },
+        margin: { bottom: 20 },
+      });
+      y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 11;
+      y = pdfSectionTitle(
+        doc,
+        y,
+        doc.internal.pageSize.getWidth(),
+        "Meeting invitations",
+        "Responses in selected meetings",
+      );
+      autoTable(doc, {
+        startY: y,
+        head: [["Accepted", "Awaiting response", "Declined"]],
+        body: [[acceptedInvites, awaitingInvites, declinedInvites]],
         styles: { fontSize: 8 },
         margin: { bottom: 20 },
       });
@@ -284,8 +305,9 @@ export function OperationsScheduleReport({
                   ["Overdue open", overdue],
                   ["Meetings", meetings.length],
                   ["Upcoming meetings", upcoming],
-                  ["Accepted invites", inviteStatuses.filter((invite) => invite.status === "accepted").length],
-                  ["Awaiting response", inviteStatuses.filter((invite) => invite.status === "invited").length],
+                  ["Accepted invites", acceptedInvites],
+                  ["Awaiting response", awaitingInvites],
+                  ["Declined invites", declinedInvites],
                 ].map(([label, value]) => (
                   <div key={label} className="min-w-0 rounded-lg border bg-card p-3">
                     <p className="text-muted-foreground text-xs">{label}</p>
@@ -346,7 +368,9 @@ export function OperationsScheduleReport({
                       <TableCell className="capitalize">{meeting.status}</TableCell>
                       <TableCell>{meeting.owner_name ?? meeting.owner_key}</TableCell>
                       <TableCell className="capitalize">
-                        {meeting.invitees.map((invite) => invite.status).join(", ") || "—"}
+                        {meeting.invitees
+                          .map((invite) => `${invite.staff_name ?? invite.staff_key}: ${invite.status}`)
+                          .join(", ") || "—"}
                       </TableCell>
                     </TableRow>
                   ))}
