@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateRangePicker } from "@/components/date-range-picker";
 import type { DateRange as PickerDateRange } from "react-day-picker";
-import { availableYears, type Granularity, type PeriodFilter } from "../lib/periodFilter";
-import { isoDateOnly } from "../../../shared/lib/format";
+import { availableYears, type Granularity, type PeriodFilter } from "../lib/engagementPeriod";
+import { isoDateOnly } from "../lib/format";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const GRANULARITIES: { value: Granularity; label: string }[] = [
@@ -17,10 +17,13 @@ const GRANULARITIES: { value: Granularity; label: string }[] = [
 ];
 
 // docs/plans/29-company-leads-full-system-blueprint.md Section 7.1 -- one
-// real filter bar shared by the Dashboard, Analytics and Call Log screens,
-// translating UNIFIED_CUSTOMER_ENGAGEMENT_SYSTEM.xlsx's own Year + Month
-// (0 = all) selector into a real Year/Month/Granularity/custom-range control.
-export function PeriodFilterBar({
+// real filter bar shared by every Dashboard/Analytics/Call Log screen
+// across Company Leads, Pipeline and Client Database, translating
+// UNIFIED_CUSTOMER_ENGAGEMENT_SYSTEM.xlsx's own Year + Month (0 = all)
+// selector into a real Year/Month/Granularity/custom-range control.
+// Distinct from this directory's own PeriodFilterBar (the simple list-
+// narrowing filter) -- see shared/lib/engagementPeriod.ts's own comment.
+export function EngagementPeriodFilterBar({
   filter,
   onChange,
   activityDates,

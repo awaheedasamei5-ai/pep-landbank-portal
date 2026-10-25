@@ -2,6 +2,23 @@
 .title { font-size: 22px; margin: 0 0 4px; }
 .sub { color: var(--c-muted); margin: 0 0 16px; font-size: 13.5px; }
 
+.head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.headActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 10px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 /* Premium UI spec, Section 6.H: "Use a CRM table on desktop and rich
    client cards on mobile." Real dense table below (.tableWrap), matching
    the exact same table language Pipeline's own desktop view already

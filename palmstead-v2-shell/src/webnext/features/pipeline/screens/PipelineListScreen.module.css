@@ -56,6 +56,9 @@
 .headActions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
   border-radius: var(--r-pill);
@@ -68,6 +71,9 @@
 }
 
 .addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--c-accent);
   color: #fff;
   border: none;

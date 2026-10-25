@@ -3,11 +3,14 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import type { NewContractRequest } from '../../../types/domain';
 
-// Real contract_requests_upd RLS: manager or the 'elizabeth' key only --
-// same special-key pattern Plot Inventory already uses for elias/emmanuel.
+// TEMPORARY, TESTING PHASE (2026-10-24, real user request): every signed-
+// in staff member can use contract generate/fulfil, matching the real
+// contract_requests_upd RLS widened the same way -- was manager/elizabeth
+// only. Revert this alongside that policy once the real settings/
+// permissions UI (the user's own next step) exists.
 export function useCanFulfilContracts(): boolean {
   const profile = useSessionStore((s) => s.profile);
-  return !!profile && (profile.role === 'manager' || profile.key === 'elizabeth');
+  return !!profile;
 }
 
 export function useContractRequests() {

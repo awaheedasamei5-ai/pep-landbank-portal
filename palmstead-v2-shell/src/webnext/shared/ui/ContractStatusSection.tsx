@@ -5,22 +5,20 @@ import { CheckCircle2, CircleDashed, FileText, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useContracts } from "../../contracts/hooks/useContracts";
-import { useCanFulfilContracts, useCreateContractRequest, useContractRequests } from "../../contracts/hooks/useContractRequests";
-import { useKycCompletenessSummary } from "../../contracts/hooks/useContractAi";
-import { useSendContractToClient } from "../../contracts/hooks/useSendContractToClient";
-import { LeadKycDialog } from "../../contracts/components/LeadKycDialog";
-import { friendlyError } from "../../../shared/lib/friendlyError";
-import { fmtLongDate } from "../../../shared/lib/format";
-import type { Lead } from "../../../types/domain";
+import { useContracts } from "../../features/contracts/hooks/useContracts";
+import { useCanFulfilContracts, useCreateContractRequest, useContractRequests } from "../../features/contracts/hooks/useContractRequests";
+import { useKycCompletenessSummary } from "../../features/contracts/hooks/useContractAi";
+import { useSendContractToClient } from "../../features/contracts/hooks/useSendContractToClient";
+import { LeadKycDialog } from "../../features/contracts/components/LeadKycDialog";
+import { friendlyError } from "../lib/friendlyError";
+import { fmtLongDate } from "../lib/format";
+import type { Lead } from "../../types/domain";
 
-// docs/plans/29-company-leads-full-system-blueprint.md Section 7.6 -- the
-// Contract of Sale tab's current, real reachable state: KYC intake
-// (reused verbatim from LeadKycDialog) and a contract request
-// (useCreateContractRequest, already real). The full generate-PDF ->
-// share-link -> SMS pipeline is Phase F, not yet built -- this tab
-// honestly shows "request submitted, awaiting Management" rather than
-// claiming a capability that doesn't exist yet.
+// docs/plans/29-company-leads-full-system-blueprint.md Section 7.6,
+// generalized for Pipeline and Client Database -- the Contract of Sale
+// tab: KYC intake (reused verbatim from LeadKycDialog), a contract
+// request, and the full real generate-PDF -> share-link -> SMS pipeline
+// (Phase F). Fully lead-generic, no Company-Leads-specific logic.
 export function ContractStatusSection({ lead }: { lead: Lead }) {
   const [kycOpen, setKycOpen] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);

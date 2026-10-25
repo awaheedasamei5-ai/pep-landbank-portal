@@ -1,5 +1,5 @@
-import type { ActivityLogEntry, Lead, SiteVisit } from '../../../types/domain';
-import { today } from '../../../shared/lib/format';
+import type { ActivityLogEntry, Lead, SiteVisit } from '../../types/domain';
+import { today } from './format';
 
 // docs/plans/28-company-leads-engagement-upgrade-plan.md §5 -- the real,
 // precise follow-up-queue definition: a lead's "open follow-up" is the
@@ -7,6 +7,8 @@ import { today } from '../../../shared/lib/format';
 // newer call naturally supersedes an older one (the new row becomes
 // "most recent"), matching the real workflow -- no separate resolved/
 // unresolved flag needed, and nothing can drift out of sync with it.
+// Shared across Company Leads, Pipeline and Client Database's own Call
+// Log pages -- fully generic, no company-leads-specific logic.
 export interface OpenFollowUp {
   leadId: string;
   client: string;
@@ -36,12 +38,10 @@ export function isToday(iso: string): boolean {
 }
 
 // docs/plans/29-company-leads-full-system-blueprint.md Section 7.4 -- "how
-// many of the people have gone to site out of the Company Leads, how many
-// have bought, how many didn't," per the user's own words. Same real
-// definition as the Dashboard's own tiles (all-time cohort measures, not
+// many of the people have gone to site, how many have bought, how many
+// didn't," per the user's own words. All-time cohort measures, not
 // period-gated -- matching the workbook's own Dashboard tab, where these
-// three tiles don't move with the Year/Month selector either), factored
-// out here so Call Log and the Dashboard can't silently drift apart.
+// three tiles don't move with the Year/Month selector either.
 export interface VisitCohort {
   visitedCount: number;
   boughtCount: number;

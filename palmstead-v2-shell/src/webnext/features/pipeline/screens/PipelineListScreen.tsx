@@ -2,8 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { BarChart3, Download, Phone, Upload } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
+import { EngagementDashboardPanel } from '../../../shared/ui/EngagementDashboardPanel';
+import { useScopedActivity } from '../../../shared/hooks/useScopedActivity';
 import { useLeads } from '../hooks/useLeads';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useAssignLead, useUpdateLead, useDeleteLead, useDeleteFullPipeline } from '../hooks/useLead';
@@ -119,6 +123,9 @@ export function PipelineListScreen() {
   const { data: leads, isLoading } = isMaster ? master : mine;
   const { data: siteVisits } = useSiteVisits();
   const { data: staff } = useStaffDirectory();
+  const scopedActivity = useScopedActivity(leads ?? []);
+  const demoModeForDashboard = useSessionStore((s) => s.demoMode);
+  const paymentsQuery = useQuery({ queryKey: ['pipelinePayments'], queryFn: () => getDataSource(demoModeForDashboard).payments.listAll() });
   const assignLead = useAssignLead();
   const updateLead = useUpdateLead();
   const deleteLead = useDeleteLead();
@@ -275,6 +282,12 @@ export function PipelineListScreen() {
               Master mode swaps in the company-wide counterparts of both
               (useDownloadMasterPipeline / PipelineImportCard) -- the same
               two components Reports already used, not new ones. */}
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/calls')}>
+            <Phone className="size-4" aria-hidden="true" /> Call Log
+          </button>
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/analytics')}>
+            <BarChart3 className="size-4" aria-hidden="true" /> Analytics
+          </button>
           <button
             type="button"
             className={styles.iconBtn}
@@ -282,10 +295,10 @@ export function PipelineListScreen() {
             disabled={isMaster ? downloadMasterPipeline.isPending : downloadAgentPipeline.isPending}
             onClick={() => (isMaster ? downloadMasterPipeline.mutate() : profile && downloadAgentPipeline.mutate({ agentKey: profile.key, agentName: profile.name }))}
           >
-            ⬇
+            <Download className="size-4" aria-hidden="true" />
           </button>
           <button type="button" className={styles.iconBtn} title={isMaster ? 'Import Master Pipeline (.xlsx)' : 'Import my pipeline (.xlsx)'} onClick={() => setShowImport((v) => !v)}>
-            ⬆
+            <Upload className="size-4" aria-hidden="true" />
           </button>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/new', { state: { returnTo: basePath } })}>
             + Add lead
@@ -309,6 +322,15 @@ export function PipelineListScreen() {
       {downloadMasterPipeline.isError && <p className={styles.emptyMsg}>{friendlyError(downloadMasterPipeline.error, 'Could not build the export.')}</p>}
 
       {showImport && (isMaster ? <PipelineImportCard /> : <StaffPipelineImportCard />)}
+
+      <EngagementDashboardPanel
+        leads={all}
+        activity={scopedActivity.data}
+        visits={siteVisits ?? []}
+        payments={paymentsQuery.data ?? []}
+        isLoading={isLoading || scopedActivity.isLoading || paymentsQuery.isLoading}
+        heading={isMaster ? 'Engagement dashboard — company-wide' : 'Engagement dashboard'}
+      />
 
       <div className={styles.searchRow}>
         <input className={styles.search} placeholder="Search by name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />

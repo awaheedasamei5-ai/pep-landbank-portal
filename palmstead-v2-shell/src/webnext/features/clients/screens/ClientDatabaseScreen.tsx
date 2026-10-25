@@ -3,11 +3,18 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Outlet, useLocation, useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { BarChart3, Phone } from 'lucide-react';
 import { ghs, normContact } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { Icon } from '../../../shared/ui/Icon';
+import { EngagementDashboardPanel } from '../../../shared/ui/EngagementDashboardPanel';
+import { useScopedActivity } from '../../../shared/hooks/useScopedActivity';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { getDataSource } from '../../../data/source';
 import { useClients } from '../hooks/useClients';
+import { useLeads } from '../../pipeline/hooks/useLeads';
+import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { clientKey } from '../lib/groupClients';
 import type { Client } from '../../../types/domain';
 import styles from './ClientDatabaseScreen.module.css';
@@ -30,7 +37,17 @@ export function ClientDatabaseScreen() {
   const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
   const isMgr = profile?.role === 'manager';
+  const demoMode = useSessionStore((s) => s.demoMode);
   const { data: clients, isLoading } = useClients();
+  // Same real raw-lead pool useClients() itself groups from -- the
+  // Engagement dashboard needs the underlying Lead[], not the aggregated
+  // Client[] view.
+  const ownLeads = useLeads();
+  const allLeads = useAllLeads();
+  const { data: rawLeads, isLoading: rawLeadsLoading } = isMgr ? allLeads : ownLeads;
+  const scopedActivity = useScopedActivity(rawLeads ?? []);
+  const siteVisitsQuery = useQuery({ queryKey: ['clientsSiteVisits'], queryFn: () => getDataSource(demoMode).siteVisits.listAll() });
+  const paymentsQuery = useQuery({ queryKey: ['clientsPayments'], queryFn: () => getDataSource(demoMode).payments.listAll() });
   const [query, setQuery] = useState('');
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
 
@@ -77,13 +94,34 @@ export function ClientDatabaseScreen() {
   return (
     <div className={`${styles.pageRow} ${hasDetailOpen ? styles.pageRowSplit : ''}`}>
       <div className={`${styles.wrap} ${hasDetailOpen ? `${styles.wrapHiddenMobile} ${styles.wrapWithDrawer}` : ''}`}>
-        <h1 className={styles.title}>Client Database</h1>
-        <p className={styles.sub}>{isMgr ? 'Every client, company-wide, grouped from the master pipeline' : 'Every client you own, grouped from your pipeline'}</p>
+        <div className={styles.head}>
+          <div>
+            <h1 className={styles.title}>Client Database</h1>
+            <p className={styles.sub}>{isMgr ? 'Every client, company-wide, grouped from the master pipeline' : 'Every client you own, grouped from your pipeline'}</p>
+          </div>
+          <div className={styles.headActions}>
+            <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/clients/calls')}>
+              <Phone className="size-4" aria-hidden="true" /> Call Log
+            </button>
+            <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/clients/analytics')}>
+              <BarChart3 className="size-4" aria-hidden="true" /> Analytics
+            </button>
+          </div>
+        </div>
 
         <PipePillStrip>
           <PipePill tone="blue" value={clients?.length ?? 0} label="Clients" />
           <PipePill tone="green" value={ghs((clients ?? []).reduce((s, c) => s + c.totalValue, 0))} label="Total value" isMoney />
         </PipePillStrip>
+
+        <EngagementDashboardPanel
+          leads={rawLeads ?? []}
+          activity={scopedActivity.data}
+          visits={siteVisitsQuery.data ?? []}
+          payments={paymentsQuery.data ?? []}
+          isLoading={rawLeadsLoading || scopedActivity.isLoading || siteVisitsQuery.isLoading || paymentsQuery.isLoading}
+          heading={isMgr ? 'Engagement dashboard — company-wide' : 'Engagement dashboard'}
+        />
 
         {/* Premium UI spec 6.H: "Search/filter controls should remain
             pinned at the top of the content area." Sticky at desktop,

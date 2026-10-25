@@ -1,10 +1,20 @@
-import { today } from "../../../shared/lib/format";
+import { today } from "./format";
 
 // docs/plans/29-company-leads-full-system-blueprint.md Section 7.1 -- the
-// one real period-filter engine shared by the Dashboard, Analytics and
-// Call Log screens, translated from UNIFIED_CUSTOMER_ENGAGEMENT_SYSTEM.xlsx's
-// own Dashboard/Analytics tabs (Year + Month(0=all) selector, day/month/year
+// one real period-filter engine shared by every Dashboard/Analytics/Call
+// Log screen across Company Leads, Pipeline (My + Master) and Client
+// Database, translated from UNIFIED_CUSTOMER_ENGAGEMENT_SYSTEM.xlsx's own
+// Dashboard/Analytics tabs (Year + Month(0=all) selector, day/month/year
 // breakdown tables, "avg calls per ACTIVE day" -- never per calendar day).
+//
+// Deliberately a DIFFERENT tool from this same directory's own
+// periodFilter.ts/usePeriodFilter() -- that one narrows a list to recent
+// data with a simple mode+range (Site Visits/SVE/Enquiries/Complaints/
+// Allocations' shared filter); this one drives bucketed breakdown tables
+// and charts (day/week/month/year granularity, active-day counting) for
+// engagement analytics screens. Different job, different shape -- kept
+// separate rather than forcing one API to do both, hence the different
+// name instead of colliding with periodFilter.ts.
 
 export type Granularity = "day" | "week" | "month" | "year" | "custom";
 

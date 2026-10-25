@@ -4,18 +4,16 @@ import { useState } from "react";
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { useCompanyLeads } from "../hooks/useCompanyLeads";
-import { LogCallDialog } from "./LogCallDialog";
-import type { Lead } from "../../../types/domain";
+import { LogCallDialog } from "../../features/company-leads/components/LogCallDialog";
+import type { Lead } from "../../types/domain";
 
-// docs/plans/28-company-leads-engagement-upgrade-plan.md Phase 1 -- the
-// Call Log page's primary action. Real brief ask: "staff search and
-// select an existing client's name; display phone and recent context
-// to confirm the choice." A CommandDialog picker (same real component
-// the app's own global search already uses) over useCompanyLeads()'s
-// already-loaded list, then the real LogCallDialog for the chosen lead.
-export function LogCallEntryButton() {
-  const { data: leads } = useCompanyLeads();
+// docs/plans/28-company-leads-engagement-upgrade-plan.md Phase 1 /
+// docs/plans/29-company-leads-full-system-blueprint.md, generalized for
+// Pipeline and Client Database -- the Call Log page's primary action: a
+// CommandDialog picker over whichever leads the caller passes in (own
+// pipeline, company-wide, or Company Leads), then the real LogCallDialog
+// for the chosen lead.
+export function LogCallEntryButton({ leads }: { leads: Lead[] }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<Lead | null>(null);
 
@@ -26,13 +24,13 @@ export function LogCallEntryButton() {
         Log a call
       </Button>
 
-      <CommandDialog open={pickerOpen} onOpenChange={setPickerOpen} title="Choose a client" description="Search a company lead by name or contact">
+      <CommandDialog open={pickerOpen} onOpenChange={setPickerOpen} title="Choose a client" description="Search a lead by name or contact">
         <Command>
           <CommandInput placeholder="Search by name or phone…" />
           <CommandList>
             <CommandEmpty>No client found.</CommandEmpty>
             <CommandGroup>
-              {(leads ?? []).map((l) => (
+              {leads.map((l) => (
                 <CommandItem
                   key={l.id}
                   value={`${l.name} ${l.contact}`}

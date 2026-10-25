@@ -271,6 +271,39 @@ Verified live end-to-end using a real throwaway test lead (`ZZZ TEST CONTRACT PI
 
 **All six phases (A-F) of this blueprint are now complete.**
 
+## 10. Rollout to Pipeline (My + Master) and Client Database, 2026-10-24
+
+Real user request, same day: "upgrade the staff pipelines, master pipelines and the clients database with the same upgrade, give all the feature access to everyone including reports analytics and everything... i want all the features and functions to be available to staff and managemnt accounts so that i can test and point out errors when we are done building all the apps, then i would make sure build the settings where we can give/restrict access to apps to who should have them."
+
+### 10.1 Generalization (so three apps don't mean three copies)
+
+Before touching Pipeline or Client Database, every Company-Leads-specific piece built in Phases A-E was generalized into real shared, parameterized building blocks, since the underlying logic was never actually Company-Leads-specific -- it was always "pick a scope, show its engagement data":
+
+- `shared/lib/engagementPeriod.ts` / `shared/ui/EngagementPeriodFilterBar.tsx` -- moved out of `company-leads/`, renamed (not overwritten) to avoid a real naming collision: this directory already had its own, different, pre-existing `periodFilter.ts`/`PeriodFilterBar.tsx` (a simple "narrow to recent data" list filter used by Site Visits/SVE/Enquiries/Complaints/Allocations) -- a different tool for a different job, documented in both files so they don't get confused for duplicates of each other later.
+- `shared/lib/callActivityLogic.ts` -- `getOpenFollowUps`/`computeVisitCohort`, moved as-is (already fully generic).
+- `shared/hooks/useEngagementDashboard.ts`, `useEngagementAnalytics.ts`, `useEngagementTrends.ts`, `useScopedActivity.ts` -- pure functions of already-fetched `Lead[]`/`ActivityLogEntry[]`/`SiteVisit[]`/`Payment[]`; the CALLER decides scope (own leads, company-wide, Company Leads only) by what it passes in, these hooks hold no fetching or RLS assumptions of their own.
+- `shared/ui/EngagementDashboardPanel.tsx`, `EngagementAnalyticsTabs.tsx`, `EngagementCallLogPanel.tsx`, `LogCallEntryButton.tsx`, `ContractStatusSection.tsx`, `LeadClientScreen.tsx` -- the real presentational pieces, same generalization.
+- Company Leads' own screens became thin wrappers around these shared pieces (verified byte-identical live behavior after the move -- same numbers, same charts, same tabs).
+
+### 10.2 Pipeline (`/dashboard/pipeline`, the one real route for both My Pipeline and Master Pipeline)
+
+Added to `PipelineListScreen.tsx`: the Engagement dashboard panel (scoped to `mine`/`master` exactly like the rest of the screen already branches), plus Call Log and Analytics header buttons/routes (`/dashboard/pipeline/calls`, `/dashboard/pipeline/analytics`, both role-aware). The pipeline's own `[id]` route now renders the shared `LeadClientScreen` (Overview/Payment History/Site Visits & Allocation/Contract of Sale tabs) via a new `PipelineClientScreen.tsx` wrapper, instead of the old single-scroll `PipelineDetailScreen` -- `PipelineDetailScreen.tsx` itself still exists and still works (its exported sections are exactly what `LeadClientScreen` reuses), it's just no longer the top-level route. Pre-existing emoji icons on this screen (⬇/⬆) swapped to lucide too, same pass.
+
+### 10.3 Client Database (`/dashboard/clients`)
+
+Added the same Engagement dashboard panel + Call Log/Analytics routes to the list screen, scoped to the same real `Lead[]` pool `useClients()` itself already groups from (own leads / company-wide). The aggregate, multi-lead "Customer 360" detail page (`ClientDetailScreen`, reached via a client-identity key, not a single lead id) is architecturally different from the other two apps' single-lead detail pages and was deliberately NOT retrofitted with `LeadClientScreen` -- its own Call Log's "Open client" links route to Master Pipeline's real per-lead detail page instead, which can address a specific lead directly.
+
+### 10.4 Testing-phase permission opening (temporary, explicitly reversible)
+
+Per the user's explicit request, every signed-in staff member can now use every one of these new features, not just Management/Elizabeth:
+
+- `has_permission(p_key)` (the real function every `contracts.generate`/`payments.manage`/`allocations.manage`/`ops.view_all` check already routes through) temporarily always returns `true`. The real role-based body is preserved verbatim in the migration's own comment for an exact revert once the user's own planned settings/permissions UI exists.
+- `contract_requests_upd` RLS (fulfil/markGenerated) was hardcoded to manager-or-elizabeth directly, not through `has_permission` -- widened separately to any signed-in user, same reasoning.
+- `useCanFulfilContracts()` (the client-side gate for the "Generate & send to client" button) updated to match -- any signed-in profile, not just manager/elizabeth.
+- Deliberately NOT touched: roughly 15 other hardcoded manager/elias/emmanuel/elizabeth RLS policies found on unrelated tables (contract templates/clauses/drafts/style-settings, plots delete, referrals, SVE storage, payment-receipt storage) -- those belong to features outside this turn's actual ask (Pipeline/Client Database) and widening them is a separate, larger decision for whenever the user asks for it directly.
+
+Verified live: logged in as a plain `agent`-role account (Adams, not manager, not elias/emmanuel/elizabeth) and confirmed "Generate & send to client" renders and is reachable on a real Pipeline lead -- the permission opening genuinely works for a non-privileged account, not just for Management (who already had access before this change). Also verified the Dashboard/Analytics/Call Log pages all render correctly for both a manager account and a plain agent account, each correctly scoped (company-wide vs. own pipeline).
+
 ## 9. QA
 
 Per phase: log a real test call/visit/payment where relevant, confirm every tile/chart/table number matches a direct SQL query for the same period. For Phase F specifically: generate a real contract for a test lead, confirm the `/contract/[token]` link opens and downloads correctly in an incognito-equivalent fresh browser tab (no session), confirm the SMS fires via `sms_log`, then delete the test contract/share-link/SMS row and the test lead's KYC afterward.
