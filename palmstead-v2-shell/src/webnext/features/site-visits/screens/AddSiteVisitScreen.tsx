@@ -13,7 +13,8 @@ import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { DAY_DEFAULT_TIME, dayTimeLabel, fmtLongDate, upcomingDatesForDay } from '../../site-visit-auth/lib/siteVisitAuthLogic';
-import { useCreateLead } from '../../pipeline/hooks/useLeads';
+import { useCreateLead, useLeads } from '../../pipeline/hooks/useLeads';
+import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { previewGrandTotal } from '../../pipeline/lib/pipelineLogic';
 import type { SiteVisit, PlotType } from '../../../types/domain';
@@ -101,11 +102,15 @@ export function AddSiteVisitScreen() {
   const downloadPdf = useDownloadSiteVisitFormPdf();
   const { data: myVisits } = useSiteVisits();
   const { data: clients } = useClients();
+  const ownPipelineLeads = useLeads();
+  const allPipelineLeads = useAllLeads();
+  const { data: visiblePipelineLeads } = profile?.role === 'manager' ? allPipelineLeads : ownPipelineLeads;
   const [confirmedVisit, setConfirmedVisit] = useState<SiteVisit | null>(null);
   const [confirmedLeadId, setConfirmedLeadId] = useState<string | undefined>(undefined);
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
   const [interestCustom, setInterestCustom] = useState('');
   const [addToPipeline, setAddToPipeline] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState(leadId ?? '');
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -142,6 +147,18 @@ export function AddSiteVisitScreen() {
   // way it got there (chip or the calendar itself), matching Master Spec
   // 9.1's fixed per-day schedule.
   const selectedDow = watchedDate ? new Date(`${watchedDate}T00:00:00`).getDay() : today.getDay();
+  const matchingClient = useMemo(() => {
+    if (!watchedName.trim() || !watchedContact.trim()) return null;
+    const key = clientKey(watchedName, watchedContact);
+    return (clients ?? []).find((item) => clientKey(item.name, item.contact) === key) ?? null;
+  }, [clients, watchedName, watchedContact]);
+  const matchingLeads = useMemo(
+    () => (visiblePipelineLeads ?? []).filter((lead) => matchingClient?.leadIds.includes(lead.id)),
+    [visiblePipelineLeads, matchingClient]
+  );
+  const selectedExistingLeadId = leadId ??
+    matchingLeads.find((lead) => lead.id === selectedLeadId)?.id ??
+    (matchingLeads.length === 1 ? matchingLeads[0].id : undefined);
 
   function pickDay(dow: number) {
     const [nextDate] = upcomingDatesForDay(dow, 1);
@@ -185,7 +202,11 @@ export function AddSiteVisitScreen() {
       // leadId FK, same as a visit logged from Pipeline Detail's own "Log a
       // visit" link -- one real, linked record instead of two separate,
       // unconnected ones.
-      let effectiveLeadId = leadId;
+      if (matchingClient && matchingLeads.length > 1 && !selectedExistingLeadId) {
+        setSaveError('This client has more than one pipeline record. Choose the correct record before saving the visit.');
+        return;
+      }
+      let effectiveLeadId = selectedExistingLeadId;
       if (addToPipeline && !leadId && !isKnownClient && config) {
         const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
         const pricing = previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
@@ -231,6 +252,9 @@ export function AddSiteVisitScreen() {
           {addToPipeline && confirmedLeadId && confirmedLeadId !== leadId && (
             <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was also added to your pipeline as a new lead.</p>
           )}
+          {confirmedLeadId && !addToPipeline && (
+            <p className={styles.confirmNote}>This visit is linked to the existing pipeline record and will appear in the client’s Client 360 history.</p>
+          )}
           <button type="button" className={styles.pdfBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate(confirmedVisit)}>
             {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download request form (PDF)'}
           </button>
@@ -275,6 +299,31 @@ export function AddSiteVisitScreen() {
               <input className={styles.input} placeholder="e.g. 0244 000 000" {...register('contact')} />
               {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
             </div>
+            {matchingClient && matchingLeads.length === 1 && !leadId && (
+              <div className={styles.newClientNote} role="status">
+                This visit will be linked to {matchingLeads[0].plotType} · {matchingLeads[0].stage} in the existing client record.
+              </div>
+            )}
+            {matchingClient && matchingLeads.length > 1 && !leadId && (
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="site-visit-lead-link">Choose the pipeline record for this visit *</label>
+                <select
+                  id="site-visit-lead-link"
+                  className={styles.select}
+                  value={selectedExistingLeadId ?? ''}
+                  onChange={(event) => setSelectedLeadId(event.target.value)}
+                  required
+                >
+                  <option value="">Select a record</option>
+                  {matchingLeads.map((lead) => (
+                    <option key={lead.id} value={lead.id}>
+                      {lead.plotType} · {lead.stage} · {lead.date}
+                    </option>
+                  ))}
+                </select>
+                <p className={styles.sub}>Selecting the right record keeps the visit, pipeline, and Client 360 history together.</p>
+              </div>
+            )}
             {!isKnownClient && (
               <>
                 <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
