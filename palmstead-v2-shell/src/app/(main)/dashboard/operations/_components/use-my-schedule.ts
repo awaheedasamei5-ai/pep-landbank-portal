@@ -279,7 +279,7 @@ export async function checkScheduleConflicts(staffKey: string, date: string, sta
       .from("op_todos")
       .select("id,title,start_time,end_time,status,item_date")
       .eq("item_date", date)
-      .or(`assigned_to.eq.${staffKey},owner_key.eq.${staffKey}`)
+      .eq("assigned_to", staffKey)
       .not("status", "in", "(done,cancelled,rescheduled)"),
     sb
       .from("schedule_items")

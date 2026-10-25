@@ -19,6 +19,12 @@ items. A later phase should move the organizer invariant into one transactional 
 path and add a free-time suggestion view. Verify the Management and Adams UI flows on
 preview and production, including a temporary overlap, before calling this slice complete.
 
+Preview QA exposed a delegated-task ownership error: a task assigned to Adams marked
+Management busy merely because Management created it. The follow-up migration counts
+tasks for their assignee, and the task editor's existing conflict query now uses the
+same rule. Temporary Adams and Management tasks proved the attendee warning and
+organizer block in the browser; both QA tasks were deleted immediately afterward.
+
 References: [Google Calendar Find a time](https://support.google.com/calendar/answer/6294878?hl=en-uk),
 [Google Calendar private and busy events](https://support.google.com/a/users/answer/9282964?hl=en),
 and the open-source [ai-calendar conflict and availability design](https://github.com/damanjz/ai-calendar).
