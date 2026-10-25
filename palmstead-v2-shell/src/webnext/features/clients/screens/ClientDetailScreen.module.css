@@ -147,6 +147,18 @@
 .receiptAction:disabled { opacity: .55; cursor: wait; }
 .receiptLink { color: var(--c-ink); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .receiptError { padding: 8px 12px; color: var(--c-danger); font-size: 11.5px; }
+.contractActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+.contractAction {
+  min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card);
+  color: var(--c-ink); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.contractAction svg { width: 14px; height: 14px; }
+.contractAction:hover { background: var(--c-paper); border-color: var(--c-accent); }
+.contractAction:disabled { opacity: .55; cursor: wait; }
+.contractAction:focus-visible, .contractLink:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.contractLink { color: var(--c-ink); font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.contractError { flex-basis: 100%; color: var(--c-danger); font-size: 11px; text-align: right; }
 
 @media (max-width: 480px) {
   .paymentRow { flex-wrap: wrap; }
