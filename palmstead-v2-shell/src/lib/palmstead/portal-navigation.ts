@@ -53,7 +53,6 @@ export const portalRoutePatterns = [
   "/dashboard/plots",
   "/dashboard/plots/[id]",
   "/dashboard/plots/reconciliation",
-  "/dashboard/profile",
   "/dashboard/quotation",
   "/dashboard/quotation/technical",
   "/dashboard/referrals",
@@ -88,7 +87,6 @@ const appNames: Record<string, string> = {
   banners: "Banner tracking",
   "site-visit-authorization": "Site visit authorization",
   announcements: "Announcements",
-  profile: "Profile",
   chat: "Chat",
 };
 const home = "/dashboard/default";
