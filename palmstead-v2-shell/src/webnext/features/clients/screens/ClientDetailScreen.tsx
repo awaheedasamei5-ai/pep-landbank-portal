@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Check, Download, Link2 } from 'lucide-react';
+import { requireSupabase } from '@/lib/supabase.client';
 // biome-ignore lint/correctness/noUndeclaredDependencies: this resolves through the local webnext router shim.
 import { useNavigate, useParams } from 'react-router';
 import { ghs, fmtLongDate } from '../../../shared/lib/format';
@@ -15,7 +16,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useClients } from '../hooks/useClients';
 import { useClientRelatedData } from '../hooks/useClientRelatedData';
 import { clientKey } from '../lib/groupClients';
-import type { SiteVisit } from '../../../types/domain';
+import type { ContractGeneration, SiteVisit } from '../../../types/domain';
 import styles from './ClientDetailScreen.module.css';
 
 function initials(name: string): string {
@@ -29,6 +30,42 @@ function initials(name: string): string {
 
 function StatusChip({ tone, children }: { tone: 'ok' | 'warn' | 'dgr' | 'muted'; children: React.ReactNode }) {
   return <span className={`${styles.chip} ${styles[`chip_${tone}`]}`}>{children}</span>;
+}
+
+function ContractPdfAction({ generation }: { generation: ContractGeneration }) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function prepareLink() {
+    if (!generation.pdfStoragePath) return;
+    setLoading(true);
+    setError(null);
+    setSignedUrl(null);
+    try {
+      const { data, error: storageError } = await requireSupabase()
+        .storage.from('contract-pdfs').createSignedUrl(generation.pdfStoragePath, 300);
+      if (storageError) throw storageError;
+      if (!data?.signedUrl) throw new Error('A secure PDF link could not be created.');
+      setSignedUrl(data.signedUrl);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The contract PDF could not be opened.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!generation.pdfStoragePath) return <StatusChip tone="muted">PDF not stored</StatusChip>;
+  return (
+    <div className={styles.contractActions}>
+      <button type="button" className={styles.contractAction} disabled={loading} onClick={prepareLink}>
+        <Download aria-hidden="true" />
+        {loading ? 'Preparing…' : signedUrl ? 'Refresh link' : 'Get PDF'}
+      </button>
+      {signedUrl && <a className={styles.contractLink} href={signedUrl} target="_blank" rel="noopener noreferrer">Open PDF</a>}
+      {error && <span className={styles.contractError} role="alert">{error}</span>}
+    </div>
+  );
 }
 
 // Master Rebuild Spec 17.2: "Open customer -> all related leads, payments,
@@ -48,7 +85,7 @@ export function ClientDetailScreen() {
   const ownLeads = useLeads();
   const allLeads = useAllLeads();
   const { data: leads } = profile?.role === 'manager' ? allLeads : ownLeads;
-  const { data: related } = useClientRelatedData(client?.leadIds ?? []);
+  const { data: related, isLoading: relatedLoading } = useClientRelatedData(client?.leadIds ?? []);
   const downloadReceipt = useDownloadReceipt();
   const issueReceiptLink = useIssueReceiptLink();
   const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
@@ -68,6 +105,26 @@ export function ClientDetailScreen() {
   // leadIds here is the only thing standing between this render and
   // showing a colleague's contract. Never remove this filter.
   const contracts = useMemo(() => (related?.contracts ?? []).filter((c) => leadIdSet.has(c.leadId)), [related, leadIdSet]);
+  const contractGenerations = useMemo(
+    () => (related?.contractGenerations ?? []).filter((generation) => generation.leadId != null && leadIdSet.has(generation.leadId)),
+    [related, leadIdSet]
+  );
+  const metadataOnlyContracts = useMemo(() => {
+    const matchedGenerationIds = new Set<string>();
+    return contracts.filter((contract) => {
+      const contractTime = Date.parse(contract.createdAt);
+      const match = contractGenerations.find((generation) => {
+        if (matchedGenerationIds.has(generation.id) || generation.leadId !== contract.leadId || generation.generatedBy !== contract.createdBy) return false;
+        const generationTime = Date.parse(generation.generatedAt);
+        return Number.isFinite(contractTime) && Number.isFinite(generationTime) && Math.abs(generationTime - contractTime) <= 60_000;
+      });
+      if (match) {
+        matchedGenerationIds.add(match.id);
+        return false;
+      }
+      return true;
+    });
+  }, [contracts, contractGenerations]);
   const complaints = useMemo(() => (related?.complaints ?? []).filter((co) => client && clientKey(co.name ?? '', co.contact ?? '') === key), [related, client, key]);
 
   async function shareReceipt(paymentId: string, leadId: string) {
@@ -245,28 +302,44 @@ export function ClientDetailScreen() {
               ))}
             </Section>
 
-            <Section title="Contracts" count={contracts.length + contractRequests.length} icon="document">
-              {contracts.length === 0 && contractRequests.length === 0 && <EmptyRow text="No contracts on file." />}
-              {contracts.map((c) => (
-                <div key={c.id} className={styles.rowStatic}>
-                  <div className={styles.rowMain}>
-                    <div className={styles.rowTitle}>Contract of Sale</div>
-                    <div className={styles.rowSub}>Generated {fmtLongDate(c.createdAt)}</div>
-                  </div>
-                  <StatusChip tone="ok">generated</StatusChip>
-                </div>
-              ))}
-              {contractRequests
-                .filter((r) => r.status === 'pending')
-                .map((r) => (
-                  <div key={r.id} className={styles.rowStatic}>
-                    <div className={styles.rowMain}>
-                      <div className={styles.rowTitle}>Contract request</div>
-                      <div className={styles.rowSub}>Requested {fmtLongDate(r.createdAt)}</div>
+            <Section title="Contracts" count={contractGenerations.length + metadataOnlyContracts.length + contractRequests.filter((r) => r.status === 'pending').length} icon="document">
+              {relatedLoading ? (
+                <EmptyRow text="Loading contract records…" />
+              ) : contractGenerations.length === 0 && metadataOnlyContracts.length === 0 && !contractRequests.some((r) => r.status === 'pending') ? (
+                <EmptyRow text="No contracts on file." />
+              ) : (
+                <>
+                  {contractGenerations.map((generation) => (
+                    <div key={`generation-${generation.id}`} className={styles.rowStatic}>
+                      <div className={styles.rowMain}>
+                        <div className={styles.rowTitle}>Contract of Sale{generation.versionNumberSnapshot != null ? ` · v${generation.versionNumberSnapshot}` : ''}</div>
+                        <div className={styles.rowSub}>Generated {fmtLongDate(generation.generatedAt)} · {generation.generatedByName}</div>
+                      </div>
+                      <ContractPdfAction generation={generation} />
                     </div>
-                    <StatusChip tone="warn">pending</StatusChip>
-                  </div>
-                ))}
+                  ))}
+                  {metadataOnlyContracts.map((contract) => (
+                    <div key={`metadata-${contract.id}`} className={styles.rowStatic}>
+                      <div className={styles.rowMain}>
+                        <div className={styles.rowTitle}>Contract of Sale record</div>
+                        <div className={styles.rowSub}>Generated {fmtLongDate(contract.createdAt)} · PDF is not stored in this record</div>
+                      </div>
+                      <StatusChip tone="muted">record only</StatusChip>
+                    </div>
+                  ))}
+                  {contractRequests
+                    .filter((request) => request.status === 'pending')
+                    .map((request) => (
+                      <div key={`request-${request.id}`} className={styles.rowStatic}>
+                        <div className={styles.rowMain}>
+                          <div className={styles.rowTitle}>Contract request</div>
+                          <div className={styles.rowSub}>Requested {fmtLongDate(request.createdAt)}</div>
+                        </div>
+                        <StatusChip tone="warn">pending</StatusChip>
+                      </div>
+                    ))}
+                </>
+              )}
             </Section>
 
             <Section title="Complaints" count={complaints.length} icon="warning">
