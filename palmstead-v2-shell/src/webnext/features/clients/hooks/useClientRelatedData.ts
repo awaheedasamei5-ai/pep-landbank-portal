@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import type { AllocationRequest, Complaint, Contract, ContractGeneration, ContractRequest, Payment, SiteVisit } from '../../../types/domain';
+import type { ActivityLogEntry, AllocationRequest, Complaint, Contract, ContractGeneration, ContractRequest, Payment, SiteVisit } from '../../../types/domain';
 
 export interface ClientRelatedData {
   payments: Payment[];
@@ -13,6 +13,7 @@ export interface ClientRelatedData {
   complaints: Complaint[];
   contracts: Contract[];
   contractGenerations: ContractGeneration[];
+  activity: ActivityLogEntry[];
 }
 
 // Master Rebuild Spec 17.2: "Open customer -> all related leads, payments,
@@ -34,16 +35,17 @@ export function useClientRelatedData(leadIds: string[] = []) {
     enabled: !!agentKey,
     queryFn: async (): Promise<ClientRelatedData> => {
       const ds = getDataSource(demoMode);
-      const [paymentsByLead, siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations] = await Promise.all([
+      const [paymentsByLead, siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations, activityByLead] = await Promise.all([
         Promise.all(clientLeadIds.map((leadId) => ds.payments.listForLead(leadId))),
         role === 'manager' ? ds.siteVisits.listAll() : ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
-        ds.complaints.listForAgent(agentKey),
+        role === 'manager' ? ds.complaints.listAll() : ds.complaints.listForAgent(agentKey),
         ds.contracts.list(),
         ds.contractGenerations.list(),
+        Promise.all(clientLeadIds.map((leadId) => ds.activityLog.listForLead(leadId))),
       ]);
-      return { payments: paymentsByLead.flat(), siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations };
+      return { payments: paymentsByLead.flat(), siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations, activity: activityByLead.flat() };
     },
   });
 }

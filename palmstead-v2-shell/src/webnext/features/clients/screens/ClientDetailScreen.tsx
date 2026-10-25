@@ -32,6 +32,69 @@ function StatusChip({ tone, children }: { tone: 'ok' | 'warn' | 'dgr' | 'muted';
   return <span className={`${styles.chip} ${styles[`chip_${tone}`]}`}>{children}</span>;
 }
 
+type JourneyKind = 'contact' | 'visit' | 'payment' | 'allocation' | 'contract' | 'case';
+type JourneyEvent = { id: string; kind: JourneyKind; at: string; title: string; detail: string };
+const journeyFilters: Array<{ value: 'all' | JourneyKind; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'contact', label: 'Contact' },
+  { value: 'visit', label: 'Visits' },
+  { value: 'payment', label: 'Payments' },
+  { value: 'allocation', label: 'Allocations' },
+  { value: 'contract', label: 'Contracts' },
+  { value: 'case', label: 'Cases' },
+];
+
+function eventDate(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat('en-GH', { day: 'numeric', month: 'short', year: 'numeric' }).format(parsed);
+}
+
+function ClientJourney({ events, loading }: { events: JourneyEvent[]; loading: boolean }) {
+  const [filter, setFilter] = useState<'all' | JourneyKind>('all');
+  const [limit, setLimit] = useState(12);
+  const filtered = filter === 'all' ? events : events.filter((event) => event.kind === filter);
+  return (
+    <section className={styles.journey} aria-label="Client activity history">
+      <div className={styles.journeyHead}>
+        <div>
+          <h2 className={styles.journeyTitle}>Client history</h2>
+          <p className={styles.journeyIntro}>A dated view of this client’s contacts, visits, payments and documents.</p>
+        </div>
+        <span className={styles.journeyTotal}>{events.length} records</span>
+      </div>
+      <div className={styles.journeyFilters} role="group" aria-label="Filter client history">
+        {journeyFilters.map(({ value, label }) => (
+          <button key={value} type="button" className={`${styles.journeyFilter} ${filter === value ? styles.journeyFilterActive : ''}`}
+            aria-pressed={filter === value} onClick={() => { setFilter(value); setLimit(12); }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className={styles.journeyList}>
+        {loading && <div className={styles.emptyRow}>Loading client history…</div>}
+        {!loading && filtered.length === 0 && <div className={styles.emptyRow}>No {filter === 'all' ? '' : `${filter} `}records found for this client.</div>}
+        {!loading && filtered.slice(0, limit).map((event) => (
+          <div key={event.id} className={styles.journeyItem}>
+            <span className={styles.journeyMarker} aria-hidden="true" />
+            <div className={styles.journeyContent}>
+              <div className={styles.journeyItemHead}>
+                <strong>{event.title}</strong>
+                <time dateTime={event.at}>{eventDate(event.at)}</time>
+              </div>
+              <div className={styles.journeyDetail}>{event.detail}</div>
+            </div>
+          </div>
+        ))}
+        {!loading && filtered.length > limit && (
+          <button type="button" className={styles.journeyMore} onClick={() => setLimit((current) => current + 12)}>
+            Show more ({filtered.length - limit} remaining)
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ContractPdfAction({ generation }: { generation: ContractGeneration }) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +148,7 @@ export function ClientDetailScreen() {
   const ownLeads = useLeads();
   const allLeads = useAllLeads();
   const { data: leads } = profile?.role === 'manager' ? allLeads : ownLeads;
-  const { data: related, isLoading: relatedLoading } = useClientRelatedData(client?.leadIds ?? []);
+  const { data: related, isLoading: relatedLoading, error: relatedError } = useClientRelatedData(client?.leadIds ?? []);
   const downloadReceipt = useDownloadReceipt();
   const issueReceiptLink = useIssueReceiptLink();
   const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
@@ -126,6 +189,21 @@ export function ClientDetailScreen() {
     });
   }, [contracts, contractGenerations]);
   const complaints = useMemo(() => (related?.complaints ?? []).filter((co) => client && clientKey(co.name ?? '', co.contact ?? '') === key), [related, client, key]);
+  const journey = useMemo<JourneyEvent[]>(() => {
+    const events: JourneyEvent[] = [];
+    for (const lead of clientLeads) events.push({ id: `lead-${lead.id}`, kind: 'contact', at: lead.date, title: 'Lead opened', detail: `${lead.plotType} · ${ghs(lead.grandTotal)}` });
+    for (const entry of related?.activity ?? []) {
+      if (!entry.leadId || !leadIdSet.has(entry.leadId)) continue;
+      events.push({ id: `activity-${entry.id}`, kind: 'contact', at: entry.createdAt, title: entry.action || 'Client contact', detail: [entry.outcome, entry.detail, entry.note, entry.agentName].filter(Boolean).join(' · ') });
+    }
+    for (const visit of siteVisits) events.push({ id: `visit-${visit.id}`, kind: 'visit', at: visit.visitDate || visit.createdAt, title: `Site visit · ${visit.status}`, detail: [visit.site, visit.plot, visit.agentName].filter(Boolean).join(' · ') });
+    for (const payment of payments) events.push({ id: `payment-${payment.id}`, kind: 'payment', at: payment.date, title: `${ghs(payment.amount)} payment`, detail: [payment.status ?? 'approved', payment.paymentMethod, payment.receiptNumber].filter(Boolean).join(' · ') });
+    for (const allocation of allocations) events.push({ id: `allocation-${allocation.id}`, kind: 'allocation', at: allocation.createdAt, title: `Allocation · ${allocation.status}`, detail: allocation.plotNumber || 'Plot selection pending' });
+    for (const contract of contractGenerations) events.push({ id: `contract-${contract.id}`, kind: 'contract', at: contract.generatedAt, title: 'Contract of Sale generated', detail: [contract.versionNumberSnapshot ? `Version ${contract.versionNumberSnapshot}` : null, contract.generatedByName].filter(Boolean).join(' · ') });
+    for (const request of contractRequests) events.push({ id: `contract-request-${request.id}`, kind: 'contract', at: request.createdAt, title: `Contract requested · ${request.status}`, detail: request.requestedByName });
+    for (const complaint of complaints) events.push({ id: `case-${complaint.id}`, kind: 'case', at: complaint.createdAt, title: complaint.category || 'Client case', detail: [complaint.status, complaint.priority].filter(Boolean).join(' · ') });
+    return events.sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0) || a.id.localeCompare(b.id));
+  }, [clientLeads, related?.activity, leadIdSet, siteVisits, payments, allocations, contractGenerations, contractRequests, complaints]);
 
   async function shareReceipt(paymentId: string, leadId: string) {
     const payment = payments.find((item) => item.id === paymentId);
@@ -178,6 +256,9 @@ export function ClientDetailScreen() {
                 <div className={styles.statValue}>{ghs(Math.max(client.totalValue - client.totalPaid, 0))}</div>
               </div>
             </div>
+
+            {relatedError && <div className={styles.receiptError} role="alert">Some client records could not be loaded. Refresh the page to try again.</div>}
+            <ClientJourney events={journey} loading={relatedLoading} />
 
             <Section title="Leads" count={clientLeads.length} icon="briefcase2">
               {clientLeads.length === 0 && <EmptyRow text="No leads on file." />}
