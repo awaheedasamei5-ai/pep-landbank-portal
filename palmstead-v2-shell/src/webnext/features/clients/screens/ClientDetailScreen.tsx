@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { Check, Download, Link2 } from 'lucide-react';
+import { ArrowLeft, Check, Download, Link2, X } from 'lucide-react';
 import { requireSupabase } from '@/lib/supabase.client';
 // biome-ignore lint/correctness/noUndeclaredDependencies: this resolves through the local webnext router shim.
 import { useNavigate, useParams } from 'react-router';
@@ -146,7 +146,7 @@ export function ClientDetailScreen() {
     <div className={styles.drawerBackdrop}>
       <div className={styles.drawerPanel}>
         <button type="button" className={styles.closeDrawerBtn} onClick={() => navigate('/dashboard/clients')} aria-label="Close" title="Close">
-          ✕
+          <X className="size-4" aria-hidden="true" />
         </button>
 
         {!client ? (
@@ -359,7 +359,7 @@ export function ClientDetailScreen() {
                 real back affordance Pipeline's own detail screen gives
                 mobile users, at the bottom of the content. */}
             <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/clients')}>
-              ← Back
+              <ArrowLeft className="size-4" aria-hidden="true" /> Back
             </button>
           </div>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { Download, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import type { Banner, BannerStatus } from '../../../types/domain';
 import { BANNER_STATUS, BANNER_STATUS_ORDER, last6MonthKeys, monthShortLabel, REPORT_PERIODS, reportPeriodRange, type ReportPeriod } from '../lib/bannerLogic';
@@ -150,7 +151,7 @@ function BannerRow({ banner, leadCount, onOpen }: { banner: Banner; leadCount: n
         <img src={banner.image} alt="" className={styles.rowThumb} />
       ) : (
         <span className={styles.rowAvatar} style={{ background: `linear-gradient(135deg, ${st.color}, ${st.color}99)` }}>
-          📍
+          <MapPin className="size-4" aria-hidden="true" />
         </span>
       )}
       <div className={styles.rowMain}>
@@ -435,7 +436,7 @@ function ReportsTab({ all, onDownload, downloading }: { all: Banner[]; onDownloa
         </span>
       </div>
       <button type="button" className={styles.addBtn} disabled={downloading} onClick={() => onDownload(filtered)}>
-        {downloading ? 'Preparing…' : '⬇ Download full report (PDF)'}
+        {downloading ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download full report (PDF)</span>)}
       </button>
       {filtered.length === 0 && <p className={styles.emptyMsg}>Nothing matches these filters</p>}
       <div className={styles.list}>

@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { useLead } from "../../pipeline/hooks/useLead";
 import { useContractGenerations, useContractApprovals } from "../hooks/useContractTemplates";
 import { cn } from "cn";
@@ -58,7 +59,7 @@ export function ContractProgressRail({ request }: { request: ContractRequest }) 
                   done ? "border-primary bg-primary text-primary-foreground" : isCurrent ? "border-primary text-primary" : "border-border text-muted-foreground",
                 )}
               >
-                {done ? "✓" : i + 1}
+                {done ? <Check className="size-3" aria-hidden="true" /> : i + 1}
               </span>
               <span className={cn("text-[11px] whitespace-nowrap", isCurrent ? "font-medium text-foreground" : "text-muted-foreground")}>{s.label}</span>
             </div>

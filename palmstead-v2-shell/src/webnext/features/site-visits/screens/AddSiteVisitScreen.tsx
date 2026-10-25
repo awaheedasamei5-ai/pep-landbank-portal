@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { ArrowLeft, Check, Download } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { z } from 'zod';
 import { useCreateSiteVisit, useSiteVisits, findDuplicateVisit } from '../hooks/useSiteVisits';
@@ -255,7 +256,7 @@ export function AddSiteVisitScreen() {
     return (
       <div className={styles.wrap}>
         <div className={styles.confirmCard}>
-          <div className={styles.confirmCheck}>✓</div>
+          <div className={styles.confirmCheck}><Check className="size-6" aria-hidden="true" /></div>
           <h1 className={styles.title}>Visit logged</h1>
           <p className={styles.sub}>
             {confirmedVisit.name} · {fmtLongDate(confirmedVisit.visitDate)} {confirmedVisit.visitTime ? `at ${confirmedVisit.visitTime}` : ''} · {confirmedVisit.site}
@@ -270,7 +271,7 @@ export function AddSiteVisitScreen() {
             <p className={styles.confirmNote}>This visit is linked to the existing pipeline record and will appear in the client’s Client 360 history.</p>
           )}
           <button type="button" className={styles.pdfBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate(confirmedVisit)}>
-            {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download request form (PDF)'}
+            {downloadPdf.isPending ? 'Preparing PDF…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download request form (PDF)</span>)}
           </button>
           <div className={styles.actions}>
             <button type="button" className={styles.cancel} onClick={() => setConfirmedVisit(null)}>
@@ -293,7 +294,7 @@ export function AddSiteVisitScreen() {
           at the very bottom of this long form. Same destination Cancel
           uses, surfaced immediately at the top too. */}
       <button type="button" className={styles.backLink} onClick={() => navigate(backTo)}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <h1 className={styles.title}>Log a site visit</h1>
       <p className={styles.sub}>Saved against your own visits.</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { ArrowRight, Download } from 'lucide-react';
 import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
@@ -62,7 +63,7 @@ export function QuotationScreen() {
       <p className={styles.sub} style={{ marginTop: -12 }}>
         Custom or irregular plots?{' '}
         <Link to="/dashboard/quotation/technical" style={{ color: 'var(--c-accent)', fontWeight: 700 }}>
-          Try Technical Quotation →
+          Try Technical Quotation <ArrowRight className="inline size-3" aria-hidden="true" />
         </Link>
       </p>
 
@@ -207,7 +208,7 @@ export function QuotationScreen() {
               })
             }
           >
-            {downloadPdf.isPending ? 'Generating…' : '⬇ Download PDF'}
+            {downloadPdf.isPending ? 'Generating…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download PDF</span>)}
           </button>
         </>
       )}

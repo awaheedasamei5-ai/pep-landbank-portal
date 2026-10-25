@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Download, Phone, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BarChart3, Download, Pencil, Phone, Receipt, Upload } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { EngagementDashboardPanel } from '../../../shared/ui/EngagementDashboardPanel';
@@ -559,7 +559,7 @@ export function PipelineListScreen() {
                     <td className={`${styles.td} ${styles.tdMono}`}>{ghs(Math.max(l.grandTotal - l.amtPaid, 0))}</td>
                     <td className={`${styles.td} ${overdue ? styles.tdOverdue : ''}`}>
                       {l.nextAction || '—'}
-                      {overdue ? ' ⚠' : ''}
+                      {overdue ? <AlertTriangle className="inline size-3" aria-hidden="true" /> : ''}
                     </td>
                     <td className={styles.td}>
                       <StageBadge stage={l.stage} />
@@ -574,10 +574,10 @@ export function PipelineListScreen() {
                         disabled={!config || downloadLeadQuotation.isPending}
                         onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
                       >
-                        🧾
+                        <Receipt className="size-4" aria-hidden="true" />
                       </button>
                       <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`${basePath}/${l.id}`)}>
-                        ✎
+                        <Pencil className="size-4" aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -619,7 +619,7 @@ export function PipelineListScreen() {
                 disabled={!config || downloadLeadQuotation.isPending}
                 onClick={() => config && downloadLeadQuotation.mutate({ lead: l, config })}
               >
-                🧾
+                <Receipt className="size-4" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -628,7 +628,7 @@ export function PipelineListScreen() {
                 aria-label={`Edit ${l.name}`}
                 onClick={() => navigate(`${basePath}/${l.id}`)}
               >
-                ✎
+                <Pencil className="size-4" aria-hidden="true" />
               </button>
             </div>
           );
@@ -637,7 +637,7 @@ export function PipelineListScreen() {
 
       {profile?.role === 'manager' && (
         <button type="button" className={styles.archivedLink} onClick={() => navigate('/dashboard/pipeline/archived')}>
-          View archived leads →
+          View archived leads <ArrowRight className="inline size-4" aria-hidden="true" />
         </button>
       )}
     </div>

@@ -82,7 +82,7 @@ export function PortfolioScreen() {
                   )}
                 </>
               ) : (
-                <div className="font-medium text-emerald-600 dark:text-emerald-400">You&apos;re #1 — keep it up 🎉</div>
+                <div className="font-medium text-emerald-600 dark:text-emerald-400">You&apos;re #1 — keep it up <Sparkles className="inline size-4" aria-hidden="true" /></div>
               )}
               {gapCoach && (
                 <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground italic">
@@ -99,7 +99,7 @@ export function PortfolioScreen() {
         <Card className="transition-colors hover:bg-muted/40">
           <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div className="flex items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-lg">🏆</span>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-lg"><Trophy className="size-5" aria-hidden="true" /></span>
               <div>
                 <div className="font-semibold">
                   {earnedCount} of {totalCount} achievements earned

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -85,7 +86,7 @@ export function PlotDetailScreen() {
     <div className={styles.drawerBackdrop}>
       <div className={styles.drawerPanel}>
         <button type="button" className={styles.closeDrawerBtn} onClick={() => navigate('/dashboard/plots')} aria-label="Close" title="Close">
-          ✕
+          <X className="size-4" aria-hidden="true" />
         </button>
 
         {!plot ? (
@@ -263,7 +264,7 @@ export function PlotDetailScreen() {
             )}
 
             <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/plots')}>
-              ← Back
+              <ArrowLeft className="size-4" aria-hidden="true" /> Back
             </button>
           </div>
         )}

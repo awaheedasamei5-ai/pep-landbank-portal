@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import { techBaseAreaSqft, techCustomLotArea } from '../../quotation/lib/quotationLogic';
 import type { TechLot, TechLotShape } from '../../quotation/lib/quotationLogic';
 import type { Config, PlotType } from '../../../types/domain';
@@ -111,7 +112,7 @@ function PartialLotRow({ lot, onChange, onRemove }: { lot: TechLot; onChange: (p
         )}
         {onRemove && (
           <button type="button" className={styles.removeLot} onClick={onRemove} aria-label="Remove lot">
-            ✕
+            <X className="size-4" aria-hidden="true" />
           </button>
         )}
       </div>

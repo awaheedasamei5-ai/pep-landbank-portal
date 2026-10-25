@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { Download } from 'lucide-react';
 import { Link } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
@@ -210,7 +211,7 @@ export function TechnicalQuotationScreen() {
               })
             }
           >
-            {downloadPdf.isPending ? 'Generating…' : !hasAnyPlot ? 'Add at least one plot' : '⬇ Download PDF'}
+            {downloadPdf.isPending ? 'Generating…' : !hasAnyPlot ? 'Add at least one plot' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download PDF</span>)}
           </button>
         </>
       )}

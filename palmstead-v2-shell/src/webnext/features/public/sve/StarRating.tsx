@@ -1,5 +1,6 @@
 "use client";
 
+import { Star } from 'lucide-react';
 import styles from './SveFeedbackScreen.module.css';
 
 export function StarRating({ value, onChange, max = 5 }: { value: number; onChange: (n: number) => void; max?: number }) {
@@ -15,7 +16,7 @@ export function StarRating({ value, onChange, max = 5 }: { value: number; onChan
           role="radio"
           onClick={() => onChange(n)}
         >
-          ★
+          <Star className="size-6" fill={n <= value ? 'currentColor' : 'none'} aria-hidden="true" />
         </button>
       ))}
     </div>

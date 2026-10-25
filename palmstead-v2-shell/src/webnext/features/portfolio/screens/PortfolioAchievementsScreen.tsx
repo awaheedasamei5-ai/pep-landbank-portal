@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Trophy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -58,7 +58,7 @@ export function PortfolioAchievementsScreen() {
             <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
               <div>
                 <div className="text-lg font-extrabold">
-                  🏆 {wonDefs.length} of {portfolio.defs.length} earned
+                  <Trophy className="inline size-5" aria-hidden="true" /> {wonDefs.length} of {portfolio.defs.length} earned
                 </div>
                 <div className="text-xs text-muted-foreground">{totalPoints} points from achievements</div>
               </div>

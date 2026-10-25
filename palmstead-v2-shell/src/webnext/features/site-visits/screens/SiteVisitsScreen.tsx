@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Download } from 'lucide-react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
@@ -112,7 +113,7 @@ export function SiteVisitsScreen() {
           </p>
           {hasSveAccess && (
             <button type="button" className={styles.experienceLink} onClick={() => navigate('/dashboard/site-visits/experience')}>
-              Experience feedback →
+              Experience feedback <Icon name="chevronRight" size={14} />
             </button>
           )}
         </div>
@@ -193,7 +194,7 @@ export function SiteVisitsScreen() {
                     downloadPdf.mutate(v);
                   }}
                 >
-                  {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download request form (PDF)'}
+                  {downloadPdf.isPending ? 'Preparing PDF…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download request form (PDF)</span>)}
                 </button>
                 {(isManager || v.agentKey === profile?.key) &&
                   (deletingId === v.id ? (

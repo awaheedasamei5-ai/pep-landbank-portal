@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useId, useState } from 'react';
+import { AlertTriangle, FileText } from 'lucide-react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useConfirmLeaveUsed, useCreateLeaveRequest, useDeletePlannedLeave, useLeaveConflictDates, useLeaveRequests, useSendPlannedLeave } from '../hooks/useLeaveRequests';
@@ -89,7 +90,7 @@ export function LeaveScreen() {
               setShowForm(false);
             }}
           >
-            {showEmergencyForm ? 'Cancel' : '🚨 Emergency Leave'}
+            {showEmergencyForm ? 'Cancel' : (<span className="inline-flex items-center gap-1"><AlertTriangle className="size-4" aria-hidden="true" /> Emergency Leave</span>)}
           </button>
           <button
             type="button"
@@ -200,7 +201,7 @@ function PlannedLeaveRow({ request }: { request: LeaveRequest }) {
         </div>
         {request.letterText && (
           <button type="button" className={styles.letterBtn} disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
-            {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
+            {downloadLetter.isPending ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><FileText className="size-4" aria-hidden="true" /> Leave request letter</span>)}
           </button>
         )}
       </div>
@@ -225,7 +226,7 @@ function MyLeaveRow({ request }: { request: LeaveRequest }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className={styles.name}>
           {request.daysCount} day{request.daysCount === 1 ? '' : 's'}
-          {request.isEmergency && <span className={styles.emergencyTag}>🚨 Emergency</span>}
+          {request.isEmergency && <span className={styles.emergencyTag}><AlertTriangle className="inline size-3" aria-hidden="true" /> Emergency</span>}
         </div>
         <div className={styles.meta}>
           {firstDate}
@@ -233,7 +234,7 @@ function MyLeaveRow({ request }: { request: LeaveRequest }) {
         </div>
         {request.letterText && (
           <button type="button" className={styles.letterBtn} disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
-            {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
+            {downloadLetter.isPending ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><FileText className="size-4" aria-hidden="true" /> Leave request letter</span>)}
           </button>
         )}
         {request.status !== 'pending' && request.decidedByName && (
@@ -402,7 +403,7 @@ function EmergencyLeaveForm({ requests, onDone }: { requests: LeaveRequest[]; on
         <textarea id={reasonId} className={styles.textarea} placeholder="What's the emergency?" value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
       {dates.length > 0 && <p className={styles.emergencyDaysNote}>{dates.length} working day(s): {dates[0]} to {dates[dates.length - 1]}</p>}
-      {conflictWarning && <p className={styles.error}>⚠ {conflictWarning} Management will see this too.</p>}
+      {conflictWarning && <p className={styles.error}><AlertTriangle className="inline size-3" aria-hidden="true" /> {conflictWarning} Management will see this too.</p>}
       {error && <p className={styles.error}>{error}</p>}
       <button type="button" className={styles.emergencySubmitBtn} disabled={create.isPending} onClick={submit}>
         {create.isPending ? 'Sending…' : 'Send emergency request'}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { Compass } from 'lucide-react';
 import { BANNER_STATUS, BANNER_STATUS_ORDER, bannerAreaColor, bannerRouteLinks, directionsUrl, ensureLeafletLoaded, type LeafletMapInstance } from '../lib/bannerLogic';
 import type { Banner, BannerStatus } from '../../../types/domain';
 import styles from './BannerMapPanel.module.css';
@@ -133,7 +134,7 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
           </div>
         </div>
         <button type="button" className={styles.directionsBtn} onClick={getDirections}>
-          🧭 Get directions (opens Google Maps)
+          <Compass className="inline size-4" aria-hidden="true" /> Get directions (opens Google Maps)
         </button>
         <p className={styles.hint}>Picking a single banner routes straight there. Otherwise the route covers every mapped banner matching your Area + Status filter, in stops of up to 10 (Google Maps&apos; own limit) -- more than 10 opens as multiple route links.</p>
         {routeLinks.length > 0 && (

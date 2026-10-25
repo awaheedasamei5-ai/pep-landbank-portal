@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import { Check, Download, Link2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Download, Link2, Pin, User, X } from 'lucide-react';
 import { useBanners } from '../../banners/hooks/useBanners';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { ghs, today } from '../../../shared/lib/format';
@@ -105,7 +105,7 @@ export function PipelineDetailScreen() {
     <div className={styles.drawerBackdrop}>
       <div className={styles.drawerPanel}>
         <button type="button" className={styles.closeDrawerBtn} onClick={() => navigate(backTo)} aria-label="Close" title="Close">
-          ✕
+          <X className="size-4" aria-hidden="true" />
         </button>
         <div className={styles.wrap}>
           <div className={styles.head}>
@@ -164,7 +164,7 @@ export function PipelineDetailScreen() {
       <DangerZoneSection lead={lead} onDeleted={() => navigate(backTo)} />
 
           <button type="button" className={styles.backBtn} onClick={() => navigate(backTo)}>
-            ← Back
+            <ArrowLeft className="size-4" aria-hidden="true" /> Back
           </button>
         </div>
         <ScrollHelper />
@@ -190,10 +190,10 @@ function ScrollHelper() {
   return (
     <div className={styles.scrollHelper}>
       <button type="button" className={styles.scrollHelperBtn} onClick={() => jumpTo('lead-client-section')} title="Jump to client details">
-        👤
+        <User className="size-4" aria-hidden="true" />
       </button>
       <button type="button" className={styles.scrollHelperBtn} onClick={() => jumpTo('lead-followup-section')} title="Jump to next action">
-        📌
+        <Pin className="size-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -841,7 +841,7 @@ export function AllocationEligibilitySection({ lead, config, payments }: { lead:
               ? 'Allocation request awaiting Management sign-off.'
               : 'Allocation request submitted — awaiting suggestion.'}{' '}
           <button type="button" className={styles.editLink} onClick={() => navigate('/dashboard/allocations')}>
-            View in Allocations →
+            View in Allocations <ArrowRight className="inline size-3" aria-hidden="true" />
           </button>
         </p>
       ) : dep.complete ? (
@@ -1022,7 +1022,7 @@ function FollowUpDraftBox({ lead }: { lead: Lead }) {
       {draft.data && (
         <div className={styles.aiDraftActions}>
           <button type="button" className={styles.aiDraftCopyBtn} onClick={copy}>
-            {copied ? 'Copied ✓' : 'Copy'}
+            {copied ? (<span className="inline-flex items-center gap-1">Copied <Check className="size-3" aria-hidden="true" /></span>) : 'Copy'}
           </button>
           <button type="button" className={styles.aiDraftRetryBtn} onClick={() => draft.mutate(lead)}>
             Redraft
@@ -1165,7 +1165,7 @@ export function DocumentationSection({ lead }: { lead: Lead }) {
         disabled={!stage || updateStage.isPending}
         onClick={() => updateStage.mutateAsync({ id: lead.id, stage }).then(() => { setDone(true); setTimeout(() => setDone(false), 2000); })}
       >
-        {updateStage.isPending ? 'Updating…' : done ? 'Updated ✓' : 'Update stage'}
+        {updateStage.isPending ? 'Updating…' : done ? (<span className="inline-flex items-center gap-1">Updated <Check className="size-3" aria-hidden="true" /></span>) : 'Update stage'}
       </button>
     </div>
   );

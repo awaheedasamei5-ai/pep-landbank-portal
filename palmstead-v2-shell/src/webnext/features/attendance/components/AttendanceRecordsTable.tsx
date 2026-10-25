@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -222,7 +222,7 @@ export function AttendanceRecordsTable({
 
                 {selected.signInLat != null && selected.signInLng != null && (
                   <a className="text-sm font-medium text-primary hover:underline" href={`https://www.google.com/maps?q=${selected.signInLat},${selected.signInLng}`} target="_blank" rel="noreferrer">
-                    View sign-in location on map →
+                    View sign-in location on map <ArrowRight className="inline size-3" aria-hidden="true" />
                   </a>
                 )}
 

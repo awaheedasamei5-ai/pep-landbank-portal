@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from 'react';
+import { ArrowLeft, Download, Sparkles, Star } from 'lucide-react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import {
   useDeleteSveEntry,
@@ -186,11 +187,11 @@ export function SveManagementScreen() {
                   <div className={styles.detail}>
                     <div className={styles.ratingRow}>
                       <div className={styles.ratingBox}>
-                        <div className={styles.ratingVal}>{submission.overallRating ?? '—'}★</div>
+                        <div className={styles.ratingVal}>{submission.overallRating ?? '—'} <Star className="inline size-4" aria-hidden="true" /></div>
                         <div className={styles.ratingLbl}>Overall</div>
                       </div>
                       <div className={styles.ratingBox}>
-                        <div className={styles.ratingVal}>{submission.relationshipRating ?? '—'}★</div>
+                        <div className={styles.ratingVal}>{submission.relationshipRating ?? '—'} <Star className="inline size-4" aria-hidden="true" /></div>
                         <div className={styles.ratingLbl}>Handling</div>
                       </div>
                       <div className={styles.ratingBox}>
@@ -321,7 +322,7 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
             </div>
             <div className={styles.right}>
               <button type="button" className={styles.copyBtn} disabled={download.isPending} onClick={() => download.mutate(r)}>
-                {download.isPending ? 'Preparing…' : '⬇ Download'}
+                {download.isPending ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download</span>)}
               </button>
             </div>
           </div>
@@ -375,7 +376,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
     return (
       <div>
         <button type="button" className={styles.copyBtn} onClick={onClose}>
-          ← Back
+          <ArrowLeft className="size-4" aria-hidden="true" /> Back
         </button>
         <p className={styles.emptyMsg}>Loading…</p>
       </div>
@@ -472,7 +473,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
           </div>
         </div>
         <button type="button" className={styles.copyBtn} onClick={onClose}>
-          ← Back
+          <ArrowLeft className="size-4" aria-hidden="true" /> Back
         </button>
       </div>
 
@@ -490,7 +491,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
         />
         <div className={styles.reportActions}>
           <button type="button" className={styles.reportCancelBtn} disabled={polish.isPending || !siteSummary.trim()} onClick={polishDaySummary}>
-            {polish.isPending ? 'Polishing…' : '✨ Polish with AI'}
+            {polish.isPending ? 'Polishing…' : (<span className="inline-flex items-center gap-1"><Sparkles className="size-4" aria-hidden="true" /> Polish with AI</span>)}
           </button>
         </div>
         {siteSummaryAi && (
@@ -535,7 +536,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
               <>
                 <div className={styles.reportActions} style={{ marginTop: 8 }}>
                   <button type="button" className={styles.reportCancelBtn} disabled={genFeedback.isPending} onClick={() => generateFeedbackFor(i)}>
-                    {genFeedback.isPending ? 'Analyzing…' : entry.aiFeedbackSummary ? 'Regenerate AI feedback' : '✨ Generate AI feedback'}
+                    {genFeedback.isPending ? 'Analyzing…' : entry.aiFeedbackSummary ? 'Regenerate AI feedback' : (<span className="inline-flex items-center gap-1"><Sparkles className="size-4" aria-hidden="true" /> Generate AI feedback</span>)}
                   </button>
                 </div>
                 {entry.aiFeedbackSummary && (
@@ -563,7 +564,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
                         onClick={() => updateReviewAnswer(i, q.key, n)}
                         aria-label={`${n} star${n === 1 ? '' : 's'}`}
                       >
-                        ★
+                        <Star className="size-4" fill={Number(entry.managerReview?.[q.key] ?? 0) >= n ? 'currentColor' : 'none'} aria-hidden="true" />
                       </button>
                     ))}
                   </div>
@@ -591,7 +592,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
             ))}
             <div className={styles.reportActions}>
               <button type="button" className={styles.reportCancelBtn} disabled={polish.isPending || !reviewIsAnswered(entry.managerReview)} onClick={() => polishClientNotes(i)}>
-                {polish.isPending ? 'Composing…' : '✨ Compose with AI'}
+                {polish.isPending ? 'Composing…' : (<span className="inline-flex items-center gap-1"><Sparkles className="size-4" aria-hidden="true" /> Compose with AI</span>)}
               </button>
             </div>
             {entry.managerNotesAi && (

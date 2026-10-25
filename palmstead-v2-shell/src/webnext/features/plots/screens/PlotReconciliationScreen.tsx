@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, Check } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { usePlots } from '../hooks/usePlots';
 import styles from './PlotReconciliationScreen.module.css';
@@ -59,7 +60,7 @@ export function PlotReconciliationScreen() {
   return (
     <div className={styles.wrap}>
       <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/plots')}>
-        ← Plot Inventory
+        <ArrowLeft className="size-4" aria-hidden="true" /> Plot Inventory
       </button>
       <h1 className={styles.title}>Plot Data Reconciliation</h1>
       <p className={styles.sub}>Live inventory vs. the original workbook and site-plan legend, block by block.</p>
@@ -103,7 +104,7 @@ export function PlotReconciliationScreen() {
                     <td>{r.sitePlan}</td>
                     <td>
                       {r.clean ? (
-                        <span className={styles.badgeOk}>✓ Matches both</span>
+                        <span className={styles.badgeOk}><Check className="inline size-3" aria-hidden="true" /> Matches both</span>
                       ) : (
                         <span className={styles.badgeWarn}>
                           {r.liveVsWorkbook !== 0 && `${r.liveVsWorkbook > 0 ? '+' : ''}${r.liveVsWorkbook} vs workbook`}

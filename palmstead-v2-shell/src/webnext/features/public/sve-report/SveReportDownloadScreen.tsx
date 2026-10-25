@@ -2,6 +2,7 @@
 
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, ClipboardList, Link2 } from 'lucide-react';
 import { resolveSveReportLink } from '../../../data/sveReportClient';
 import styles from './SveReportDownloadScreen.module.css';
 
@@ -37,7 +38,7 @@ export function SveReportDownloadScreen() {
 
         {state === 'not_found' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>🔗</div>
+            <div className={styles.centerIcon}><Link2 className="mx-auto size-8" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>This link isn&apos;t valid</div>
             <p className={styles.centerSub}>Double-check the link you were sent, or ask the staff member for a fresh one.</p>
           </div>
@@ -45,7 +46,7 @@ export function SveReportDownloadScreen() {
 
         {state === 'unavailable' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>⚠️</div>
+            <div className={styles.centerIcon}><AlertTriangle className="mx-auto size-8" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>This report isn&apos;t available right now</div>
             <p className={styles.centerSub}>Please try again in a little while, or ask the staff member to send the link again.</p>
           </div>
@@ -53,7 +54,7 @@ export function SveReportDownloadScreen() {
 
         {state === 'ready' && data?.url && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>📋</div>
+            <div className={styles.centerIcon}><ClipboardList className="mx-auto size-8" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>The report is ready</div>
             <p className={styles.centerSub}>Tap below to view or download the PDF.</p>
             <a className={styles.downloadBtn} href={data.url} target="_blank" rel="noreferrer">

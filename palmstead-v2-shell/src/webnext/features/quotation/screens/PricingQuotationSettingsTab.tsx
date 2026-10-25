@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { ArrowRight, Check } from 'lucide-react';
 import { ghs, today as todayStr } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { useCreatePricingPromotion, useDeletePricingPromotion, useLogPricingChange, usePricingHistory, usePricingPromotions, useUpdateConfig } from '../../manager/hooks/useConfigSettings';
@@ -167,7 +168,7 @@ function PricingSettingsSection({ config }: { config: Config }) {
       </div>
       {error && <p className={styles.errorMsg}>{error}</p>}
       <button type="button" className={styles.saveBtn} disabled={!dirty || update.isPending} onClick={save}>
-        {update.isPending ? 'Saving…' : saved ? 'Saved ✓' : 'Save pricing'}
+        {update.isPending ? 'Saving…' : saved ? (<span className="inline-flex items-center gap-1">Saved <Check className="size-3" aria-hidden="true" /></span>) : 'Save pricing'}
       </button>
     </div>
   );
@@ -269,7 +270,7 @@ function PromotionalPricingSection() {
                   {p.plotType} — {p.mode === 'discount' ? 'Extra discount' : 'Price increase'} of {ghs(p.amountPerPlot)}/plot
                 </div>
                 <div className={styles.historyMeta}>
-                  {p.dateFrom} → {p.dateTo} · {state} · added by {p.createdByName || 'Management'}
+                  {p.dateFrom} <ArrowRight className="inline size-3" aria-hidden="true" /> {p.dateTo} · {state} · added by {p.createdByName || 'Management'}
                 </div>
                 <button
                   type="button"
@@ -303,7 +304,7 @@ function PricingHistorySection() {
             <div key={h.id} className={styles.historyRow}>
               <div className={styles.historyField}>{h.fieldLabel}</div>
               <div className={styles.historyMeta}>
-                {ghs(h.oldValue)} → {ghs(h.newValue)} · by {h.changedByName} · {h.changedAt.slice(0, 16).replace('T', ' ')}
+                {ghs(h.oldValue)} <ArrowRight className="inline size-3" aria-hidden="true" /> {ghs(h.newValue)} · by {h.changedByName} · {h.changedAt.slice(0, 16).replace('T', ' ')}
               </div>
             </div>
           ))}

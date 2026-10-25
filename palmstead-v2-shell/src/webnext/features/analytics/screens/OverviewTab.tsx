@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
 import { Label, Pie, PieChart } from 'recharts';
-import { Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { ghs } from '../../../shared/lib/format';
@@ -254,7 +254,7 @@ export function OverviewTab() {
       <p className="mt-2 text-xs text-muted-foreground">
         Need a downloadable PDF or Excel export instead?{' '}
         <Link href="/dashboard/finance?tab=reports" className="font-medium text-primary hover:underline">
-          Go to Reports →
+          Go to Reports <ArrowRight className="inline size-3" aria-hidden="true" />
         </Link>
       </p>
     </div>

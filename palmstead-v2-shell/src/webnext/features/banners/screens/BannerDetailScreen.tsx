@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import { ArrowLeft, Camera, Images, MapPin } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
 import { BANNER_STATUS, BANNER_STATUS_ORDER, directionsUrl } from '../lib/bannerLogic';
@@ -40,7 +41,7 @@ export function BannerDetailScreen() {
     return (
       <div className={styles.wrap}>
         <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/banners')}>
-          ← Back
+          <ArrowLeft className="size-4" aria-hidden="true" /> Back
         </button>
         <p className={styles.emptyMsg}>This banner may have been deleted.</p>
       </div>
@@ -88,7 +89,7 @@ export function BannerDetailScreen() {
   return (
     <div className={styles.wrap}>
       <button type="button" className={styles.backBtn} onClick={() => navigate('/dashboard/banners')}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <div className={styles.head}>
         <div>
@@ -107,7 +108,7 @@ export function BannerDetailScreen() {
         )}
         {banner.lat != null && banner.lng != null && (
           <a className={styles.directionsChip} href={directionsUrl(banner.lat, banner.lng)} target="_blank" rel="noopener noreferrer">
-            📍 Directions
+            <MapPin className="inline size-4" aria-hidden="true" /> Directions
           </a>
         )}
         {banner.notes && <p className={styles.notes}>{banner.notes}</p>}
@@ -133,10 +134,10 @@ export function BannerDetailScreen() {
           <label className={styles.label}>Photos</label>
           <div className={styles.photoRow}>
             <button type="button" className={styles.ghostBtn} onClick={() => captureRef.current?.click()}>
-              📷 Take photo
+              <Camera className="inline size-4" aria-hidden="true" /> Take photo
             </button>
             <button type="button" className={styles.ghostBtn} onClick={() => galleryRef.current?.click()}>
-              🖼️ Choose photos
+              <Images className="inline size-4" aria-hidden="true" /> Choose photos
             </button>
           </div>
           <input ref={captureRef} type="file" accept="image/*" capture="environment" hidden onChange={handlePhotos} />

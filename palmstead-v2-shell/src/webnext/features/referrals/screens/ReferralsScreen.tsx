@@ -62,7 +62,7 @@ export function ReferralsScreen() {
               <div className={styles.rowMain}>
                 <div className={styles.name}>
                   {r.referrerName}
-                  <span className={styles.arrow}>→</span>
+                  <span className={styles.arrow}><Icon name="chevronRight" size={14} /></span>
                   {r.referredName}
                 </div>
                 <div className={styles.meta}>

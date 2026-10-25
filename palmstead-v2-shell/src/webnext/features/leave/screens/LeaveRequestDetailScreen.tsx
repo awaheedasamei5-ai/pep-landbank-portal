@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CalendarClock, FileText, Pencil, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, FileText, Pencil, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -157,7 +157,7 @@ export function LeaveRequestDetailScreen() {
                       <div className="text-sm font-medium">
                         {log.fromStatus ? (
                           <>
-                            {STATUS_LABEL[log.fromStatus] ?? log.fromStatus} → {STATUS_LABEL[log.toStatus] ?? log.toStatus}
+                            {STATUS_LABEL[log.fromStatus] ?? log.fromStatus} <ArrowRight className="inline size-3" aria-hidden="true" /> {STATUS_LABEL[log.toStatus] ?? log.toStatus}
                           </>
                         ) : (
                           <>Created as {STATUS_LABEL[log.toStatus] ?? log.toStatus}</>

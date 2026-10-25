@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { useUpdateConfig } from '../../manager/hooks/useConfigSettings';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { Config } from '../../../types/domain';
@@ -184,7 +185,7 @@ export function TemplateSettingsTab({ config }: { config: Config }) {
 
       {error && <p className={styles.errorMsg}>{error}</p>}
       <button type="button" className={styles.saveBtn} disabled={!dirty || update.isPending} onClick={save}>
-        {update.isPending ? 'Saving…' : saved ? 'Saved ✓' : 'Save template settings'}
+        {update.isPending ? 'Saving…' : saved ? (<span className="inline-flex items-center gap-1">Saved <Check className="size-3" aria-hidden="true" /></span>) : 'Save template settings'}
       </button>
     </div>
   );

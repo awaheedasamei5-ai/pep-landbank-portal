@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Lightbulb, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Lightbulb, TriangleAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,7 +138,7 @@ export function LeaderboardAdminScreen() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <PageHeader title="Leaderboard scoring" description="Tune how much each metric contributes to points. Changes preview instantly below before you save." />
         <Button type="button" disabled={!dirty || update.isPending} onClick={save}>
-          {update.isPending ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
+          {update.isPending ? 'Saving…' : saved ? (<span className="inline-flex items-center gap-1">Saved <Check className="size-3" aria-hidden="true" /></span>) : 'Save changes'}
         </Button>
       </div>
 
@@ -236,7 +236,7 @@ function HistoryRow({ entry }: { entry: LeaderboardScoreHistoryEntry }) {
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            {entry.oldPoints} → {entry.newPoints} pts · {timeAgo(entry.changedAt)}
+            {entry.oldPoints} <ArrowRight className="inline size-3" aria-hidden="true" /> {entry.newPoints} pts · {timeAgo(entry.changedAt)}
           </div>
         </div>
         <span className={`font-mono text-sm font-bold ${delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>

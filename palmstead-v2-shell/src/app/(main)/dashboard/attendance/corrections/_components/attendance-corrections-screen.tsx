@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Clock, History, X } from "lucide-react";
+import { ArrowRight, Check, Clock, History, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -166,7 +166,7 @@ function ManagementQueueTab() {
           <CardContent className="grid gap-2">
             <div className="flex items-center gap-4 text-sm">
               <span className="text-muted-foreground">Original: {fmtTime(c.originalValue)}</span>
-              <span>→</span>
+              <ArrowRight className="size-4" aria-hidden="true" />
               <span className="font-medium">Proposed: {fmtTime(c.proposedValue)}</span>
             </div>
             <p className="text-muted-foreground text-sm">{c.reason}</p>

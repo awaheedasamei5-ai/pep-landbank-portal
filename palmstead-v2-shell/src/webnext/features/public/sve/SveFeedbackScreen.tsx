@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Link2, PartyPopper } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSiteVisitInvite, submitSiteVisitExperience } from '../../../data/sveClient';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -197,7 +198,7 @@ export function SveFeedbackScreen() {
 
         {screen === 'not_found' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>🔗</div>
+            <div className={styles.centerIcon}><Link2 className="size-7" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>This link isn't valid</div>
             <p className={styles.centerSub}>Double-check the link you were sent, or contact your agent for a fresh one.</p>
           </div>
@@ -205,7 +206,7 @@ export function SveFeedbackScreen() {
 
         {screen === 'unavailable' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>⚠️</div>
+            <div className={styles.centerIcon}><AlertTriangle className="size-7" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>This form isn't available right now</div>
             <p className={styles.centerSub}>Please try again in a little while.</p>
           </div>
@@ -213,7 +214,7 @@ export function SveFeedbackScreen() {
 
         {screen === 'already_submitted' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>✅</div>
+            <div className={styles.centerIcon}><CheckCircle2 className="size-7" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>You've already shared your feedback</div>
             <p className={styles.centerSub}>Thank you{invite?.clientName ? `, ${invite.clientName}` : ''} -- we've got it on file already.</p>
           </div>
@@ -221,7 +222,7 @@ export function SveFeedbackScreen() {
 
         {screen === 'thanks' && (
           <div className={`${styles.card} ${styles.centerState}`}>
-            <div className={styles.centerIcon}>🎉</div>
+            <div className={styles.centerIcon}><PartyPopper className="size-7" aria-hidden="true" /></div>
             <div className={styles.centerTitle}>Thank you{fullName ? `, ${fullName}` : ''}!</div>
             <p className={styles.centerSub}>Your feedback has been received. We really appreciate you taking the time.</p>
           </div>
@@ -355,7 +356,7 @@ export function SveFeedbackScreen() {
 
             {validationErr && <div className={styles.submitErr}>{validationErr}</div>}
             <button type="button" className={styles.submitBtn} onClick={goToReview}>
-              Review my answers →
+              Review my answers <ArrowRight className="inline size-4" aria-hidden="true" />
             </button>
           </>
         )}
@@ -468,7 +469,7 @@ function ReviewScreen({
         {submitting ? 'Submitting…' : 'Confirm & submit'}
       </button>
       <button type="button" className={styles.editAnswersBtn} onClick={onEdit} disabled={submitting}>
-        ← Edit my answers
+        <ArrowLeft className="inline size-4" aria-hidden="true" /> Edit my answers
       </button>
       {submitError && <div className={styles.submitErr}>{submitError}</div>}
     </>

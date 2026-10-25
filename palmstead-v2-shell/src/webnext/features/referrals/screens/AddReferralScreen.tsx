@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useLeads } from '../../pipeline/hooks/useLeads';
@@ -59,7 +60,7 @@ export function AddReferralScreen() {
   return (
     <div className={styles.wrap}>
       <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/referrals')}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <h1 className={styles.title}>Add a referral</h1>
       <p className={styles.sub}>Record that one of your clients referred someone new.</p>

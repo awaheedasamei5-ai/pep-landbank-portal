@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import { Camera, Images, MapPin, X } from 'lucide-react';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
 import { parseGoogleMapsLatLng } from '../lib/bannerLogic';
 import { useCreateBanner, useLogBannerStatusUpdate } from '../hooks/useBanners';
@@ -125,7 +126,7 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
         <div className={styles.head}>
           <div className={styles.title}>Add banner / location</div>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            ✕
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -157,10 +158,10 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
           <label className={styles.label}>Banner photo</label>
           <div className={styles.photoRow}>
             <button type="button" className={styles.ghostBtn} onClick={() => captureRef.current?.click()}>
-              📷 Take photo
+              <Camera className="inline size-4" aria-hidden="true" /> Take photo
             </button>
             <button type="button" className={styles.ghostBtn} onClick={() => galleryRef.current?.click()}>
-              🖼️ Choose from gallery
+              <Images className="inline size-4" aria-hidden="true" /> Choose from gallery
             </button>
           </div>
           <input ref={captureRef} type="file" accept="image/*" capture="environment" hidden onChange={handlePhoto} />
@@ -195,7 +196,7 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
           </div>
         </div>
         <button type="button" className={styles.ghostBtnFull} onClick={useCurrentLocation} disabled={locating}>
-          {locating ? 'Locating…' : '📍 Use my current location'}
+          {locating ? 'Locating…' : (<span className="inline-flex items-center gap-1"><MapPin className="size-4" aria-hidden="true" /> Use my current location</span>)}
         </button>
 
         <div className={styles.field}>

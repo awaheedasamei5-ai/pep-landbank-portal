@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { FileText, Send, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, FileText, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useSendPlannedLeave, useDeletePlannedLeave } from '../hooks/useLeaveRequests';
@@ -49,7 +49,7 @@ export function PlannedLeaveRow({ request }: { request: LeaveRequest }) {
             </Button>
           )}
           <Link href={`/dashboard/leave/requests/${request.id}`} className="text-sm font-medium text-primary hover:underline">
-            View details →
+            View details <ArrowRight className="inline size-3" aria-hidden="true" />
           </Link>
         </div>
       </div>
@@ -82,7 +82,7 @@ export function MyLeaveRow({ request }: { request: LeaveRequest }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className={styles.name}>
           {request.daysCount} day{request.daysCount === 1 ? '' : 's'}
-          {request.isEmergency && <span className={styles.emergencyTag}>🚨 Emergency</span>}
+          {request.isEmergency && <span className={styles.emergencyTag}><AlertTriangle className="inline size-3" aria-hidden="true" /> Emergency</span>}
         </div>
         <div className={styles.meta}>
           {firstDate}
@@ -90,7 +90,7 @@ export function MyLeaveRow({ request }: { request: LeaveRequest }) {
         </div>
         {request.letterText && (
           <button type="button" className={styles.letterBtn} disabled={downloadLetter.isPending} onClick={() => downloadLetter.mutate(request)}>
-            {downloadLetter.isPending ? 'Preparing…' : '📄 Leave request letter'}
+            {downloadLetter.isPending ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><FileText className="size-4" aria-hidden="true" /> Leave request letter</span>)}
           </button>
         )}
         {request.status !== 'pending' && request.decidedByName && (
@@ -101,7 +101,7 @@ export function MyLeaveRow({ request }: { request: LeaveRequest }) {
           </div>
         )}
         <Link href={`/dashboard/leave/requests/${request.id}`} className={styles.letterBtn}>
-          View details →
+          View details <ArrowRight className="inline size-3" aria-hidden="true" />
         </Link>
       </div>
       <span className={styles[STATUS_CLASS[request.status]]}>{STATUS_LABEL[request.status]}</span>

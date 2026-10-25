@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateEnquiry, useEnquiries } from '../hooks/useEnquiries';
@@ -76,7 +77,7 @@ export function AddEnquiryScreen() {
   return (
     <div className={styles.wrap}>
       <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/enquiries')}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <h1 className={styles.title}>Log a client enquiry</h1>
       <p className={styles.sub}>Saved against your own enquiries.</p>

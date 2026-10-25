@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import type { DateClickInfo, EventInput } from '@fullcalendar/react';
 import { MiniEventCalendar } from '@/components/mini-event-calendar';
 import { ghanaHolidayMapForYear, isWeekendIso } from '../../../shared/lib/ghanaHolidays';
@@ -105,7 +106,7 @@ export function LeaveCalendar({
                 onClick={() => onToggleDate(d)}
                 className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs font-medium text-primary hover:bg-primary/20"
               >
-                {d} ✕
+                {d} <X className="inline size-3" aria-hidden="true" />
               </button>
             ))}
         </div>

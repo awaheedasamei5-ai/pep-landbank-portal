@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Download, Settings2, Lightbulb } from 'lucide-react';
+import { Download, Settings2, Lightbulb, Medal } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,11 +19,10 @@ import { PointsTrendChart } from './PointsTrendChart';
 import type { LeaderboardRow } from '../../../types/domain';
 import styles from './LeaderboardScreen.module.css';
 
-const MEDALS = ['🥇', '🥈', '🥉'];
 const RANK_TIER_CLASS = [styles.rankFirst, styles.rankSecond, styles.rankThird];
 
-function rank(i: number): string {
-  return MEDALS[i] ?? String(i + 1);
+function rank(i: number): ReactNode {
+  return i < 3 ? <Medal className="size-4" aria-hidden="true" /> : String(i + 1);
 }
 
 function exportCsv(rows: LeaderboardRow[], year: number) {

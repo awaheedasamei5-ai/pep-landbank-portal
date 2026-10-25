@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { Calendar, Download, X } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
@@ -131,7 +132,7 @@ function FormBody({ form, visits, activeDay, isManager }: { form: WeeklyVisitFor
         </span>
       </div>
       <button type="button" className={styles.pdfDownloadBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate({ form, visits })}>
-        {downloadPdf.isPending ? 'Preparing PDF…' : '⬇ Download authorization form (PDF)'}
+        {downloadPdf.isPending ? 'Preparing PDF…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download authorization form (PDF)</span>)}
       </button>
 
       <div className={styles.smCard}>
@@ -307,7 +308,7 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
         <div className={styles.visitName}>{visit.name}</div>
         {canCancel && mode === 'none' && (
           <button type="button" className={styles.visitCancelIcon} title="Remove or reschedule this visit" aria-label={`Remove or reschedule visit for ${visit.name}`} onClick={() => setMode('menu')}>
-            ✕
+            <X className="size-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -327,10 +328,10 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
         <div className={styles.cancelBox}>
           <div className={styles.menuBox}>
             <button type="button" className={styles.menuOption} onClick={() => setMode('reschedule')}>
-              📅 Reschedule to another day
+              <Calendar className="inline size-4" aria-hidden="true" /> Reschedule to another day
             </button>
             <button type="button" className={`${styles.menuOption} ${styles.menuOptionDanger}`} onClick={() => setMode('cancel')}>
-              ✕ Remove from list completely
+              <X className="inline size-4" aria-hidden="true" /> Remove from list completely
             </button>
             <button type="button" className={styles.cancelBtn} onClick={reset}>
               Back

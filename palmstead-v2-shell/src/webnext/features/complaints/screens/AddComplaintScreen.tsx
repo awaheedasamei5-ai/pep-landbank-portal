@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateComplaint, useComplaints } from '../hooks/useComplaints';
@@ -68,7 +69,7 @@ export function AddComplaintScreen() {
   return (
     <div className={styles.wrap}>
       <button type="button" className={styles.backLink} onClick={() => navigate('/dashboard/complaints')}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <h1 className={styles.title}>Log a complaint</h1>
       <p className={styles.sub}>Saved against your own complaints.</p>

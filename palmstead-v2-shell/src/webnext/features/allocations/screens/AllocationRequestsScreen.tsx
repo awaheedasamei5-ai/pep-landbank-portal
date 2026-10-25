@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from 'react';
+import { AlertTriangle, ArrowRight, Check, Search, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { friendlyError } from '../../../shared/lib/friendlyError';
@@ -245,7 +246,7 @@ function RequestRow({ request, canAllocate }: { request: AllocationRequest; canA
 
       {request.flagReason && (
         <div className={styles.flagBanner}>
-          ⚠ {request.flagReason} — flagged by {request.flaggedBy}
+          <AlertTriangle className="inline size-3" aria-hidden="true" /> {request.flagReason} — flagged by {request.flaggedBy}
         </div>
       )}
 
@@ -432,7 +433,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
         <p className={styles.helpText} style={{ marginTop: -6 }}>
           Client buying more than one plot?{' '}
           <button type="button" className={styles.inlineLink} onClick={() => navigate(`/dashboard/pipeline/${request.leadId}`)}>
-            Set the plot count on their lead →
+            Set the plot count on their lead <ArrowRight className="inline size-3" aria-hidden="true" />
           </button>{' '}
           — this panel will ask for one slot per unit automatically.
         </p>
@@ -467,12 +468,12 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
       )}
 
       <p className={`${styles.comboProgress} ${complete ? styles.comboProgressDone : ''}`}>
-        {complete ? '✓ All 3 suggestions ready to send' : `${filledCount} of 3 suggestions complete`}
+        {complete ? (<span className="inline-flex items-center gap-1"><Check className="size-3" aria-hidden="true" /> All 3 suggestions ready to send</span>) : `${filledCount} of 3 suggestions complete`}
       </p>
 
       <div className={styles.allocateActions} style={{ marginBottom: 10 }}>
         <button type="button" className={styles.cancelBtn} onClick={autoSuggestAll}>
-          ✨ Auto-fill all 3 from {section ? `Block ${section}` : 'inventory'}
+          <Sparkles className="inline size-4" aria-hidden="true" /> Auto-fill all 3 from {section ? `Block ${section}` : 'inventory'}
         </button>
         <button type="button" className={styles.cancelBtn} onClick={() => setShowPartials((v) => !v)}>
           {showPartials ? 'Hide partial plots' : `Browse partial plots (≥ ${browseUnit} size)`}
@@ -520,7 +521,7 @@ function SuggestPanel({ request, lead }: { request: AllocationRequest; lead: Lea
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.allocateActions}>
         <button type="button" className={styles.confirmBtn} disabled={suggest.isPending} onClick={submit}>
-          {suggest.isPending ? 'Sending…' : complete ? 'Suggest all 3 →' : `Suggest all 3 → (${filledCount}/3 ready)`}
+          {suggest.isPending ? 'Sending…' : complete ? (<span className="inline-flex items-center gap-1">Suggest all 3 <ArrowRight className="size-3" aria-hidden="true" /></span>) : (<span className="inline-flex items-center gap-1">Suggest all 3 <ArrowRight className="size-3" aria-hidden="true" /> ({filledCount}/3 ready)</span>)}
         </button>
         <button type="button" className={styles.cancelBtn} onClick={() => setFlagging(true)}>
           Flag an issue
@@ -564,7 +565,7 @@ function SuggestionComboCard({
     <div className={`${styles.comboCard} ${isComplete ? styles.comboCardComplete : ''}`}>
       <button type="button" className={styles.comboHead} onClick={onToggle}>
         <div className={styles.comboHeadLeft}>
-          <span className={`${styles.comboBadge} ${isComplete ? styles.comboBadgeComplete : ''}`}>{isComplete ? '✓' : comboIdx + 1}</span>
+          <span className={`${styles.comboBadge} ${isComplete ? styles.comboBadgeComplete : ''}`}>{isComplete ? <Check className="size-3" aria-hidden="true" /> : comboIdx + 1}</span>
           <div>
             <div className={styles.comboTitle}>Suggestion {comboIdx + 1}</div>
             <div className={styles.comboSummary}>{combo.some((v) => v.trim()) ? combo.filter(Boolean).join(' + ') || 'Not started' : 'Not started'}</div>
@@ -670,7 +671,7 @@ function SuggestionSlot({
       <div className={styles.slotHead}>
         <span className={styles.slotLabel}>{unit}</span>
         <button type="button" className={styles.slotFindBtn} onClick={() => setPickerOpen((v) => !v)}>
-          {pickerOpen ? 'Close' : '🔍 Find a plot'}
+          {pickerOpen ? 'Close' : (<span className="inline-flex items-center gap-1"><Search className="size-4" aria-hidden="true" /> Find a plot</span>)}
         </button>
       </div>
       <input className={styles.input} placeholder="e.g. A12, or use Find a plot" value={value} onChange={(e) => onChange(e.target.value)} />
@@ -681,7 +682,7 @@ function SuggestionSlot({
       )}
       {canSplitCandidate && (
         <button type="button" className={styles.inlineLink} style={{ marginTop: 4 }} disabled={splitting} onClick={() => candidate && onSplit(candidate.id)}>
-          {splitting ? 'Splitting…' : `Split ${candidate?.plotNumber} into two Half Plots, use the first half →`}
+          {splitting ? 'Splitting…' : (<span className="inline-flex items-center gap-1">{`Split ${candidate?.plotNumber} into two Half Plots, use the first half`} <ArrowRight className="size-3" aria-hidden="true" /></span>)}
         </button>
       )}
       {pickerOpen && (
@@ -989,7 +990,7 @@ function AllocatedPanel({ request }: { request: AllocationRequest }) {
             Edit allocated plot
           </button>
           <button type="button" className={styles.cancelBtn} onClick={() => setConfirming('undo')}>
-            Undo → Pending
+            Undo <ArrowRight className="inline size-3" aria-hidden="true" /> Pending
           </button>
           <button type="button" className={styles.dangerBtn} onClick={() => setConfirming('delete')}>
             Delete

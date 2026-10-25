@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { ArrowLeft, Tag } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import { z } from 'zod';
 import { useCreateLead, useLeads } from '../hooks/useLeads';
@@ -319,7 +320,7 @@ export function AddLeadScreen() {
           own back button. Same returnTo destination Cancel already uses,
           just also surfaced immediately at the top. */}
       <button type="button" className={styles.backLink} onClick={() => navigate(returnTo)}>
-        ← Back
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
       <h1 className={styles.title}>Add to pipeline</h1>
       <p className={styles.sub}>Saved straight into your pipeline.</p>
@@ -412,7 +413,7 @@ export function AddLeadScreen() {
                 />
                 {activePromo && (
                   <p className={styles.hint}>
-                    🏷️ Promo active for this date/plot type: {activePromo.mode === 'discount' ? `extra ${ghs(activePromo.amountPerPlot)} discount` : `${ghs(activePromo.amountPerPlot)} price increase`} per plot, through{' '}
+                    <Tag className="inline size-3" aria-hidden="true" /> Promo active for this date/plot type: {activePromo.mode === 'discount' ? `extra ${ghs(activePromo.amountPerPlot)} discount` : `${ghs(activePromo.amountPerPlot)} price increase`} per plot, through{' '}
                     {activePromo.dateTo}.
                   </p>
                 )}
