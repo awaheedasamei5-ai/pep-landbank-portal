@@ -136,6 +136,35 @@
 .rowRight { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .rowValue { font-family: var(--font-mono); font-weight: 700; font-size: 13px; }
 
+.paymentRow { align-items: flex-start; }
+.paymentRight { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.paymentActions { display: flex; align-items: center; gap: 3px; }
+.receiptAction {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card); color: var(--c-ink); cursor: pointer;
+}
+.receiptAction:hover { background: var(--c-paper); border-color: var(--c-accent); }
+.receiptAction:disabled { opacity: .55; cursor: wait; }
+.receiptLink { color: var(--c-ink); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.receiptError { padding: 8px 12px; color: var(--c-danger); font-size: 11.5px; }
+.contractActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+.contractAction {
+  min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 5px 9px; border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card);
+  color: var(--c-ink); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.contractAction svg { width: 14px; height: 14px; }
+.contractAction:hover { background: var(--c-paper); border-color: var(--c-accent); }
+.contractAction:disabled { opacity: .55; cursor: wait; }
+.contractAction:focus-visible, .contractLink:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.contractLink { color: var(--c-ink); font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.contractError { flex-basis: 100%; color: var(--c-danger); font-size: 11px; text-align: right; }
+
+@media (max-width: 480px) {
+  .paymentRow { flex-wrap: wrap; }
+  .paymentRight { width: 100%; justify-content: space-between; }
+}
+
 .emptyRow { padding: 14px; color: var(--c-muted); font-size: 12.5px; text-align: center; }
 
 .chip {
@@ -151,5 +180,58 @@
 .chip_warn { background: var(--c-warn-bg); color: var(--c-warn); }
 .chip_dgr { background: var(--c-danger-bg); color: var(--c-danger); }
 .chip_muted { background: var(--c-paper); color: var(--c-muted); border: 1px solid var(--c-line); }
+
+
+.visitGap {
+  display: grid;
+  gap: 7px;
+  padding: 12px 14px;
+  background: var(--c-warn-bg);
+  border-bottom: 1px solid var(--c-line);
+}
+.visitGapTitle { font-size: 12px; font-weight: 800; color: var(--c-warn); }
+.visitGapText { color: var(--c-ink); font-size: 11.5px; line-height: 1.5; }
+.visitGapButton {
+  justify-self: start;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-card);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.visitGapButton:hover { border-color: var(--c-warn); }
+.visitGapButton:focus-visible, .visitSummary:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+.visitRecord { border-bottom: 1px solid var(--c-line); }
+.visitRecord:last-child { border-bottom: none; }
+.visitSummary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  list-style: none;
+  cursor: pointer;
+}
+.visitSummary::-webkit-details-marker { display: none; }
+.visitSummary::after { content: "+"; flex: 0 0 auto; color: var(--c-muted); font-size: 16px; font-weight: 700; }
+.visitRecord[open] .visitSummary { background: var(--c-paper); }
+.visitRecord[open] .visitSummary::after { content: "−"; }
+.visitBody { padding: 0 14px 14px; }
+.visitAttribution { padding: 9px 0; border-top: 1px solid var(--c-line); color: var(--c-muted); font-size: 10.5px; }
+.visitFormGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0; }
+.visitFormField { min-width: 0; }
+.visitFormLabel { color: var(--c-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.visitFormValue { margin: 2px 0 0; color: var(--c-ink); font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.visitNoFields, .visitHistory { margin-top: 8px; color: var(--c-muted); font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .visitFormGrid { grid-template-columns: minmax(0, 1fr); }
+  .visitGapButton { justify-self: stretch; text-align: center; }
+}
 
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; margin-top: 4px; }

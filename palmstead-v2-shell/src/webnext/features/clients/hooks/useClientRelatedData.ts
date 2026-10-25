@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import type { AllocationRequest, Complaint, Contract, ContractRequest, Payment, SiteVisit } from '../../../types/domain';
+import type { AllocationRequest, Complaint, Contract, ContractGeneration, ContractRequest, Payment, SiteVisit } from '../../../types/domain';
 
 export interface ClientRelatedData {
   payments: Payment[];
@@ -12,39 +12,38 @@ export interface ClientRelatedData {
   contractRequests: ContractRequest[];
   complaints: Complaint[];
   contracts: Contract[];
+  contractGenerations: ContractGeneration[];
 }
 
 // Master Rebuild Spec 17.2: "Open customer -> all related leads, payments,
-// visits, allocations, contracts and complaints." Every fetch here uses the
-// same agent-scoped call the rest of the app already relies on -- payments/
-// siteVisits/complaints via listForAgent(agentKey), allocations/
-// contractRequests via list(viewerKey, role) -- so this screen can never
-// leak a colleague's record just because the app now surfaces more of it
-// (Section 11's own "never reuse a generic all-X query for a personal
-// screen" warning). ds.contracts.list() has no agent-scoped variant at all
-// (confirmed in data/source.ts), so it's fetched broad and the caller MUST
-// filter it down to the client's own leadIds before rendering -- never
-// render this array directly.
-export function useClientRelatedData() {
+// visits, allocations, contracts and complaints." Fetch payments by this
+// customer's lead IDs. The database's payments RLS policy still controls which
+// rows the current role can read, while the lead filter avoids an extra,
+// viewer-agent filter that can hide a staff member's own client's payments.
+// Contracts have no agent-scoped variant, so the caller applies the same
+// client filter to them before rendering.
+export function useClientRelatedData(leadIds: string[] = []) {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const agentKey = profile?.key ?? '';
   const role = profile?.role ?? 'agent';
+  const clientLeadIds = [...new Set(leadIds)].sort();
 
   return useQuery({
-    queryKey: ['clientRelatedData', agentKey],
+    queryKey: ['clientRelatedData', agentKey, role, clientLeadIds],
     enabled: !!agentKey,
     queryFn: async (): Promise<ClientRelatedData> => {
       const ds = getDataSource(demoMode);
-      const [payments, siteVisits, allocations, contractRequests, complaints, contracts] = await Promise.all([
-        ds.payments.listForAgent(agentKey),
-        ds.siteVisits.listForAgent(agentKey),
+      const [paymentsByLead, siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations] = await Promise.all([
+        Promise.all(clientLeadIds.map((leadId) => ds.payments.listForLead(leadId))),
+        role === 'manager' ? ds.siteVisits.listAll() : ds.siteVisits.listForAgent(agentKey),
         ds.allocationRequests.list(agentKey, role),
         ds.contractRequests.list(agentKey, role),
         ds.complaints.listForAgent(agentKey),
         ds.contracts.list(),
+        ds.contractGenerations.list(),
       ]);
-      return { payments, siteVisits, allocations, contractRequests, complaints, contracts };
+      return { payments: paymentsByLead.flat(), siteVisits, allocations, contractRequests, complaints, contracts, contractGenerations };
     },
   });
 }

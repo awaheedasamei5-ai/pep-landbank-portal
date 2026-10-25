@@ -53,7 +53,18 @@ export function shiftMonth(mk: string, delta: number): string {
 // Ported from index.html's fmtLongDate() (index.html:23587) -- 'YYYY-MM-DD' -> '12 April 1990'.
 export function fmtLongDate(iso: string): string {
   if (!iso) return '';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  // Keep the database calendar day when callers pass a full timestamp.
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) return 'Date not recorded';
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return 'Date not recorded';
+  }
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function daysSince(iso: string): number {
