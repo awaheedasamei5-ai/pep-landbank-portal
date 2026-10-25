@@ -48,6 +48,9 @@ begin
   if p_item_date is null or p_start_time is null or p_end_time is null or p_end_time <= p_start_time then
     raise exception 'Choose a date and an end time after the start time.' using errcode = '22023';
   end if;
+  if (p_item_date + p_start_time) at time zone 'Africa/Accra' <= pg_catalog.now() then
+    raise exception 'A meeting must start in the future.' using errcode = '22023';
+  end if;
   if pg_catalog.cardinality(v_keys) > 100 then
     raise exception 'A meeting can have up to 100 staff invitees.' using errcode = '22023';
   end if;

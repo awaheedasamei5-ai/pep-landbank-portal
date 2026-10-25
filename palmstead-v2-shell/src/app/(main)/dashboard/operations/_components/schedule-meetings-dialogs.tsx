@@ -29,7 +29,7 @@ import {
 	useRespondToScheduleMeeting,
 	useUpdateScheduleMeeting,
 } from "./use-schedule-meetings";
-import { workspaceDateOnly } from "./schedule-time.ts";
+import { addScheduleDays, workspaceDateOnly, workspaceDeadline } from "./schedule-time.ts";
 
 function inviteeStatusVariant(
 	status: string,
@@ -41,6 +41,27 @@ function inviteeStatusVariant(
 
 function todayDate() {
 	return workspaceDateOnly(new Date());
+}
+
+function defaultMeetingSlot(date: string, preferred?: string) {
+	if (preferred) return { date, time: preferred };
+	if (date !== todayDate()) return { date, time: "09:00" };
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		timeZone: "Africa/Accra",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	}).formatToParts(new Date());
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	const minutesNow = Number(values.hour) * 60 + Number(values.minute);
+	const nextSlot = Math.ceil((minutesNow + 1) / 30) * 30;
+	if (nextSlot >= 23 * 60 + 30) {
+		return { date: addScheduleDays(date, 1), time: "09:00" };
+	}
+	return {
+		date,
+		time: `${String(Math.floor(nextSlot / 60)).padStart(2, "0")}:${String(nextSlot % 60).padStart(2, "0")}`,
+	};
 }
 
 export function ScheduleMeetingComposer({
@@ -60,8 +81,9 @@ export function ScheduleMeetingComposer({
 	const createMeeting = useCreateScheduleMeeting();
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
-	const [date, setDate] = useState(defaultDate || todayDate());
-	const [startTime, setStartTime] = useState(defaultStartTime ?? "09:00");
+	const initialSlot = defaultMeetingSlot(defaultDate || todayDate(), defaultStartTime);
+	const [date, setDate] = useState(initialSlot.date);
+	const [startTime, setStartTime] = useState(initialSlot.time);
 	const [endTime, setEndTime] = useState("09:30");
 	const [location, setLocation] = useState("");
 	const [search, setSearch] = useState("");
@@ -71,8 +93,9 @@ export function ScheduleMeetingComposer({
 		if (!open) return;
 		setTitle("");
 		setDescription("");
-		setDate(defaultDate || todayDate());
-		const start = defaultStartTime ?? "09:00";
+		const slot = defaultMeetingSlot(defaultDate || todayDate(), defaultStartTime);
+		setDate(slot.date);
+		const start = slot.time;
 		setStartTime(start);
 		const [hour, minute] = start.split(":").map(Number);
 		const end = new Date(2000, 0, 1, hour, minute + 30);
@@ -94,8 +117,10 @@ export function ScheduleMeetingComposer({
 			.toLowerCase()
 			.includes(search.trim().toLowerCase()),
 	);
+	const startDeadline = workspaceDeadline(date, startTime);
+	const isFutureStart = startDeadline !== null && startDeadline > Date.now();
 	const isValid = Boolean(
-		title.trim() && date && startTime && endTime && endTime > startTime,
+		title.trim() && date && startTime && endTime && endTime > startTime && isFutureStart,
 	);
 
 	async function submit() {
@@ -163,6 +188,11 @@ export function ScheduleMeetingComposer({
 							/>
 						</div>
 					</div>
+					{startDeadline !== null && !isFutureStart ? (
+						<p className="text-sm text-destructive" role="alert">
+							Choose a future start time so invitees can receive a reminder.
+						</p>
+					) : null}
 					{startTime && endTime && endTime <= startTime && (
 						<p role="alert" className="text-sm text-destructive">
 							End time must be after start time on the same day.
@@ -317,6 +347,13 @@ export function ScheduleMeetingDetails({
 		(staffQuery.data ?? []).map((person) => [person.key, person.name]),
 	);
 	const cancelled = meeting.status === "cancelled";
+	const editedMeetingStart = workspaceDeadline(date, startTime);
+	const meetingTimeUnchanged =
+		date === meeting.date && startTime === (meeting.startTime ?? "09:00");
+	const meetingStartIsValid = Boolean(
+		editedMeetingStart !== null &&
+		(editedMeetingStart > Date.now() || meetingTimeUnchanged),
+	);
 	const inviteeOptions = useMemo(() => {
 		const active = staffQuery.data ?? [];
 		const activeKeys = new Set(active.map((person) => person.key));
@@ -417,7 +454,8 @@ export function ScheduleMeetingDetails({
 			!date ||
 			!startTime ||
 			!endTime ||
-			endTime <= startTime
+			endTime <= startTime ||
+			!meetingStartIsValid
 		)
 			return;
 		try {
@@ -646,6 +684,11 @@ export function ScheduleMeetingDetails({
 						End time must be after start time.
 					</p>
 				)}
+				{editing && !meetingStartIsValid && (
+					<p role="alert" className="text-sm text-destructive">
+						Move the meeting to a future start time before saving this time change.
+					</p>
+				)}
 				<DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
 					<div className="flex flex-wrap gap-2">
 						{ownInvite && !cancelled && (
@@ -682,7 +725,8 @@ export function ScheduleMeetingDetails({
 										disabled={
 											updateMeeting.isPending ||
 											!title.trim() ||
-											endTime <= startTime
+							endTime <= startTime ||
+							!meetingStartIsValid
 										}
 									>
 										Save changes
