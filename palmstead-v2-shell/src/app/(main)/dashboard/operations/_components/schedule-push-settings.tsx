@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BellRing, Check, Smartphone } from "lucide-react";
 
@@ -20,13 +20,39 @@ function decodeApplicationServerKey(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+async function requestNotificationPermission(): Promise<NotificationPermission> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Notification.requestPermission(),
+      new Promise<NotificationPermission>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "The browser did not answer the notification request. Check its site permissions, then try again.",
+              ),
+            ),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export function SchedulePushSettings() {
   const profile = useAuthStore((state) => state.profile);
   const [deviceState, setDeviceState] = useState<DeviceState>("checking");
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const inspectionId = useRef(0);
 
   const inspectDevice = useCallback(async () => {
+    const requestId = ++inspectionId.current;
+    setDeviceState("checking");
+    setErrorMessage(null);
     if (!profile?.key) return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
       setDeviceState("unsupported");
@@ -34,14 +60,33 @@ export function SchedulePushSettings() {
     }
     try {
       const serviceWorker = await navigator.serviceWorker.register("/operations-push-sw.js", { scope: "/" });
-      setRegistration(serviceWorker);
       const subscription = await serviceWorker.pushManager.getSubscription();
-      if (subscription) setDeviceState("enabled");
-      else if (Notification.permission === "denied") setDeviceState("denied");
+      if (requestId !== inspectionId.current) return;
+      setRegistration(serviceWorker);
+      if (subscription) {
+        const { data, error } = await requireSupabase()
+          .from("push_subscriptions")
+          .select("id")
+          .eq("owner_kind", "staff")
+          .eq("owner_id", profile.key)
+          .eq("endpoint", subscription.endpoint)
+          .maybeSingle();
+        if (error) throw new Error("Could not check which account owns this device reminder.");
+        if (requestId !== inspectionId.current) return;
+        if (data) setDeviceState("enabled");
+        else {
+          // A shared browser may still hold a previous staff member's endpoint.
+          // Revoke it before this account can opt in with a fresh subscription.
+          if (!(await subscription.unsubscribe())) throw new Error("Could not clear an old device reminder.");
+          if (requestId !== inspectionId.current) return;
+          setDeviceState("disabled");
+        }
+      } else if (Notification.permission === "denied") setDeviceState("denied");
       else setDeviceState("disabled");
-    } catch {
+    } catch (error) {
+      if (requestId !== inspectionId.current) return;
       setErrorMessage(
-        "This browser could not prepare background notifications. Check its notification settings and retry.",
+        error instanceof Error ? error.message : "This browser could not prepare background notifications. Try again.",
       );
       setDeviceState("error");
     }
@@ -49,6 +94,9 @@ export function SchedulePushSettings() {
 
   useEffect(() => {
     void inspectDevice();
+    return () => {
+      inspectionId.current += 1;
+    };
   }, [inspectDevice]);
 
   async function enableDevice() {
@@ -56,7 +104,7 @@ export function SchedulePushSettings() {
     setErrorMessage(null);
     setDeviceState("busy");
     try {
-      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      const permission = Notification.permission === "granted" ? "granted" : await requestNotificationPermission();
       if (permission !== "granted") {
         setDeviceState(permission === "denied" ? "denied" : "disabled");
         return;
@@ -112,8 +160,11 @@ export function SchedulePushSettings() {
           .delete()
           .eq("owner_kind", "staff")
           .eq("owner_id", profile.key)
-          .eq("endpoint", subscription.endpoint);
-        if (result.status >= 400) throw new Error("Could not remove this device from your account. Try again.");
+          .eq("endpoint", subscription.endpoint)
+          .select("id");
+        if (result.error || !result.data?.length) {
+          throw new Error("Could not remove this device from your account. Try again.");
+        }
         await subscription.unsubscribe();
       }
       setDeviceState("disabled");
@@ -149,8 +200,8 @@ export function SchedulePushSettings() {
             </CardTitle>
             <CardDescription className="mt-1">
               {enabled
-                ? "Due-time and missed-task alerts can reach this device while Palmstead is closed, if browser and operating-system notifications are allowed."
-                : "Opt in to receive due-time and missed-task alerts on this device, even when the schedule page is closed."}
+                ? "Timed task and invited meeting alerts can reach this device while Palmstead is closed, if browser and operating-system notifications are allowed."
+                : "Opt in to receive timed task and invited meeting alerts on this device, even when the schedule page is closed."}
             </CardDescription>
           </div>
         </div>

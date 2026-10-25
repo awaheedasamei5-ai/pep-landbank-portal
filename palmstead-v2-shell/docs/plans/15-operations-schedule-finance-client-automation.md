@@ -1,5 +1,30 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-25 device reminder account check
+
+The older push assessment below predates the task and meeting outbox migrations. The active
+`send-todo-alarms` function now handles `op_todo_push_outbox` due/missed events and
+`op_meeting_push_outbox` invited-meeting events, in addition to legacy schedule items.
+The minute cron is active, and recent HTTP responses returned 200 with both queues empty.
+No device is currently opted in, so handset delivery has not been established.
+
+The schedule control previously treated any browser subscription as enabled for the current
+staff account. On a shared browser, that could show the wrong status and leave a previous
+account's endpoint active. This slice gives authenticated staff SELECT access only to their
+own `push_subscriptions` rows, checks the current endpoint against the signed-in agent key,
+and revokes an endpoint that is not registered to that agent before offering opt-in. Turning
+off reminders now confirms a row was actually removed before revoking the browser endpoint.
+Task and meeting wording now matches the active worker.
+The browser permission request also has a bounded wait: browsers that leave the permission
+prompt unanswered return an actionable retry message instead of a permanently busy button.
+
+The migration was applied only to V2 as `20261025183443_operations_push_subscription_owner_read`.
+Rollback-only SQL inserted two temporary endpoint rows and verified that Adams and Management
+could each see only their own row; the temporary rows were absent afterward. This verifies
+database isolation, not push receipt on a physical device. Remaining validation: opt in a
+supported real browser, schedule a harmless test task and invited meeting, observe due/missed
+notification behavior with the app closed, then remove the test items and subscription.
+
 **Status: phased implementation in progress.** This plan covers the next linked product slice across Operations, Finance, CRM, allocations, and plot inventory. It is based on review of the V2 source tree and connected V2 Supabase project `sbydzrlzqxcdbudjaube`. The missed-task reminder outbox and worker are live. No synthetic tasks, client records, or real SMS messages were used during verification.
 
 ## Outcome
