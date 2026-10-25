@@ -101,10 +101,12 @@ export function AddSiteVisitScreen() {
   const { data: config } = useConfig();
   const downloadPdf = useDownloadSiteVisitFormPdf();
   const { data: myVisits } = useSiteVisits();
-  const { data: clients } = useClients();
+  const { data: clients, isLoading: clientsLoading } = useClients();
   const ownPipelineLeads = useLeads();
   const allPipelineLeads = useAllLeads();
-  const { data: visiblePipelineLeads } = profile?.role === 'manager' ? allPipelineLeads : ownPipelineLeads;
+  const visibleLeadsQuery = profile?.role === 'manager' ? allPipelineLeads : ownPipelineLeads;
+  const { data: visiblePipelineLeads } = visibleLeadsQuery;
+  const isVisibleLeadsLoading = visibleLeadsQuery.isLoading;
   const [confirmedVisit, setConfirmedVisit] = useState<SiteVisit | null>(null);
   const [confirmedLeadId, setConfirmedLeadId] = useState<string | undefined>(undefined);
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
@@ -194,6 +196,18 @@ export function AddSiteVisitScreen() {
 
   async function onSubmit(values: FormValues) {
     setSaveError(null);
+    if (matchingClient && (clientsLoading || isVisibleLeadsLoading)) {
+      setSaveError('Checking this client’s existing pipeline records. Wait a moment, then try again.');
+      return;
+    }
+    if (matchingClient && matchingLeads.length === 0) {
+      setSaveError('We could not load a visible pipeline record for this client. Reload the page before saving so the visit is linked correctly.');
+      return;
+    }
+    if (addToPipeline && !leadId && !isKnownClient && !config) {
+      setSaveError('Pricing settings are still loading. Wait a moment before adding this client to your pipeline.');
+      return;
+    }
     if (duplicate && !(isManager && duplicateOverride)) return;
     try {
       // Real client request: booking a visit for a genuinely new client can
