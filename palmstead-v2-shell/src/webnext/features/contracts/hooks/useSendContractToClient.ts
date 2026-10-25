@@ -67,6 +67,26 @@ export function useSendContractToClient() {
         profile.key,
       );
 
+      // docs/plans/30-master-system-audit-and-unification-plan.md Phase 10 --
+      // every other money-adjacent action (allocation requests, payments)
+      // echoes to Management; this one only ever notified the client. Same
+      // real pattern as useAllocationRequests.ts: manager-role profile
+      // phones plus app_config.company_phone (Management's real number,
+      // since production has no manager-role profile with a phone),
+      // deduped, alongside an in-app notification.
+      const managers = await ds.staff.list().catch(() => []);
+      const toManagers = managers.filter((m) => m.role === 'manager');
+      if (toManagers.length > 0) {
+        ds.notifications
+          .notify(profile.key, profile.name, toManagers.map((m) => m.key), `${profile.name} sent ${lead.name}'s Contract of Sale.`, 'contract_sent', 'contract', contract.id)
+          .catch(() => {});
+      }
+      const managerPhones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+      if (config.companyPhone) managerPhones.add(config.companyPhone);
+      for (const phone of managerPhones) {
+        ds.sms.send(phone, `${profile.name} sent ${lead.name}'s Contract of Sale.`, 'contract_sent', profile.key).catch(() => {});
+      }
+
       return { token, link, smsOk };
     },
     onSuccess: () => {
