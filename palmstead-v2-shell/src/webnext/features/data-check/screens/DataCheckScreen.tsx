@@ -1,18 +1,22 @@
 "use client";
 
 import Link from "next/link";
+
+import { cn } from "cn";
 import { Sparkles } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+
+import { PageHeader } from "@/components/page-header";
+import { TableEmpty } from "@/components/table-empty";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TableEmpty } from "@/components/table-empty";
-import { PageHeader } from "@/components/page-header";
+
 import { useSessionStore } from "../../../auth/useSessionStore";
 import { useDataCheck } from "../hooks/useDataCheck";
 import { useDataCheckSummary } from "../hooks/useDataCheckSummary";
 import type { DataIssue } from "../lib/dataIntegrityCheck";
-import { cn } from "cn";
+import { PaymentReconciliation } from "./PaymentReconciliation";
 
 // docs/plans/19-data-check-plan.md -- real destination for the ported
 // index.html runDataIntegrityCheck() (index.html:19180-19271). One
@@ -20,7 +24,16 @@ import { cn } from "cn";
 // a hygiene scan is genuinely one cohesive result set.
 export function DataCheckScreen() {
   const profile = useSessionStore((s) => s.profile);
-  const { issues, totalLeads, hygieneScore, isLoading, dismiss } = useDataCheck();
+  const {
+    issues,
+    totalLeads,
+    hygieneScore,
+    isLoading,
+    dismiss,
+    paymentReconciliation,
+    reconciliationLoading,
+    reconciliationError,
+  } = useDataCheck();
   const { data: aiSummary } = useDataCheckSummary(issues, totalLeads, hygieneScore, isLoading);
 
   const scopeLabel = profile?.role === "manager" ? "the company" : "your pipeline";
@@ -30,19 +43,25 @@ export function DataCheckScreen() {
 
   return (
     <div>
-      <PageHeader title="Data Check" description={`Scans every lead in ${scopeLabel} for pricing/payment inconsistencies and record hygiene — automatically, every time you open this.`} />
+      <PageHeader
+        title="Data Check"
+        description={`Scans every lead in ${scopeLabel} for pricing/payment inconsistencies and record hygiene — automatically, every time you open this.`}
+      />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <Card>
           <CardContent className="pt-6">
-            <div className={cn("text-3xl font-semibold tracking-tight", hygieneScore < 90 && "text-destructive")}>{hygieneScore}%</div>
+            <div className={cn("text-3xl font-semibold tracking-tight", hygieneScore < 90 && "text-destructive")}>
+              {hygieneScore}%
+            </div>
             <p className="text-sm text-muted-foreground">Hygiene score</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-semibold tracking-tight">
-              {totalLeads - flaggedCount} <span className="text-base font-normal text-muted-foreground">/ {totalLeads}</span>
+              {totalLeads - flaggedCount}{" "}
+              <span className="text-base font-normal text-muted-foreground">/ {totalLeads}</span>
             </div>
             <p className="text-sm text-muted-foreground">Clean leads</p>
           </CardContent>
@@ -54,6 +73,14 @@ export function DataCheckScreen() {
           <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
           <span className="text-muted-foreground">{aiSummary}</span>
         </div>
+      )}
+
+      {profile?.role === "manager" && (
+        <PaymentReconciliation
+          items={paymentReconciliation}
+          loading={reconciliationLoading}
+          error={reconciliationError}
+        />
       )}
 
       <Card>
@@ -71,9 +98,19 @@ export function DataCheckScreen() {
               {isLoading ? (
                 <TableEmpty colSpan={4} message="Scanning…" />
               ) : sorted.length === 0 ? (
-                <TableEmpty colSpan={4} message="Every lead's unit price, totals, payments and basic record fields are all in order." />
+                <TableEmpty
+                  colSpan={4}
+                  message="Every lead's unit price, totals, payments and basic record fields are all in order."
+                />
               ) : (
-                sorted.map((issue, i) => <IssueRow key={`${issue.leadId}-${issue.type}-${i}`} issue={issue} onDismiss={() => dismiss.mutate(issue)} dismissing={dismiss.isPending} />)
+                sorted.map((issue, i) => (
+                  <IssueRow
+                    key={`${issue.leadId}-${issue.type}-${i}`}
+                    issue={issue}
+                    onDismiss={() => dismiss.mutate(issue)}
+                    dismissing={dismiss.isPending}
+                  />
+                ))
               )}
             </TableBody>
           </Table>
