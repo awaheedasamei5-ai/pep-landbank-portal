@@ -212,6 +212,44 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['pricingHistory'] });
       queryClient.invalidateQueries({ queryKey: ['pricingPromotions'] });
     };
+    // Phase 3 of docs/plans/30-master-system-audit-and-unification-plan.md --
+    // these tables were in no bridge, and weren't even in the
+    // supabase_realtime publication until that same migration. 'leaderboard'
+    // was already invalidated as a side effect of referral/config changes,
+    // but never from the actual scores/history tables themselves; the shared
+    // engagement dashboards' own scoped activity queries had no invalidation
+    // path at all, unlike activityForLead which rode along on leads/payments.
+    const invalidateActivityLog = () => {
+      queryClient.invalidateQueries({ queryKey: ['activityForLead'] });
+      queryClient.invalidateQueries({ queryKey: ['scopedActivityAll'] });
+      queryClient.invalidateQueries({ queryKey: ['companyWideActivity'] });
+    };
+    const invalidateProfiles = () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      queryClient.invalidateQueries({ queryKey: ['staffDirectory'] });
+    };
+    const invalidateAnnouncements = () => {
+      queryClient.invalidateQueries({ queryKey: ['announcements'] });
+    };
+    const invalidateAnnouncementComments = () => {
+      queryClient.invalidateQueries({ queryKey: ['announcementComments'] });
+    };
+    const invalidateLeaderboardScores = () => {
+      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboardScoreHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboardRawRows'] });
+    };
+    const invalidateContractApprovals = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractApprovals'] });
+    };
+    const invalidateContractFields = () => {
+      queryClient.invalidateQueries({ queryKey: ['contractFields'] });
+    };
+    const invalidateChatStatus = () => {
+      queryClient.invalidateQueries({ queryKey: ['chat-status-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['chat-status-viewers'] });
+      queryClient.invalidateQueries({ queryKey: ['chat-status-my-views'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -262,7 +300,17 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_visit_forms' }, invalidateWeeklyVisitForm)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, invalidateConfig)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_history' }, invalidatePricing)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_promotions' }, invalidatePricing);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_promotions' }, invalidatePricing)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, invalidateActivityLog)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, invalidateProfiles)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, invalidateAnnouncements)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcement_comments' }, invalidateAnnouncementComments)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_scores' }, invalidateLeaderboardScores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard_score_history' }, invalidateLeaderboardScores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_approvals' }, invalidateContractApprovals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_fields' }, invalidateContractFields)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_status_updates' }, invalidateChatStatus)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_status_views' }, invalidateChatStatus);
     channel.subscribe();
 
     return () => {
