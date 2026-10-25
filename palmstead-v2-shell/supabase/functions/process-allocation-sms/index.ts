@@ -28,7 +28,7 @@ type Lead = {
 type Agent = { name: string; phone: string | null; active: boolean };
 type Config = { allocation_threshold_pct: number | null };
 type Delivery = {
-  status: "sent" | "failed" | "pending" | "needs_review";
+  status: "sent" | "failed" | "pending" | "blocked" | "needs_review";
   providerReference: string | null;
   error: string | null;
   providerStatus: Record<string, unknown> | null;
