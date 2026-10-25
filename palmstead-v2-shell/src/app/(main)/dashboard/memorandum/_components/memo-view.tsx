@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { safeOperationCommentHtml } from "@/lib/palmstead/operations-comment-html";
 
 import type { Memo } from "./use-memoranda";
 
@@ -146,8 +147,8 @@ export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEdit
 
             <div
               className="scrollbar-none prose prose-sm dark:prose-invert min-h-0 max-w-none flex-1 overflow-y-auto text-sm"
-              // eslint-disable-next-line react/no-danger -- real memo body from our own compose dialog, same trust boundary as the rest of this app's HTML content fields
-              dangerouslySetInnerHTML={{ __html: memo.bodyHtml }}
+              // eslint-disable-next-line react/no-danger -- sanitized at this render boundary (safeOperationCommentHtml's own allowlist), same real fix already applied to Operations comments. A memo body is user-composed rich text, not trusted markup -- it must never be rendered raw.
+              dangerouslySetInnerHTML={{ __html: safeOperationCommentHtml(memo.bodyHtml) }}
             />
           </div>
         ) : (
