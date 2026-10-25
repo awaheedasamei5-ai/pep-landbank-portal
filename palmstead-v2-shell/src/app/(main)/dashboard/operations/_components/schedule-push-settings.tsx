@@ -20,6 +20,28 @@ function decodeApplicationServerKey(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+async function requestNotificationPermission(): Promise<NotificationPermission> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Notification.requestPermission(),
+      new Promise<NotificationPermission>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "The browser did not answer the notification request. Check its site permissions, then try again.",
+              ),
+            ),
+          15000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export function SchedulePushSettings() {
   const profile = useAuthStore((state) => state.profile);
   const [deviceState, setDeviceState] = useState<DeviceState>("checking");
@@ -82,7 +104,7 @@ export function SchedulePushSettings() {
     setErrorMessage(null);
     setDeviceState("busy");
     try {
-      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      const permission = Notification.permission === "granted" ? "granted" : await requestNotificationPermission();
       if (permission !== "granted") {
         setDeviceState(permission === "denied" ? "denied" : "disabled");
         return;

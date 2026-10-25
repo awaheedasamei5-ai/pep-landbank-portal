@@ -15,6 +15,8 @@ own `push_subscriptions` rows, checks the current endpoint against the signed-in
 and revokes an endpoint that is not registered to that agent before offering opt-in. Turning
 off reminders now confirms a row was actually removed before revoking the browser endpoint.
 Task and meeting wording now matches the active worker.
+The browser permission request also has a bounded wait: browsers that leave the permission
+prompt unanswered return an actionable retry message instead of a permanently busy button.
 
 The migration was applied only to V2 as `20261025183443_operations_push_subscription_owner_read`.
 Rollback-only SQL inserted two temporary endpoint rows and verified that Adams and Management
