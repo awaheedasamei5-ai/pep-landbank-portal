@@ -1,5 +1,33 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-25 transactional organizer booking guard
+
+The meeting form's last-second availability check still allowed two browser sessions
+to pass together. V2 now takes a transaction-scoped PostgreSQL advisory lock for the
+staff member and Africa/Accra calendar date before every active task or meeting
+booking write. Both tables use the same lock and compare half-open time intervals.
+The rule protects the task assignee and meeting organizer, including direct table
+writes; it does not force invitees to be free. Cancelling or completing an item
+releases its slot, and unrelated edits to an existing active row do not revalidate
+historical conflicts. The UI retains its privacy-safe busy counts and explicit
+busy-invitee choice. A database conflict returns a plain scheduling error in the
+existing create/edit dialog instead of silently booking a second item.
+
+V2 schema inspection found one active to-do, no active meetings and no existing
+meeting/task organizer overlaps before the migration. Rollback-only SQL exercised
+overlapping meeting creation, task time edit, adjacent slots, title edit, and
+cancel-then-rebook. No live business row or SMS was changed. The remaining follow-up
+is to test simultaneous saves from separate sessions and add free-time suggestions
+to the planner. This guard does not reserve invitees or physical meeting rooms.
+
+PostgreSQL documents [transaction advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)
+and [range exclusion constraints](https://www.postgresql.org/docs/current/rangetypes.html#RANGETYPES-CONSTRAINT).
+An exclusion constraint over one table cannot cover both existing task and meeting
+sources without a new shared reservation table, so this narrow phase uses a common
+transaction lock in both write triggers. The existing open-source
+[Cal.com scheduling project](https://github.com/calcom/cal.com) remains the broader
+availability and booking-flow reference for later team planning.
+
 ## 2026-10-25 meeting availability slice
 
 Google Calendar compares the organizer and guests' availability when choosing a meeting
