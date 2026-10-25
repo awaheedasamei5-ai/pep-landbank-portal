@@ -1,7 +1,10 @@
 "use client";
 
-import { CalendarDays, Check, Clock3, MapPin, Users, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+
+import { CalendarDays, Check, Clock3, MapPin, Users, X } from "lucide-react";
+
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,13 +25,43 @@ import {
 	type ScheduleMeeting,
 	useActiveMeetingStaff,
 	useCreateScheduleMeeting,
+	useReplaceScheduleMeetingInvitees,
 	useRespondToScheduleMeeting,
 	useUpdateScheduleMeeting,
 } from "./use-schedule-meetings";
-import { workspaceDateOnly } from "./schedule-time.ts";
+import { addScheduleDays, workspaceDateOnly, workspaceDeadline } from "./schedule-time.ts";
+
+function inviteeStatusVariant(
+	status: string,
+): "default" | "destructive" | "outline" {
+	if (status === "accepted") return "default";
+	if (status === "declined") return "destructive";
+	return "outline";
+}
 
 function todayDate() {
 	return workspaceDateOnly(new Date());
+}
+
+function defaultMeetingSlot(date: string, preferred?: string) {
+	if (preferred) return { date, time: preferred };
+	if (date !== todayDate()) return { date, time: "09:00" };
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		timeZone: "Africa/Accra",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	}).formatToParts(new Date());
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	const minutesNow = Number(values.hour) * 60 + Number(values.minute);
+	const nextSlot = Math.ceil((minutesNow + 1) / 30) * 30;
+	if (nextSlot >= 23 * 60 + 30) {
+		return { date: addScheduleDays(date, 1), time: "09:00" };
+	}
+	return {
+		date,
+		time: `${String(Math.floor(nextSlot / 60)).padStart(2, "0")}:${String(nextSlot % 60).padStart(2, "0")}`,
+	};
 }
 
 export function ScheduleMeetingComposer({
@@ -48,8 +81,9 @@ export function ScheduleMeetingComposer({
 	const createMeeting = useCreateScheduleMeeting();
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
-	const [date, setDate] = useState(defaultDate || todayDate());
-	const [startTime, setStartTime] = useState(defaultStartTime ?? "09:00");
+	const initialSlot = defaultMeetingSlot(defaultDate || todayDate(), defaultStartTime);
+	const [date, setDate] = useState(initialSlot.date);
+	const [startTime, setStartTime] = useState(initialSlot.time);
 	const [endTime, setEndTime] = useState("09:30");
 	const [location, setLocation] = useState("");
 	const [search, setSearch] = useState("");
@@ -59,8 +93,9 @@ export function ScheduleMeetingComposer({
 		if (!open) return;
 		setTitle("");
 		setDescription("");
-		setDate(defaultDate || todayDate());
-		const start = defaultStartTime ?? "09:00";
+		const slot = defaultMeetingSlot(defaultDate || todayDate(), defaultStartTime);
+		setDate(slot.date);
+		const start = slot.time;
 		setStartTime(start);
 		const [hour, minute] = start.split(":").map(Number);
 		const end = new Date(2000, 0, 1, hour, minute + 30);
@@ -82,15 +117,15 @@ export function ScheduleMeetingComposer({
 			.toLowerCase()
 			.includes(search.trim().toLowerCase()),
 	);
+	const startDeadline = workspaceDeadline(date, startTime);
+	const isFutureStart = startDeadline !== null && startDeadline > Date.now();
 	const isValid = Boolean(
-		title.trim() && date && startTime && endTime && endTime > startTime,
+		title.trim() && date && startTime && endTime && endTime > startTime && isFutureStart,
 	);
 
 	async function submit() {
 		if (!profile || !isValid) return;
 		await createMeeting.mutateAsync({
-			ownerKey: profile.key,
-			ownerName: profile.name,
 			title,
 			description,
 			date,
@@ -108,7 +143,8 @@ export function ScheduleMeetingComposer({
 				<DialogHeader>
 					<DialogTitle>Schedule a meeting</DialogTitle>
 					<p className="text-sm text-muted-foreground">
-						Times use Palmstead&apos;s Africa/Accra workspace time.
+						Times use Palmstead&apos;s Africa/Accra workspace time. Invitations appear in
+						Operations for invited staff; this does not send email or SMS.
 					</p>
 				</DialogHeader>
 				<div className="grid gap-4">
@@ -152,6 +188,11 @@ export function ScheduleMeetingComposer({
 							/>
 						</div>
 					</div>
+					{startDeadline !== null && !isFutureStart ? (
+						<p className="text-sm text-destructive" role="alert">
+							Choose a future start time so invitees can receive a reminder.
+						</p>
+					) : null}
 					{startTime && endTime && endTime <= startTime && (
 						<p role="alert" className="text-sm text-destructive">
 							End time must be after start time on the same day.
@@ -282,6 +323,7 @@ export function ScheduleMeetingDetails({
 }) {
 	const staffQuery = useActiveMeetingStaff();
 	const updateMeeting = useUpdateScheduleMeeting();
+	const replaceInvitees = useReplaceScheduleMeetingInvitees();
 	const respond = useRespondToScheduleMeeting();
 	const [title, setTitle] = useState(meeting.title);
 	const [description, setDescription] = useState(meeting.description ?? "");
@@ -290,6 +332,11 @@ export function ScheduleMeetingDetails({
 	const [endTime, setEndTime] = useState(meeting.endTime ?? "09:30");
 	const [location, setLocation] = useState(meeting.location ?? "");
 	const [editing, setEditing] = useState(false);
+	const [editingInvitees, setEditingInvitees] = useState(false);
+	const [inviteeSearch, setInviteeSearch] = useState("");
+	const [selectedInviteeKeys, setSelectedInviteeKeys] = useState<string[]>(
+		meeting.invitees.map((invitee) => invitee.staffKey),
+	);
 	const [feedback, setFeedback] = useState<string | null>(null);
 	const canManage =
 		profile?.role === "manager" || profile?.key === meeting.ownerKey;
@@ -300,6 +347,75 @@ export function ScheduleMeetingDetails({
 		(staffQuery.data ?? []).map((person) => [person.key, person.name]),
 	);
 	const cancelled = meeting.status === "cancelled";
+	const editedMeetingStart = workspaceDeadline(date, startTime);
+	const meetingTimeUnchanged =
+		date === meeting.date && startTime === (meeting.startTime ?? "09:00");
+	const meetingStartIsValid = Boolean(
+		editedMeetingStart !== null &&
+		(editedMeetingStart > Date.now() || meetingTimeUnchanged),
+	);
+	const inviteeOptions = useMemo(() => {
+		const active = staffQuery.data ?? [];
+		const activeKeys = new Set(active.map((person) => person.key));
+		const existing = meeting.invitees
+			.filter((invitee) => !activeKeys.has(invitee.staffKey))
+			.map((invitee) => ({
+				key: invitee.staffKey,
+				name: invitee.staffName || invitee.staffKey,
+				department: "Inactive staff",
+			}));
+		return [...active, ...existing].filter(
+			(person) => person.key !== meeting.ownerKey,
+		);
+	}, [meeting.invitees, meeting.ownerKey, staffQuery.data]);
+	const filteredInviteeOptions = inviteeOptions.filter((person) =>
+		`${person.name} ${person.department ?? ""}`
+			.toLowerCase()
+			.includes(inviteeSearch.trim().toLowerCase()),
+	);
+	let inviteeContent: ReactNode;
+	if (canManage && meeting.invitees.length > 0) {
+		inviteeContent = (
+			<div className="divide-y rounded-md border">
+				{meeting.invitees.map((invitee) => (
+					<div
+						key={invitee.id}
+						className="flex items-center justify-between gap-3 px-3 py-2"
+					>
+						<span className="min-w-0 truncate text-sm">
+							{invitee.staffName ||
+								staffNames.get(invitee.staffKey) ||
+								invitee.staffKey}
+						</span>
+						<Badge
+							variant={inviteeStatusVariant(invitee.status)}
+						>
+							{invitee.status === "invited"
+								? "Needs response"
+								: invitee.status}
+						</Badge>
+					</div>
+				))}
+			</div>
+		);
+	} else if (ownInvite) {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">
+				Your response: {ownInvite.status === "invited" ? "Needs response" : ownInvite.status}.
+				 Attendee responses are visible to the organizer and management.
+			</p>
+		);
+	} else if (meeting.invitees.length > 0) {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">
+				Attendee details are limited to the organizer and management.
+			</p>
+		);
+	} else {
+		inviteeContent = (
+			<p className="text-sm text-muted-foreground">No staff were invited.</p>
+		);
+	}
 
 	useEffect(() => {
 		setTitle(meeting.title);
@@ -309,8 +425,28 @@ export function ScheduleMeetingDetails({
 		setEndTime(meeting.endTime ?? "09:30");
 		setLocation(meeting.location ?? "");
 		setEditing(false);
+		setEditingInvitees(false);
+		setSelectedInviteeKeys(meeting.invitees.map((invitee) => invitee.staffKey));
+		setInviteeSearch("");
 		setFeedback(null);
 	}, [meeting]);
+
+	async function saveInvitees() {
+		try {
+			const result = await replaceInvitees.mutateAsync({
+				id: meeting.id,
+				inviteeKeys: selectedInviteeKeys,
+			});
+			setFeedback(
+				`Invitees updated. ${result.added} added and ${result.removed} removed. Retained responses are unchanged.`,
+			);
+			setEditingInvitees(false);
+		} catch (error) {
+			setFeedback(
+				error instanceof Error ? error.message : "Invitees could not be updated.",
+			);
+		}
+	}
 
 	async function save() {
 		if (
@@ -318,7 +454,8 @@ export function ScheduleMeetingDetails({
 			!date ||
 			!startTime ||
 			!endTime ||
-			endTime <= startTime
+			endTime <= startTime ||
+			!meetingStartIsValid
 		)
 			return;
 		try {
@@ -367,6 +504,55 @@ export function ScheduleMeetingDetails({
 					: "Your response could not be saved.",
 			);
 		}
+	}
+
+	let inviteeEditorContent: ReactNode;
+	if (staffQuery.isError) {
+		inviteeEditorContent = (
+			<p role="alert" className="p-3 text-sm text-destructive">
+				Staff could not be loaded. Try again before saving.
+			</p>
+		);
+	} else if (staffQuery.isLoading) {
+		inviteeEditorContent = (
+			<p className="p-3 text-sm text-muted-foreground">Loading staff…</p>
+		);
+	} else if (filteredInviteeOptions.length === 0) {
+		inviteeEditorContent = (
+			<p className="p-3 text-sm text-muted-foreground">
+				No staff match that search.
+			</p>
+		);
+	} else {
+		inviteeEditorContent = filteredInviteeOptions.map((person) => (
+			<div
+				key={person.key}
+				className="flex min-h-11 items-center gap-3 border-b px-3 last:border-0"
+			>
+				<Checkbox
+					id={`edit-invitee-${person.key}`}
+					checked={selectedInviteeKeys.includes(person.key)}
+					onCheckedChange={(checked) =>
+						setSelectedInviteeKeys((current) =>
+							checked
+								? [...current, person.key]
+								: current.filter((key) => key !== person.key),
+						)
+					}
+				/>
+				<label
+					htmlFor={`edit-invitee-${person.key}`}
+					className="min-w-0 flex-1 cursor-pointer truncate text-sm"
+				>
+					{person.name}
+				</label>
+				{person.department && (
+					<span className="text-xs text-muted-foreground">
+						{person.department}
+					</span>
+				)}
+			</div>
+		));
 	}
 
 	return (
@@ -460,53 +646,32 @@ export function ScheduleMeetingDetails({
 									{meeting.invitees.length}
 								</span>
 							</div>
-							{meeting.invitees.length && canManage ? (
-								<div className="divide-y rounded-md border">
-									{meeting.invitees.map((invitee) => (
-										<div
-											key={invitee.id}
-											className="flex items-center justify-between gap-3 px-3 py-2"
-										>
-											<span className="min-w-0 truncate text-sm">
-												{invitee.staffName ||
-													staffNames.get(invitee.staffKey) ||
-													invitee.staffKey}
-											</span>
-											<Badge
-												variant={
-													invitee.status === "accepted"
-														? "default"
-														: invitee.status === "declined"
-															? "destructive"
-															: "outline"
-												}
-											>
-												{invitee.status === "invited"
-													? "Needs response"
-													: invitee.status}
-											</Badge>
-										</div>
-									))}
-								</div>
-							) : ownInvite ? (
-								<p className="text-sm text-muted-foreground">
-									Your response:{" "}
-									{ownInvite.status === "invited"
-										? "Needs response"
-										: ownInvite.status}
-									. Attendee responses are visible to the organizer and
-									management.
-								</p>
-							) : meeting.invitees.length ? (
-								<p className="text-sm text-muted-foreground">
-									Attendee details are limited to the organizer and management.
-								</p>
+							{canManage && !cancelled && (
+								<div className="flex flex-wrap gap-2">
+									{editingInvitees ? (
+										<>
+											<Button size="sm" variant="outline" onClick={() => {
+												setSelectedInviteeKeys(meeting.invitees.map((invitee) => invitee.staffKey));
+												setEditingInvitees(false);
+											}}>Discard changes</Button>
+											<Button size="sm" onClick={() => void saveInvitees()} disabled={replaceInvitees.isPending || staffQuery.isLoading || staffQuery.isError}>
+												{replaceInvitees.isPending ? "Saving…" : "Save invitees"}
+											</Button>
+										</>
 							) : (
-								<p className="text-sm text-muted-foreground">
-									No staff were invited.
-								</p>
+										<Button size="sm" variant="outline" onClick={() => setEditingInvitees(true)}>Edit invitees</Button>
 							)}
-						</section>
+								</div>
+							)}
+							{editingInvitees ? (
+								<div className="grid gap-2">
+									<p className="text-xs text-muted-foreground">Retained staff keep their current response. Removed staff lose access to this invitation.</p>
+									<Input value={inviteeSearch} onChange={(event) => setInviteeSearch(event.target.value)} placeholder="Search staff" aria-label="Search meeting invitees" />
+									<div className="max-h-52 overflow-y-auto rounded-md border">
+							{inviteeEditorContent}
+									</div>
+								</div>
+							) : inviteeContent}</section>
 					</div>
 				)}
 				{feedback && (
@@ -517,6 +682,11 @@ export function ScheduleMeetingDetails({
 				{editing && endTime <= startTime && (
 					<p role="alert" className="text-sm text-destructive">
 						End time must be after start time.
+					</p>
+				)}
+				{editing && !meetingStartIsValid && (
+					<p role="alert" className="text-sm text-destructive">
+						Move the meeting to a future start time before saving this time change.
 					</p>
 				)}
 				<DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
@@ -555,7 +725,8 @@ export function ScheduleMeetingDetails({
 										disabled={
 											updateMeeting.isPending ||
 											!title.trim() ||
-											endTime <= startTime
+							endTime <= startTime ||
+							!meetingStartIsValid
 										}
 									>
 										Save changes
@@ -589,3 +760,4 @@ export function ScheduleMeetingDetails({
 		</Dialog>
 	);
 }
+
