@@ -11,6 +11,7 @@ type PushEvent = {
   recipient_key: string;
   task_title: string;
   scheduled_for: string;
+  advance_minutes: number;
   attempt_count: number;
 };
 
@@ -73,8 +74,20 @@ function exactSchedule(todo: Todo, event: PushEvent, graceMinutes: number) {
   if (!todo.start_time) return false;
   const due = addLocalMinutes(todo.item_date, todo.start_time, 0);
   const deadline = addLocalMinutes(todo.item_date, todo.end_time ?? todo.start_time, 0);
-  const expected = event.event_kind === "due" ? due : deadline + graceMinutes * 60_000;
-  return Number.isFinite(expected) && expected === Date.parse(event.scheduled_for);
+  const scheduled = Date.parse(event.scheduled_for);
+  if (event.event_kind === "due") {
+    const advance = Number(event.advance_minutes);
+    const earliest = due - advance * 60_000;
+    return (
+      [0, 15, 60, 1440].includes(advance) &&
+      Number.isFinite(earliest) &&
+      Number.isFinite(scheduled) &&
+      scheduled >= earliest &&
+      scheduled <= due
+    );
+  }
+  const expected = deadline + graceMinutes * 60_000;
+  return Number.isFinite(expected) && expected === scheduled;
 }
 
 async function deliverOutbox(
@@ -146,8 +159,14 @@ async function deliverOutbox(
       continue;
     }
 
+    let notificationTitle = "Task still open";
+    if (event.event_kind === "due") {
+      notificationTitle = Date.now() < addLocalMinutes(todo.item_date, todo.start_time as string, 0)
+        ? "Task coming up"
+        : "Task due now";
+    }
     const notification = JSON.stringify({
-      title: event.event_kind === "due" ? "Task due now" : "Task still open",
+      title: notificationTitle,
       body: event.event_kind === "due" ? todo.title : `“${todo.title}” is still open after its scheduled finish.`,
       icon: "/icon-512.png",
       badge: "/favicon-32.png",

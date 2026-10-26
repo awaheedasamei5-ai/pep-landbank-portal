@@ -15,6 +15,7 @@ import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { MyReminderDevices } from "./my-reminder-devices";
+import { MyTaskReminderPreference } from "./my-task-reminder-preference";
 
 type ReminderEvent = {
   id: string;
@@ -41,7 +42,7 @@ function ghanaTime(value: string) {
 
 function eventLabel(event: ReminderEvent) {
   if (event.item_kind === "meeting") return "Meeting starting soon";
-  return event.event_kind === "missed" ? "Missed-task follow-up" : "Task due";
+  return event.event_kind === "missed" ? "Missed-task follow-up" : "Task reminder";
 }
 
 function deliveryState(event: ReminderEvent) {
@@ -219,6 +220,7 @@ export function MyOperationsReminderActivity() {
           </CardContent>
         </Card>
       )}
+      <MyTaskReminderPreference />
       <MyReminderDevices />
     </div>
   );
