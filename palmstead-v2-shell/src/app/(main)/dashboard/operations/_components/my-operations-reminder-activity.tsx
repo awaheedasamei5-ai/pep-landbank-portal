@@ -42,7 +42,7 @@ function ghanaTime(value: string) {
 
 function eventLabel(event: ReminderEvent) {
   if (event.item_kind === "meeting") return "Meeting starting soon";
-  return event.event_kind === "missed" ? "Missed-task follow-up" : "Task due";
+  return event.event_kind === "missed" ? "Missed-task follow-up" : "Task reminder";
 }
 
 function deliveryState(event: ReminderEvent) {
