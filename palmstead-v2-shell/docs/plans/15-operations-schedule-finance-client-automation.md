@@ -20,6 +20,12 @@ preferences, per-item overrides and physical-device receipt testing. Google's
 supports private per-user defaults and event overrides; Palmstead's existing
 outbox timing stays fixed in this phase.
 
+Preview QA uncovered queued device alarms for a task already hard-deleted by a
+prior test. A follow-up migration cancels pending SMS/device rows on task delete
+and marks earlier orphaned pending rows cancelled while preserving their history.
+The worker still rechecks source data before sending; a delete racing a provider
+call already in flight cannot recall that provider request.
+
 ## 2026-10-26 find a meeting time slice — design before implementation
 
 The next scheduler action will offer up to five same-day alternatives from the
