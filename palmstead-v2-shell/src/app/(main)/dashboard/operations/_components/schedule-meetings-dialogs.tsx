@@ -19,11 +19,13 @@ import { addScheduleDays, workspaceDateOnly, workspaceDeadline } from "./schedul
 import {
   checkMeetingAvailability,
   type ScheduleMeeting,
+  type SuggestedMeetingSlot,
   useActiveMeetingStaff,
   useCreateScheduleMeeting,
   useMeetingAvailability,
   useReplaceScheduleMeetingInvitees,
   useRespondToScheduleMeeting,
+  useSuggestMeetingSlots,
   useUpdateScheduleMeeting,
 } from "./use-schedule-meetings";
 
@@ -56,6 +58,109 @@ function defaultMeetingSlot(date: string, preferred?: string) {
     date,
     time: `${String(Math.floor(nextSlot / 60)).padStart(2, "0")}:${String(nextSlot % 60).padStart(2, "0")}`,
   };
+}
+
+function meetingDurationMinutes(startTime: string, endTime: string) {
+  if (!/^\d{2}:\d{2}$/.test(startTime) || !/^\d{2}:\d{2}$/.test(endTime)) return null;
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  const duration = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  return duration >= 15 && duration <= 180 ? duration : null;
+}
+
+function describeSuggestedSlot(slot: SuggestedMeetingSlot) {
+  if (slot.inviteeCount === 0) return "Organizer free";
+  if (slot.busyInviteeCount === 0) {
+    return `All ${slot.inviteeCount} invitee${slot.inviteeCount === 1 ? "" : "s"} free`;
+  }
+  return `${slot.busyInviteeCount} of ${slot.inviteeCount} invitees busy`;
+}
+
+function MeetingTimeSuggestions({
+  date,
+  startTime,
+  endTime,
+  organizerKey,
+  inviteeKeys,
+  excludeId,
+  onSelect,
+}: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  organizerKey: string | undefined;
+  inviteeKeys: string[];
+  excludeId?: string;
+  onSelect: (slot: SuggestedMeetingSlot) => void;
+}) {
+  const suggestions = useSuggestMeetingSlots();
+  const durationMinutes = meetingDurationMinutes(startTime, endTime);
+  const canFind = Boolean(date && organizerKey && durationMinutes);
+
+  return (
+    <section className="grid gap-2" aria-label="Find a meeting time">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!canFind || suggestions.isPending}
+          onClick={() => {
+            if (!date || !organizerKey || !durationMinutes) return;
+            suggestions.mutate({
+              date,
+              preferredStart: startTime,
+              durationMinutes,
+              organizerKey,
+              inviteeKeys,
+              excludeId,
+            });
+          }}
+        >
+          <Clock3 data-icon="inline-start" />
+          {suggestions.isPending ? "Finding times…" : "Find a time"}
+        </Button>
+        <span className="text-xs text-muted-foreground">Same day · 09:00–18:00 · Africa/Accra</span>
+      </div>
+      {durationMinutes === null && startTime && endTime && endTime > startTime && (
+        <p className="text-xs text-muted-foreground">Suggestions support meetings lasting 15 minutes to 3 hours.</p>
+      )}
+      {suggestions.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          Available times could not be loaded. Try again.
+        </p>
+      )}
+      {suggestions.isSuccess && suggestions.data.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No organizer-free starts remain in this day&apos;s working window. Choose another date or duration.
+        </p>
+      )}
+      {suggestions.isSuccess && suggestions.data.length > 0 && (
+        <ul className="grid gap-1" aria-label="Suggested meeting times">
+          {suggestions.data.map((slot) => (
+            <li key={`${slot.startTime}-${slot.endTime}`}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto w-full min-w-0 justify-between gap-3 px-2 py-2 text-left"
+                onClick={() => onSelect(slot)}
+              >
+                <span className="font-medium">
+                  {slot.startTime}–{slot.endTime}
+                </span>
+                <span className="min-w-0 text-right text-xs text-muted-foreground">{describeSuggestedSlot(slot)}</span>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {suggestions.isSuccess && suggestions.data.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Selecting a time checks availability again. Times can change before you save.
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function ScheduleMeetingComposer({
@@ -321,6 +426,18 @@ export function ScheduleMeetingComposer({
               </label>
             </div>
           )}
+          <MeetingTimeSuggestions
+            key={[date, startTime, endTime, ...inviteeKeys].join("|")}
+            date={date}
+            startTime={startTime}
+            endTime={endTime}
+            organizerKey={profile?.key}
+            inviteeKeys={inviteeKeys}
+            onSelect={(slot) => {
+              setStartTime(slot.startTime);
+              setEndTime(slot.endTime);
+            }}
+          />
           {saveFeedback && (
             <p role="alert" className="text-sm text-destructive">
               {saveFeedback}
@@ -768,6 +885,23 @@ export function ScheduleMeetingDetails({
               <span>Keep this time and notify invitees anyway; they can decline.</span>
             </label>
           </div>
+        )}
+        {editing && (
+          <MeetingTimeSuggestions
+            key={[date, startTime, endTime, ...meeting.invitees.map((invitee) => invitee.staffKey)].join("|")}
+            date={date}
+            startTime={startTime}
+            endTime={endTime}
+            organizerKey={meeting.ownerKey}
+            inviteeKeys={meeting.invitees
+              .filter((invitee) => invitee.status !== "declined")
+              .map((invitee) => invitee.staffKey)}
+            excludeId={meeting.id}
+            onSelect={(slot) => {
+              setStartTime(slot.startTime);
+              setEndTime(slot.endTime);
+            }}
+          />
         )}
         {editing && endTime <= startTime && (
           <p role="alert" className="text-sm text-destructive">
