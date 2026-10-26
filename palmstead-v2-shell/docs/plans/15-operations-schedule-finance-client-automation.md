@@ -1,5 +1,25 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-26 personal reminder activity slice
+
+The due/missed SMS and task/meeting push outboxes already keep delivery state,
+but Staff currently cannot inspect their own results. This phase adds a read-only
+personal activity page from My Schedule. It combines the latest 30 SMS and device
+events, shows scheduled Ghana time, a safe status and the number of registered
+devices. A signed-in, active staff profile may see only events addressed to its
+own agent key. Phone numbers, message content, push endpoints, provider IDs and
+raw errors remain private. Management sees its own history on this page and
+retains the separate company SMS health screen.
+
+The screen distinguishes a queued reminder from provider acceptance and explains
+that acceptance does not prove an alert appeared on a handset. It includes
+empty/error/loading states, a refresh control and a return path to My Schedule.
+No message is sent by this read-only feature. Later phases still need recipient
+preferences, per-item overrides and physical-device receipt testing. Google's
+[reminder model](https://developers.google.com/workspace/calendar/api/concepts/reminders)
+supports private per-user defaults and event overrides; Palmstead's existing
+outbox timing stays fixed in this phase.
+
 ## 2026-10-26 find a meeting time slice — design before implementation
 
 The next scheduler action will offer up to five same-day alternatives from the
