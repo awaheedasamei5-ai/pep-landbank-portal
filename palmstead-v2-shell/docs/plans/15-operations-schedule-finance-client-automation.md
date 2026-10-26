@@ -1,5 +1,32 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-26 find a meeting time slice — design before implementation
+
+The next scheduler action will offer up to five same-day alternatives from the
+selected date, preserving the proposed meeting duration. Suggestions use
+Africa/Accra local time, half-hour starts inside the stated 09:00–18:00 working
+window, and never offer a start in the past. They exclude the meeting being edited,
+require the organizer to be free, and rank fewer busy invitees before proximity
+to the requested start. Invitee conflicts remain advisory; the existing explicit
+acknowledgement is still required if a suggested slot has busy invitees.
+
+The suggestion RPC will return only the time and counts of busy invitees, not
+their event titles or client/task details. It will require an active staff account,
+validate the selected staff, and allow a non-manager to request suggestions only
+for their own calendar. The form must show loading, empty and error states, and
+applying a suggestion must re-run the existing availability check and revoke an
+earlier busy-invitee acknowledgement. The transactional database write guard stays
+authoritative if availability changes after the suggestion appears.
+
+Google Calendar's [Find a time](https://support.google.com/calendar/answer/6294878?hl=en)
+compares guest availability without making private event details necessary for
+the booking choice. Its [event model](https://developers.google.com/workspace/calendar/api/concepts/events-calendars)
+distinguishes the organizer and attendees. This phase adapts that interaction to
+Palmstead's current `op_todos`, `schedule_items` and invitation model; room
+availability, working-hours preferences, holidays and multi-day search remain
+separate work. The open-source [Cal.com source](https://github.com/calcom/cal.com)
+is the broader booking-flow reference, not a literal dependency in this slice.
+
 ## 2026-10-25 transactional organizer booking guard
 
 The meeting form's last-second availability check still allowed two browser sessions

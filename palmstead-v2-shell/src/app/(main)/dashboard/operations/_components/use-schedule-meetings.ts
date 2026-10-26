@@ -42,6 +42,44 @@ export interface MeetingAvailability {
   meetingCount: number;
 }
 
+export interface SuggestedMeetingSlot {
+  startTime: string;
+  endTime: string;
+  busyInviteeCount: number;
+  inviteeCount: number;
+}
+
+export function useSuggestMeetingSlots() {
+  return useMutation({
+    mutationFn: async (input: {
+      date: string;
+      preferredStart: string;
+      durationMinutes: number;
+      organizerKey: string;
+      inviteeKeys: string[];
+      excludeId?: string;
+    }): Promise<SuggestedMeetingSlot[]> => {
+      const { data, error } = await requireSupabase().rpc("suggest_schedule_meeting_slots", {
+        p_item_date: input.date,
+        p_preferred_start: input.preferredStart,
+        p_duration_minutes: input.durationMinutes,
+        p_organizer_key: input.organizerKey,
+        p_invitee_keys: [...new Set(input.inviteeKeys)],
+        p_exclude_id: input.excludeId ?? null,
+      });
+      if (error) throw error;
+      return (data ?? []).map(
+        (row: { slot_start: string; slot_end: string; busy_invitee_count: number; invitee_count: number }) => ({
+          startTime: row.slot_start.slice(0, 5),
+          endTime: row.slot_end.slice(0, 5),
+          busyInviteeCount: Number(row.busy_invitee_count),
+          inviteeCount: Number(row.invitee_count),
+        }),
+      );
+    },
+  });
+}
+
 export async function checkMeetingAvailability(input: {
   date: string;
   startTime: string;
