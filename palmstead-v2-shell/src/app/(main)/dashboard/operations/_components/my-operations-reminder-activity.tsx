@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BellRing, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -13,6 +13,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
+
+import { MyReminderDevices } from "./my-reminder-devices";
 
 type ReminderEvent = {
   id: string;
@@ -95,6 +97,7 @@ function deliveryState(event: ReminderEvent) {
 
 export function MyOperationsReminderActivity() {
   const profile = useAuthStore((state) => state.profile);
+  const queryClient = useQueryClient();
   const activity = useQuery({
     queryKey: ["myOperationsReminderActivity", profile?.key],
     enabled: Boolean(profile?.active && profile.key),
@@ -127,7 +130,14 @@ export function MyOperationsReminderActivity() {
           title="My reminder activity"
           description="Your recent Operations task texts and device alerts, shown in Ghana time."
           action={
-            <Button variant="outline" disabled={activity.isFetching} onClick={() => activity.refetch()}>
+            <Button
+              variant="outline"
+              disabled={activity.isFetching}
+              onClick={() => {
+                void activity.refetch();
+                void queryClient.invalidateQueries({ queryKey: ["myOperationsReminderDevices", profile?.key] });
+              }}
+            >
               <RefreshCw data-icon="inline-start" className={activity.isFetching ? "animate-spin" : undefined} />
               Refresh
             </Button>
@@ -209,6 +219,7 @@ export function MyOperationsReminderActivity() {
           </CardContent>
         </Card>
       )}
+      <MyReminderDevices />
     </div>
   );
 }

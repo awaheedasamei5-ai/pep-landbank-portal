@@ -1,5 +1,35 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-26 personal device control slice
+
+The next bounded Operations release makes the existing push opt-in manageable across
+devices. My reminder activity will list the signed-in staff member's registered
+browsers with a plain browser/platform label, registration date, and
+an indicator for the current browser. A staff member can revoke any one of their
+registrations after an explicit confirmation. The list will never render a push
+endpoint or encryption key. `last_seen_at` currently defaults at registration and
+is not refreshed by the worker, so the UI must not imply it proves recent device
+activity. The existing RLS owner policy remains authoritative; client queries
+also filter by the authenticated profile key. A successful database
+removal stops the server worker from sending to that registration. If the current
+browser is revoked, it will additionally unsubscribe locally. A remote browser's
+permission cannot be changed from this screen, but revisiting its Schedule will
+detect its unowned subscription and clear it before any new opt-in.
+
+States: unsupported push browser, no devices, loading, read error, deletion in
+progress, and confirmation. Refresh updates activity and devices together. The
+control stays below delivery activity to keep the primary history readable on a
+phone; rows stack and action labels remain unambiguous at 320–360 px. Management
+gets the same **personal** controls and cannot manage other staff devices here.
+
+The implementation uses the existing `push_subscriptions` RLS, so it adds no new
+database grant or public endpoint. Verify owner isolation with Management and
+Staff, test the empty live state without enrolling a real device, and use an
+isolated rollback-only database check for other-owner deletion. Do not send a
+test push or SMS. A physical opt-in and closed-app delivery test remains separate.
+This follows the [MDN Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API)
+subscription lifecycle and [Google Calendar's private notification settings](https://support.google.com/calendar/answer/37242?hl=en).
+
 ## 2026-10-26 personal reminder activity slice
 
 The due/missed SMS and task/meeting push outboxes already keep delivery state,
