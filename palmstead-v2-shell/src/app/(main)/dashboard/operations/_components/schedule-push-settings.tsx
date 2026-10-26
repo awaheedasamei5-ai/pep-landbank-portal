@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BellRing, Check, Smartphone } from "lucide-react";
+import Link from "next/link";
+
+import { ArrowUpRight, BellRing, Check, Smartphone } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -220,26 +222,33 @@ export function SchedulePushSettings() {
           </CardAction>
         )}
       </CardHeader>
-      {(deviceState === "denied" || deviceState === "unsupported" || errorMessage) && (
-        <CardContent className="grid gap-2 pt-0">
-          {deviceState === "denied" && (
-            <p className="text-muted-foreground text-sm">
-              Allow notifications for Palmstead in your browser or device settings, then return here to enable them.
-            </p>
-          )}
-          {deviceState === "unsupported" && (
-            <p className="text-muted-foreground text-sm">
-              This browser does not support background push. Scheduled task SMS is separate and follows the company’s
-              Operations reminder policy.
-            </p>
-          )}
-          {errorMessage && (
-            <p role="alert" className="text-destructive text-sm">
-              {errorMessage}
-            </p>
-          )}
-        </CardContent>
-      )}
+      <CardContent className="grid gap-2 pt-0">
+        <Button asChild variant="link" size="sm" className="h-auto w-fit px-0">
+          <Link href="/dashboard/operations/reminders/mine">
+            View my reminder activity <ArrowUpRight data-icon="inline-end" />
+          </Link>
+        </Button>
+        {(deviceState === "denied" || deviceState === "unsupported" || errorMessage) && (
+          <>
+            {deviceState === "denied" && (
+              <p className="text-muted-foreground text-sm">
+                Allow notifications for Palmstead in your browser or device settings, then return here to enable them.
+              </p>
+            )}
+            {deviceState === "unsupported" && (
+              <p className="text-muted-foreground text-sm">
+                This browser does not support background push. Scheduled task SMS is separate and follows the company’s
+                Operations reminder policy.
+              </p>
+            )}
+            {errorMessage && (
+              <p role="alert" className="text-destructive text-sm">
+                {errorMessage}
+              </p>
+            )}
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 }
