@@ -15,6 +15,7 @@ import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { MyReminderDevices } from "./my-reminder-devices";
+import { MyTaskReminderPreference } from "./my-task-reminder-preference";
 
 type ReminderEvent = {
   id: string;
@@ -219,6 +220,7 @@ export function MyOperationsReminderActivity() {
           </CardContent>
         </Card>
       )}
+      <MyTaskReminderPreference />
       <MyReminderDevices />
     </div>
   );
