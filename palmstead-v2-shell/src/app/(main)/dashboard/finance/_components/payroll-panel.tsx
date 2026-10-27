@@ -559,10 +559,11 @@ export function PayrollPanel() {
   }
 
   const existingRun = runs?.find((r) => r.period === period);
+  const hasConfiguredPayee = (staff ?? []).some((payee) => payee.active && configuredStaffIds?.has(payee.id));
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-medium">Payroll</h2>
           <p className="text-sm text-muted-foreground">Manage payees, salary components, and monthly payroll runs.</p>
@@ -618,16 +619,21 @@ export function PayrollPanel() {
         <CardHeader>
           <CardTitle className="text-base">Generate payroll</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center gap-3">
-          <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="w-44" />
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="max-w-full w-44" />
           <Button
             onClick={() => generate.mutate(period)}
-            disabled={generate.isPending || (existingRun && existingRun.status !== "draft")}
+            disabled={generate.isPending || !hasConfiguredPayee || (existingRun && existingRun.status !== "draft")}
           >
             {existingRun ? "Regenerate (draft)" : "Generate"}
           </Button>
           {existingRun && existingRun.status !== "draft" && (
             <Badge variant={STATUS_VARIANT[existingRun.status]}>Already {existingRun.status.replace("_", " ")}</Badge>
+          )}
+          {!hasConfiguredPayee && (
+            <p className="text-sm text-muted-foreground">
+              Set up salary for at least one active payee to generate payroll.
+            </p>
           )}
         </CardContent>
       </Card>
