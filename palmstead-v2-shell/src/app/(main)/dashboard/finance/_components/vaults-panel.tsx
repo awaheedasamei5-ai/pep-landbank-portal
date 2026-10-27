@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { useRouter } from "next/navigation";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -77,6 +79,7 @@ function VaultSelect({
 }
 
 export function VaultsPanel() {
+  const router = useRouter();
   const profile = useAuthStore((state) => state.profile);
   const isManager = profile?.role === "manager";
   const qc = useQueryClient();
@@ -85,12 +88,25 @@ export function VaultsPanel() {
     enabled: Boolean(profile),
     queryFn: async () => {
       const sb = requireSupabase();
-      const [accessResult, userResult] = await Promise.all([sb.rpc("finance_can_view_treasury"), sb.auth.getUser()]);
-      if (accessResult.error) throw accessResult.error;
+      // Confirm/refresh the Supabase session before calling a protected RPC.
+      // The shell can briefly show a persisted profile while AuthGate checks it.
+      const userResult = await sb.auth.getUser();
+      if (userResult.error?.name === "AuthSessionMissingError") {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
       if (userResult.error) throw userResult.error;
-      return { allowed: Boolean(accessResult.data), userId: userResult.data.user?.id ?? "" };
+      if (!userResult.data.user) throw new Error("Your session has expired. Please sign in again.");
+      const accessResult = await sb.rpc("finance_can_view_treasury");
+      if (accessResult.error) throw accessResult.error;
+      return { allowed: Boolean(accessResult.data), userId: userResult.data.user.id };
     },
   });
+  useEffect(() => {
+    if (access.error instanceof Error && access.error.message === "Your session has expired. Please sign in again.") {
+      useAuthStore.setState({ profile: null });
+      router.replace("/auth/v1/login");
+    }
+  }, [access.error, router]);
   const data = useQuery({
     queryKey: ["finance-vault-register", access.data?.userId],
     enabled: access.data?.allowed === true,
