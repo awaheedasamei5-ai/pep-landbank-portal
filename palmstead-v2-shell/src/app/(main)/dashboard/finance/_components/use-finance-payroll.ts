@@ -77,9 +77,24 @@ export function usePayrollStaff() {
     queryKey: ["payroll-staff"],
     queryFn: async (): Promise<PayrollStaff[]> => {
       const sb = requireSupabase();
-      const { data, error } = await sb.from("payroll_staff").select("id,profile_key,name,role_title,bank_name,bank_account_name,bank_account_number,active").order("name");
+      const { data, error } = await sb
+        .from("payroll_staff")
+        .select("id,profile_key,name,role_title,bank_name,bank_account_name,bank_account_number,active")
+        .order("name");
       if (error) throw error;
       return (data ?? []).map(mapStaff);
+    },
+  });
+}
+
+export function usePayrollConfiguredStaffIds(enabled: boolean) {
+  return useQuery({
+    queryKey: ["payroll-configured-staff-ids"],
+    enabled,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await requireSupabase().from("payroll_salary_components").select("payroll_staff_id");
+      if (error) throw error;
+      return new Set((data ?? []).map((row) => row.payroll_staff_id));
     },
   });
 }
@@ -87,7 +102,16 @@ export function usePayrollStaff() {
 export function useUpsertPayrollStaff() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { id?: string; profileKey: string | null; name: string; roleTitle: string; bankName: string; bankAccountName: string; bankAccountNumber: string; createdBy: string | undefined }) => {
+    mutationFn: async (input: {
+      id?: string;
+      profileKey: string | null;
+      name: string;
+      roleTitle: string;
+      bankName: string;
+      bankAccountName: string;
+      bankAccountNumber: string;
+      createdBy: string | undefined;
+    }) => {
       const sb = requireSupabase();
       const payload = {
         profile_key: input.profileKey,
@@ -148,7 +172,12 @@ export function useSalaryComponents(staffId: string | null) {
 export function useAddSalaryComponent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { payrollStaffId: string; componentName: string; componentType: "earning" | "deduction"; amount: number }) => {
+    mutationFn: async (input: {
+      payrollStaffId: string;
+      componentName: string;
+      componentType: "earning" | "deduction";
+      amount: number;
+    }) => {
       const sb = requireSupabase();
       const { error } = await sb.from("payroll_salary_components").insert({
         payroll_staff_id: input.payrollStaffId,
@@ -158,7 +187,10 @@ export function useAddSalaryComponent() {
       });
       if (error) throw error;
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["payroll-salary-components", vars.payrollStaffId] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["payroll-salary-components", vars.payrollStaffId] });
+      qc.invalidateQueries({ queryKey: ["payroll-configured-staff-ids"] });
+    },
   });
 }
 
@@ -170,7 +202,10 @@ export function useDeleteSalaryComponent() {
       const { error } = await sb.from("payroll_salary_components").delete().eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["payroll-salary-components", vars.payrollStaffId] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["payroll-salary-components", vars.payrollStaffId] });
+      qc.invalidateQueries({ queryKey: ["payroll-configured-staff-ids"] });
+    },
   });
 }
 
@@ -179,7 +214,10 @@ export function usePayrollRuns() {
     queryKey: ["payroll-runs"],
     queryFn: async (): Promise<PayrollRun[]> => {
       const sb = requireSupabase();
-      const { data, error } = await sb.from("payroll_runs").select("id,period,status,generated_by,generated_at,signed_off_by,signed_off_at").order("period", { ascending: false });
+      const { data, error } = await sb
+        .from("payroll_runs")
+        .select("id,period,status,generated_by,generated_at,signed_off_by,signed_off_at")
+        .order("period", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((r) => ({
         id: r.id,
