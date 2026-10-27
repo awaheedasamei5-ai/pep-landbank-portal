@@ -93,6 +93,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!supabase) return;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        useAuthStore.setState({ profile: null });
+        router.replace("/auth/v1/login");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [router]);
+
   if (!ready) {
     return (
       <div className="flex h-dvh items-center justify-center text-muted-foreground text-sm">
