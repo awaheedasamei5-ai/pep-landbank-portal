@@ -54,6 +54,7 @@ import {
   calendarDateOnly,
   calendarTime,
   workspaceDateOnly,
+  workspaceDeadline,
   workspaceMonthRange,
 } from "./schedule-time.ts";
 import { getScheduleUrgency } from "./schedule-urgency";
@@ -147,13 +148,16 @@ function reminderLeadLabel(minutes: number) {
 
 function TaskReminderOverride({ todo }: { todo: Todo }) {
   const profile = useAuthStore((state) => state.profile);
+  const taskStart = workspaceDeadline(todo.date, todo.startTime);
+  const canChoose =
+    profile?.key === todo.assignedTo && todo.status === "open" && taskStart !== null && taskStart > Date.now();
   const [draft, setDraft] = useState("default");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const setting = useQuery({
     queryKey: ["myOpTodoPushOverride", profile?.key, todo.id],
-    enabled: Boolean(profile?.active && profile.key === todo.assignedTo),
+    enabled: Boolean(profile?.active && canChoose),
     queryFn: async () => {
       const { data, error } = await requireSupabase().rpc("get_my_op_todo_push_override", {
         p_todo_id: todo.id,
@@ -190,7 +194,7 @@ function TaskReminderOverride({ todo }: { todo: Todo }) {
     }
   }
 
-  if (profile?.key !== todo.assignedTo || todo.status !== "open" || !todo.startTime) return null;
+  if (!canChoose) return null;
 
   return (
     <div className="grid min-w-0 gap-2 rounded-md border bg-muted/20 p-3">
@@ -199,7 +203,8 @@ function TaskReminderOverride({ todo }: { todo: Todo }) {
       </div>
       <p className="text-xs text-muted-foreground">
         Your default is {setting.data ? reminderLeadLabel(setting.data.defaultMinutes).toLowerCase() : "loading"}. This
-        changes only your device alert for this task; company SMS and missed-task reminders stay the same.
+        changes only your device alert for this task; company SMS and missed-task reminders stay the same. Alerts
+        already sent cannot be recalled or repeated.
       </p>
       {setting.isPending ? <p className="text-xs text-muted-foreground">Loading reminder choice…</p> : null}
       {setting.isError ? (
