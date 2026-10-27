@@ -11,6 +11,7 @@ import { PaymentsPanel } from "./_components/payments-panel";
 import { PayrollPanel } from "./_components/payroll-panel";
 import { ReportsPanel } from "./_components/reports-panel";
 import { SettingsPanel } from "./_components/settings-panel";
+import { VaultsPanel } from "./_components/vaults-panel";
 
 // Real Accounting app (renamed from "Finance" -- docs/plans/05-accounting-app-blueprint.md
 // Part B.1. Route stays /dashboard/finance so the real /receipt/:token
@@ -50,6 +51,10 @@ export default function Page() {
           <PayrollPanel />
         </TabsContent>
 
+        <TabsContent value="vaults">
+          <VaultsPanel />
+        </TabsContent>
+
         <TabsContent value="reports">
           <ReportsPanel />
         </TabsContent>
@@ -61,4 +66,3 @@ export default function Page() {
     </div>
   );
 }
-

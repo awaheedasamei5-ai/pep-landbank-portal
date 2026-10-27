@@ -13,6 +13,7 @@ const tabs = [
   "expenses",
   "commission",
   "payroll",
+  "vaults",
   "reports",
   "settings",
 ] as const;
@@ -34,4 +35,3 @@ export function AccountingTabs({ children }: { children: ReactNode }) {
     </Tabs>
   );
 }
-
