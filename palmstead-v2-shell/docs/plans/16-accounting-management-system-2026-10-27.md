@@ -1,5 +1,11 @@
 # Accounting management system — governing plan
 
+## 28 October 2026 implementation note — budgets and requests
+
+The current slice adds annual department/category budget drafts with revision numbers, separate Head of Finance activation, an active plan per scope, and a Staff request register. Management configures department membership, approvers and named direct-to-Finance exceptions. Request drafts are editable with a revision check. Submission routes departmental requests to a different HOD and approved exceptions directly to Finance. HOD forward/return/reject and Finance approve/return/reject are server-authorized; every transition records actor, timestamp and note. An approved departmental request counts as a **commitment**, with a lock and hard budget limit. It is never called paid or deducted from a bank/cash vault. Legacy `fund_requests` and `expenses` remain untouched and are not silently reclassified. Database rollback-only checks passed for the chain, self-approval denial, over-budget rejection, direct-route authorization and unrelated Staff isolation; they left no QA records. These checks do not constitute a live browser release.
+
+Still required before this programme is complete: actual expense and payment settlement links, private attachments, project/task and recipient fields, monthly budget distribution, configurable threshold and exception policy, full searchable/paginated registers, PDFs/reports and vendor/payroll/transport work. The new budget screen displays committed and remaining only to Management or approvers who can see the underlying requests; all actual/paid figures await canonical settlement records. Do not enter real budgets or roles as a test fixture.
+
 Status: research and architecture approved for phased implementation; **not a claim that the features below are already built**. Written 27 October 2026. This plan supersedes the limited scope in `04-finance-app-plan.md` and `05-accounting-app-blueprint.md` for future Accounting work. Do not use older “done” labels as evidence for the new requirements.
 
 ## 1. Product boundary and existing assets

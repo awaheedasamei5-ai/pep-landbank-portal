@@ -21,6 +21,15 @@ type Assignment = {
   assigned_at: string;
   revoked_at: string | null;
 };
+type DirectRoute = { profile_id: string; reason: string; assigned_at: string };
+type RouteEvent = {
+  id: number;
+  profile_id: string;
+  actor_id: string;
+  action: string;
+  reason: string;
+  occurred_at: string;
+};
 
 const roles = [
   ["finance_head", "Head of Finance"],
@@ -36,7 +45,7 @@ function useFinanceStructure() {
     queryKey: ["finance-structure"],
     queryFn: async () => {
       const sb = requireSupabase();
-      const [departments, staff, memberships, assignments] = await Promise.all([
+      const [departments, staff, memberships, assignments, directRoutes, routeEvents] = await Promise.all([
         sb.from("finance_departments").select("id,name,active").order("name"),
         sb.from("profiles").select("id,name,active").eq("active", true).order("name"),
         sb.from("finance_staff_departments").select("id,profile_id,department_id,ended_at").is("ended_at", null),
@@ -45,13 +54,22 @@ function useFinanceStructure() {
           .select("id,profile_id,department_id,finance_role,assigned_at,revoked_at")
           .is("revoked_at", null)
           .order("assigned_at"),
+        sb.from("finance_direct_routes").select("profile_id,reason,assigned_at").order("assigned_at"),
+        sb
+          .from("finance_direct_route_events")
+          .select("id,profile_id,actor_id,action,reason,occurred_at")
+          .order("occurred_at", { ascending: false })
+          .limit(20),
       ]);
-      for (const result of [departments, staff, memberships, assignments]) if (result.error) throw result.error;
+      for (const result of [departments, staff, memberships, assignments, directRoutes, routeEvents])
+        if (result.error) throw result.error;
       return {
         departments: (departments.data ?? []) as Department[],
         staff: (staff.data ?? []) as Staff[],
         memberships: (memberships.data ?? []) as Membership[],
         assignments: (assignments.data ?? []) as Assignment[],
+        directRoutes: (directRoutes.data ?? []) as DirectRoute[],
+        routeEvents: (routeEvents.data ?? []) as RouteEvent[],
       };
     },
   });
@@ -92,10 +110,24 @@ export function FinanceStructurePanel() {
   const [reason, setReason] = useState("");
   const [revokeId, setRevokeId] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
+  const [directStaffId, setDirectStaffId] = useState("");
+  const [directReason, setDirectReason] = useState("");
   const [message, setMessage] = useState("");
   const mutation = useMutation({
-    mutationFn: async (action: { kind: "department" | "membership" | "role" | "revoke" }) => {
+    mutationFn: async (action: {
+      kind: "department" | "membership" | "role" | "revoke" | "direct" | "direct_revoke";
+      profileId?: string;
+    }) => {
       const sb = requireSupabase();
+      if (action.kind === "direct" || action.kind === "direct_revoke") {
+        const { error } = await sb.rpc("finance_set_direct_route", {
+          p_profile_id: action.profileId ?? directStaffId,
+          p_enabled: action.kind === "direct",
+          p_reason: directReason.trim() || "Management revoked direct route",
+        });
+        if (error) throw error;
+        return action.kind;
+      }
       const args =
         action.kind === "department"
           ? { functionName: "finance_create_department", parameters: { p_name: departmentName.trim() } }
@@ -125,8 +157,20 @@ export function FinanceStructurePanel() {
     onSuccess: async (kind) => {
       await qc.invalidateQueries({ queryKey: ["finance-structure"] });
       setMessage(
-        kind === "department" ? "Department created." : kind === "revoke" ? "Role revoked." : "Assignment saved.",
+        kind === "department"
+          ? "Department created."
+          : kind === "revoke"
+            ? "Role revoked."
+            : kind === "direct"
+              ? "Direct Finance route assigned."
+              : kind === "direct_revoke"
+                ? "Direct route removed."
+                : "Assignment saved.",
       );
+      if (kind === "direct" || kind === "direct_revoke") {
+        setDirectReason("");
+        return;
+      }
       if (kind === "department") setDepartmentName("");
       if (kind === "revoke") {
         setRevokeId("");
@@ -229,6 +273,74 @@ export function FinanceStructurePanel() {
               Assign department
             </Button>
           </div>
+        </div>
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <h3 className="font-medium">Direct Finance route exceptions</h3>
+          <p className="text-xs text-muted-foreground">
+            Only Management can authorize a named staff member to bypass department screening. Staff cannot choose this
+            route on a request.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="direct-route-staff">Staff member</Label>
+              <Selector id="direct-route-staff" value={directStaffId} onChange={setDirectStaffId}>
+                <option value="">Choose staff</option>
+                {data?.staff.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </Selector>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="direct-route-reason">Reason</Label>
+              <Input
+                id="direct-route-reason"
+                value={directReason}
+                onChange={(event) => setDirectReason(event.target.value)}
+                maxLength={500}
+                placeholder="Why is the direct route required?"
+              />
+            </div>
+          </div>
+          <Button
+            className="self-start"
+            disabled={mutation.isPending || !directStaffId || directReason.trim().length < 3}
+            onClick={() => mutation.mutate({ kind: "direct" })}
+          >
+            Allow direct route
+          </Button>
+          <ul className="flex flex-col gap-2 text-sm">
+            {data?.directRoutes.map((route) => (
+              <li key={route.profile_id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                <span>
+                  {staffName(route.profile_id)} · <span className="text-muted-foreground">{route.reason}</span>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={mutation.isPending}
+                  onClick={() => mutation.mutate({ kind: "direct_revoke", profileId: route.profile_id })}
+                >
+                  Remove route
+                </Button>
+              </li>
+            ))}
+            {!data?.directRoutes.length && <li className="text-muted-foreground">No direct-route exceptions.</li>}
+          </ul>
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Recent route changes</summary>
+            <ol className="mt-2 flex flex-col gap-2">
+              {data?.routeEvents.map((event) => (
+                <li key={event.id} className="border-t pt-2">
+                  {staffName(event.profile_id)} · {event.action} by {staffName(event.actor_id)} ·{" "}
+                  {new Date(event.occurred_at).toLocaleString()}
+                  <span className="block text-muted-foreground">{event.reason}</span>
+                </li>
+              ))}
+              {!data?.routeEvents.length && <li className="text-muted-foreground">No route changes recorded.</li>}
+            </ol>
+          </details>
         </div>
         <div className="space-y-3 rounded-lg border p-4">
           <h3 className="font-medium">Approval and finance roles</h3>
