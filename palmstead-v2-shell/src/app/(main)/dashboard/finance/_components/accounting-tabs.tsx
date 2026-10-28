@@ -14,6 +14,8 @@ const tabs = [
   "commission",
   "payroll",
   "vaults",
+  "budgets",
+  "requests",
   "reports",
   "settings",
 ] as const;

@@ -3,6 +3,7 @@ import { TabsContent } from "@/components/ui/tabs";
 
 import { PortalBackLink } from "../_components/portal-navigation";
 import { AccountingTabs } from "./_components/accounting-tabs";
+import { BudgetsPanel } from "./_components/budgets-panel";
 import { CommissionPanel } from "./_components/commission-panel";
 import { ExpensesPanel } from "./_components/expenses-panel";
 import { MonthlyPlansPanel } from "./_components/monthly-plans-panel";
@@ -10,6 +11,7 @@ import { OverviewPanel } from "./_components/overview-panel";
 import { PaymentsPanel } from "./_components/payments-panel";
 import { PayrollPanel } from "./_components/payroll-panel";
 import { ReportsPanel } from "./_components/reports-panel";
+import { RequestsPanel } from "./_components/requests-panel";
 import { SettingsPanel } from "./_components/settings-panel";
 import { VaultsPanel } from "./_components/vaults-panel";
 
@@ -24,7 +26,10 @@ export default function Page() {
       <div>
         <PortalBackLink fallback="/dashboard/default" />
       </div>
-      <PageHeader title="Accounting" description="Payments, expenses, commission and payroll in one place." />
+      <PageHeader
+        title="Accounting"
+        description="Client collections, budgets, requests, treasury, expenses and payroll."
+      />
 
       <AccountingTabs>
         <TabsContent value="overview">
@@ -53,6 +58,14 @@ export default function Page() {
 
         <TabsContent value="vaults">
           <VaultsPanel />
+        </TabsContent>
+
+        <TabsContent value="budgets">
+          <BudgetsPanel />
+        </TabsContent>
+
+        <TabsContent value="requests">
+          <RequestsPanel />
         </TabsContent>
 
         <TabsContent value="reports">
