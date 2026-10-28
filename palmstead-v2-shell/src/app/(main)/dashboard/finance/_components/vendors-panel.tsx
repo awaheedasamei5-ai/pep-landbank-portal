@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { VendorSettlementPanel } from "./vendor-settlement-panel";
+
 type Vendor = {
   id: string;
   legal_name: string;
@@ -39,6 +41,7 @@ type Bill = {
 };
 type BillEvent = { id: number; actor_id: string; action: string; note: string; occurred_at: string };
 type Person = { id: string; name: string };
+type PaymentSummary = { id: string; bill_id: string; amount: number };
 const money = (value: number) => new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(value);
 const validAmount = (value: string) => /^\d{1,12}(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
 
@@ -90,12 +93,38 @@ export function VendorsPanel() {
         sb.from("profiles").select("id,name").eq("active", true),
       ]);
       for (const result of [vendors, bills, roles, people]) if (result.error) throw result.error;
+      const approvedIds = (bills.data ?? []).filter((bill) => bill.status === "approved").map((bill) => bill.id);
+      const payments = approvedIds.length
+        ? await sb.from("finance_vendor_payments").select("id,bill_id,amount").in("bill_id", approvedIds)
+        : { data: [] as PaymentSummary[], error: null };
+      if (payments.error) throw payments.error;
+      const paymentRows = (payments.data ?? []) as PaymentSummary[];
+      const reversals = paymentRows.length
+        ? await sb
+            .from("finance_vendor_payment_reversals")
+            .select("payment_id")
+            .in(
+              "payment_id",
+              paymentRows.map((payment) => payment.id),
+            )
+        : { data: [] as { payment_id: string }[], error: null };
+      if (reversals.error) throw reversals.error;
+      const reversedIds = new Set((reversals.data ?? []).map((reversal) => reversal.payment_id));
+      const paidByBill = new Map<string, number>();
+      for (const payment of paymentRows) {
+        if (reversedIds.has(payment.id)) continue;
+        paidByBill.set(
+          payment.bill_id,
+          (paidByBill.get(payment.bill_id) ?? 0) + Math.round(Number(payment.amount) * 100),
+        );
+      }
       return {
         vendors: (vendors.data ?? []) as Vendor[],
         bills: (bills.data ?? []) as Bill[],
         roles: roles.data ?? [],
         people: (people.data ?? []) as Person[],
         userId: auth.data.user.id,
+        paidByBill,
       };
     },
   });
@@ -187,6 +216,11 @@ export function VendorsPanel() {
   const selected = data?.bills.find((bill) => bill.id === selectedId) ?? null;
   const person = (id: string) => data?.people.find((item) => item.id === id)?.name ?? "Former staff member";
   const vendor = (id: string) => data?.vendors.find((item) => item.id === id)?.legal_name ?? "Vendor";
+  const outstanding = (bill: Bill) =>
+    Math.max(0, Math.round(Number(bill.amount) * 100) - (data?.paidByBill.get(bill.id) ?? 0));
+  const approvedBills = data?.bills.filter((bill) => bill.status === "approved") ?? [];
+  const openBills = approvedBills.filter((bill) => outstanding(bill) > 0);
+  const overdueBills = openBills.filter((bill) => bill.due_date < new Date().toISOString().slice(0, 10));
   const decide = (decision: string) =>
     selected && mutation.mutate({ kind: "decide", id: selected.id, decision, revision: selected.revision });
   const startEdit = (bill: Bill) => {
@@ -217,8 +251,7 @@ export function VendorsPanel() {
         <CardHeader>
           <CardTitle>Vendor payments</CardTitle>
           <CardDescription>
-            Register vendors and review their bills separately from staff requests. An approved bill is not a payment;
-            settlement and vault posting are not yet available.
+            Register vendors, review bills, and record confirmed disbursements with private proof and vault postings.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -233,7 +266,7 @@ export function VendorsPanel() {
               {message}
             </p>
           )}
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">Active vendors</p>
               <p className="text-2xl font-semibold">
@@ -247,10 +280,15 @@ export function VendorsPanel() {
               </p>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Approved for payment, unsettled</p>
-              <p className="text-2xl font-semibold">
-                {data?.bills.filter((b) => b.status === "approved").length ?? "—"}
+              <p className="text-xs text-muted-foreground">Unsettled bills</p>
+              <p className="text-2xl font-semibold">{data ? openBills.length : "—"}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Overdue · outstanding</p>
+              <p className="text-xl font-semibold tabular-nums">
+                {data ? money(overdueBills.reduce((sum, bill) => sum + outstanding(bill), 0) / 100) : "—"}
               </p>
+              <p className="text-xs text-muted-foreground">{overdueBills.length} unpaid bill(s) past due</p>
             </div>
           </div>
         </CardContent>
@@ -511,6 +549,7 @@ export function VendorsPanel() {
                   </span>
                   <span className="text-xs capitalize text-muted-foreground">
                     Due {bill.due_date} · {bill.status.replaceAll("_", " ")}
+                    {bill.status === "approved" && ` · ${money(outstanding(bill) / 100)} outstanding`}
                   </span>
                 </button>
               ))}
@@ -606,11 +645,15 @@ export function VendorsPanel() {
                       ))}
                     </ol>
                   </div>
-                  {selected.status === "approved" && (
-                    <p className="text-xs text-muted-foreground">
-                      Approved {selected.approved_at ? new Date(selected.approved_at).toLocaleString() : ""}. This bill
-                      has not been marked paid and has no vault posting.
-                    </p>
+                  {selected.status === "approved" && data && (
+                    <VendorSettlementPanel
+                      bill={selected}
+                      vendorName={selected.vendor_name_snapshot || vendor(selected.vendor_id)}
+                      financeHead={financeHead}
+                      manager={manager}
+                      userId={data.userId}
+                      person={person}
+                    />
                   )}
                 </>
               )}
