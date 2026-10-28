@@ -112,6 +112,18 @@ export function BudgetsPanel() {
           r.category.toLowerCase() === budget.category.toLowerCase(),
       )
       .reduce((sum, r) => sum + Number(r.amount), 0) ?? 0;
+  const downloadBudget = async (budget: Budget) => {
+    try {
+      const { buildFinanceBudgetPdf } = await import("./approval-documents");
+      buildFinanceBudgetPdf({
+        ...budget,
+        department: departmentName(budget.department_id),
+        committed: budget.status === "active" && canSeeCommitments ? committed(budget) : null,
+      }).save(`Palmstead-budget-${budget.fiscal_year}-${budget.id.slice(0, 8)}.pdf`);
+    } catch {
+      setMessage("Could not prepare the budget PDF. Please try again.");
+    }
+  };
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Card>
@@ -249,6 +261,7 @@ export function BudgetsPanel() {
                       </td>
                       <td className="p-3 capitalize">{b.status}</td>
                       <td className="p-3">
+                        <div className="flex flex-wrap gap-2">
                         {b.status === "draft" && data.canActivate && b.created_by !== data.userId ? (
                           <Button
                             size="sm"
@@ -258,9 +271,11 @@ export function BudgetsPanel() {
                           >
                             Activate
                           </Button>
-                        ) : (
-                          "—"
-                        )}
+                        ) : null}
+                        <Button size="sm" variant="outline" onClick={() => downloadBudget(b)}>
+                          PDF
+                        </Button>
+                        </div>
                       </td>
                     </tr>
                   );
