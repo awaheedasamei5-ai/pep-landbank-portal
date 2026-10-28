@@ -16,6 +16,7 @@ const tabs = [
   "vaults",
   "budgets",
   "requests",
+  "vendors",
   "reports",
   "settings",
 ] as const;
