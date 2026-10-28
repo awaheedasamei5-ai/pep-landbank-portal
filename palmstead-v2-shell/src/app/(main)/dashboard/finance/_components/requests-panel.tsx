@@ -22,6 +22,8 @@ type Request = {
   status: string;
   revision: number;
   created_at: string;
+  approved_budget_revision: number | null;
+  approved_at: string | null;
 };
 type Event = {
   id: number;
@@ -58,7 +60,9 @@ export function RequestsPanel() {
       const [requests, people, departments, roles, memberships, direct] = await Promise.all([
         sb
           .from("finance_requests")
-          .select("id,requester_id,department_id,route,category,purpose,amount,needed_by,status,revision,created_at")
+          .select(
+            "id,requester_id,department_id,route,category,purpose,amount,needed_by,status,revision,created_at,approved_budget_revision,approved_at",
+          )
           .order("created_at", { ascending: false })
           .limit(200),
         sb.from("profiles").select("id,name").eq("active", true).order("name"),
@@ -431,7 +435,11 @@ export function RequestsPanel() {
               </div>
               {selected.status === "approved" && (
                 <p className="text-xs text-muted-foreground">
-                  Approved as a budget commitment. No bank or cash payment has been recorded.
+                  Approved {selected.approved_at ? new Date(selected.approved_at).toLocaleString() : ""}
+                  {selected.approved_budget_revision
+                    ? ` against budget revision ${selected.approved_budget_revision}`
+                    : ""}
+                  . This is a commitment; no bank or cash payment has been recorded.
                 </p>
               )}
             </>

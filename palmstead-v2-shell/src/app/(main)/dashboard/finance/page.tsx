@@ -26,7 +26,10 @@ export default function Page() {
       <div>
         <PortalBackLink fallback="/dashboard/default" />
       </div>
-      <PageHeader title="Accounting" description="Payments, expenses, commission and payroll in one place." />
+      <PageHeader
+        title="Accounting"
+        description="Client collections, budgets, requests, treasury, expenses and payroll."
+      />
 
       <AccountingTabs>
         <TabsContent value="overview">
