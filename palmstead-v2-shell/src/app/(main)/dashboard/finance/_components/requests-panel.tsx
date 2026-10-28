@@ -176,6 +176,23 @@ export function RequestsPanel() {
   };
   const act = (action: string) =>
     selected && mutation.mutate({ kind: "transition", id: selected.id, revision: selected.revision, action });
+  const downloadRequest = async () => {
+    if (!selected || !history.data || history.isFetching) return;
+    try {
+      const { buildFinanceRequestPdf } = await import("./approval-documents");
+      buildFinanceRequestPdf({
+        ...selected,
+        requester: person(selected.requester_id),
+        department: department(selected.department_id),
+        events: history.data.map((event) => ({
+          ...event,
+          actor_name: person(event.actor_id),
+        })),
+      }).save(`Palmstead-request-${selected.id.slice(0, 8)}.pdf`);
+    } catch {
+      setMessage("Could not prepare the request PDF. Please try again.");
+    }
+  };
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(300px,0.95fr)_minmax(0,1.5fr)]">
       <div className="flex min-w-0 flex-col gap-4">
@@ -363,6 +380,9 @@ export function RequestsPanel() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="outline" disabled={!history.data || history.isFetching} onClick={downloadRequest}>
+                  Download request PDF
+                </Button>
                 {owned && ["draft", "returned"].includes(selected.status) && (
                   <>
                     <Button variant="outline" onClick={() => startEdit(selected)}>
