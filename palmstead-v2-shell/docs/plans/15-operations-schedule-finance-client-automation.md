@@ -1,5 +1,188 @@
 # Operations Schedule, Finance Receipts, and Client Record Automation
 
+## 2026-10-26 per-task device reminder override — implementation plan
+
+**Behavior.** The assignee of a timed task may use their personal device-alert default or choose 0, 15, 60, or 1440 minutes before that one task. The choice appears in the task detail editor with the effective default explained. Resetting to default removes the override. This is a private recipient setting, following [Google Calendar's per-event reminder model](https://developers.google.com/workspace/calendar/api/concepts/reminders); it does not alter Management's SMS policy, missed-task alerts, or meeting invitations. [MDN Push](https://developer.mozilla.org/en-US/docs/Web/API/Push_API) documents the device opt-in requirement, so the UI must not promise delivery without an opted-in device.
+
+**Data and concurrency.** Store the override in a private table keyed by task and assignee, with no Data API table grant. Authenticated RPCs derive the active agent key from `auth.uid()` and check current assignment before returning or changing an override. Saving locks the task row, rejects tasks without a future timed start, and retimes only a queued/retry due-device event for that recipient. A send already in flight cannot be recalled; sent history stays immutable. The task enqueue trigger resolves override, then personal default, then zero. Changing the personal default retimes only tasks without an override. Deleting a task cascades the override. Reassignment uses the new assignee's own setting and cannot expose the prior assignee's choice.
+
+**Verification and release.** Inspect V2 schema before migration. Check RPC ownership and queue timing with rollback-only database fixtures for Management and Adams, including reset to default, invalid values, retiming on task edit, and unchanged missed/SMS events. Typecheck and inspect exact Vercel preview with both roles; verify the choice saves, survives refresh, and does not cross accounts. Restore QA state, then release only to `rebuild`, wait for READY on the production alias and inspect both roles. No push or SMS is sent during this phase. A real opted-in device/closed-app receipt test remains outstanding.
+
+## 2026-10-26 personal task device reminder lead time — implementation plan
+
+**Scope.** Give every active staff member a private default for the *device* alert before a timed task starts. Choices: at start (existing behavior), 15 minutes, 1 hour, or 1 day before. Management sets only its own preference. The company SMS due/missed policy, missed-task device follow-up, invited-meeting 15-minute alert, and per-task overrides remain separate phases. A device must still be opted in for an alert to arrive. Google Calendar's [private default and event override model](https://developers.google.com/workspace/calendar/api/concepts/reminders) guides the distinction; [MDN Push](https://developer.mozilla.org/en-US/docs/Web/API/Push_API) confirms the service worker/device subscription requirement. This does not promise handset receipt.
+
+**Database and security.** Add a private per-agent preference table in `app_schedule_private`, keyed by `profiles.agent_key`, with a constrained minute value and server timestamp. No Data API table grant. Stable, authenticated RPC wrappers derive the active agent from `auth.uid()` and expose only their own value; the setter rejects unsupported values. The set operation adjusts only that recipient's queued/retry future task-due device events inside the same transaction. Already-sending events may have reached the push provider and cannot be recalled; sent history is immutable. If the desired advance point is already past but task start is future, queue immediately; if the start has passed, cancel the due alert. New task/assignment writes consult the recipient's preference before enqueuing. No client-supplied staff key is trusted. Preserve queue idempotency and the independent missed reminder.
+
+**Worker and UI.** Store the chosen lead time on each device outbox event so the worker can validate its timing against the task and show accurate 'coming up' wording. Keep the source task, assignee, status, signature and recipient checks. Add a compact preference card on My reminder activity, with current value, four explicit options, Save, disabled/loading/error/success states, and plain language that this changes device alerts only. Use existing shadcn Card/Select/Field/Button components and theme tokens. At phone widths, the selector and action stack without horizontal overflow. No new app-wide settings route.
+
+**Verification/release.** Inspect the live V2 schema and pending queue first. Use a rollback-only SQL fixture for two agents: owner read/write, cross-owner denial, future rescheduling, immediate reminder, past task cancellation, no missed/sent changes and invalid value rejection. Check Management and Adams in an exact Vercel preview, including save and refresh; restore each account's original setting after QA. Do not opt in a device or send SMS/push for this verification. Apply the migration only to V2, deploy the updated push worker, then release only to `rebuild` after the preview works. Confirm exact READY production deployment, refresh both roles and verify the saved preference. A physical closed-app device test and per-task override are still outstanding.
+
+## 2026-10-26 personal device control slice
+
+The next bounded Operations release makes the existing push opt-in manageable across
+devices. My reminder activity will list the signed-in staff member's registered
+browsers with a plain browser/platform label, registration date, and
+an indicator for the current browser. A staff member can revoke any one of their
+registrations after an explicit confirmation. The list will never render a push
+endpoint or encryption key. `last_seen_at` currently defaults at registration and
+is not refreshed by the worker, so the UI must not imply it proves recent device
+activity. The existing RLS owner policy remains authoritative; client queries
+also filter by the authenticated profile key. A successful database
+removal stops the server worker from sending to that registration. If the current
+browser is revoked, it will additionally unsubscribe locally. A remote browser's
+permission cannot be changed from this screen, but revisiting its Schedule will
+detect its unowned subscription and clear it before any new opt-in.
+
+States: unsupported push browser, no devices, loading, read error, deletion in
+progress, and confirmation. Refresh updates activity and devices together. The
+control stays below delivery activity to keep the primary history readable on a
+phone; rows stack and action labels remain unambiguous at 320–360 px. Management
+gets the same **personal** controls and cannot manage other staff devices here.
+
+The implementation uses the existing `push_subscriptions` RLS, so it adds no new
+database grant or public endpoint. Verify owner isolation with Management and
+Staff, test the empty live state without enrolling a real device, and use an
+isolated rollback-only database check for other-owner deletion. Do not send a
+test push or SMS. A physical opt-in and closed-app delivery test remains separate.
+This follows the [MDN Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API)
+subscription lifecycle and [Google Calendar's private notification settings](https://support.google.com/calendar/answer/37242?hl=en).
+
+## 2026-10-26 personal reminder activity slice
+
+The due/missed SMS and task/meeting push outboxes already keep delivery state,
+but Staff currently cannot inspect their own results. This phase adds a read-only
+personal activity page from My Schedule. It combines the latest 30 SMS and device
+events, shows scheduled Ghana time, a safe status and the number of registered
+devices. A signed-in, active staff profile may see only events addressed to its
+own agent key. Phone numbers, message content, push endpoints, provider IDs and
+raw errors remain private. Management sees its own history on this page and
+retains the separate company SMS health screen.
+
+The screen distinguishes a queued reminder from provider acceptance and explains
+that acceptance does not prove an alert appeared on a handset. It includes
+empty/error/loading states, a refresh control and a return path to My Schedule.
+No message is sent by this read-only feature. Later phases still need recipient
+preferences, per-item overrides and physical-device receipt testing. Google's
+[reminder model](https://developers.google.com/workspace/calendar/api/concepts/reminders)
+supports private per-user defaults and event overrides; Palmstead's existing
+outbox timing stays fixed in this phase.
+
+Preview QA uncovered queued device alarms for a task already hard-deleted by a
+prior test. A follow-up migration cancels pending SMS/device rows on task delete
+and marks earlier orphaned pending rows cancelled while preserving their history.
+The worker still rechecks source data before sending; a delete racing a provider
+call already in flight cannot recall that provider request.
+
+## 2026-10-26 find a meeting time slice — design before implementation
+
+The next scheduler action will offer up to five same-day alternatives from the
+selected date, preserving the proposed meeting duration. Suggestions use
+Africa/Accra local time, half-hour starts inside the stated 09:00–18:00 working
+window, and never offer a start in the past. They exclude the meeting being edited,
+require the organizer to be free, and rank fewer busy invitees before proximity
+to the requested start. Invitee conflicts remain advisory; the existing explicit
+acknowledgement is still required if a suggested slot has busy invitees.
+
+The suggestion RPC will return only the time and counts of busy invitees, not
+their event titles or client/task details. It will require an active staff account,
+validate the selected staff, and allow a non-manager to request suggestions only
+for their own calendar. The form must show loading, empty and error states, and
+applying a suggestion must re-run the existing availability check and revoke an
+earlier busy-invitee acknowledgement. The transactional database write guard stays
+authoritative if availability changes after the suggestion appears.
+
+Google Calendar's [Find a time](https://support.google.com/calendar/answer/6294878?hl=en)
+compares guest availability without making private event details necessary for
+the booking choice. Its [event model](https://developers.google.com/workspace/calendar/api/concepts/events-calendars)
+distinguishes the organizer and attendees. This phase adapts that interaction to
+Palmstead's current `op_todos`, `schedule_items` and invitation model; room
+availability, working-hours preferences, holidays and multi-day search remain
+separate work. The open-source [Cal.com source](https://github.com/calcom/cal.com)
+is the broader booking-flow reference, not a literal dependency in this slice.
+
+## 2026-10-25 transactional organizer booking guard
+
+The meeting form's last-second availability check still allowed two browser sessions
+to pass together. V2 now takes a transaction-scoped PostgreSQL advisory lock for the
+staff member and Africa/Accra calendar date before every active task or meeting
+booking write. Both tables use the same lock and compare half-open time intervals.
+The rule protects the task assignee and meeting organizer, including direct table
+writes; it does not force invitees to be free. Cancelling or completing an item
+releases its slot, and unrelated edits to an existing active row do not revalidate
+historical conflicts. The UI retains its privacy-safe busy counts and explicit
+busy-invitee choice. A database conflict returns a plain scheduling error in the
+existing create/edit dialog instead of silently booking a second item.
+
+V2 schema inspection found one active to-do, no active meetings and no existing
+meeting/task organizer overlaps before the migration. Rollback-only SQL exercised
+overlapping meeting creation, task time edit, adjacent slots, title edit, and
+cancel-then-rebook. No live business row or SMS was changed. The remaining follow-up
+is to test simultaneous saves from separate sessions and add free-time suggestions
+to the planner. This guard does not reserve invitees or physical meeting rooms.
+
+PostgreSQL documents [transaction advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)
+and [range exclusion constraints](https://www.postgresql.org/docs/current/rangetypes.html#RANGETYPES-CONSTRAINT).
+An exclusion constraint over one table cannot cover both existing task and meeting
+sources without a new shared reservation table, so this narrow phase uses a common
+transaction lock in both write triggers. The existing open-source
+[Cal.com scheduling project](https://github.com/calcom/cal.com) remains the broader
+availability and booking-flow reference for later team planning.
+
+## 2026-10-25 meeting availability slice
+
+Google Calendar compares the organizer and guests' availability when choosing a meeting
+time, while keeping private event details hidden according to permissions. Palmstead's
+task editor already checked collisions; the meeting composer, time editor, and invitee
+editor did not. The new `check_schedule_meeting_availability` RPC reads task and meeting
+intervals for selected active staff and returns only busy counts. Half-open time ranges
+allow adjacent slots, declined invitations do not make a staff member busy, and the
+edited meeting is excluded from its own check. The composer and meeting editors show
+busy staff, prevent an organizer from selecting an overlapping slot, and require an
+explicit choice before inviting or rescheduling a busy attendee. Each save rechecks
+availability. Removing an invitee does not require a new availability check.
+
+This is a scheduling warning and organizer guard in the application, not a serializable
+booking lock. Concurrent writes or direct database clients could still make overlapping
+items. A later phase should move the organizer invariant into one transactional write
+path and add a free-time suggestion view. Verify the Management and Adams UI flows on
+preview and production, including a temporary overlap, before calling this slice complete.
+
+Preview QA exposed a delegated-task ownership error: a task assigned to Adams marked
+Management busy merely because Management created it. The follow-up migration counts
+tasks for their assignee, and the task editor's existing conflict query now uses the
+same rule. Temporary Adams and Management tasks proved the attendee warning and
+organizer block in the browser; both QA tasks were deleted immediately afterward.
+
+References: [Google Calendar Find a time](https://support.google.com/calendar/answer/6294878?hl=en-uk),
+[Google Calendar private and busy events](https://support.google.com/a/users/answer/9282964?hl=en),
+and the open-source [ai-calendar conflict and availability design](https://github.com/damanjz/ai-calendar).
+
+## 2026-10-25 device reminder account check
+
+The older push assessment below predates the task and meeting outbox migrations. The active
+`send-todo-alarms` function now handles `op_todo_push_outbox` due/missed events and
+`op_meeting_push_outbox` invited-meeting events, in addition to legacy schedule items.
+The minute cron is active, and recent HTTP responses returned 200 with both queues empty.
+No device is currently opted in, so handset delivery has not been established.
+
+The schedule control previously treated any browser subscription as enabled for the current
+staff account. On a shared browser, that could show the wrong status and leave a previous
+account's endpoint active. This slice gives authenticated staff SELECT access only to their
+own `push_subscriptions` rows, checks the current endpoint against the signed-in agent key,
+and revokes an endpoint that is not registered to that agent before offering opt-in. Turning
+off reminders now confirms a row was actually removed before revoking the browser endpoint.
+Task and meeting wording now matches the active worker.
+The browser permission request also has a bounded wait: browsers that leave the permission
+prompt unanswered return an actionable retry message instead of a permanently busy button.
+
+The migration was applied only to V2 as `20261025183443_operations_push_subscription_owner_read`.
+Rollback-only SQL inserted two temporary endpoint rows and verified that Adams and Management
+could each see only their own row; the temporary rows were absent afterward. This verifies
+database isolation, not push receipt on a physical device. Remaining validation: opt in a
+supported real browser, schedule a harmless test task and invited meeting, observe due/missed
+notification behavior with the app closed, then remove the test items and subscription.
+
 **Status: phased implementation in progress.** This plan covers the next linked product slice across Operations, Finance, CRM, allocations, and plot inventory. It is based on review of the V2 source tree and connected V2 Supabase project `sbydzrlzqxcdbudjaube`. The missed-task reminder outbox and worker are live. No synthetic tasks, client records, or real SMS messages were used during verification.
 
 ## Outcome

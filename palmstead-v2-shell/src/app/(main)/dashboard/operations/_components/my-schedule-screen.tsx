@@ -17,6 +17,7 @@ import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin from "@fullcalendar/react/interaction";
 import listPlugin from "@fullcalendar/react/list";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
@@ -43,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { ScheduleMeetingComposer, ScheduleMeetingDetails } from "./schedule-meetings-dialogs";
@@ -52,6 +54,7 @@ import {
   calendarDateOnly,
   calendarTime,
   workspaceDateOnly,
+  workspaceDeadline,
   workspaceMonthRange,
 } from "./schedule-time.ts";
 import { getScheduleUrgency } from "./schedule-urgency";
@@ -124,6 +127,147 @@ function toMeetingEvent(meeting: ScheduleMeeting, canEdit: boolean): EventInput 
     classNames: meeting.status === "cancelled" ? ["opacity-50", "line-through"] : [],
     extendedProps: { kind: "meeting", meeting },
   };
+}
+
+type TaskReminderSetting = {
+  defaultMinutes: number;
+  overrideMinutes: number | null;
+  effectiveMinutes: number;
+};
+
+const DEVICE_REMINDER_OPTIONS = [
+  { value: "0", label: "When this task starts" },
+  { value: "15", label: "15 minutes before" },
+  { value: "60", label: "1 hour before" },
+  { value: "1440", label: "1 day before" },
+] as const;
+
+function reminderLeadLabel(minutes: number) {
+  return DEVICE_REMINDER_OPTIONS.find((option) => Number(option.value) === minutes)?.label ?? "When this task starts";
+}
+
+function TaskReminderOverride({ todo }: { todo: Todo }) {
+  const profile = useAuthStore((state) => state.profile);
+  const taskStart = workspaceDeadline(todo.date, todo.startTime);
+  const canChoose =
+    profile?.key === todo.assignedTo && todo.status === "open" && taskStart !== null && taskStart > Date.now();
+  const [draft, setDraft] = useState("default");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const setting = useQuery({
+    queryKey: ["myOpTodoPushOverride", profile?.key, todo.id],
+    enabled: Boolean(profile?.active && canChoose),
+    queryFn: async () => {
+      const { data, error } = await requireSupabase().rpc("get_my_op_todo_push_override", {
+        p_todo_id: todo.id,
+      });
+      if (error) throw error;
+      return data as TaskReminderSetting;
+    },
+  });
+
+  useEffect(() => {
+    if (setting.data)
+      setDraft(setting.data.overrideMinutes === null ? "default" : String(setting.data.overrideMinutes));
+  }, [setting.data]);
+
+  async function save() {
+    if (saving || !setting.data) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const { error } = await requireSupabase().rpc("set_my_op_todo_push_override", {
+        p_todo_id: todo.id,
+        p_minutes: draft === "default" ? null : Number(draft),
+      });
+      if (error) throw error;
+      const refreshed = await setting.refetch();
+      if (refreshed.isError)
+        throw new Error("Saved, but could not refresh this reminder. Reopen the task to check it.");
+      setSaved(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save this reminder. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!canChoose) return null;
+
+  return (
+    <div className="grid min-w-0 gap-2 rounded-md border bg-muted/20 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <BellRing className="size-4" aria-hidden="true" /> Device alert for this task
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Your default is {setting.data ? reminderLeadLabel(setting.data.defaultMinutes).toLowerCase() : "loading"}. This
+        changes only your device alert for this task; company SMS and missed-task reminders stay the same. Alerts
+        already sent cannot be recalled or repeated.
+      </p>
+      {setting.isPending ? <p className="text-xs text-muted-foreground">Loading reminder choice…</p> : null}
+      {setting.isError ? (
+        <p role="alert" className="text-xs text-destructive">
+          Could not load this reminder choice. Reopen the task to retry.
+        </p>
+      ) : null}
+      {setting.data ? (
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="grid min-w-0 flex-1 gap-1">
+            <label htmlFor={`task-reminder-${todo.id}`} className="text-xs font-medium">
+              Alert me
+            </label>
+            <Select
+              value={draft}
+              onValueChange={(value) => {
+                setDraft(value);
+                setSaved(false);
+                setSaveError(null);
+              }}
+              disabled={saving}
+            >
+              <SelectTrigger id={`task-reminder-${todo.id}`} className="w-full min-w-0">
+                <SelectValue placeholder="Choose an alert time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">
+                  Use my default ({reminderLeadLabel(setting.data.defaultMinutes).toLowerCase()})
+                </SelectItem>
+                {DEVICE_REMINDER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void save()}
+            disabled={
+              saving ||
+              draft === (setting.data.overrideMinutes === null ? "default" : String(setting.data.overrideMinutes))
+            }
+          >
+            {saving ? "Saving…" : "Save alert"}
+          </Button>
+        </div>
+      ) : null}
+      {saveError ? (
+        <p role="alert" className="text-xs text-destructive">
+          {saveError}
+        </p>
+      ) : null}
+      {saved ? (
+        <p role="status" className="text-xs text-muted-foreground">
+          Task alert saved.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }) {
@@ -263,6 +407,7 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
               rows={3}
             />
           </div>
+          <TaskReminderOverride todo={todo} />
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}

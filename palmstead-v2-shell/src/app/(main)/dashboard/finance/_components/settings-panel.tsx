@@ -1,19 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import { Image as ImageIcon, Trash2 } from "lucide-react";
 
+import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SubmitButton } from "@/components/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
-import { type FinanceSettings, useFinanceSettings, useRemoveCompanyLogo, useUpdateFinanceSettings, useUploadCompanyLogo } from "./use-finance-settings";
+import { FinanceStructurePanel } from "./finance-structure-panel";
+import {
+  type FinanceSettings,
+  useFinanceSettings,
+  useRemoveCompanyLogo,
+  useUpdateFinanceSettings,
+  useUploadCompanyLogo,
+} from "./use-finance-settings";
 
 // Real Accounting Settings (Part B.7). Closes two real gaps: the
 // company-identity app_config columns (quote_company_name/company_phone/
@@ -37,7 +45,10 @@ function LogoUpload() {
         )}
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="logo-upload" className="w-fit cursor-pointer rounded-md border border-input px-3 py-1.5 text-sm hover:bg-muted">
+        <Label
+          htmlFor="logo-upload"
+          className="w-fit cursor-pointer rounded-md border border-input px-3 py-1.5 text-sm hover:bg-muted"
+        >
           {upload.isPending ? "Uploading…" : "Upload logo"}
         </Label>
         <input
@@ -56,7 +67,9 @@ function LogoUpload() {
             Remove
           </Button>
         )}
-        <p className="text-xs text-muted-foreground">Falls back to the default Trulander logo when empty. Used on Receipt, Commission and Payroll PDFs.</p>
+        <p className="text-xs text-muted-foreground">
+          Falls back to the default Trulander logo when empty. Used on Receipt, Commission and Payroll PDFs.
+        </p>
       </div>
     </div>
   );
@@ -76,7 +89,9 @@ export function SettingsPanel() {
   if (!isManager) {
     return (
       <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">Settings are visible to Management only.</CardContent>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Settings are visible to Management only.
+        </CardContent>
       </Card>
     );
   }
@@ -108,7 +123,9 @@ export function SettingsPanel() {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-lg font-medium">Settings</h2>
-        <p className="text-sm text-muted-foreground">Company identity and bank details used across every Accounting PDF.</p>
+        <p className="text-sm text-muted-foreground">
+          Company identity and bank details used across every Accounting PDF.
+        </p>
       </div>
 
       <Card>
@@ -142,7 +159,9 @@ export function SettingsPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Company bank account</CardTitle>
-          <CardDescription>Shown on the Commission and Payroll sign-off sections, so a report can go straight to the bank.</CardDescription>
+          <CardDescription>
+            Shown on the Commission and Payroll sign-off sections, so a report can go straight to the bank.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {field("bankName", "Bank")}
@@ -152,6 +171,8 @@ export function SettingsPanel() {
           {field("bankSwiftCode", "SWIFT / sort code")}
         </CardContent>
       </Card>
+
+      <FinanceStructurePanel />
 
       <div className="flex justify-end">
         <SubmitButton loading={update.isPending} onClick={() => form && update.mutate(form)}>

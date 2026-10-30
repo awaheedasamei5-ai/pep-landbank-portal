@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
+
 import { Clock, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ghs } from "@/lib/palmstead/format";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -22,7 +26,11 @@ export function OverviewPanel() {
 
   const cards = [
     { icon: TrendingUp, label: "Collected this month", value: data ? ghs(data.collectedThisMonth) : null },
-    { icon: Wallet, label: isManager ? "Outstanding (company-wide)" : "Outstanding (your leads)", value: data ? ghs(data.outstanding) : null },
+    {
+      icon: Wallet,
+      label: isManager ? "Outstanding (company-wide)" : "Outstanding (your leads)",
+      value: data ? ghs(data.outstanding) : null,
+    },
     { icon: TrendingDown, label: "Expense burn this month", value: data ? ghs(data.expenseBurnThisMonth) : null },
     { icon: Clock, label: "Pending approvals", value: data ? String(pendingCount) : null },
   ];
@@ -31,7 +39,9 @@ export function OverviewPanel() {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-lg font-medium">Overview</h2>
-        <p className="text-sm text-muted-foreground">{isManager ? "Real company-wide financial snapshot." : "Your own collected and outstanding this month."}</p>
+        <p className="text-sm text-muted-foreground">
+          {isManager ? "Real company-wide financial snapshot." : "Your own collected and outstanding this month."}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:grid-cols-2 xl:grid-cols-4 dark:*:data-[slot=card]:bg-card">
@@ -53,6 +63,20 @@ export function OverviewPanel() {
           </Card>
         ))}
       </div>
+
+      {isManager && (
+        <Alert>
+          <AlertTitle>Payment balance review</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              Check pipeline balances against approved payment entries before correcting a record or issuing a receipt.
+            </span>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/data-check#payment-reconciliation-title">Open review list</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {data && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">

@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/page-header";
 import { useSessionStore } from "../../../auth/useSessionStore";
 import { useDocumentVault } from "../hooks/useDocumentVault";
 import type { DownloadRecord } from "../../../types/domain";
+import { requireSupabase } from "@/lib/supabase.client";
 
 const KIND_ICON: Record<string, typeof FileText> = { pdf: FileText, excel: FileSpreadsheet, csv: FileSpreadsheet };
 
@@ -29,8 +30,7 @@ function dataUriToBlobUrl(dataUri: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
-function redownload(fileData: string | null, filename: string) {
-  if (!fileData) return;
+function redownload(fileData: string, filename: string) {
   const url = dataUriToBlobUrl(fileData);
   const a = document.createElement("a");
   a.href = url;
@@ -38,7 +38,7 @@ function redownload(fileData: string | null, filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // docs/plans/20-document-vault-plan.md -- real destination for the
@@ -104,6 +104,34 @@ export function DocumentVaultScreen() {
 
 function DownloadRow({ record, showUser }: { record: DownloadRecord; showUser: boolean }) {
   const Icon = KIND_ICON[record.kind] ?? FileIcon;
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function download() {
+    setDownloading(true);
+    setError(null);
+    try {
+      let fileData = record.fileData;
+      if (!fileData) {
+        // The register omits large file_data values. Fetch only the selected
+        // file, with downloads RLS still limiting access to this viewer.
+        const { data, error: loadError } = await requireSupabase()
+          .from("downloads")
+          .select("file_data")
+          .eq("id", record.id)
+          .single();
+        if (loadError) throw loadError;
+        fileData = data?.file_data ?? null;
+      }
+      if (!fileData) throw new Error("This file has no saved copy.");
+      redownload(fileData, record.filename);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The file could not be downloaded.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <TableRow>
       <TableCell className="font-medium">
@@ -118,12 +146,13 @@ function DownloadRow({ record, showUser }: { record: DownloadRecord; showUser: b
       {showUser && <TableCell className="text-muted-foreground">{record.userName}</TableCell>}
       <TableCell className="text-muted-foreground">{fmtDateTime(record.createdAt)}</TableCell>
       <TableCell className="text-right">
-        {record.fileData && (
-          <Button type="button" variant="outline" size="sm" onClick={() => redownload(record.fileData, record.filename)}>
+        <div className="flex flex-col items-end gap-1">
+          <Button type="button" variant="outline" size="sm" disabled={downloading} onClick={download}>
             <Download />
-            Download
+            {downloading ? "Preparing…" : "Download"}
           </Button>
-        )}
+          {error && <span role="alert" className="max-w-48 text-xs text-destructive">{error}</span>}
+        </div>
       </TableCell>
     </TableRow>
   );
