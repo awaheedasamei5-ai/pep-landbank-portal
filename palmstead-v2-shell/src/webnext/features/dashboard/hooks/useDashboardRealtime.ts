@@ -212,6 +212,14 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['pricingHistory'] });
       queryClient.invalidateQueries({ queryKey: ['pricingPromotions'] });
     };
+    // Batch 6 of the full test sweep -- same bug class as attendance_corrections
+    // (Batch 3) and the chat tables (Batch 5): already in the
+    // supabase_realtime publication but never subscribed here, so a Data
+    // Check finding dismissed on one device stayed dismissed-looking-live
+    // only on that device until a manual refresh elsewhere.
+    const invalidateDataCheckDismissals = () => {
+      queryClient.invalidateQueries({ queryKey: ['dataCheckDismissals'] });
+    };
     // Phase 3 of docs/plans/30-master-system-audit-and-unification-plan.md --
     // these tables were in no bridge, and weren't even in the
     // supabase_realtime publication until that same migration. 'leaderboard'
@@ -336,7 +344,8 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_complaints' }, invalidateStaffComplaints)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback' }, invalidateTeamFeedback)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback_comments' }, invalidateTeamFeedback)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_corrections' }, invalidateAttendance);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_corrections' }, invalidateAttendance)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'data_check_dismissals' }, invalidateDataCheckDismissals);
     channel.subscribe();
 
     return () => {
