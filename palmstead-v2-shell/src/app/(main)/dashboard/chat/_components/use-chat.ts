@@ -386,22 +386,41 @@ export function useChatRealtime(myKey: string | undefined) {
       if (stopped) return;
       if (channel) sb.removeChannel(channel);
       attempt += 1;
-      const ch = sb.channel(`chat-messages-${myKey}-${attempt}`).on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const incoming = mapMessage(payload.new as RawMessage);
-            patchMessages(qc, myKey, (prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
-          } else if (payload.eventType === "UPDATE") {
-            const updated = mapMessage(payload.new as RawMessage);
-            patchMessages(qc, myKey, (prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-          } else if (payload.eventType === "DELETE") {
-            const oldId = (payload.old as { id?: string })?.id;
-            if (oldId) patchMessages(qc, myKey, (prev) => prev.filter((m) => m.id !== oldId));
-          }
-        },
-      );
+      const ch = sb
+        .channel(`chat-messages-${myKey}-${attempt}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "messages" },
+          (payload) => {
+            if (payload.eventType === "INSERT") {
+              const incoming = mapMessage(payload.new as RawMessage);
+              patchMessages(qc, myKey, (prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
+            } else if (payload.eventType === "UPDATE") {
+              const updated = mapMessage(payload.new as RawMessage);
+              patchMessages(qc, myKey, (prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+            } else if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string })?.id;
+              if (oldId) patchMessages(qc, myKey, (prev) => prev.filter((m) => m.id !== oldId));
+            }
+          },
+        )
+        // Full test sweep, Batch 5 (docs/plans/38-cross-app-sync-findings-batch5.md):
+        // chat_message_reactions/chat_group_members/chat_groups were all in
+        // the supabase_realtime publication but subscribed nowhere -- a
+        // reaction someone else added, or being added/removed from a group,
+        // never reached an already-open Chat screen without a manual
+        // refresh. Prefix-invalidate (TanStack Query's invalidateQueries
+        // matches by key prefix) rather than patch in place, since these
+        // are low-frequency, low-volume changes unlike the message stream.
+        .on("postgres_changes", { event: "*", schema: "public", table: "chat_message_reactions" }, () => {
+          qc.invalidateQueries({ queryKey: ["chat-reactions"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "chat_group_members" }, () => {
+          qc.invalidateQueries({ queryKey: ["chat-my-groups"] });
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "chat_groups" }, () => {
+          qc.invalidateQueries({ queryKey: ["chat-my-groups"] });
+        });
       ch.subscribe((status) => {
         if (status === "SUBSCRIBED") {
           attempt = 0;
