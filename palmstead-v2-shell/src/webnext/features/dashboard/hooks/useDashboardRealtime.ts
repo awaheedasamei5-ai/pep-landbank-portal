@@ -250,6 +250,25 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['chat-status-viewers'] });
       queryClient.invalidateQueries({ queryKey: ['chat-status-my-views'] });
     };
+    // Found during the full-app test sweep (Batch 3): Staff Hub's own 4
+    // tabs (Notice Board/Polls/Complaints/Feedback) and
+    // attendance_corrections were in no bridge at all -- a post, vote,
+    // concern, or correction request on one device left every other open
+    // session's copy of these screens stale until a manual refresh,
+    // unlike every other app in this bridge.
+    const invalidateNoticeBoard = () => {
+      queryClient.invalidateQueries({ queryKey: ['noticeBoard'] });
+    };
+    const invalidatePolls = () => {
+      queryClient.invalidateQueries({ queryKey: ['polls'] });
+    };
+    const invalidateStaffComplaints = () => {
+      queryClient.invalidateQueries({ queryKey: ['staffComplaints'] });
+    };
+    const invalidateTeamFeedback = () => {
+      queryClient.invalidateQueries({ queryKey: ['teamFeedback'] });
+      queryClient.invalidateQueries({ queryKey: ['feedbackComments'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -310,7 +329,14 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_approvals' }, invalidateContractApprovals)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contract_fields' }, invalidateContractFields)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_status_updates' }, invalidateChatStatus)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_status_views' }, invalidateChatStatus);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_status_views' }, invalidateChatStatus)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notice_board_posts' }, invalidateNoticeBoard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'polls' }, invalidatePolls)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'poll_votes' }, invalidatePolls)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_complaints' }, invalidateStaffComplaints)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback' }, invalidateTeamFeedback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback_comments' }, invalidateTeamFeedback)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_corrections' }, invalidateAttendance);
     channel.subscribe();
 
     return () => {
