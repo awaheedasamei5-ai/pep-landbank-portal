@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { VendorInvoiceEvidence } from "./vendor-invoice-evidence";
 import { VendorSettlementPanel } from "./vendor-settlement-panel";
 
 type Vendor = {
@@ -38,6 +39,7 @@ type Bill = {
   revision: number;
   created_by: string;
   approved_at: string | null;
+  invoice_proof_path: string | null;
 };
 type BillEvent = { id: number; actor_id: string; action: string; note: string; occurred_at: string };
 type Person = { id: string; name: string };
@@ -81,7 +83,7 @@ export function VendorsPanel() {
         sb
           .from("finance_vendor_bills")
           .select(
-            "id,vendor_id,vendor_name_snapshot,invoice_number,invoice_date,due_date,category,description,amount,status,revision,created_by,approved_at",
+            "id,vendor_id,vendor_name_snapshot,invoice_number,invoice_date,due_date,category,description,amount,status,revision,created_by,approved_at,invoice_proof_path",
           )
           .order("due_date")
           .limit(200),
@@ -590,13 +592,21 @@ export function VendorsPanel() {
                       <p className="whitespace-pre-wrap break-words">{selected.description}</p>
                     </div>
                   </div>
+                  <VendorInvoiceEvidence
+                    key={selected.id}
+                    bill={selected}
+                    canAttach={Boolean(clerk && selected.created_by === data?.userId && selected.status === "draft")}
+                  />
                   <div className="flex flex-wrap gap-2">
                     {clerk && selected.created_by === data?.userId && selected.status === "draft" && (
                       <>
                         <Button variant="outline" onClick={() => startEdit(selected)}>
                           Edit draft
                         </Button>
-                        <Button disabled={mutation.isPending} onClick={() => decide("submit")}>
+                        <Button
+                          disabled={mutation.isPending || !selected.invoice_proof_path}
+                          onClick={() => decide("submit")}
+                        >
                           Submit for Finance review
                         </Button>
                         <Button variant="outline" disabled={mutation.isPending} onClick={() => decide("cancel")}>
