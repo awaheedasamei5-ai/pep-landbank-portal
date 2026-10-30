@@ -1,7 +1,13 @@
 # Batch 3 — Full Test Sweep + Cross-App Sync Findings
 
 Apps covered: Directory, Staff Hub (Notice Board / Polls / Complaints / Feedback), Attendance, Leave.
-Tested live as Adams (agent) and Management against the real `sbydzrlzqxcdbudjaube` project. Part of the full exhaustive test sweep requested 2026-10-30.
+Tested live as both Adams (agent) and Management against the real `sbydzrlzqxcdbudjaube` project. Part of the full exhaustive test sweep requested 2026-10-30.
+
+**Management-role pass, additional findings**:
+- Directory: identical for Management, no manager-only differences (expected — it's a shared staff list).
+- Staff Hub: Notice Board gains a real "Board / Reported" moderation toggle for Management (matches the `notice_board_reports` table found in the Adams pass). Complaints tab correctly shows the full company list (1 real complaint, "Office AC not working", status "Investigating") vs. Adams's empty "nothing submitted" state — `staff_complaints_sel` RLS confirmed working as designed.
+- Attendance: `/dashboard/attendance/management` is a real, separate Management dashboard (Records/Exceptions/Corrections/Policy & Locations tabs, "who's in today" live tiles). Policy & Locations settings page is real and complete (late/workday policy with versioning, real geofenced office locations). Same onTimeRate 100%-default issue applies to Management's own personal stats too (same root cause, not re-logged separately).
+- Leave: `/dashboard/leave/management` is a real, separate Management dashboard (Reports/Company-wide requests/Team calendar/Reminders/Settings). Company-wide requests screen initially appeared to show "0 requests" despite 3 real rows existing in the database — **investigated and confirmed to be a loading-race false alarm, not a bug**: the page reads `requests ?? []` before the query resolves, so an early read catches it empty; a few seconds later it correctly shows all 3 real requests (Adams/Elias/Abdul Waheed) with full per-staff roster breakdown. Settings page (annual quota, Eid windows, company closures) is real and complete.
 
 ---
 
