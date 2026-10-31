@@ -9,14 +9,38 @@ import type { Config, Lead, PlotType } from '../../../types/domain';
 // much larger geometry-driven feature, deliberately out of scope here.
 export const PLAN_MONTHS: Record<PaymentPlanKey, number> = { 'Full Payment': 0, '3 Months': 3, '6 Months': 6, '9 Months': 9, '12 Months': 12 };
 
-// Deposit is 30% of the NET price only (list minus discount, interest NOT
-// included) -- confirmed against a real index.html test case with non-zero
-// interest on the books (index.html:16571-16585's own documented
-// debugging note): GHS 48,000 list, GHS 3,000 interest (12-month), deposit
-// must read GHS 14,400 (30% of net) not GHS 15,300 (30% of the GHS 51,000
-// grand). Getting this backwards is the exact bug that test caught once
-// already -- ported as a fixed constant, not re-derived.
+// Deposit is, by default, a configurable % of the NET price only (list
+// minus discount, interest NOT included) -- confirmed against a real
+// index.html test case with non-zero interest on the books
+// (index.html:16571-16585's own documented debugging note): GHS 48,000
+// list, GHS 3,000 interest (12-month), a 30% default deposit must read
+// GHS 14,400 (30% of net) not GHS 15,300 (30% of the GHS 51,000 grand).
+// Getting this backwards is the exact bug that test caught once already.
+// This constant is now only the LAST-RESORT fallback for a config row that
+// somehow has no value at all -- the real, live, staff-editable number is
+// `config.defaultDepositPct` (real column default_deposit_pct, added
+// 2026-10-31, Quotation Settings' own "Default deposit %" field). Never
+// read this constant directly for a real calculation; use
+// defaultDepositPctFraction(config) below so a Settings change actually
+// takes effect everywhere.
 export const QUOTE_DEPOSIT_PCT = 0.3;
+
+// config.defaultDepositPct is stored 0-100 (same convention as
+// allocationThresholdPct), this returns the 0-1 fraction every calculation
+// below actually multiplies by.
+export function defaultDepositPctFraction(config: Config): number {
+  const pct = config.defaultDepositPct;
+  return pct != null && pct >= 0 ? pct / 100 : QUOTE_DEPOSIT_PCT;
+}
+
+// The 3 real deposit-input modes the Quotation calculator UI offers (user
+// ask 2026-10-31): 'standard' uses config.defaultDepositPct as-is; 'percent'
+// lets staff type any other percent for just this one quotation without
+// changing the company-wide default; 'amount' lets staff type a real cash
+// figure when the client already knows exactly what they want to pay as
+// deposit, and everything else (balance, monthly schedule) is derived from
+// grand-total minus that amount instead of from any percent at all.
+export type DepositOverride = { mode: 'percent'; value: number } | { mode: 'amount'; value: number } | null;
 
 export type PaymentPlanKey = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
 
@@ -60,14 +84,19 @@ export function interestFor(config: Config, plan: PaymentPlanKey): number {
 // behavior -- see QUOTE_DEPOSIT_PCT's own comment above: deposit is 30%
 // of net only). Standard and Technical Quotation both now let the client
 // choose true instead -- deposit as 30% of the net+interest grand.
-function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number, depositIncludesInterest = false): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
+function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number, depositIncludesInterest = false, depositAmountOverride: number | null = null): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
   const grand = net + interestTotal;
   let deposit = 0;
   let balance = grand;
   let monthlyDue = 0;
   const schedule: InstallmentScheduleRow[] = [];
   if (planMonths && grand > 0) {
-    deposit = Math.round((depositIncludesInterest ? grand : net) * depositPct);
+    // A real typed-in cash amount always wins over any percent -- that's
+    // the whole point of the "deposit amount" mode (user ask 2026-10-31):
+    // the client already told us the number, don't re-derive it from %.
+    // Clamped to [0, grand] so a mistyped figure larger than the whole
+    // quotation can't produce a negative balance.
+    deposit = depositAmountOverride != null ? Math.min(Math.max(depositAmountOverride, 0), grand) : Math.round((depositIncludesInterest ? grand : net) * depositPct);
     balance = grand - deposit;
     monthlyDue = Math.round(balance / planMonths);
     let opening = balance;
@@ -81,7 +110,7 @@ function computeInstallmentPlan(net: number, interestTotal: number, planMonths: 
   return { grand, deposit, balance, monthlyDue, schedule };
 }
 
-export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey, depositIncludesInterest = false): QuotationTotals {
+export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey, depositIncludesInterest = false, depositOverride: DepositOverride = null): QuotationTotals {
   const p = pricingFor(config, plotType);
   // noPlots is a full-plot-equivalent count (0.5 = one Half Plot), matching
   // previewGrandTotal/computeLeadQuotationTotals below -- see
@@ -95,7 +124,13 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
   const net = Math.max(listTotal - discountTotal, 0);
   const interestTotal = interestFor(config, plan) * eq;
   const planMonths = PLAN_MONTHS[plan] ?? 0;
-  const ip = computeInstallmentPlan(net, interestTotal, planMonths, QUOTE_DEPOSIT_PCT, depositIncludesInterest);
+  // 'percent' mode overrides just this one quotation's %, clamped to a
+  // sane 0-100 range; 'amount' mode bypasses % entirely (see
+  // computeInstallmentPlan's own comment). Neither mode touches
+  // config.defaultDepositPct itself -- that only changes via Settings.
+  const depositPct = depositOverride?.mode === 'percent' ? Math.max(0, Math.min(100, depositOverride.value)) / 100 : defaultDepositPctFraction(config);
+  const depositAmountOverride = depositOverride?.mode === 'amount' ? depositOverride.value : null;
+  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest, depositAmountOverride);
   return { listTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
 }
 
@@ -122,7 +157,7 @@ export function computeLeadQuotationTotals(config: Config, lead: Lead): Quotatio
   const net = lead.netTotal != null ? lead.netTotal : computedNet;
   const grand = lead.grandTotal != null ? lead.grandTotal : net + interestTotal;
   const planMonths = PLAN_MONTHS[lead.paymentPlan] ?? 0;
-  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * QUOTE_DEPOSIT_PCT);
+  const target = lead.depositTarget != null ? lead.depositTarget : Math.round(net * defaultDepositPctFraction(config));
 
   let deposit = 0;
   let balance = grand;
@@ -217,7 +252,7 @@ export function computeTechnicalQuotationTotals(config: Config, fullCount: numbe
   const eq = baseArea > 0 ? totalArea / baseArea : 0;
   const interestTotal = Math.round(interestFor(config, plan) * eq);
   const planMonths = PLAN_MONTHS[plan] ?? 0;
-  const depositPct = depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : QUOTE_DEPOSIT_PCT;
+  const depositPct = depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : defaultDepositPctFraction(config);
   const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest);
   return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
 }

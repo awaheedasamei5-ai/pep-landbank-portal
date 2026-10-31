@@ -584,6 +584,7 @@ export interface DataSource {
           | "int6"
           | "int9"
           | "int12"
+          | "defaultDepositPct"
           | "techFullPlotLengthFt"
           | "techFullPlotWidthFt"
           | "techHalfPlotLengthFt"
@@ -2666,6 +2667,7 @@ function createLiveDataSource(): DataSource {
         if (patch.int6 !== undefined) dbPatch.int_6 = patch.int6;
         if (patch.int9 !== undefined) dbPatch.int_9 = patch.int9;
         if (patch.int12 !== undefined) dbPatch.int_12 = patch.int12;
+        if (patch.defaultDepositPct !== undefined) dbPatch.default_deposit_pct = patch.defaultDepositPct;
         if (patch.techFullPlotLengthFt !== undefined) dbPatch.tech_full_plot_length_ft = patch.techFullPlotLengthFt;
         if (patch.techFullPlotWidthFt !== undefined) dbPatch.tech_full_plot_width_ft = patch.techFullPlotWidthFt;
         if (patch.techHalfPlotLengthFt !== undefined) dbPatch.tech_half_plot_length_ft = patch.techHalfPlotLengthFt;

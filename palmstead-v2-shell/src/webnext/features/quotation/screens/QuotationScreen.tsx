@@ -7,7 +7,7 @@ import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
-import { computeQuotationTotals, type PaymentPlanKey } from '../lib/quotationLogic';
+import { computeQuotationTotals, defaultDepositPctFraction, type DepositOverride, type PaymentPlanKey } from '../lib/quotationLogic';
 import type { PlotType } from '../../../types/domain';
 import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
 import { TemplateSettingsTab } from './TemplateSettingsTab';
@@ -43,6 +43,16 @@ export function QuotationScreen() {
   // as 30% of net alone (standard, unchanged default) or of net+interest
   // together. See computeInstallmentPlan's own comment in quotationLogic.ts.
   const [depositIncludesInterest, setDepositIncludesInterest] = useState(false);
+  // Real user ask (2026-10-31): the deposit doesn't have to be the
+  // company's standard %, configured in Quotation Settings -- a client
+  // may already know a different % or a real cash figure they want to pay.
+  // 'standard' always reflects whatever Settings currently says (so a
+  // later Settings change is picked up live, not frozen at page-load);
+  // 'percent'/'amount' are this-quotation-only overrides, typed as a
+  // string so the field can be legitimately empty mid-edit.
+  const [depositMode, setDepositMode] = useState<'standard' | 'percent' | 'amount'>('standard');
+  const [depositPercentInput, setDepositPercentInput] = useState('');
+  const [depositAmountInput, setDepositAmountInput] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
   const [clientAddress, setClientAddress] = useState('');
@@ -54,7 +64,12 @@ export function QuotationScreen() {
     setNoPlots(plotType === 'Half Plot' ? 0.5 : 1);
   }, [plotType, noPlotsTouched]);
 
-  const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest) : null;
+  const depositOverride: DepositOverride =
+    depositMode === 'percent' && depositPercentInput !== '' ? { mode: 'percent', value: Number(depositPercentInput) || 0 } :
+    depositMode === 'amount' && depositAmountInput !== '' ? { mode: 'amount', value: Number(depositAmountInput) || 0 } :
+    null;
+  const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest, depositOverride) : null;
+  const standardPct = config ? Math.round(defaultDepositPctFraction(config) * 1000) / 10 : 30;
 
   return (
     <div className={styles.wrap}>
@@ -121,10 +136,54 @@ export function QuotationScreen() {
             value={depositIncludesInterest ? 'with' : 'without'}
             onChange={(e) => setDepositIncludesInterest(e.target.value === 'with')}
           >
-            <option value="without">Before interest &mdash; 30% of the net price only</option>
-            <option value="with">After interest &mdash; 30% of net + interest combined</option>
+            <option value="without">Before interest &mdash; {standardPct}% of the net price only</option>
+            <option value="with">After interest &mdash; {standardPct}% of net + interest combined</option>
           </select>
         </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Deposit amount</label>
+          <select
+            className={styles.select}
+            value={depositMode}
+            onChange={(e) => setDepositMode(e.target.value as typeof depositMode)}
+          >
+            <option value="standard">Standard &mdash; {standardPct}% (set in Quotation Settings)</option>
+            <option value="percent">Custom percent</option>
+            <option value="amount">Fixed amount the client wants to pay</option>
+          </select>
+        </div>
+        {depositMode === 'percent' && (
+          <div className={styles.field}>
+            <label className={styles.label}>Deposit percent (%)</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              placeholder={`e.g. ${standardPct}`}
+              value={depositPercentInput}
+              onChange={(e) => setDepositPercentInput(e.target.value)}
+            />
+          </div>
+        )}
+        {depositMode === 'amount' && (
+          <div className={styles.field}>
+            <label className={styles.label}>Deposit amount (GHS)</label>
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              placeholder="e.g. 15000"
+              value={depositAmountInput}
+              onChange={(e) => setDepositAmountInput(e.target.value)}
+            />
+            <p className={styles.sub} style={{ marginTop: 6, fontSize: 12 }}>
+              The monthly schedule below is calculated from the grand total minus this exact amount &mdash; the "before/after interest" choice above is ignored while this mode is active, since the deposit is no longer a
+              percentage of anything.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className={styles.card}>
@@ -161,7 +220,16 @@ export function QuotationScreen() {
           {totals.planMonths > 0 ? (
             <>
               <div className={styles.card}>
-                <SummaryRow label={`Deposit (30% of ${depositIncludesInterest ? 'net + interest' : 'net'})`} value={ghs(totals.deposit)} />
+                <SummaryRow
+                  label={
+                    depositMode === 'amount'
+                      ? 'Deposit (fixed amount)'
+                      : depositMode === 'percent' && depositPercentInput !== ''
+                        ? `Deposit (${depositPercentInput}% of ${depositIncludesInterest ? 'net + interest' : 'net'})`
+                        : `Deposit (${standardPct}% of ${depositIncludesInterest ? 'net + interest' : 'net'})`
+                  }
+                  value={ghs(totals.deposit)}
+                />
                 <SummaryRow label="Balance after deposit" value={ghs(totals.balance)} />
                 <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={ghs(totals.monthlyDue)} strong />
               </div>

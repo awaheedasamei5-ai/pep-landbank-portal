@@ -797,6 +797,7 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     int6: Number(r.int_6 ?? 1500),
     int9: Number(r.int_9 ?? 2250),
     int12: Number(r.int_12 ?? 3000),
+    defaultDepositPct: Number(r.default_deposit_pct ?? 30),
     quoteCompanyName: (r.quote_company_name as string) ?? "Trulander JSF Limited",
     quoteSiteName: (r.quote_site_name as string) ?? "",
     companyPhone: (r.company_phone as string) ?? "",

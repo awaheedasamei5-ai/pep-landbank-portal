@@ -581,6 +581,11 @@ export interface Config {
   int6: number;
   int9: number;
   int12: number;
+  // Real column default_deposit_pct (added 2026-10-31) -- the Quotation
+  // calculator's own standard deposit percent, previously hardcoded to 30
+  // in quotationLogic.ts's QUOTE_DEPOSIT_PCT. Same 0-100 convention as
+  // allocationThresholdPct below, not a 0-1 fraction.
+  defaultDepositPct: number;
   // Real columns quote_company_name/quote_site_name/company_phone/
   // company_email/company_tin/quote_footer_address/receipt_thanks_text/
   // receipt_logo_image (confirmed live) -- company identity shown on

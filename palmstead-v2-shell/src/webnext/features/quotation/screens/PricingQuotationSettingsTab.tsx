@@ -38,6 +38,7 @@ const PRICING_FIELD_LABELS: Record<string, string> = {
   int6: '6 Months interest',
   int9: '9 Months interest',
   int12: '12 Months interest',
+  defaultDepositPct: 'Default deposit %',
   techFullPlotLengthFt: 'Full Plot length (ft)',
   techFullPlotWidthFt: 'Full Plot width (ft)',
   techHalfPlotLengthFt: 'Half Plot length (ft)',
@@ -55,6 +56,7 @@ function PricingSettingsSection({ config }: { config: Config }) {
   const [int6, setInt6] = useState(String(config.int6));
   const [int9, setInt9] = useState(String(config.int9));
   const [int12, setInt12] = useState(String(config.int12));
+  const [defaultDepositPct, setDefaultDepositPct] = useState(String(config.defaultDepositPct));
   const [techFullLen, setTechFullLen] = useState(String(config.techFullPlotLengthFt));
   const [techFullWid, setTechFullWid] = useState(String(config.techFullPlotWidthFt));
   const [techHalfLen, setTechHalfLen] = useState(String(config.techHalfPlotLengthFt));
@@ -71,6 +73,7 @@ function PricingSettingsSection({ config }: { config: Config }) {
     int6: Number(int6),
     int9: Number(int9),
     int12: Number(int12),
+    defaultDepositPct: Number(defaultDepositPct),
     techFullPlotLengthFt: Number(techFullLen),
     techFullPlotWidthFt: Number(techFullWid),
     techHalfPlotLengthFt: Number(techHalfLen),
@@ -142,6 +145,16 @@ function PricingSettingsSection({ config }: { config: Config }) {
           <label className={styles.label}>12 Months (GHS)</label>
           <input className={styles.input} type="number" value={int12} onChange={(e) => setInt12(e.target.value)} />
         </div>
+      </div>
+
+      <div className={styles.sectionSubtitle}>Standard deposit</div>
+      <p className={styles.sectionHint}>
+        The percent a quotation uses by default when no custom percent or fixed amount is chosen for that one quotation &mdash; applies to the Quotation calculator, Technical Quotation, and any new lead&apos;s deposit target
+        going forward. Doesn&apos;t change any existing lead already saved with its own deposit target.
+      </p>
+      <div className={styles.field}>
+        <label className={styles.label}>Default deposit percent (%)</label>
+        <input className={styles.input} type="number" min={0} max={100} step={0.5} value={defaultDepositPct} onChange={(e) => setDefaultDepositPct(e.target.value)} />
       </div>
 
       <div className={styles.sectionSubtitle}>Technical Quotation — standard plot dimensions (ft)</div>
