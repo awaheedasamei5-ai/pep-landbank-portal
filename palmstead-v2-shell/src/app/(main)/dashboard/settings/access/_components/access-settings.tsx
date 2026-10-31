@@ -19,6 +19,8 @@ const SUPPORTED_KEYS = [
   "operations.todos.manage",
   "operations.projects.view",
   "operations.projects.manage",
+  "operations.meetings.view",
+  "operations.meetings.manage",
 ];
 
 export function AccessSettings() {
@@ -110,8 +112,8 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then allow or restrict their Operations to-dos and shared projects. Changes to
-          projects also affect work items, comments, and project reports.
+          Choose a staff member, then allow or restrict their Operations to-dos, projects, and meetings. Project access
+          also covers work items, comments, and project reports.
         </p>
       </div>
       {loading && (
