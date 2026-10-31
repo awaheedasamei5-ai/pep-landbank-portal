@@ -43,6 +43,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
   const [error, setError] = useState<string | null>(null);
   const [newIssueName, setNewIssueName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [access, setAccess] = useState<{ view: boolean; manage: boolean } | null>(null);
   const [filters, setFilters] = useState<IssueFilters>({ priority: null, stateGroup: null });
 
   const issueRoot = store.issue;
@@ -58,7 +59,16 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
     (async () => {
       setLoading(true);
       try {
-        await ensureCurrentPlaneUser(requireSupabase(), store.user);
+        const client = requireSupabase();
+        const [viewGrant, manageGrant] = await Promise.all([
+          client.rpc("has_permission", { p_key: "operations.projects.view" }),
+          client.rpc("has_permission", { p_key: "operations.projects.manage" }),
+        ]);
+        if (viewGrant.error || manageGrant.error) throw new Error("Project access could not be checked.");
+        const nextAccess = { view: viewGrant.data === true, manage: viewGrant.data === true && manageGrant.data === true };
+        if (!cancelled) setAccess(nextAccess);
+        if (!nextAccess.view) return;
+        await ensureCurrentPlaneUser(client, store.user);
         if (!project) await store.projectRoot.project.fetchProjectDetails(WORKSPACE_SLUG, projectId);
         await Promise.all([
           stateStore.fetchProjectStates(WORKSPACE_SLUG, projectId),
@@ -100,7 +110,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
   });
 
   async function createIssue() {
-    if (!newIssueName.trim()) return;
+    if (!access?.manage || !newIssueName.trim()) return;
     setCreating(true);
     try {
       await projectIssues.createIssue(WORKSPACE_SLUG, projectId, { name: newIssueName.trim() });
@@ -116,6 +126,12 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
     <div>
       <PortalBackLink fallback="/dashboard/operations" className="mb-2" />
 
+      {!loading && access?.view === false && (
+        <Card><CardContent className="pt-6 text-sm text-muted-foreground">Project access is restricted for this account.</CardContent></Card>
+      )}
+
+      {access?.view && <>
+
       <PageHeader
         title={project?.name ?? "Project"}
         description={project ? `${project.identifier} · real op_issues rows` : undefined}
@@ -123,11 +139,11 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
           <Tabs value={view} onValueChange={setView} className="min-w-0 max-w-full overflow-x-auto pb-2">
             <TabsList aria-label="Project sections">
               <TabsTrigger value="list">List</TabsTrigger>
-              <TabsTrigger value="board">Board</TabsTrigger>
-              <TabsTrigger value="cycles">Cycles</TabsTrigger>
-              <TabsTrigger value="modules">Modules</TabsTrigger>
-              <TabsTrigger value="views">Views</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+              {access.manage && <TabsTrigger value="board">Board</TabsTrigger>}
+              {access.manage && <TabsTrigger value="cycles">Cycles</TabsTrigger>}
+              {access.manage && <TabsTrigger value="modules">Modules</TabsTrigger>}
+              {access.manage && <TabsTrigger value="views">Views</TabsTrigger>}
+              {access.manage && <TabsTrigger value="settings">Settings</TabsTrigger>}
             </TabsList>
           </Tabs>
         }
@@ -136,7 +152,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
       {(view === "list" || view === "board") && (
         <Card className="mb-4">
           <CardContent className="flex flex-wrap gap-2 pt-6">
-            <Input
+            {access.manage && <><Input
               placeholder="New issue name"
               value={newIssueName}
               onChange={(e) => setNewIssueName(e.target.value)}
@@ -146,7 +162,7 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
             <SubmitButton type="button" loading={creating} onClick={createIssue}>
               <Plus />
               Add
-            </SubmitButton>
+            </SubmitButton></>}
             {view === "list" && (
               <div className="ml-auto flex gap-2">
                 <Select value={filters.stateGroup ?? "all"} onValueChange={(v) => setFilters((f) => ({ ...f, stateGroup: v === "all" ? null : v }))}>
@@ -183,7 +199,9 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {view === "cycles" ? (
+      {!access.manage && view !== "list" ? (
+        <p className="text-sm text-muted-foreground">This project is read-only for your account. Open the List tab to view work items.</p>
+      ) : view === "cycles" ? (
         <CyclesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
       ) : view === "modules" ? (
         <ModulesPanel workspaceSlug={WORKSPACE_SLUG} projectId={projectId} />
@@ -258,6 +276,8 @@ export const ProjectIssuesScreen = observer(function ProjectIssuesScreen({ proje
       ) : (
         <IssueKanbanBoard workspaceSlug={WORKSPACE_SLUG} projectId={projectId} projectIdentifier={project?.identifier} />
       )}
+      </>}
     </div>
   );
 });
+
