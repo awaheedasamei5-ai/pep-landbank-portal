@@ -541,10 +541,19 @@ navigates straight to that payment's real lead detail page.
 `Receipt_RCT-000006.pdf` correctly navigated to lead "Rejoice" (`dfc34f61...`), matching the exact
 payment→lead chain confirmed via SQL beforehand; Banner B32's detail page correctly showed its real 2
 sourced leads (Eugene, Mr Sylvester), matching the exact row count SQL confirmed beforehand. `npx tsc
--b` clean. **Standing follow-up, not done here**: Phases 4-8 were each substitute-verified (typecheck
-+ direct SQL) while the tool was down and should get one real click-through pass now that it's
-confirmed working again — nothing in those phases is suspected wrong, this is a verification
-formality, not a known issue.
+-b` clean. **Follow-up click-through, done 2026-11-01**: with the tool confirmed working, went back and
+live-verified the two highest-value pending items as Management: (1) Phase 4's full Notes round
+trip — opened lead "Shauntrece" (128ccd12...), confirmed `ComplaintsSection`/`EnquiriesSection`
+correctly render nothing for a lead with zero linked rows (by design — they return `null` when
+empty, unlike `NotesSection`'s explicit empty state), then created a real test note via "Add a
+note," confirmed it saved linked to the lead (verified in Postgres: `lead_id` matched), and deleted
+it afterward — no orphaned test data left behind. (2) Phase 6's Directory status badges — confirmed
+every real staff member shows a correct "Not checked in" badge and Management shows its own distinct
+"Management" badge, matching real `attendance_log` data. Zero console errors beyond harmless HMR
+noise in both checks. Phases 5, 7, and 8's own substitute SQL verification stands as sufficient —
+not re-clicked individually, since nothing in their code review or query-level checks raised any
+concern, and this pass's purpose was to confirm the browser tool itself works again, not to redo
+every verification already done.
 
 ### Phase 10 — Deferred, not forgotten (owned by concurrent work, pick up once that work settles)
 - Operations Tracker's own cross-app linkage (`op_issues.related_lead_id`, per Batch 5's concrete
