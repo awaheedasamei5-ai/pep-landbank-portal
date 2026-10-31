@@ -567,7 +567,7 @@ export function OperationsCommandCenter({
 							<CardDescription>Jump straight into the work.</CardDescription>
 						</CardHeader>
 						<CardContent className="grid grid-cols-2 gap-2">
-							<Button
+							{onNewProject && <Button
 								variant="outline"
 								className="h-auto flex-col items-start gap-1 py-3"
 								onClick={() => {
@@ -577,7 +577,7 @@ export function OperationsCommandCenter({
 							>
 								<FolderPlus className="size-4" />
 								New project
-							</Button>
+							</Button>}
 							<Button
 								variant="outline"
 								className="h-auto flex-col items-start gap-1 py-3"
@@ -723,7 +723,7 @@ export function OperationsCommandCenter({
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-						<Button
+						{onNewProject && <Button
 							variant="outline"
 							className="h-auto flex-col items-start gap-1 py-3"
 							onClick={() => {
@@ -733,7 +733,7 @@ export function OperationsCommandCenter({
 						>
 							<FolderPlus className="size-4" />
 							New project
-						</Button>
+						</Button>}
 						<Button
 							variant="outline"
 							className="h-auto flex-col items-start gap-1 py-3"
@@ -794,3 +794,4 @@ export function OperationsCommandCenter({
 		</div>
 	);
 }
+

@@ -41,6 +41,7 @@ export const OperationsTrackerScreen = observer(
 		const [newName, setNewName] = useState("");
 		const [newIdentifier, setNewIdentifier] = useState("");
 		const [creating, setCreating] = useState(false);
+		const [projectAccess, setProjectAccess] = useState({ view: false, manage: false });
 		const projectStore = store.projectRoot.project;
 		const canResetData = useAuthStore((state) => state.profile?.role === "manager" && state.profile.active);
 
@@ -49,9 +50,18 @@ export const OperationsTrackerScreen = observer(
 			let cancelled = false;
 			(async () => {
 				try {
-					await ensureCurrentPlaneUser(requireSupabase(), store.user);
-					await store.workspaceRoot.fetchWorkspaces();
-					await projectStore.fetchProjects(WORKSPACE_SLUG);
+					const client = requireSupabase();
+					const [viewGrant, manageGrant] = await Promise.all([
+						client.rpc("has_permission", { p_key: "operations.projects.view" }),
+						client.rpc("has_permission", { p_key: "operations.projects.manage" }),
+					]);
+					if (viewGrant.error || manageGrant.error) throw new Error("Project access could not be checked.");
+					if (!cancelled) setProjectAccess({ view: viewGrant.data === true, manage: viewGrant.data === true && manageGrant.data === true });
+					if (viewGrant.data === true) {
+						await ensureCurrentPlaneUser(client, store.user);
+						await store.workspaceRoot.fetchWorkspaces();
+						await projectStore.fetchProjects(WORKSPACE_SLUG);
+					}
 				} catch (err) {
 					if (!cancelled)
 						setError(
@@ -72,7 +82,7 @@ export const OperationsTrackerScreen = observer(
 		const projectIds = projectStore.workspaceProjectIds ?? [];
 
 		async function createProject() {
-			if (!newName.trim() || !newIdentifier.trim()) return;
+			if (!projectAccess.manage || !newName.trim() || !newIdentifier.trim()) return;
 			setCreating(true);
 			try {
 				await projectStore.createProject(WORKSPACE_SLUG, {
@@ -113,24 +123,27 @@ export const OperationsTrackerScreen = observer(
 
 				{view === "overview" && (
 					<>
-						<div className="mb-6">
+						{!projectAccess.view && !loading && (
+							<Card className="mb-6"><CardContent className="pt-6 text-sm text-muted-foreground">Project access is restricted for this account. Your schedule remains available.</CardContent></Card>
+						)}
+						{projectAccess.view && <div className="mb-6">
 							<OperationsCommandCenter
-								onNewProject={() => setShowNewProject(true)}
+								onNewProject={projectAccess.manage ? () => setShowNewProject(true) : undefined}
 							/>
-						</div>
+						</div>}
 
-						<div
+						{projectAccess.view && <div
 							id="projects-section"
 							className="mb-3 flex scroll-mt-20 items-center justify-between"
 						>
 							<h2 className="font-semibold text-lg">Projects</h2>
-							<Button onClick={() => setShowNewProject((v) => !v)} size="sm">
+							{projectAccess.manage && <Button onClick={() => setShowNewProject((v) => !v)} size="sm">
 								<Plus />
 								New project
-							</Button>
-						</div>
+							</Button>}
+						</div>}
 
-						{showNewProject && (
+						{projectAccess.manage && showNewProject && (
 							<Card className="mb-4">
 								<CardContent className="grid grid-cols-1 gap-2 pt-6 sm:flex sm:flex-wrap sm:items-center">
 									<Input
@@ -176,7 +189,7 @@ export const OperationsTrackerScreen = observer(
 							</div>
 						)}
 
-						{!loading && !error && (
+						{projectAccess.view && !loading && !error && (
 							<div className="grid gap-4 xl:grid-cols-12">
 								{projectIds.length === 0 && (
 									<Card className="xl:col-span-12">
@@ -223,3 +236,4 @@ export const OperationsTrackerScreen = observer(
 		);
 	},
 );
+
