@@ -270,7 +270,7 @@ function TaskReminderOverride({ todo }: { todo: Todo }) {
   );
 }
 
-function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }) {
+function TodoDetailDialog({ todo, onClose, canManage }: { todo: Todo; onClose: () => void; canManage: boolean }) {
   const profile = useAuthStore((s) => s.profile);
   const updateStatus = useUpdateTodoStatus();
   const updateTodo = useUpdateTodo();
@@ -356,13 +356,14 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit task</DialogTitle>
+          <DialogTitle>{canManage ? "Edit task" : "Task details"}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1.5 text-sm font-medium">
             <label htmlFor="todo-edit-title">Task title</label>
             <Input
               id="todo-edit-title"
+              disabled={!canManage}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What needs to get done?"
@@ -372,12 +373,19 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="grid gap-1.5 text-sm font-medium">
               <label htmlFor="todo-edit-date">Due date</label>
-              <Input id="todo-edit-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input
+                id="todo-edit-date"
+                type="date"
+                value={date}
+                disabled={!canManage}
+                onChange={(e) => setDate(e.target.value)}
+              />
             </div>
             <div className="grid gap-1.5 text-sm font-medium">
               <label htmlFor="todo-edit-start">Start time (optional)</label>
               <Input
                 id="todo-edit-start"
+                disabled={!canManage}
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -385,13 +393,20 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
             </div>
             <div className="grid gap-1.5 text-sm font-medium">
               <label htmlFor="todo-edit-end">End time (optional)</label>
-              <Input id="todo-edit-end" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              <Input
+                id="todo-edit-end"
+                type="time"
+                value={endTime}
+                disabled={!canManage}
+                onChange={(e) => setEndTime(e.target.value)}
+              />
             </div>
           </div>
           <div className="grid gap-1.5 text-sm font-medium">
             <label htmlFor="todo-edit-contact">Related client or reference (optional)</label>
             <Input
               id="todo-edit-contact"
+              disabled={!canManage}
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder="Client name, project, or reference"
@@ -401,6 +416,7 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
             <label htmlFor="todo-edit-notes">Notes (optional)</label>
             <Textarea
               id="todo-edit-notes"
+              disabled={!canManage}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add details, next steps, or context"
@@ -419,7 +435,7 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
               {todo.escalationNote && `: "${todo.escalationNote}"`}
             </p>
           )}
-          {profile?.role === "manager" && todo.status === "open" && !todo.recursFreq && (
+          {canManage && profile?.role === "manager" && todo.status === "open" && !todo.recursFreq && (
             <div className="grid gap-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assign to a staff member</p>
               <p className="text-xs text-muted-foreground">Currently assigned to {todo.assignedToName}.</p>
@@ -462,18 +478,18 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
         </div>
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
           <div className="flex flex-wrap gap-2">
-            {hasChanges && (
+            {canManage && hasChanges && (
               <Button size="sm" variant="outline" disabled={isSaving} onClick={saveEdits}>
                 Save changes
               </Button>
             )}
-            {todo.status === "open" && (
+            {canManage && todo.status === "open" && (
               <Button size="sm" onClick={() => updateStatus.mutateAsync({ todo, status: "done" }).then(onClose)}>
                 <Check />
                 Mark done
               </Button>
             )}
-            {todo.status === "open" && (
+            {canManage && todo.status === "open" && (
               <Button
                 size="sm"
                 variant="outline"
@@ -484,17 +500,19 @@ function TodoDetailDialog({ todo, onClose }: { todo: Todo; onClose: () => void }
               </Button>
             )}
           </div>
-          <ConfirmDialog
-            trigger={
-              <Button variant="ghost" size="icon-sm">
-                <Trash2 className="size-4" />
-              </Button>
-            }
-            title="Delete this item?"
-            description="This permanently removes it from your schedule."
-            confirmLabel="Delete"
-            onConfirm={() => deleteTodo.mutateAsync(todo).then(onClose)}
-          />
+          {canManage && (
+            <ConfirmDialog
+              trigger={
+                <Button variant="ghost" size="icon-sm">
+                  <Trash2 className="size-4" />
+                </Button>
+              }
+              title="Delete this item?"
+              description="This permanently removes it from your schedule."
+              confirmLabel="Delete"
+              onConfirm={() => deleteTodo.mutateAsync(todo).then(onClose)}
+            />
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -781,6 +799,22 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
 
 export function MyScheduleScreen() {
   const profile = useAuthStore((s) => s.profile);
+  const todoAccess = useQuery({
+    queryKey: ["operationsTodoAccess", profile?.key],
+    enabled: Boolean(profile?.key),
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const client = requireSupabase();
+      const [view, manage] = await Promise.all([
+        client.rpc("has_permission", { p_key: "operations.todos.view" }),
+        client.rpc("has_permission", { p_key: "operations.todos.manage" }),
+      ]);
+      if (view.error || manage.error) throw new Error("Operations to-do access could not be checked.");
+      return { view: view.data === true, manage: manage.data === true };
+    },
+  });
+  const canViewTodos = !todoAccess.isError && todoAccess.data?.view === true;
+  const canManageTodos = canViewTodos && todoAccess.data?.manage === true;
   const controller = useCalendarController();
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 639px)");
@@ -829,18 +863,23 @@ export function MyScheduleScreen() {
 
   const events = useMemo(
     () => [
-      ...(todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).map(toEventInput),
+      ...(canViewTodos ? (todos ?? []) : []).filter((todo) => isVisibleScheduleTodo(todo.status)).map(toEventInput),
       ...(meetings ?? [])
         .filter((meeting) => isVisibleScheduleMeeting(meeting.status))
         .map((meeting) => toMeetingEvent(meeting, profile?.role === "manager" || meeting.ownerKey === profile?.key)),
     ],
-    [meetings, profile?.key, profile?.role, todos],
+    [canViewTodos, meetings, profile?.key, profile?.role, todos],
   );
   const selectedMeeting = meetings?.find((meeting) => meeting.id === selectedMeetingId) ?? null;
 
   const urgency = useMemo(
-    () => getScheduleUrgency(triageTodos.data ?? [], now, new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)),
-    [triageTodos.data, now],
+    () =>
+      getScheduleUrgency(
+        canViewTodos ? (triageTodos.data ?? []) : [],
+        now,
+        new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+      ),
+    [canViewTodos, triageTodos.data, now],
   );
   const overdue = urgency.overdue;
   const dueSoon = urgency.dueSoon;
@@ -871,6 +910,10 @@ export function MyScheduleScreen() {
     }
     const todo = props.todo;
     if (!todo) return;
+    if (!canManageTodos) {
+      info.revert();
+      return;
+    }
     const newStartTime = todo.startTime ? calendarTime(newStart) : null;
     const newEndTime = info.event.end ? calendarTime(info.event.end) : todo.endTime;
     try {
@@ -905,6 +948,10 @@ export function MyScheduleScreen() {
           },
         });
       } else if (props.todo) {
+        if (!canManageTodos) {
+          info.revert();
+          return;
+        }
         await reschedule.mutateAsync({
           todo: props.todo,
           newDate: calendarDateOnly(newStart),
@@ -930,11 +977,13 @@ export function MyScheduleScreen() {
   const [quickAddDate, setQuickAddDate] = useState(today);
 
   function handleDateClick(info: DateClickInfo) {
+    if (!canManageTodos) return;
     setQuickAddDate(calendarDateOnly(info.date));
     setShowForm(true);
   }
 
   function handleSelect(info: DateSelectInfo) {
+    if (!canManageTodos) return;
     setQuickAddDate(calendarDateOnly(info.start));
     setShowForm(true);
   }
@@ -942,6 +991,28 @@ export function MyScheduleScreen() {
   return (
     <div className="grid gap-4">
       <SchedulePushSettings />
+      {todoAccess.isError && (
+        <Alert variant="destructive">
+          <AlertTitle>To-do access could not be checked</AlertTitle>
+          <AlertDescription>Refresh this page before working on tasks.</AlertDescription>
+        </Alert>
+      )}
+      {todoAccess.data && !canViewTodos && (
+        <Alert>
+          <AlertTitle>To-do access restricted</AlertTitle>
+          <AlertDescription>
+            Your meetings remain available. Management controls access to Operations to-dos.
+          </AlertDescription>
+        </Alert>
+      )}
+      {todoAccess.data && canViewTodos && !canManageTodos && (
+        <Alert>
+          <AlertTitle>To-dos are read-only</AlertTitle>
+          <AlertDescription>
+            You can review assigned tasks, but Management has restricted task changes.
+          </AlertDescription>
+        </Alert>
+      )}
       {overdue.length > 0 && (
         <Alert variant="destructive" className="border-destructive/40 bg-destructive/5">
           <AlertTriangle />
@@ -1000,7 +1071,7 @@ export function MyScheduleScreen() {
           <div className="flex min-w-0 shrink-0 flex-col gap-1">
             <div className="font-medium text-lg leading-none">{range.title}</div>
             <p className="text-muted-foreground text-sm">
-              {(todos ?? []).filter((todo) => isVisibleScheduleTodo(todo.status)).length +
+              {(canViewTodos ? (todos ?? []) : []).filter((todo) => isVisibleScheduleTodo(todo.status)).length +
                 (meetings ?? []).filter((meeting) => isVisibleScheduleMeeting(meeting.status)).length}{" "}
               scheduled items
               {(todosLoading || meetingsQuery.isFetching) && <span className="ml-2">· syncing</span>}
@@ -1062,15 +1133,17 @@ export function MyScheduleScreen() {
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              onClick={() => {
-                setQuickAddDate(today);
-                setShowForm((v) => !v);
-              }}
-            >
-              <Plus />
-              Schedule task
-            </Button>
+            {canManageTodos && (
+              <Button
+                onClick={() => {
+                  setQuickAddDate(today);
+                  setShowForm((v) => !v);
+                }}
+              >
+                <Plus />
+                Schedule task
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {
@@ -1085,7 +1158,7 @@ export function MyScheduleScreen() {
           </div>
         </div>
 
-        {showForm && (
+        {showForm && canManageTodos && (
           <div className="p-4">
             <QuickAddForm
               defaultDate={quickAddDate}
@@ -1119,19 +1192,22 @@ export function MyScheduleScreen() {
               <div>
                 <p className="font-medium">Nothing scheduled for this period</p>
                 <p className="text-sm text-muted-foreground">
-                  Add a task with its due date, time, assignee, notes, and client reference. Timed tasks can notify the
-                  assignee by SMS. Use Week or Agenda to focus on upcoming work.
+                  {canManageTodos
+                    ? "Add a task with its due date, time, assignee, notes, and client reference. Timed tasks can notify the assignee by SMS."
+                    : "Your schedule has no visible items in this period. Use Week or Agenda to check nearby dates."}
                 </p>
               </div>
-              <Button
-                onClick={() => {
-                  setQuickAddDate(today);
-                  setShowForm(true);
-                }}
-              >
-                <Plus />
-                Schedule a task
-              </Button>
+              {canManageTodos && (
+                <Button
+                  onClick={() => {
+                    setQuickAddDate(today);
+                    setShowForm(true);
+                  }}
+                >
+                  <Plus />
+                  Schedule a task
+                </Button>
+              )}
             </div>
           )}
 
@@ -1152,7 +1228,7 @@ export function MyScheduleScreen() {
           popoverCloseContent={() => <XIcon className="size-5 text-muted-foreground group-hover:text-foreground" />}
           events={events}
           editable
-          selectable
+          selectable={canManageTodos}
           nowIndicator
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
@@ -1169,7 +1245,9 @@ export function MyScheduleScreen() {
         />
       </div>
 
-      {selected && <TodoDetailDialog todo={selected} onClose={() => setSelected(null)} />}
+      {selected && canViewTodos && (
+        <TodoDetailDialog todo={selected} canManage={canManageTodos} onClose={() => setSelected(null)} />
+      )}
       {selectedMeeting && (
         <ScheduleMeetingDetails
           meeting={selectedMeeting}
@@ -1180,3 +1258,4 @@ export function MyScheduleScreen() {
     </div>
   );
 }
+
