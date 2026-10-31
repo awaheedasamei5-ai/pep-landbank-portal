@@ -3,6 +3,7 @@ import { classifyProviderResponse, type DeliveryOutcome } from "./delivery.ts";
 
 type OutboxRow = {
   id: string;
+  recipient_key: string | null;
   recipient_phone: string | null;
   message_body: string;
   attempt_count: number;
@@ -45,11 +46,20 @@ Deno.serve(async (request) => {
   let persistenceErrors = 0;
 
   for (const row of rows) {
-    const phone = normalizeGhanaPhone(row.recipient_phone);
+    // A queued number can become stale after Management corrects biodata.
+    // Resolve the active staff member again immediately before delivery.
+    const { data: recipient, error: recipientError } = row.recipient_key
+      ? await supabase.from("profiles").select("phone,active").eq("agent_key", row.recipient_key).maybeSingle()
+      : { data: null, error: null };
+    const phone = recipient?.active === true ? normalizeGhanaPhone(recipient.phone) : null;
     let outcome: DeliveryOutcome;
     let providerStatus: Record<string, unknown> | null = null;
 
-    if (!apiKey) {
+    if (recipientError) {
+      outcome = { status: "needs_review", providerReference: null, error: "Staff contact could not be rechecked." };
+    } else if (!recipient?.active) {
+      outcome = { status: "failed", providerReference: null, error: "The recipient is no longer an active staff member." };
+    } else if (!apiKey) {
       outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server." };
     } else if (!phone) {
       outcome = { status: "failed", providerReference: null, error: "The staff phone number is not a valid Ghana mobile number." };
