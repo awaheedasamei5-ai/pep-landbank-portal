@@ -196,6 +196,29 @@ export function SiteVisitsScreen() {
                 >
                   {downloadPdf.isPending ? 'Preparing PDF…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download request form (PDF)</span>)}
                 </button>
+                {v.leadId ? (
+                  <button
+                    type="button"
+                    className={styles.pdfRowBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/dashboard/pipeline/${v.leadId}`);
+                    }}
+                  >
+                    View lead →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.pdfRowBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/dashboard/pipeline/new', { state: { name: v.name, contact: v.contact, returnTo: '/dashboard/site-visits', siteVisitIdToLink: v.id } });
+                    }}
+                  >
+                    Convert to lead
+                  </button>
+                )}
                 {(isManager || v.agentKey === profile?.key) &&
                   (deletingId === v.id ? (
                     <div className={styles.deleteConfirm} onClick={(e) => e.stopPropagation()}>

@@ -15,6 +15,7 @@ import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { useBanners } from '../../banners/hooks/useBanners';
 import { useCreateReferral, useLinkReferralLead } from '../../referrals/hooks/useReferrals';
+import { useLinkSiteVisitToLead } from '../../site-visits/hooks/useSiteVisits';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
 import styles from './AddLeadScreen.module.css';
 
@@ -22,7 +23,10 @@ const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 // Port of v1's real LEAD_SOURCES constant (index.html:6282) verbatim --
 // this is the actual "where did you hear about us?" list production
 // uses, not a reinvented shorter one.
-const LEAD_SOURCES = ['Banner', 'Referral', 'Facebook', 'Instagram', 'TikTok', 'Google', 'Website', 'Radio', 'TV', 'Other'] as const;
+// 'Quotation' added for docs/plans/41 Phase 5 (C2.6) -- a real new source
+// this system itself can now generate (the "Save as lead" action on the
+// Quotation calculator), not a v1-ported value.
+const LEAD_SOURCES = ['Banner', 'Referral', 'Facebook', 'Instagram', 'TikTok', 'Google', 'Website', 'Radio', 'TV', 'Quotation', 'Other'] as const;
 
 // Port of formAddLead()/readLeadForm() (index.html:14132-14198), widened to
 // close a real completeness gap the user caught live: source/priority/
@@ -82,8 +86,29 @@ export function AddLeadScreen() {
   // this creates into that real pool instead of the signed-in staff
   // member's own pipeline -- see useCreateLead's own comment for why the
   // auto follow-up task is also skipped in that case.
-  const prefill = location.state as { name?: string; contact?: string; returnTo?: string; agentKeyOverride?: string } | null;
+  // `siteVisitIdToLink`: Phase 5 (C2.1) "Convert to lead" quick-action on
+  // an unlinked walk-in site visit -- same prefill-via-router-state shape
+  // Client Database's "+ New deal for this client" already established,
+  // with one real addition: the originating visit's own id, so the new
+  // lead can be linked back to it right after creation (see onSubmit).
+  // `plotType`/`noPlots`/`paymentPlan`/`address`/`leadSource`: Phase 5
+  // (C2.6) "Save as lead" on the Quotation calculator -- carries over the
+  // real figures already computed there instead of making staff retype
+  // them, same reduce-manual-re-entry goal as `siteVisitIdToLink` above.
+  const prefill = location.state as {
+    name?: string;
+    contact?: string;
+    returnTo?: string;
+    agentKeyOverride?: string;
+    siteVisitIdToLink?: string;
+    plotType?: FormInput['plotType'];
+    noPlots?: number;
+    paymentPlan?: FormInput['paymentPlan'];
+    address?: string;
+    leadSource?: string;
+  } | null;
   const createLead = useCreateLead(prefill?.agentKeyOverride);
+  const linkSiteVisitToLead = useLinkSiteVisitToLead();
   const { data: leads } = useLeads();
   const { data: clients } = useClients();
   const { data: config } = useConfig();
@@ -98,7 +123,7 @@ export function AddLeadScreen() {
   // form (see the schema's own comment above), mirrors v1's
   // LEAD_SOURCE_STATE object exactly: bannerId when the source is
   // Banner, referrer identity when it's a Referral.
-  const [source, setSource] = useState('');
+  const [source, setSource] = useState(prefill?.leadSource ?? '');
   const [bannerArea, setBannerArea] = useState('');
   const [bannerId, setBannerId] = useState('');
   const [referredByExisting, setReferredByExisting] = useState<'yes' | 'no' | ''>('');
@@ -150,14 +175,15 @@ export function AddLeadScreen() {
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
     defaultValues: {
-      plotType: 'Full Plot',
-      noPlots: 1,
-      paymentPlan: 'Full Payment',
+      plotType: prefill?.plotType ?? 'Full Plot',
+      noPlots: prefill?.noPlots ?? 1,
+      paymentPlan: prefill?.paymentPlan ?? 'Full Payment',
       amtPaid: 0,
       date: today(),
       siteVisit: 'No',
       name: prefill?.name ?? '',
       contact: prefill?.contact ?? '',
+      address: prefill?.address ?? '',
     },
   });
 
@@ -288,6 +314,15 @@ export function AddLeadScreen() {
         await linkReferralLead.mutateAsync({ id: referral.id, leadId: lead.id });
       } catch {
         // Non-fatal -- see comment above.
+      }
+    }
+    if (prefill?.siteVisitIdToLink) {
+      try {
+        await linkSiteVisitToLead.mutateAsync({ id: prefill.siteVisitIdToLink, leadId: lead.id });
+      } catch {
+        // Non-fatal -- the lead is real and saved; a failed link-back
+        // shouldn't block or roll back the lead creation itself, same
+        // discipline as the Referral-link attempt above.
       }
     }
     if (depositError) {

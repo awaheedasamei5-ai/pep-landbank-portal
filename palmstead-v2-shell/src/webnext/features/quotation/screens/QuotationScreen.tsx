@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Download } from 'lucide-react';
-import { Link } from 'react-router';
+import { ArrowRight, Download, UserPlus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
 import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -27,6 +27,7 @@ const PLANS: PaymentPlanKey[] = ['Full Payment', '3 Months', '6 Months', '9 Mont
 // is `auth.uid() IS NOT NULL`, not manager-gated), matching how
 // index.html's Quotation tile has no role restriction either.
 export function QuotationScreen() {
+  const navigate = useNavigate();
   const isManager = useSessionStore((s) => s.profile?.role === 'manager');
   const { data: config, isLoading } = useConfig();
   const [activeTab, setActiveTab] = useState<QuotationAppTab>('calculator');
@@ -193,23 +194,52 @@ export function QuotationScreen() {
             <p className={styles.fullPaymentNote}>Full Payment &mdash; the whole grand total is due at once, no installment schedule.</p>
           )}
 
-          <button
-            type="button"
-            className={styles.btn}
-            disabled={!clientName.trim() || downloadPdf.isPending}
-            onClick={() =>
-              config &&
-              downloadPdf.mutate({
-                totals,
-                noPlots,
-                plotType,
-                client: { name: clientName.trim(), contact: clientContact.trim(), address: clientAddress.trim(), email: clientEmail.trim() },
-                config,
-              })
-            }
-          >
-            {downloadPdf.isPending ? 'Generating…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download PDF</span>)}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={!clientName.trim() || downloadPdf.isPending}
+              onClick={() =>
+                config &&
+                downloadPdf.mutate({
+                  totals,
+                  noPlots,
+                  plotType,
+                  client: { name: clientName.trim(), contact: clientContact.trim(), address: clientAddress.trim(), email: clientEmail.trim() },
+                  config,
+                })
+              }
+            >
+              {downloadPdf.isPending ? 'Generating…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download PDF</span>)}
+            </button>
+            {/* docs/plans/41 Phase 5 (C2.6) -- optional, additive: generating a
+                quotation here still works exactly as before either way. If the
+                prospect is worth tracking, this carries the real figures
+                already computed above straight into Add Lead instead of
+                someone retyping them from scratch (or, worse, the prospect
+                never becoming a lead at all). */}
+            <button
+              type="button"
+              className={styles.btn}
+              disabled={!clientName.trim()}
+              onClick={() =>
+                navigate('/dashboard/pipeline/new', {
+                  state: {
+                    name: clientName.trim(),
+                    contact: clientContact.trim(),
+                    address: clientAddress.trim(),
+                    plotType,
+                    noPlots,
+                    paymentPlan: plan,
+                    leadSource: 'Quotation',
+                    returnTo: '/dashboard/quotation',
+                  },
+                })
+              }
+            >
+              <span className="inline-flex items-center gap-1"><UserPlus className="size-4" aria-hidden="true" /> Save as lead</span>
+            </button>
+          </div>
         </>
       )}
         </>

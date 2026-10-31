@@ -378,6 +378,34 @@ schema error; `useDashboardRealtime.ts` confirmed to contain real `notes`/`compl
 `enquiriesForLead` invalidation wiring exactly as described above. This does not replace a real
 click-through, but rules out a schema-level or wiring-level mistake.
 
+### Phase 5 — Funnel-capture automation — **DONE** (code-complete, substitute-verified)
+
+**C2.1 — "Convert to lead" on unlinked site visits**: `site_visits.lead_id` already existed (added
+earlier this sweep) with `SiteVisit.leadId`/`mapSiteVisitRow` already wired — only the write path was
+missing. Added `siteVisits.linkToLead(id, leadId)` to `source.ts` and a matching
+`useLinkSiteVisitToLead()` hook. `SiteVisitsScreen.tsx` now shows "Convert to lead" (unlinked) or
+"View lead →" (linked) on each visit row; the former navigates to Add Lead with the visit's
+name/contact pre-filled plus a new `siteVisitIdToLink` field. `AddLeadScreen.tsx` links the visit back
+to the newly-created lead right after save (fire-and-forget, non-fatal on failure — same discipline
+already used for the existing Referral auto-link). `SiteVisitsSection` on the lead detail page (built
+in Phase 4) picks this up automatically since it already reads `site_visits.lead_id` directly.
+
+**C2.6 — "Save as lead" on Quotation**: added `'Quotation'` as a real, new `lead_source` value (the
+system's own first self-generated source, not a v1-ported one). `AddLeadScreen`'s prefill type
+extended with `plotType`/`noPlots`/`paymentPlan`/`address`/`leadSource` so the real figures Quotation
+already computed carry straight through instead of being retyped. `QuotationScreen.tsx` gets a "Save
+as lead" button beside "Download PDF" — purely additive, downloading a quotation works identically
+whether or not this is ever clicked.
+
+**Verification**: `npx tsc -b` clean (`NODE_OPTIONS="--max-old-space-size=4096"`); dev server compiles
+with zero errors (`preview_logs` checked directly). **Live click-through still blocked**: the Browser
+pane tool remains unresponsive on retry (confirmed again this phase, same symptom as Phase 4 — a
+genuine environment/tool issue, not an app bug). Substitute checks performed instead: `site_visits_upd`
+RLS confirmed to allow the exact actors (own agent or manager) who'd ever click "Convert to lead";
+`NewLead`/`FormInput` field shapes confirmed to match what's being passed from both new callers. This
+phase and Phase 4 should both get one real click-through pass as soon as the browser tool recovers —
+noted as a standing follow-up, not silently assumed fine.
+
 ### Phase 5 — Funnel-capture automation
 - C2.1: "Convert to lead" quick-action on unlinked site visits.
 - C2.6: "Save as lead" action on Quotation.

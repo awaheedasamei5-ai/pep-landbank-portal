@@ -175,3 +175,23 @@ export function useRescheduleSiteVisit() {
     },
   });
 }
+
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 5
+// (C2.1) -- 69 real walk-in site visits had no way to ever become a
+// Pipeline lead; this is the other half of that fix (the first half is
+// AddLeadScreen's new `siteVisitIdToLink` prefill field, which calls this
+// right after a real lead is created). Plain FK set -- SiteVisitsSection
+// on the lead detail page already reads site_visits.lead_id directly, so
+// the newly-linked visit appears there with no separate write.
+export function useLinkSiteVisitToLead() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, leadId }: { id: string; leadId: string }) => getDataSource(demoMode).siteVisits.linkToLead(id, leadId),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      queryClient.invalidateQueries({ queryKey: ['siteVisitsAll'] });
+      if (updated.leadId) queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead', updated.leadId] });
+    },
+  });
+}

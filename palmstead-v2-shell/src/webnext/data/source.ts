@@ -681,6 +681,12 @@ export interface DataSource {
       rescheduledBy: string,
       rescheduledByName: string,
     ): Promise<SiteVisit>;
+    // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 5
+    // (C2.1) -- "Convert to lead" on an unlinked walk-in visit. Plain FK
+    // set, not an RPC: no other row needs to change, same shape as
+    // reschedule()'s own lead_id-is-already-the-link-everything-needs
+    // reasoning in its comment above.
+    linkToLead(id: string, leadId: string): Promise<SiteVisit>;
   };
   // Master Spec Section 4's "combined activity timeline" lead-record
   // section. Real activity_log.lead_id FK (added this session, see
@@ -2856,6 +2862,11 @@ function createLiveDataSource(): DataSource {
           .eq("id", id)
           .select()
           .single();
+        if (error) throw error;
+        return mapSiteVisitRow(data);
+      },
+      async linkToLead(id, leadId) {
+        const { data, error } = await requireClient().from("site_visits").update({ lead_id: leadId }).eq("id", id).select().single();
         if (error) throw error;
         return mapSiteVisitRow(data);
       },
