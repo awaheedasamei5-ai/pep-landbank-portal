@@ -79,6 +79,8 @@ export function useDashboardRealtime() {
       // up in an already-open Assign Task modal on another until it expired
       // on its own.
       queryClient.invalidateQueries({ queryKey: ['colleagueAvailability'] });
+      // Phase 8 (C2.10) -- Smart Insights' leave-usage-pattern extra.
+      queryClient.invalidateQueries({ queryKey: ['smartInsightsExtras'] });
     };
     const invalidateLeaveHolidays = () => {
       queryClient.invalidateQueries({ queryKey: ['leaveHolidays'] });
@@ -100,6 +102,9 @@ export function useDashboardRealtime() {
     const invalidateAllocations = () => {
       queryClient.invalidateQueries({ queryKey: ['allocationRequests'] });
       queryClient.invalidateQueries({ queryKey: ['plots'] });
+      // Phase 8 (C2.11) -- Data Check's new allocation-aging rule reads its
+      // own query key, a different prefix from ['allocationRequests'].
+      queryClient.invalidateQueries({ queryKey: ['dataCheckAllocations'] });
     };
     const invalidateContracts = () => {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
@@ -131,6 +136,8 @@ export function useDashboardRealtime() {
     const invalidateReferrals = () => {
       queryClient.invalidateQueries({ queryKey: ['referrals'] });
       queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      // Phase 8 (C2.11) -- Data Check's new referral-aging rule.
+      queryClient.invalidateQueries({ queryKey: ['dataCheckReferrals'] });
     };
     const invalidatePermissions = () => {
       // Real key is ['permissionOverrides', demoMode] (usePermissions.ts) --
@@ -152,6 +159,8 @@ export function useDashboardRealtime() {
       // invalidation or a complaint change never reaches an already-open
       // lead detail page's own Complaints section.
       queryClient.invalidateQueries({ queryKey: ['complaintsForLead'] });
+      // Phase 8 (C2.11) -- Data Check's new complaint-aging rule.
+      queryClient.invalidateQueries({ queryKey: ['dataCheckComplaints'] });
     };
     const invalidateEnquiries = () => {
       queryClient.invalidateQueries({ queryKey: ['enquiries'] });
@@ -164,6 +173,8 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['attendanceToday'] });
       queryClient.invalidateQueries({ queryKey: ['attendanceHistory'] });
       queryClient.invalidateQueries({ queryKey: ['attendanceAllToday'] });
+      // Phase 8 (C2.10) -- Smart Insights' late-check-in-pattern extra.
+      queryClient.invalidateQueries({ queryKey: ['smartInsightsExtras'] });
     };
     // Master Spec 11.3's Praise/Warning -- a manager on one device issuing
     // one should update another manager's Management dashboard live, and
@@ -184,6 +195,8 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
       queryClient.invalidateQueries({ queryKey: ['weekSiteVisits'] });
       queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead'] });
+      // Phase 8 (C2.10) -- Smart Insights' new site-visit-unlogged digest.
+      queryClient.invalidateQueries({ queryKey: ['smartInsightsSiteVisits'] });
     };
     const invalidateSve = () => {
       queryClient.invalidateQueries({ queryKey: ['sveVisits'] });

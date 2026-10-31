@@ -1,4 +1,4 @@
-import type { Lead, Payment, Complaint, Referral, AllocationRequest, ContractRequest, LeaveRequest, Banner } from '../../../types/domain';
+import type { Lead, Payment, Complaint, Referral, AllocationRequest, ContractRequest, LeaveRequest, Banner, SiteVisit } from '../../../types/domain';
 import { today, shiftMonth, monthKey, daysSince, ghs } from '../../../shared/lib/format';
 import { linearForecastNextMonth } from '../../../shared/lib/forecast';
 
@@ -25,7 +25,13 @@ export type InsightKind = 'cold' | 'nearTrigger' | 'readyForAllocation' | 'stall
 // a separate union (not merged into InsightKind) since their drill-down
 // rows are a different shape (not a Lead) -- CrossAppInsightKind's own
 // screen branch handles that.
-export type CrossAppInsightKind = 'complaintAging' | 'referralAging' | 'allocationAging' | 'contractRequestAging' | 'leavePending' | 'bannerZeroLeads';
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 8
+// (C2.10) -- one more real cross-app kind, same reasoning as the 6 above:
+// Site Visits had zero signal feeding into Smart Insights despite Data
+// Check already proving the "visit happened, no outcome logged" query is
+// real and queryable (dataIntegrityCheck.ts's own per-lead version of
+// this same check) -- this is the company-wide digest form of it.
+export type CrossAppInsightKind = 'complaintAging' | 'referralAging' | 'allocationAging' | 'contractRequestAging' | 'leavePending' | 'bannerZeroLeads' | 'siteVisitUnlogged';
 
 export const INSIGHT_META: Record<InsightKind, { title: string; desc: string }> = {
   cold: { title: 'Going cold', desc: 'No next action set, added 10+ days ago' },
@@ -41,6 +47,7 @@ export const CROSS_APP_INSIGHT_META: Record<CrossAppInsightKind, { title: string
   contractRequestAging: { title: 'Contract requests awaiting generation 5+ days', desc: 'Requested but no contract generated yet', app: 'Contract of Sale' },
   leavePending: { title: 'Leave requests pending decision 3+ days', desc: 'Awaiting Management approval or decline', app: 'Leave' },
   bannerZeroLeads: { title: 'Banners with zero leads after 14 days', desc: 'Active campaigns generating no real pipeline', app: 'Banner Tracking' },
+  siteVisitUnlogged: { title: 'Site visits with no outcome logged', desc: 'The visit date has passed but no feedback was recorded', app: 'Site Visits' },
 };
 
 export interface PctLead extends Lead {
@@ -133,6 +140,15 @@ export function getBannerZeroLeads(banners: Banner[], leads: Lead[]): Banner[] {
   return banners.filter((b) => daysSince(b.createdAt.slice(0, 10)) >= 14 && !(leadCountByBanner.get(b.id) ?? 0));
 }
 
+// Company-wide version of dataIntegrityCheck.ts's own per-lead
+// "Unlogged site visit outcome" rule -- same date/feedback condition,
+// no lead-matching requirement (this digest is about the visit itself,
+// not which lead it ties to).
+export function getSiteVisitUnlogged(siteVisits: SiteVisit[]): SiteVisit[] {
+  const todayIso = today();
+  return siteVisits.filter((v) => v.visitDate && v.visitDate < todayIso && !(v.feedbackAfter ?? '').trim());
+}
+
 export interface CrossAppData {
   complaints?: Complaint[];
   referrals?: Referral[];
@@ -140,12 +156,29 @@ export interface CrossAppData {
   contractRequests?: ContractRequest[];
   leaveRequests?: LeaveRequest[];
   banners?: Banner[];
+  siteVisits?: SiteVisit[];
+}
+
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 8
+// (C2.10) -- the 3 new signals that don't fit CrossAppData's Lead-like
+// list shape (staff-attendance patterns and an Operations Tracker
+// read-only count), kept as a separate optional bag rather than forced
+// into the generic-row drill-down pattern the other 7 kinds use.
+export interface StaffPatternAlert {
+  staffKey: string;
+  staffName: string;
+  count: number;
+}
+export interface IntelligenceExtras {
+  lateCheckInsThisMonth?: StaffPatternAlert[];
+  highLeaveUsageThisYear?: StaffPatternAlert[];
+  opsOverdueCount?: number;
 }
 
 // Drill-down lookup -- same shape as getInsightLists() but for the 6
 // cross-app kinds, used by the [kind] route to render the right list
 // regardless of which real table it came from.
-export function getCrossAppInsightList(kind: CrossAppInsightKind, data: CrossAppData, leads: Lead[]): Complaint[] | Referral[] | AllocationRequest[] | ContractRequest[] | LeaveRequest[] | Banner[] {
+export function getCrossAppInsightList(kind: CrossAppInsightKind, data: CrossAppData, leads: Lead[]): Complaint[] | Referral[] | AllocationRequest[] | ContractRequest[] | LeaveRequest[] | Banner[] | SiteVisit[] {
   switch (kind) {
     case 'complaintAging':
       return getComplaintAging(data.complaints ?? []);
@@ -159,10 +192,12 @@ export function getCrossAppInsightList(kind: CrossAppInsightKind, data: CrossApp
       return getLeavePending(data.leaveRequests ?? []);
     case 'bannerZeroLeads':
       return getBannerZeroLeads(data.banners ?? [], leads);
+    case 'siteVisitUnlogged':
+      return getSiteVisitUnlogged(data.siteVisits ?? []);
   }
 }
 
-export function computeSmartInsights(leads: Lead[], payments: Payment[], crossApp: CrossAppData = {}): SmartInsight[] {
+export function computeSmartInsights(leads: Lead[], payments: Payment[], crossApp: CrossAppData = {}, extras: IntelligenceExtras = {}): SmartInsight[] {
   const insights: SmartInsight[] = [];
   const { cold, nearTrigger, readyForAllocation, stalledHigh } = getInsightLists(leads);
 
@@ -355,6 +390,42 @@ export function computeSmartInsights(leads: Lead[], payments: Payment[], crossAp
         crossAppKind: 'bannerZeroLeads',
       });
     }
+  }
+
+  if (crossApp.siteVisits) {
+    const list = getSiteVisitUnlogged(crossApp.siteVisits);
+    if (list.length) {
+      insights.push({
+        key: 'siteVisitUnlogged',
+        icon: 'warning',
+        tone: 'warn',
+        app: 'Site Visits',
+        text: `${list.length} site visit${list.length === 1 ? '' : 's'} with no outcome logged`,
+        detail: list
+          .slice(0, 3)
+          .map((v) => v.name)
+          .join(', '),
+        crossAppKind: 'siteVisitUnlogged',
+      });
+    }
+  }
+
+  // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 8
+  // (C2.10) -- Attendance/Leave *pattern* signals (vs. the single-event
+  // leavePending check above), plus one read-only Operations Tracker
+  // awareness count. No drill-down route for any of these (same
+  // treatment as the momentum/forecast cards above) -- Management acts
+  // on them via Attendance/Leave/Operations Tracker's own real screens.
+  if (extras.lateCheckInsThisMonth?.length) {
+    const names = extras.lateCheckInsThisMonth.map((s) => `${s.staffName} (${s.count})`).join(', ');
+    insights.push({ key: 'lateCheckInPattern', icon: 'warning', tone: 'warn', app: 'Attendance', text: `${extras.lateCheckInsThisMonth.length} staff member${extras.lateCheckInsThisMonth.length === 1 ? '' : 's'} with repeated late check-ins this month`, detail: names });
+  }
+  if (extras.highLeaveUsageThisYear?.length) {
+    const names = extras.highLeaveUsageThisYear.map((s) => `${s.staffName} (${s.count} day${s.count === 1 ? '' : 's'})`).join(', ');
+    insights.push({ key: 'highLeaveUsage', icon: 'chartLine', tone: 'warn', app: 'Leave', text: `${extras.highLeaveUsageThisYear.length} staff member${extras.highLeaveUsageThisYear.length === 1 ? '' : 's'} with unusually high leave usage this year`, detail: names });
+  }
+  if (extras.opsOverdueCount) {
+    insights.push({ key: 'opsOverdue', icon: 'warning', tone: 'warn', app: 'Operations Tracker', text: `${extras.opsOverdueCount} overdue task${extras.opsOverdueCount === 1 ? '' : 's'} in Operations Tracker`, detail: 'Past their due date and still open.' });
   }
 
   if (!insights.length) {

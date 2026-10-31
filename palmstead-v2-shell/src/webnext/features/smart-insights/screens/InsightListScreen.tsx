@@ -19,6 +19,7 @@ const CROSS_APP_DEST: Record<CrossAppInsightKind, string> = {
   contractRequestAging: "/dashboard/contract-of-sale/requests",
   leavePending: "/dashboard/leave/management/requests",
   bannerZeroLeads: "/dashboard/banners",
+  siteVisitUnlogged: "/dashboard/site-visits",
 };
 
 function fmtDate(iso: string): string {
@@ -130,6 +131,8 @@ function toGenericRows(kind: CrossAppInsightKind, list: ReturnType<typeof useCro
       return (list as { id: string; agentName: string; daysCount: number; createdAt: string; status: string }[]).map((r) => ({ id: r.id, label: r.agentName, sub: `${r.daysCount} day${r.daysCount === 1 ? "" : "s"}`, date: r.createdAt, status: r.status }));
     case "bannerZeroLeads":
       return (list as { id: string; name: string; area: string; createdAt: string; status: string }[]).map((r) => ({ id: r.id, label: r.name, sub: r.area, date: r.createdAt, status: r.status }));
+    case "siteVisitUnlogged":
+      return (list as unknown as { id: string; name: string; contact: string; visitDate: string }[]).map((r) => ({ id: r.id, label: r.name, sub: r.contact || "—", date: r.visitDate, status: "No outcome logged" }));
   }
 }
 

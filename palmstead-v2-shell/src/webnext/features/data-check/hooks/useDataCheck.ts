@@ -51,6 +51,26 @@ export function useDataCheck() {
     queryKey: ["dataCheckSiteVisits"],
     queryFn: () => getDataSource(demoMode).siteVisits.listAll(),
   });
+  // Phase 8 (C2.11) -- same scoping rule every other per-agent-owned
+  // table on this screen already uses (isManager -> company-wide).
+  const complaintsQuery = useQuery({
+    queryKey: ["dataCheckComplaints", isManager, agentKey],
+    enabled: !!profile,
+    queryFn: () => {
+      const ds = getDataSource(demoMode);
+      return isManager ? ds.complaints.listAll() : ds.complaints.listForAgent(agentKey);
+    },
+  });
+  const referralsQuery = useQuery({
+    queryKey: ["dataCheckReferrals", isManager, agentKey],
+    enabled: !!profile,
+    queryFn: () => getDataSource(demoMode).referrals.listForAgent(agentKey, isManager),
+  });
+  const allocationRequestsQuery = useQuery({
+    queryKey: ["dataCheckAllocations", isManager, agentKey],
+    enabled: !!profile,
+    queryFn: () => getDataSource(demoMode).allocationRequests.list(agentKey, isManager ? "manager" : "agent"),
+  });
   const dismissalsQuery = useQuery({
     queryKey: ["dataCheckDismissals"],
     enabled: !!profile,
@@ -72,8 +92,20 @@ export function useDataCheck() {
       siteVisitsQuery.data,
       config,
       (key) => nameFor.get(key) ?? key,
+      complaintsQuery.data ?? [],
+      referralsQuery.data ?? [],
+      allocationRequestsQuery.data ?? [],
     );
-  }, [config, leadsQuery.data, paymentsQuery.data, siteVisitsQuery.data, nameFor]);
+  }, [
+    config,
+    leadsQuery.data,
+    paymentsQuery.data,
+    siteVisitsQuery.data,
+    nameFor,
+    complaintsQuery.data,
+    referralsQuery.data,
+    allocationRequestsQuery.data,
+  ]);
 
   const dismissedKeys = useMemo(
     () => new Set((dismissalsQuery.data ?? []).map((d) => `${d.leadId}_${d.issueType}`)),

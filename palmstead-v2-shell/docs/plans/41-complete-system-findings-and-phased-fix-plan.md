@@ -487,12 +487,44 @@ Browser pane tool remains unresponsive (see Phase 4/5/6's own notes) — `npx ts
 actively-moving concurrent Finance subsystem (same commits confirmed above) and needs a real Finance-
 policy decision before any code is written regardless. Moved into Phase 10's deferred list.
 
-### Phase 8 — Intelligence-layer expansion
-- C2.10: new Smart Insights cross-app sources (Site Visits, Attendance/Leave patterns, Operations,
-  per-client payment health).
-- C2.11: port the same aging-threshold pattern into Data Check; consider a shared rule-definition
-  layer between the two apps before building either out further (a real architecture decision, not
-  just "add more rules").
+### Phase 8 — Intelligence-layer expansion — **DONE**
+
+**C2.10**: Added a 7th real `CrossAppInsightKind` (`siteVisitUnlogged`) to Smart Insights, reusing the
+exact pattern already proven 6 times — a real `getSiteVisitUnlogged()` check (visit date passed, no
+`feedbackAfter`, no lead-matching required since this is the company-wide digest form of the same
+idea Data Check already proves per-lead), wired through `CrossAppData`, the drill-down route's
+generic-row table, and `useSmartInsights.ts`'s per-role scoping. Verified via SQL: 85 real unlogged
+visits exist, matching the known real gap from earlier findings — not zero, not forced.
+
+Also added 3 manager-only pattern/awareness signals that don't fit the Lead-like list shape the other
+7 kinds use (a separate `IntelligenceExtras` bag, no drill-down route, same treatment as the existing
+momentum/forecast cards): repeated late check-ins this month (`attendance_log.late_reason`, real
+threshold 3+), unusually high approved leave usage this year (`leave_requests.days_count`, real
+threshold 10+ days), and a read-only overdue-task count from Operations Tracker's `op_todos`
+(deliberately read-only, no write/schema touch, per the standing concurrent-development boundary on
+that subsystem). Real thresholds were chosen by querying the actual data distribution first (both
+patterns are currently near-zero in real production data — correctly produce no false alarms right
+now, will fire honestly once real usage grows past the threshold).
+
+Per-client Accounting/payment-health (mentioned in the original finding) was not built — Accounting is
+the actively-moving concurrent subsystem (same boundary as Phase 7's C2.4), left for whoever picks up
+Phase 10's deferred Finance items.
+
+**C2.11**: Ported the exact same `getComplaintAging`/`getReferralAging`/`getAllocationAging` functions
+from Smart Insights directly into `dataIntegrityCheck.ts` (imported, not duplicated — the real
+shared-layer decision: these two apps now provably can never disagree on what "aging" means for the
+same record) as 3 new lead-anchored `DataIssue` rules. Each only fires when the aging record resolves
+to a real lead in the viewer's scope (via the real `lead_id`/`referredLeadId` FKs) — an unmatched
+record is correctly left for Smart Insights' own company-wide digest instead of forced into Data
+Check's lead-centric shape. Leave requests were NOT ported into Data Check: they're staff-centric, not
+lead-centric, and don't fit `DataIssue`'s required `leadId`/`leadName` shape without a real
+architecture change — noted here as a genuine open question for whoever revisits Data Check's schema,
+not silently dropped.
+
+Verified via direct SQL (browser pane still unresponsive — same persistent issue as Phases 4-7):
+1 referral and 4 allocation requests currently resolve to real leads and would appear as new Data
+Check items right now; 0 complaints currently match (real data is sparse: only 2 complaints exist
+company-wide, per Phase 3's own finding). `npx tsc -b` clean.
 
 ### Phase 9 — Remaining attribution/UX polish
 - C2.12: banner detail page lead-attribution section.

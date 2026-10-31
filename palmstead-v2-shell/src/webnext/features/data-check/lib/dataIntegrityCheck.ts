@@ -1,5 +1,6 @@
-import type { Config, Lead, Payment, SiteVisit } from '../../../types/domain';
+import type { Config, Lead, Payment, SiteVisit, Complaint, Referral, AllocationRequest } from '../../../types/domain';
 import { computeLeadQuotationTotals } from '../../quotation/lib/quotationLogic';
+import { getComplaintAging, getReferralAging, getAllocationAging } from '../../smart-insights/lib/smartInsightsLogic';
 
 export type IssueSeverity = 'danger' | 'warn';
 
@@ -39,8 +40,18 @@ function contactMatches(a: string | null | undefined, b: string | null | undefin
 // reflect *approved* payments (this app's own payments_sel RLS and
 // applyApprovedPaymentToLead precedent), so this filters to approved-
 // or-unset-status before summing.
-export function runDataIntegrityCheck(leads: Lead[], payments: Payment[], siteVisits: SiteVisit[], config: Config, agentNameFor: (agentKey: string) => string = (k) => k): DataIssue[] {
+export function runDataIntegrityCheck(
+  leads: Lead[],
+  payments: Payment[],
+  siteVisits: SiteVisit[],
+  config: Config,
+  agentNameFor: (agentKey: string) => string = (k) => k,
+  complaints: Complaint[] = [],
+  referrals: Referral[] = [],
+  allocationRequests: AllocationRequest[] = [],
+): DataIssue[] {
   const issues: DataIssue[] = [];
+  const leadById = new Map(leads.map((l) => [l.id, l]));
 
   leads.forEach((l) => {
     const totals = computeLeadQuotationTotals(config, l);
@@ -121,6 +132,56 @@ export function runDataIntegrityCheck(leads: Lead[], payments: Payment[], siteVi
         });
       });
     }
+  });
+
+  // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 8
+  // (C2.11) -- Data Check was almost entirely leads-scoped; Smart Insights
+  // already proved Complaints/Referrals/Allocations are real, queryable
+  // aging signals (see smartInsightsLogic.ts's own getComplaintAging/
+  // getReferralAging/getAllocationAging). Reused directly here rather than
+  // duplicated, so the two apps can never silently disagree on what
+  // "aging" means for the same record. Each only becomes a Data Check item
+  // when it resolves to a real lead in scope -- an unmatched complaint/
+  // referral (no lead_id, or not in this viewer's own leads) has nothing
+  // for Data Check to attach the issue to and is correctly left for Smart
+  // Insights' own company-wide digest to surface instead, not forced here.
+  getComplaintAging(complaints).forEach((c) => {
+    const lead = c.leadId ? leadById.get(c.leadId) : undefined;
+    if (!lead) return;
+    issues.push({
+      leadId: lead.id,
+      leadName: lead.name,
+      agentDisplay: agentNameFor(lead.agent),
+      type: 'Complaint open 7+ days',
+      severity: 'warn',
+      detail: `A complaint logged ${c.createdAt.slice(0, 10)} for this client is still open.`,
+    });
+  });
+
+  getReferralAging(referrals).forEach((r) => {
+    const lead = r.referredLeadId ? leadById.get(r.referredLeadId) : undefined;
+    if (!lead) return;
+    issues.push({
+      leadId: lead.id,
+      leadName: lead.name,
+      agentDisplay: agentNameFor(lead.agent),
+      type: 'Referral pending 14+ days',
+      severity: 'warn',
+      detail: `A referral for this client logged ${r.createdAt.slice(0, 10)} hasn't been cleared yet.`,
+    });
+  });
+
+  getAllocationAging(allocationRequests).forEach((a) => {
+    const lead = leadById.get(a.leadId);
+    if (!lead) return;
+    issues.push({
+      leadId: lead.id,
+      leadName: lead.name,
+      agentDisplay: agentNameFor(lead.agent),
+      type: 'Allocation request pending 5+ days',
+      severity: 'warn',
+      detail: `An allocation request for this client (status: ${a.status}) has been waiting ${a.createdAt.slice(0, 10)} with no resolution.`,
+    });
   });
 
   return issues;
