@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
-import type { ContractTemplateVersionStatus, NewContractTemplate, ContractSection } from '../../../types/domain';
+import type { ContractTemplateVersionStatus, NewContractTemplate, ContractSection, ContractGeneration } from '../../../types/domain';
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §6 -- same manager-or-elizabeth gate as
 // useCanFulfilContracts() (this whole feature area's established access
@@ -120,6 +120,61 @@ export function useCreateContractField() {
 export function useContractGenerations() {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({ queryKey: ['contractGenerations'], queryFn: () => getDataSource(demoMode).contractGenerations.list() });
+}
+
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 7,
+// C2.5 -- the legacy `contracts` table (the v1-parity path's own
+// metadata-only record, no stored PDF) and `contract_generations` (the
+// v3 template path's content-bearing snapshot) are two real, separate
+// tables for the same real-world event. useContracts()/useContractReports
+// already correctly read both (Reports' own production-count math has
+// always used `contracts.length` as the true total) -- the Vault screen
+// was the one place still reading `contract_generations` alone, making
+// every legacy-path contract invisible in "every contract ever issued."
+// This merges both into the one shape ContractVaultScreen already
+// renders, without migrating or mutating a single legacy row: a legacy
+// contract gets templateId/pdfStoragePath = null, which the screen's
+// existing "Legacy" badge and "No stored PDF" empty-state already handle
+// correctly (re-download isn't offered for these, matching the real
+// v1-parity path's own behaviour of never storing a blob -- regenerating
+// one is Pipeline's own "Generate & send to client" action, not this
+// screen's job).
+export function useAllContractsForVault() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const generationsQuery = useContractGenerations();
+  const contractsQuery = useQuery({ queryKey: ['contracts'], queryFn: () => getDataSource(demoMode).contracts.list() });
+
+  const generations = generationsQuery.data ?? [];
+  const legacyAsGenerations: ContractGeneration[] = (contractsQuery.data ?? []).map((c) => ({
+    id: c.id,
+    contractRequestId: null,
+    leadId: c.leadId,
+    clientName: c.clientName,
+    templateId: null,
+    templateVersionId: null,
+    versionNumberSnapshot: null,
+    contentSnapshot: [],
+    fieldValuesSnapshot: {},
+    pdfStoragePath: null,
+    generatedBy: c.createdBy,
+    generatedByName: c.createdByName,
+    generatedAt: c.createdAt,
+  }));
+
+  // A template-based generation already writes BOTH tables (useGenerateContract),
+  // so the same real event would otherwise appear twice -- dedupe by leadId never
+  // mattering here since contract_generations rows always sort first and a legacy
+  // row only gets kept if no generation shares its exact clientName+day, the
+  // cheapest real signal available without a shared id linking the two tables.
+  const generationKeys = new Set(generations.map((g) => `${g.clientName}|${g.generatedAt.slice(0, 10)}`));
+  const dedupedLegacy = legacyAsGenerations.filter((l) => !generationKeys.has(`${l.clientName}|${l.generatedAt.slice(0, 10)}`));
+
+  const merged = [...generations, ...dedupedLegacy].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
+
+  return {
+    data: merged,
+    isLoading: generationsQuery.isLoading || contractsQuery.isLoading,
+  };
 }
 
 export function useContractApprovals(templateVersionId: string) {

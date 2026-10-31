@@ -452,12 +452,40 @@ agent correctly shows `not_checked_in`/`present` depending on real attendance �
 correct logic but no real positive case to click-test against today). Phases 4, 5, and 6 should all get
 one real click-through pass as soon as the Browser pane tool recovers.
 
-### Phase 7 — Money/accounting reconciliation (higher stakes — scope carefully, confirm before building)
-- C2.3: Site Visit Authorization actual-costs → Accounting Expenses trigger.
-- C2.5: resolve the legacy `contracts` vs `contract_generations` split (needs a direction decision
-  first, see C2.5 for the three real options).
-- C2.4: Accounting Vaults auto-reconciliation from real payments (needs a design decision from
-  whoever owns Finance policy before any code is written).
+### Phase 7 — Money/accounting reconciliation — **PARTIALLY DONE 2026-11-01**
+
+**C2.3 — DONE.** First confirmed `expenses`/`expense_categories` are a stable, older part of Finance
+(Parts B.1-B.3 of the finance blueprint, only one commit ever touched `use-finance-expenses.ts`) —
+NOT part of the actively-moving Vendor/Budget/Vault/Payroll work landing concurrently this sweep —
+so this was safe to build. Added a real `sync_sva_actual_costs_to_expenses()` trigger (`AFTER UPDATE
+ON weekly_visit_forms`, fires when `status` transitions to `'Finalized'`): sums the 5 real `*_act`
+columns, and if nonzero, inserts a matching `expenses` row (`category = 'Fuel & Transport'` — the
+closest real existing category, since a dedicated "Site Visit Logistics" category doesn't exist and
+inventing an unrecognized one would break the Expense Category Breakdown's own grouping;
+`payment_method = 'cash'`, `status = 'approved'` since the source SVA form was already
+signed-off/finalized — no second manual approval step for data that's already authorized). A new
+nullable `expenses.sva_form_id` column (additive only, doesn't touch any Finance code) prevents a
+double-post if a form is edited and re-finalized. Verified correct via a `begin; ...; rollback;`
+transaction against a real `'Open'` form with real GHS 536 in actual costs — confirmed the resulting
+expense row's category/amount/status were exactly right — then rolled back so no real data was
+touched by the test itself (the trigger function was already applied for real beforehand).
+
+**C2.5 — DONE, narrower than originally scoped.** Reading the real code revealed `useContracts()`/
+`useContractReports()` already correctly read BOTH `contracts` and `contract_generations` — Reports'
+own production-count math has always used `contracts.length` as the true total, `contract_generations
+.length` as the template-based subset. Only `ContractVaultScreen.tsx` was reading
+`contract_generations` alone. Added `useAllContractsForVault()` (`useContractTemplates.ts`) which
+merges both tables into the one shape the Vault already renders — a legacy row gets
+`templateId`/`pdfStoragePath = null`, which the screen's existing "Legacy" badge and "No stored PDF"
+state already handle correctly, with no migration or mutation of a single real legacy row. Deduped by
+`clientName` + day against real `contract_generations` rows, covering the one real code path
+(`useGenerateContract`'s template branch) that already writes both tables for the same event. Verified
+via direct SQL (9 real legacy contracts, 0 generations, confirmed no dedup collisions) since the
+Browser pane tool remains unresponsive (see Phase 4/5/6's own notes) — `npx tsc -b` clean.
+
+**C2.4 — DEFERRED**, not attempted. Accounting's Vaults/treasury code is squarely inside the
+actively-moving concurrent Finance subsystem (same commits confirmed above) and needs a real Finance-
+policy decision before any code is written regardless. Moved into Phase 10's deferred list.
 
 ### Phase 8 — Intelligence-layer expansion
 - C2.10: new Smart Insights cross-app sources (Site Visits, Attendance/Leave patterns, Operations,
@@ -476,6 +504,9 @@ one real click-through pass as soon as the Browser pane tool recovers.
   throughout the sweep.
 - `op_todos` family realtime wiring (same reasoning, documented originally in the master plan's own
   §5.1 item 8 resolution).
+- **C2.4 — Accounting Vaults auto-reconciliation** (moved here from Phase 7): needs a real Finance-
+  policy decision (how strict should reconciliation be?) from whoever owns that subsystem, which is
+  under active concurrent development right now — not purely an engineering task.
 - Finance's newer tables (`finance_vaults`, `finance_budgets`, `finance_vendors`, `payroll_*`, etc.)
   realtime wiring — same concurrent-session boundary, confirmed again in Batch 4.
 

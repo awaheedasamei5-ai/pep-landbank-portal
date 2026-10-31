@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableEmpty } from "@/components/table-empty";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
-import { useContractGenerations, useContractTemplates } from "../hooks/useContractTemplates";
+import { useAllContractsForVault, useContractTemplates } from "../hooks/useContractTemplates";
 import { requireSupabase } from "@/lib/supabase.client";
 
 // NEW page (docs/plans/16-contract-of-sale-build-plan.md §4) -- a real
@@ -22,7 +22,7 @@ import { requireSupabase } from "@/lib/supabase.client";
 // blueprint): a template edit after generation can never retroactively
 // change what a past generation shows.
 export function ContractVaultScreen() {
-  const { data: generations, isLoading } = useContractGenerations();
+  const { data: generations, isLoading } = useAllContractsForVault();
   const { data: templates } = useContractTemplates();
   const [query, setQuery] = useState("");
 
