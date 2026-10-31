@@ -23,6 +23,18 @@ export function useLeadBannerCounts() {
   });
 }
 
+// C2.12 (docs/plans/41-complete-system-findings-and-phased-fix-plan.md
+// Phase 9) -- the row-level sibling of useLeadBannerCounts() above, for a
+// single banner's own detail page.
+export function useLeadsForBanner(bannerId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({
+    queryKey: ['leadsForBanner', bannerId],
+    queryFn: () => getDataSource(demoMode).leads.listByBanner(bannerId),
+    enabled: !!bannerId,
+  });
+}
+
 export function useCreateBanner() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);

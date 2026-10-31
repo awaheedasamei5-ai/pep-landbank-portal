@@ -5,7 +5,7 @@ import { ArrowLeft, Camera, Images, MapPin } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
 import { BANNER_STATUS, BANNER_STATUS_ORDER, directionsUrl } from '../lib/bannerLogic';
-import { useBannerStatusLog, useBanners, useDeleteBanner, useLogBannerStatusUpdate, useUpdateBannerArea } from '../hooks/useBanners';
+import { useBannerStatusLog, useBanners, useDeleteBanner, useLeadsForBanner, useLogBannerStatusUpdate, useUpdateBannerArea } from '../hooks/useBanners';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { BannerStatus } from '../../../types/domain';
 import styles from './BannerDetailScreen.module.css';
@@ -21,6 +21,7 @@ export function BannerDetailScreen() {
   const { id } = useParams<{ id: string }>();
   const { data: banners } = useBanners();
   const { data: log, isLoading: logLoading } = useBannerStatusLog(id ?? '');
+  const { data: sourcedLeads, isLoading: leadsLoading } = useLeadsForBanner(id ?? '');
   const logUpdate = useLogBannerStatusUpdate();
   const updateArea = useUpdateBannerArea();
   const deleteBanner = useDeleteBanner();
@@ -161,6 +162,34 @@ export function BannerDetailScreen() {
           {logUpdate.isPending ? 'Saving…' : 'Log update'}
         </button>
       </div>
+
+      <div className={styles.sectitle}>
+        Leads sourced from this banner
+        <span className={styles.cnt}>{sourcedLeads?.length ?? 0}</span>
+      </div>
+      {leadsLoading && <p className={styles.emptyMsg}>Loading…</p>}
+      {!leadsLoading && (sourcedLeads ?? []).length === 0 && <p className={styles.emptyMsg}>No leads sourced from this banner yet</p>}
+      {(sourcedLeads ?? []).length > 0 && (
+        <div className={styles.list}>
+          {(sourcedLeads ?? []).map((lead) => (
+            <button
+              key={lead.id}
+              type="button"
+              className={styles.logRow}
+              style={{ borderLeftColor: 'var(--c-accent)', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+              onClick={() => navigate(`/dashboard/pipeline/${lead.id}`)}
+            >
+              <div className={styles.logTop}>
+                <div className={styles.logStatus}>{lead.name}</div>
+                <div className={styles.logDate}>{(lead.date || '').slice(0, 10)}</div>
+              </div>
+              <div className={styles.logNote}>
+                {lead.contact} · Stage {lead.stage}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className={styles.sectitle}>
         History

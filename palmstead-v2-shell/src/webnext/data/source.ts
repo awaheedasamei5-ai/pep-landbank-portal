@@ -263,6 +263,9 @@ export interface DataSource {
     // through a specific agent, sit in this shared pool until assigned.
     // Same gate as Plot Inventory (canViewClientDatabase() in index.html).
     listCompany(): Promise<Lead[]>;
+    // C2.12 -- real leads sourced from one banner, for that banner's own
+    // detail page (Banner Tracking). Sibling of leadBannerCounts() below.
+    listByBanner(bannerId: string): Promise<Lead[]>;
     assign(id: string, agentKey: string): Promise<Lead>;
     // This shell only (not real web-next) -- hands a Company Lead to a
     // staff member for follow-up WITHOUT the real ownership transfer
@@ -1810,6 +1813,23 @@ function createLiveDataSource(): DataSource {
           .from("leads")
           .select("*")
           .eq("agent_key", "company")
+          .is("deleted_at", null)
+          .order("date_added", { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapLeadRow);
+      },
+      async listByBanner(bannerId) {
+        // C2.12 (docs/plans/41-complete-system-findings-and-phased-fix-plan.md
+        // Phase 9) -- same real deleted_at filter as leadBannerCounts(),
+        // which already proves banner_id attribution is queryable; this is
+        // the row-level sibling for a banner's own detail page. No role
+        // filter here on purpose -- leads_sel RLS already scopes which rows
+        // an agent can actually see (same as every other cross-agent
+        // reference in this app, e.g. Referrals' lead picker).
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .eq("banner_id", bannerId)
           .is("deleted_at", null)
           .order("date_added", { ascending: false });
         if (error) throw error;
