@@ -1,9 +1,8 @@
 import { LoginForm } from "../../_components/login-form";
 import { LoginVideoPanel } from "./login-video-panel";
 
-// Palmstead's real sign-in screen. No self-registration and no OAuth --
-// staff accounts are provisioned by Management (real `profiles` row per
-// staff member), matching v1/web-next's own access model exactly.
+// Palmstead's sign-in screen. Staff identities are linked to real `profiles` rows.
+// Existing V1 staff keep their email and password in V2; new staff use Management invitations.
 //
 // Real user ask (2026-09-11): replace the plain blue panel with a real
 // video background, and drop the "Sign in to your staff account" line.
@@ -37,7 +36,7 @@ export default function LoginV1() {
           <div className="space-y-4 text-center">
             <div className="font-medium tracking-tight">Sign in</div>
             <div className="mx-auto max-w-xl text-muted-foreground">
-              Use the email and password Management set up for you.
+              Use your Palmstead email and password. Your previous portal login works here too.
             </div>
           </div>
           <div className="space-y-4">
