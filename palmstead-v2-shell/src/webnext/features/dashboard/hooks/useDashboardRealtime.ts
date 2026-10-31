@@ -277,6 +277,24 @@ export function useDashboardRealtime() {
       queryClient.invalidateQueries({ queryKey: ['teamFeedback'] });
       queryClient.invalidateQueries({ queryKey: ['feedbackComments'] });
     };
+    // Found in the final system-wide realtime-coverage sweep (2026-10-31):
+    // these 5 tables were in the supabase_realtime publication with real
+    // frontend consumers but never wired into this bridge -- same bug
+    // class already fixed 3 times this session (attendance_corrections,
+    // chat tables, data_check_dismissals).
+    const invalidateAchievements = () => {
+      queryClient.invalidateQueries({ queryKey: ['achievementDefs'] });
+      queryClient.invalidateQueries({ queryKey: ['staffAchievements'] });
+    };
+    const invalidateAttendanceExceptions = () => {
+      queryClient.invalidateQueries({ queryKey: ['attendanceExceptions'] });
+    };
+    const invalidateLeaveRequestLogs = () => {
+      queryClient.invalidateQueries({ queryKey: ['leaveRequestLogs'] });
+    };
+    const invalidateOfficeLocations = () => {
+      queryClient.invalidateQueries({ queryKey: ['officeLocations'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -345,7 +363,12 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback' }, invalidateTeamFeedback)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feedback_comments' }, invalidateTeamFeedback)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_corrections' }, invalidateAttendance)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'data_check_dismissals' }, invalidateDataCheckDismissals);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'data_check_dismissals' }, invalidateDataCheckDismissals)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'achievement_definitions' }, invalidateAchievements)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_achievements' }, invalidateAchievements)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_exceptions' }, invalidateAttendanceExceptions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_request_logs' }, invalidateLeaveRequestLogs)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'office_locations' }, invalidateOfficeLocations);
     channel.subscribe();
 
     return () => {
