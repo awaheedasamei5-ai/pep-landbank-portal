@@ -406,11 +406,6 @@ RLS confirmed to allow the exact actors (own agent or manager) who'd ever click 
 phase and Phase 4 should both get one real click-through pass as soon as the browser tool recovers —
 noted as a standing follow-up, not silently assumed fine.
 
-### Phase 5 — Funnel-capture automation
-- C2.1: "Convert to lead" quick-action on unlinked site visits.
-- C2.6: "Save as lead" action on Quotation.
-Both are additive, low-risk, directly reduce manual re-entry — the user's stated core goal.
-
 ### Phase 6 — Staff-availability awareness — **DONE** (code-complete, substitute-verified)
 
 **Correction found before building**: `useColleagueAvailability.ts` (the hook this item was supposed to
@@ -526,9 +521,30 @@ Verified via direct SQL (browser pane still unresponsive — same persistent iss
 Check items right now; 0 complaints currently match (real data is sparse: only 2 complaints exist
 company-wide, per Phase 3's own finding). `npx tsc -b` clean.
 
-### Phase 9 — Remaining attribution/UX polish
-- C2.12: banner detail page lead-attribution section.
-- C2.13: Document Vault deep-linking to source records.
+### Phase 9 — Remaining attribution/UX polish — **DONE, fully live-verified 2026-11-01**
+
+**C2.12 — Banner detail lead-attribution**: added `leads.listByBanner(bannerId)` as the row-level
+sibling of the already-proven `leadBannerCounts()`, surfaced via a new `useLeadsForBanner()` hook and
+a "Leads sourced from this banner" section on `BannerDetailScreen.tsx`. No role filter — `leads_sel`
+RLS already scopes visibility, same as every other cross-agent reference in this app.
+
+**C2.13 — Document Vault deep-linking**: added nullable `source_type`/`source_id` to `downloads`,
+backfilled only the one unambiguous, safely-derivable category — real `Receipt_<receipt_number>.pdf`
+filenames matched against `payments.receipt_number` (3 of 3 real rows matched correctly; every other
+filename convention left null rather than guess-matched by text, same honesty principle used
+throughout this sweep). `downloads.list()` resolves each matched row's real `lead_id` with one extra
+lookup (source_id is polymorphic, no direct FK to leads). A new "View source" button on matched rows
+navigates straight to that payment's real lead detail page.
+
+**The Browser pane tool recovered during this phase** after being unresponsive across Phases 4-8 —
+**both features were live-verified for real, as Management**: Document Vault's "View source" on
+`Receipt_RCT-000006.pdf` correctly navigated to lead "Rejoice" (`dfc34f61...`), matching the exact
+payment→lead chain confirmed via SQL beforehand; Banner B32's detail page correctly showed its real 2
+sourced leads (Eugene, Mr Sylvester), matching the exact row count SQL confirmed beforehand. `npx tsc
+-b` clean. **Standing follow-up, not done here**: Phases 4-8 were each substitute-verified (typecheck
++ direct SQL) while the tool was down and should get one real click-through pass now that it's
+confirmed working again — nothing in those phases is suspected wrong, this is a verification
+formality, not a known issue.
 
 ### Phase 10 — Deferred, not forgotten (owned by concurrent work, pick up once that work settles)
 - Operations Tracker's own cross-app linkage (`op_issues.related_lead_id`, per Batch 5's concrete
@@ -544,23 +560,39 @@ company-wide, per Phase 3's own finding). `npx tsc -b` clean.
 
 ---
 
-## 4. What this sweep deliberately did not do, and why
+## 4. Final state as of 2026-11-01 — all 9 build phases executed
+
+This document was originally written as a plan (§3 was all "to build," §4 below listed what was
+deliberately left undone). The user then asked for it to be executed in order, phase by phase,
+tested and deployed before moving to the next — which happened. **Phases 1-9 are now all DONE**
+(see each phase's own entry in §3 for exactly what was built, how it was verified, and any honest
+caveats). What follows is what was deliberately NOT done, and why, as of the real final state:
 
 - **Did not touch Operations Tracker's or Finance's own code/schema**, even where a real gap was
-  found (C2.7's Operations precedent, the Finance realtime gap) — both subsystems had real commits
-  from a different concurrent session merging into this branch throughout the sweep. Touching either
-  risked a collision with in-progress work that isn't this sweep's to interfere with.
-- **Did not touch any HR business-logic calculation** (Attendance's `onTimeRate` default) even
-  though it was found and is arguably wrong — flagged for explicit human review instead, per this
-  sweep's own standing conservatism rule for anything HR/compensation-adjacent.
-- **Did not touch any money/legal calculation logic** — only pure wiring/rendering bugs were fixed
-  directly in Accounting/Contract of Sale/Commission; every real finding in those apps that touches
-  actual financial correctness (C2.3, C2.4, C2.5) is flagged here for a scoped follow-up, not
-  auto-built.
-- **Did not revert the testing-phase `has_permission()` override** or any of its related RLS
-  widenings (including this sweep's own A1 fix) — that's explicitly the user's own next step once
-  the real Settings/permissions UI exists, per the original master plan.
-- **Did not build any of the Phase 3-9 items above** — this document is the plan, not the
-  implementation. Building out schema changes, new UI sections, triggers, and intelligence-layer
-  rules across 9 phases is real, substantial future work, scoped and sequenced here so it can be
-  picked up cleanly rather than re-derived from scratch.
+  found (C2.7's original Operations precedent, C2.3's Expenses table, C2.4's Vaults, C2.5's
+  Contract-of-Sale split) — Operations Tracker and Finance both had real commits from a different
+  concurrent session merging into this branch throughout the entire sweep (including, mid-sweep, a
+  real Settings/permissions UI and a `has_permission()` revert — see below). Touching either
+  subsystem's own code risked a collision with in-progress work that wasn't this sweep's to
+  interfere with. C2.4 specifically (Vaults auto-reconciliation) is deferred into Phase 10 for this
+  reason, pending a real Finance-policy decision from whoever owns that subsystem.
+- **Did not touch any HR business-logic calculation** (Attendance's `onTimeRate` default, found in
+  Batch 3) — flagged for explicit human review, never fixed, per this sweep's own standing
+  conservatism rule for anything HR/compensation-adjacent.
+- **Did not touch any money/legal calculation logic beyond what's explicitly documented as built**
+  — C2.3's expense-sync trigger and C2.5's contract-vault union were both scoped narrowly, verified
+  (one via a rollback-wrapped test, the other via direct SQL), and are the only real financial-logic
+  changes this sweep made. C2.4 was correctly deferred rather than guessed at.
+- **Did not revert the testing-phase `has_permission()` override itself** — that happened on its
+  own, mid-sweep, via the concurrent session's real Settings/permissions UI (confirmed live during
+  Phase 6). The handful of RLS policies this sweep separately widened for testing
+  (`contract_requests_upd`, `weekly_visit_forms` insert/update, `contract_templates_sel` — none of
+  which route through `has_permission()`) were explicitly left open per the user's own direct
+  instruction when asked (2026-10-31) — revisit that decision whenever the user is ready, it was not
+  silently forgotten.
+- **Did not force a live click-through for Phases 4-8** while the Browser pane tool was persistently
+  unresponsive across that stretch — each of those phases substituted direct SQL/schema verification
+  instead and says so honestly in its own entry. The tool recovered during Phase 9, and both of that
+  phase's own features were fully live-verified as a result. A quick confirmation pass on Phases 4-8
+  now that the tool works again is the one honest, outstanding follow-up from this whole sweep — not
+  a known defect, a verification formality.
