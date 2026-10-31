@@ -14,6 +14,7 @@ type Permission = { key: string; label: string; description: string | null };
 type Override = { staff_key: string; permission_key: string; granted: boolean; granted_at: string | null };
 type RoleDefault = { role: string; permission_key: string };
 type Setting = "allow" | "deny" | "default";
+const SUPPORTED_KEYS = ["operations.todos.view", "operations.todos.manage"];
 
 export function AccessSettings() {
   const [authorized, setAuthorized] = useState(false);
@@ -40,15 +41,18 @@ export function AccessSettings() {
     }
     const [people, defs, values, defaults] = await Promise.all([
       client.from("profiles").select("agent_key,name,role,department,active").order("name"),
-      client.from("permissions").select("key,label,description").order("key"),
+      client.from("permissions").select("key,label,description").in("key", SUPPORTED_KEYS).order("key"),
       client.from("staff_permission_overrides").select("staff_key,permission_key,granted,granted_at"),
       client.from("role_permissions").select("role,permission_key"),
     ]);
     if (people.error || defs.error || values.error || defaults.error) {
       throw new Error("Access settings could not be loaded. Please retry.");
     }
-    setAuthorized(true);
     setStaff((people.data ?? []) as Staff[]);
+    if (defs.data?.length !== SUPPORTED_KEYS.length) {
+      throw new Error("Operations access controls are not ready. Please retry later.");
+    }
+    setAuthorized(true);
     setPermissions((defs.data ?? []) as Permission[]);
     setOverrides((values.data ?? []) as Override[]);
     setRoleDefaults((defaults.data ?? []) as RoleDefault[]);
@@ -101,7 +105,8 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then allow or restrict each supported feature.
+          Choose a staff member, then allow or restrict their Operations to-dos. Project and meeting access controls
+          will be added after their database checks are complete.
         </p>
       </div>
       {loading && (
@@ -120,7 +125,7 @@ export function AccessSettings() {
             <CardHeader>
               <CardTitle>Staff member</CardTitle>
               <CardDescription>
-                Changes take effect in database permission checks for the listed features.
+                These changes take effect in the database. Restricting view access also prevents to-do changes.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -160,7 +165,16 @@ export function AccessSettings() {
                 );
                 let setting: Setting = "default";
                 if (override) setting = override.granted ? "allow" : "deny";
-                const effective = override ? override.granted : roleAllows;
+                const viewOverride = overrides.find(
+                  (entry) => entry.staff_key === person.agent_key && entry.permission_key === "operations.todos.view",
+                );
+                const viewRoleAllows = roleDefaults.some(
+                  (entry) => entry.role === person.role && entry.permission_key === "operations.todos.view",
+                );
+                const viewAllowed = viewOverride ? viewOverride.granted : viewRoleAllows;
+                const effective =
+                  (override ? override.granted : roleAllows) &&
+                  (permission.key !== "operations.todos.manage" || viewAllowed);
                 return (
                   <Card key={permission.key} className="min-w-0">
                     <CardHeader className="gap-2">
@@ -208,3 +222,4 @@ export function AccessSettings() {
     </div>
   );
 }
+
