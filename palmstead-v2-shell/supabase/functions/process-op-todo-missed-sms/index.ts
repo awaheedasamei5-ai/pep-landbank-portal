@@ -67,7 +67,7 @@ Deno.serve(async (request) => {
         .select("id,title,status,assigned_to,sms_notified_at,sms_missed_notified_at,item_date,start_time,end_time")
         .eq("id", row.todo_id)
         .maybeSingle(),
-      supabase.from("profiles").select("phone").eq("agent_key", row.recipient_key).maybeSingle(),
+      supabase.from("profiles").select("phone,active").eq("agent_key", row.recipient_key).maybeSingle(),
     ]);
 
     let outcome: DeliveryOutcome;
@@ -134,9 +134,15 @@ Deno.serve(async (request) => {
         else deferredUntilTaskEnd += 1;
         continue;
       }
-      phone = normalizeGhanaPhone(profile?.phone ?? null);
+      phone = profile?.active === true ? normalizeGhanaPhone(profile.phone) : null;
       if (!apiKey) {
         outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server." };
+      } else if (!profile?.active) {
+        outcome = {
+          status: "blocked",
+          providerReference: null,
+          error: "The assigned staff account is inactive or unavailable.",
+        };
       } else if (!phone) {
         outcome = {
           status: "blocked",

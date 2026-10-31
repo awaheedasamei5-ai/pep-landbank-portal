@@ -25,6 +25,20 @@ function mapProfileRow(r: Record<string, unknown>): Profile {
   };
 }
 
+export async function loadActiveStaffProfile(userId: string): Promise<Profile> {
+  const client = requireSupabase();
+  const { data: row, error } = await client.from("profiles").select("*").eq("id", userId).maybeSingle();
+  if (error || !row) {
+    await client.auth.signOut();
+    throw new Error("This sign-in is not linked to an invited staff account.");
+  }
+  if (row.active === false) {
+    await client.auth.signOut();
+    throw new Error("This staff account is inactive.");
+  }
+  return mapProfileRow(row);
+}
+
 export function useLiveLogin() {
   const loginLive = useAuthStore((s) => s.loginLive);
   const [isPending, setIsPending] = useState(false);
@@ -40,21 +54,7 @@ export function useLiveLogin() {
         throw new Error(signInError?.message || "Wrong email or password.");
       }
 
-      const { data: row, error: profileErr } = await client
-        .from("profiles")
-        .select("*")
-        .eq("id", data.user.id)
-        .maybeSingle();
-      if (profileErr || !row) {
-        await client.auth.signOut();
-        throw new Error("Signed in, but no staff profile is set up for this account yet.");
-      }
-      if (row.active === false) {
-        await client.auth.signOut();
-        throw new Error("This account has been deactivated. Contact management.");
-      }
-
-      const profile = mapProfileRow(row);
+      const profile = await loadActiveStaffProfile(data.user.id);
       loginLive(profile);
       return profile;
     } catch (e) {

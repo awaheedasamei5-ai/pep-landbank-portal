@@ -297,7 +297,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "team-roster",
 				title: "Team Roster",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/settings/team",
 				icon: UserPlus,
 			},
 			{
@@ -306,7 +306,7 @@ export const sidebarItems: NavGroup[] = [
 				url: NOT_BUILT_YET,
 				icon: Server,
 			},
-			{ id: "settings", title: "Settings", url: NOT_BUILT_YET, icon: Settings },
+			{ id: "settings", title: "Settings", url: "/dashboard/settings", icon: Settings },
 		],
 	},
 ];
