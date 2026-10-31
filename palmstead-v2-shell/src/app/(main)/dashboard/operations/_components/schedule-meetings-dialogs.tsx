@@ -479,10 +479,12 @@ export function ScheduleMeetingComposer({
 export function ScheduleMeetingDetails({
   meeting,
   profile,
+  canManageAccess,
   onClose,
 }: {
   meeting: ScheduleMeeting;
   profile: Profile | null;
+  canManageAccess: boolean;
   onClose: () => void;
 }) {
   const staffQuery = useActiveMeetingStaff();
@@ -503,7 +505,7 @@ export function ScheduleMeetingDetails({
   );
   const [feedback, setFeedback] = useState<string | null>(null);
   const [acceptBusyInvitees, setAcceptBusyInvitees] = useState(false);
-  const canManage = profile?.role === "manager" || profile?.key === meeting.ownerKey;
+  const canManage = canManageAccess && (profile?.role === "manager" || profile?.key === meeting.ownerKey);
   const ownInvite = meeting.invitees.find((invitee) => invitee.staffKey === profile?.key);
   const staffNames = new Map((staffQuery.data ?? []).map((person) => [person.key, person.name]));
   const cancelled = meeting.status === "cancelled";
@@ -979,3 +981,4 @@ export function ScheduleMeetingDetails({
     </Dialog>
   );
 }
+
