@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
-import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
@@ -37,11 +37,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isManager = useAuthStore((s) => s.profile?.role === "manager");
   const items = isManager
     ? sidebarItems
-    : sidebarItems.map((group) =>
-        group.items.some((item) => item.id === "master-pipeline")
-          ? { ...group, items: group.items.map((item) => (item.id === "master-pipeline" ? { ...item, title: "My Pipeline" } : item)) }
-          : group,
-      );
+    : sidebarItems
+        .filter((group) => group.label !== "Management")
+        .map((group) =>
+          group.items.some((item) => item.id === "master-pipeline")
+            ? {
+                ...group,
+                items: group.items.map((item) =>
+                  item.id === "master-pipeline" ? { ...item, title: "My Pipeline" } : item,
+                ),
+              }
+            : group,
+        );
 
   const variant = isSynced ? sidebarVariant : props.variant;
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
