@@ -28,9 +28,10 @@ import { Separator } from "@/components/ui/separator";
 interface NoteEditorProps {
   content: string;
   onChange: (html: string) => void;
+  editable?: boolean;
 }
 
-export function useNoteEditor({ content, onChange }: NoteEditorProps) {
+export function useNoteEditor({ content, onChange, editable = true }: NoteEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
@@ -43,6 +44,7 @@ export function useNoteEditor({ content, onChange }: NoteEditorProps) {
       Typography,
     ],
     content,
+    editable,
     immediatelyRender: false,
     onUpdate: ({ editor: e }) => onChange(e.getHTML()),
     editorProps: {
@@ -51,6 +53,10 @@ export function useNoteEditor({ content, onChange }: NoteEditorProps) {
       },
     },
   });
+
+  useEffect(() => {
+    editor?.setEditable(editable);
+  }, [editor, editable]);
 
   useEffect(() => {
     if (!editor) return;
@@ -122,3 +128,4 @@ export function NoteEditorSurface({ editor }: { editor: ReturnType<typeof useNot
     </div>
   );
 }
+
