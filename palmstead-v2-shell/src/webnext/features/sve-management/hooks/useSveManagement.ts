@@ -7,6 +7,7 @@ import { getSupabaseClient } from '../../../data/client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { redactPII } from '../../../shared/lib/redact';
+import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildSveDayReportPdf, sveDayReportFilename } from '../lib/sveReportPdf';
@@ -183,7 +184,7 @@ export function useGenerateClientFeedback() {
           },
         },
       });
-      if (error) throw error;
+      if (error) throw Object.assign(new Error(await friendlyFunctionsInvokeError(error, 'Could not generate feedback right now.')), { friendly: true });
       return (data as { message?: string } | null)?.message ?? '';
     },
   });
@@ -204,7 +205,7 @@ export function usePolishManagerNarrative() {
       const { data, error } = await client.functions.invoke('ai-insights', {
         body: { kind: 'sve_manager_narrative_polish', context: { scope, rawNotesRedacted: redactPII(rawNotes) } },
       });
-      if (error) throw error;
+      if (error) throw Object.assign(new Error(await friendlyFunctionsInvokeError(error, 'Could not polish this text right now.')), { friendly: true });
       return (data as { message?: string } | null)?.message ?? '';
     },
   });

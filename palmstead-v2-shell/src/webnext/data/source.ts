@@ -3,7 +3,7 @@ import type { LeaveReminderHealth } from "../features/leave/lib/leaveReminderTyp
 import { agentPoints } from "../features/manager/lib/leaderboardLogic";
 import { computeGrandTotal, deriveStageFromPayment, STAGES } from "../features/pipeline/lib/pipelineLogic";
 import { monthKey, shiftMonth, today } from "../shared/lib/format";
-import { friendlyErrorObj } from "../shared/lib/friendlyError";
+import { friendlyErrorObj, friendlyFunctionsInvokeError } from "../shared/lib/friendlyError";
 import type {
   AchievementDef,
   ActivityLogEntry,
@@ -4565,7 +4565,16 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await client.functions.invoke("ai-insights", {
           body: { kind: "allocation_doc_verify", context: { imageUrl, clientName, plotNumber } },
         });
-        if (error) throw error;
+        // Known real gap (2026-10-31, see docs/plans/42): "allocation_doc_verify"
+        // has never been implemented server-side -- this always returns a
+        // real 400 "Unknown insight kind" right now. It would need a
+        // vision-capable model (this image needs to actually be looked at,
+        // not just described in text) and a real design decision on what
+        // "verify" should check, not just a missing prompt branch like the
+        // other two gaps fixed alongside this one. Surfacing a real,
+        // friendly explanation rather than the raw SDK error until that
+        // design work happens.
+        if (error) throw friendlyErrorObj(await friendlyFunctionsInvokeError(error, "Document verification isn't available yet. A staff member should review this document manually."));
         const status = (data?.status ?? "unavailable") as AllocationRequest["authDocAiStatus"];
         const note = String(data?.note ?? "The AI did not return a clear result.");
         const { data: row, error: updError } = await client

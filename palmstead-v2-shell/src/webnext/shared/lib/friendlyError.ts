@@ -52,12 +52,48 @@ const KNOWN_CODES: Record<string, string> = {
 // decline a payment' and confirm_allocation's authorization messages were
 // both being silently replaced by 'Something went wrong' because neither
 // matched any of the raw-shape rules below.
+// Real bug caught 2026-10-31: the Supabase JS client's own generic
+// FunctionsHttpError message -- "Edge Function returned a non-2xx status
+// code" -- is capitalized, contains spaces, and matches none of the SQL-
+// internals exclusions below, so looksLikeSafeSentence() was letting it
+// through unchanged instead of falling back to the caller's own fallback
+// text. This is never the real reason for a failure (the edge function's
+// own response body has that), just the SDK's wrapper around any non-2xx
+// -- excluded by name so it always falls through to a real translation or
+// the caller's fallback instead of leaking this exact sentence to staff.
+const GENERIC_SDK_WRAPPER_MESSAGES = [/^Edge Function returned a non-2xx status code$/i, /^FunctionsHttpError/i, /^FunctionsFetchError/i, /^FunctionsRelayError/i];
+
 function looksLikeSafeSentence(raw: string): boolean {
   if (raw.length < 4 || raw.length > 200) return false;
   if (!/^[A-Z]/.test(raw)) return false;
   if (!/\s/.test(raw)) return false;
   if (/relation |column |syntax error|permission denied for|SQLSTATE|violates|duplicate key|constraint "|::|ERROR:/i.test(raw)) return false;
+  if (GENERIC_SDK_WRAPPER_MESSAGES.some((re) => re.test(raw))) return false;
   return true;
+}
+
+// Supabase's functions.invoke() never puts the edge function's own real
+// response body on `error.message` -- that body (which every edge function
+// in this project already writes as a deliberate, safe, plain-English
+// sentence, e.g. "Device reminders are not configured yet.") only lives on
+// `error.context`, a real Response object that must be read asynchronously.
+// Use this instead of the synchronous friendlyError() at any call site that
+// invokes an edge function directly, so staff see OUR real message instead
+// of the SDK's generic wrapper text or a second-guessed generic fallback.
+export async function friendlyFunctionsInvokeError(e: unknown, fallback?: string): Promise<string> {
+  const err = e as { message?: unknown; friendly?: unknown; context?: Response } | null | undefined;
+  if (err?.friendly) return String(err.message);
+  if (err?.context && typeof err.context.json === 'function') {
+    try {
+      const body = (await err.context.clone().json()) as { error?: unknown; message?: unknown } | null;
+      const real = body?.error ?? body?.message;
+      if (typeof real === 'string' && looksLikeSafeSentence(real)) return real;
+    } catch {
+      // Body wasn't JSON (or already consumed) -- fall through to the
+      // synchronous translator below, same as any other error shape.
+    }
+  }
+  return friendlyError(e, fallback);
 }
 
 export function friendlyError(e: unknown, fallback?: string): string {

@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { getSupabaseClient } from '../../../data/client';
 import { missingKycFieldLabels } from '../lib/contractFieldResolver';
+import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError';
 import type { Lead } from '../../../types/domain';
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §9 -- the 4 named AI capabilities plus
@@ -43,7 +44,7 @@ export function useClauseExplainer() {
       const client = getSupabaseClient();
       if (!client) return null;
       const { data, error } = await client.functions.invoke('ai-insights', { body: { kind: 'contract_clause_explainer', context: { clauseText } } });
-      if (error) throw error;
+      if (error) throw new Error(await friendlyFunctionsInvokeError(error, 'Could not explain this clause right now.'));
       return (data as { message?: string } | null)?.message ?? null;
     },
   });
@@ -89,7 +90,7 @@ export function useMissingDataChecklistDraft() {
       const client = getSupabaseClient();
       if (!client) return null;
       const { data, error } = await client.functions.invoke('ai-insights', { body: { kind: 'contract_missing_data_checklist', context: { missingKeys } } });
-      if (error) throw error;
+      if (error) throw new Error(await friendlyFunctionsInvokeError(error, 'Could not draft the missing-data checklist right now.'));
       return (data as { message?: string } | null)?.message ?? null;
     },
   });

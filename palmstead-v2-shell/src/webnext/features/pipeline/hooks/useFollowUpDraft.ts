@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { getSupabaseClient } from '../../../data/client';
 import { redactPII } from '../../../shared/lib/redact';
 import { daysSince } from '../../../shared/lib/format';
+import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError';
 import type { Lead } from '../../../types/domain';
 
 // Real LLM-drafted follow-up message for one lead -- kind='follow_up_draft'
@@ -34,7 +35,7 @@ export function useFollowUpDraft() {
           },
         },
       });
-      if (error) throw error;
+      if (error) throw new Error(await friendlyFunctionsInvokeError(error, 'Could not draft a follow-up message right now.'));
       const message = (data as { message?: string } | null)?.message ?? '';
       return message.replace(/\{ClientName\}/g, lead.name.split(' ')[0] || lead.name);
     },

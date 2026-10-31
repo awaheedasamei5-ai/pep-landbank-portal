@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './client';
+import { friendlyFunctionsInvokeError } from '../shared/lib/friendlyError';
 
 // Deliberately separate from data/source.ts's DataSource seam, same
 // reasoning as receiptClient.ts/sveReportClient.ts -- whoever opens a
@@ -16,7 +17,7 @@ export async function resolveContractLink(token: string): Promise<ContractLinkRe
   const client = getSupabaseClient();
   if (!client) return { url: null, notFound: false };
   const { data, error } = await client.functions.invoke('get-contract', { body: { token } });
-  if (error) throw error;
+  if (error) throw new Error(await friendlyFunctionsInvokeError(error, 'This contract link could not be opened right now. Please try again shortly.'));
   if (data?.error === 'not_found') return { url: null, notFound: true };
   if (data?.error) throw new Error(data.error);
   return { url: data?.url ?? null, notFound: false };

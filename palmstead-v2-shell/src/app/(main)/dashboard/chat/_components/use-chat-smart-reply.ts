@@ -3,6 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { requireSupabase } from "@/lib/supabase.client";
+import { friendlyFunctionsInvokeError } from "@/webnext/shared/lib/friendlyError";
 
 import type { ChatMessage } from "./use-chat";
 
@@ -28,7 +29,7 @@ export function useSuggestReply(myKey: string | undefined, partnerName: string |
           },
         },
       });
-      if (error) throw error;
+      if (error) throw new Error(await friendlyFunctionsInvokeError(error, "Could not suggest a reply right now."));
       return String(data?.message ?? "").trim();
     },
   });

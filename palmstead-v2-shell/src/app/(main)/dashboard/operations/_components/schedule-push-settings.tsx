@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
+import { friendlyFunctionsInvokeError } from "@/webnext/shared/lib/friendlyError";
 
 type DeviceState = "checking" | "unsupported" | "disabled" | "enabled" | "denied" | "busy" | "error";
 type PushConfig = { publicKey: string };
@@ -114,7 +115,14 @@ export function SchedulePushSettings() {
 
       const { data, error } = await requireSupabase().functions.invoke<PushConfig>("get-push-config");
       if (!data?.publicKey) {
-        throw new Error(error?.message || "The reminder service did not return its public device key.");
+        // Real root cause (2026-10-31): get-push-config already returns a
+        // real plain-English reason (e.g. "Device reminders are not
+        // configured yet.") in its response body, but the Supabase SDK's
+        // own error.message is always the generic "Edge Function returned
+        // a non-2xx status code" -- that body only lives on error.context,
+        // which friendlyFunctionsInvokeError reads for us.
+        const message = error ? await friendlyFunctionsInvokeError(error, "The reminder service did not return its public device key.") : "The reminder service did not return its public device key.";
+        throw Object.assign(new Error(message), { friendly: true });
       }
 
       const subscription =
