@@ -371,6 +371,13 @@ through of the 3 new sections and the real note-link round-trip (create → link
 could not be completed and should be done as a quick follow-up once the browser tooling is working
 again — treat this phase as code-complete but not yet visually confirmed in the running app.
 
+**Substitute verification performed** (browser tool still unresponsive on retry): `npx tsc -b` clean
+again after merge; a direct SQL smoke query (`select ... from leads l left join enquiries/complaints/
+notes on lead_id = l.id ...`) confirmed the `lead_id` column reads cleanly on all three tables with no
+schema error; `useDashboardRealtime.ts` confirmed to contain real `notes`/`complaintsForLead`/
+`enquiriesForLead` invalidation wiring exactly as described above. This does not replace a real
+click-through, but rules out a schema-level or wiring-level mistake.
+
 ### Phase 5 — Funnel-capture automation
 - C2.1: "Convert to lead" quick-action on unlinked site visits.
 - C2.6: "Save as lead" action on Quotation.
