@@ -295,6 +295,17 @@ export function useDashboardRealtime() {
     const invalidateOfficeLocations = () => {
       queryClient.invalidateQueries({ queryKey: ['officeLocations'] });
     };
+    // Phase 2 of docs/plans/41-complete-system-findings-and-phased-fix-plan.md.
+    // attendance_policy has a real consumer (useAttendance/useAttendanceMonth/
+    // useAttendanceComparison/useAttendanceManagement, all keyed ['attendancePolicy'])
+    // but was never wired here. attendance_reviews has zero real call sites
+    // anywhere in the app (checked) -- left unwired, nothing to invalidate.
+    // notice_board_reports is read inline by useNoticeBoard() under the
+    // existing ['noticeBoard'] key, so it reuses invalidateNoticeBoard rather
+    // than needing its own invalidate function.
+    const invalidateAttendancePolicy = () => {
+      queryClient.invalidateQueries({ queryKey: ['attendancePolicy'] });
+    };
 
     const channel = client.channel(`dashboard-${myKey}`);
     if (isManager) {
@@ -368,7 +379,9 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_achievements' }, invalidateAchievements)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_exceptions' }, invalidateAttendanceExceptions)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_request_logs' }, invalidateLeaveRequestLogs)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'office_locations' }, invalidateOfficeLocations);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'office_locations' }, invalidateOfficeLocations)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_policy' }, invalidateAttendancePolicy)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notice_board_reports' }, invalidateNoticeBoard);
     channel.subscribe();
 
     return () => {

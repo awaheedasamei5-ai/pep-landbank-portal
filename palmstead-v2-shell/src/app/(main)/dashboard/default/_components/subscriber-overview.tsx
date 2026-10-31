@@ -3,6 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ghs } from "@/lib/palmstead/format";
 import { useManagerOverview } from "@/lib/palmstead/use-manager-overview";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 // Real pipeline-by-stage funnel + real per-agent pipeline value --
 // replaces the template's fake "18,426 Customers" recent-customers table
@@ -26,8 +27,16 @@ function initials(name: string): string {
     .join("");
 }
 
+// Matches the real `leads_sel` RLS exactly (agent_key = own OR role =
+// manager OR key in the trusted set) -- these are the only accounts
+// whose unfiltered leads query in useManagerOverview() actually returns
+// every lead; everyone else's "company-wide" copy would be a lie.
+const COMPANY_WIDE_KEYS = ["elias", "emmanuel", "elizabeth"];
+
 export function SubscriberOverview() {
   const { data, isLoading } = useManagerOverview();
+  const profile = useAuthStore((s) => s.profile);
+  const seesCompanyWide = profile?.role === "manager" || (!!profile?.key && COMPANY_WIDE_KEYS.includes(profile.key));
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
 
   return (
@@ -35,7 +44,9 @@ export function SubscriberOverview() {
       <Card>
         <CardHeader>
           <CardTitle className="leading-none">Pipeline by stage</CardTitle>
-          <CardDescription>Real lead count per pipeline stage, company-wide.</CardDescription>
+          <CardDescription>
+            {seesCompanyWide ? "Real lead count per pipeline stage, company-wide." : "Real lead count per pipeline stage, your own leads."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pt-0">
           {isLoading && <p className="text-muted-foreground text-sm">Loading…</p>}

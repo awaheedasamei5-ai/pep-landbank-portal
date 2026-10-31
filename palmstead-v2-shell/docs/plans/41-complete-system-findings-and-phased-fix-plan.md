@@ -59,7 +59,7 @@ not a replacement — read a batch file directly if you want the full blow-by-bl
 | # | Finding | Severity | Apps | Status |
 |---|---|---|---|---|
 | A1 | `contract_templates_sel`/`contract_template_versions_sel` hardcoded to manager/elizabeth only, silently blocking every other staff member's real Contract Generation flow | Medium (testing-phase blocker, not a data-exposure risk) | Contract of Sale | **Fixed** (Batch 4) |
-| A2 | `weekly_visit_forms` has no delete policy at all | Low, likely intentional | Site Visit Authorization | Flagged for confirmation, not a bug |
+| A2 | `weekly_visit_forms` has no delete policy at all | Low, likely intentional | Site Visit Authorization | **Resolved (Phase 2)** — left as-is, confirmed correct |
 | A3 | Every other RLS policy checked across all 31 apps (dozens of tables) | — | all | **Sound** — no other gaps found |
 
 A1's fix followed the exact same pattern already established earlier this session for
@@ -69,9 +69,9 @@ A1's fix followed the exact same pattern already established earlier this sessio
 alongside the other testing-phase widenings once the real Settings/permissions UI exists (per
 `docs/plans/30-master-system-audit-and-unification-plan.md` §2.2 Phase 3).
 
-**A2** is almost certainly correct as-is (a signed-off authorization record shouldn't be
-staff-deletable), but wasn't explicitly confirmed with the user — a 10-second decision, not a code
-task.
+**A2 — resolved in Phase 2**: left as-is. A signed-off weekly cost-authorization record shouldn't
+be staff-deletable; no delete policy is the correct, safe default for that record type. No RLS
+change made.
 
 ---
 
@@ -89,8 +89,8 @@ doesn't appear on an already-open screen on device B until a manual refresh.
 | B2 | `chat_message_reactions`, `chat_group_members`, `chat_groups` | Batch 5 | **Fixed** (wired into Chat's own dedicated channel, not the dashboard hook — correct, by design) |
 | B3 | `data_check_dismissals` | Batch 6 | **Fixed** |
 | B4 | `achievement_definitions`, `staff_achievements`, `attendance_exceptions`, `leave_request_logs`, `office_locations` | Batch 7 (final system-wide sweep) | **Fixed** |
-| B5 | `attendance_policy`, `attendance_reviews` | Batch 7 | Flagged — real consumers exist but no single unambiguous query key was confident enough to wire without risking an incorrect invalidation target on HR data |
-| B6 | `notice_board_reports` (moderation sub-table) | Batch 3 | Flagged, low priority — a report being flagged live isn't a critical-path feature |
+| B5 | `attendance_policy`, `attendance_reviews` | Batch 7 | **Resolved (Phase 2)** — `attendance_policy` wired (real query key `['attendancePolicy']`, used by `useAttendance`/`useAttendanceMonth`/`useAttendanceComparison`/`useAttendanceManagement`). `attendance_reviews` confirmed to have **zero real call sites anywhere in the app** — left unwired, nothing to invalidate |
+| B6 | `notice_board_reports` (moderation sub-table) | Batch 3 | **Fixed (Phase 2)** — was also missing from the `supabase_realtime` publication itself (added), wired to the existing `invalidateNoticeBoard` (shares `['noticeBoard']` with `notice_board_posts`, since `useNoticeBoard()` reads both tables in one query) |
 
 **10 tables fixed across 4 commits this sweep** (`f4bec95`/`5da7c89` Batch 3, part of Batch 5's
 commit, `d9a6242` Batch 6, `5e72a61` Batch 7). The Batch 7 system-wide audit cross-referenced **all
@@ -279,10 +279,13 @@ worth recording (none are bugs):
 
 ### E. UX / copy
 
-**E1 — Home's "Pipeline by stage" card subtitle hardcoded to "company-wide" regardless of role.**
-Shown verbatim to Adams even though the numbers displayed are scoped to his own 34 leads, not the
-company's 309. *Fix*: make the subtitle conditional on `isManager`, same pattern other dashboard
-cards already use. *Apps*: Home. Low priority, cosmetic, but genuinely misleading.
+**E1 — Home's "Pipeline by stage" card subtitle hardcoded to "company-wide" regardless of role. Fixed (Phase 2).**
+Was shown verbatim to Adams even though the numbers displayed were scoped to his own 34 leads, not
+the company's 309. Fixed in `subscriber-overview.tsx`: the subtitle is now conditional on whether
+the viewer's own real `leads_sel` RLS actually returns company-wide data (`role === 'manager'` OR
+`key` in the same trusted set the RLS policy itself hardcodes — `elias`/`emmanuel`/`elizabeth`),
+not just a blunt `isManager` check, so the copy stays truthful for every account type. Verified live
+as both Adams ("your own leads") and Management ("company-wide"). *Apps*: Home.
 
 ---
 
@@ -295,13 +298,19 @@ near-zero-effort; Phases 3+ are real scoped work for a future session.
 Everything in §B marked **Fixed**, plus the one security fix (A1). 8 real bugs, already committed
 and pushed across Batches 3-7. Nothing to do.
 
-### Phase 2 — Quick confirmations and trivial fixes (minutes, not hours)
-- Confirm A2 (`weekly_visit_forms` no-delete-policy) is intentional — one question to the user.
-- Fix E1 (Home subtitle conditional on role) — a 3-line change.
-- Trace and wire B5 (`attendance_policy`/`attendance_reviews` realtime) once their real query keys
-  are confirmed — same safe pattern as the 10 tables already fixed, just needs the extra care this
-  sweep deliberately didn't rush.
-- Wire B6 (`notice_board_reports` realtime) — low priority but trivial once reached.
+### Phase 2 — Quick confirmations and trivial fixes — **DONE 2026-10-31**
+- A2 (`weekly_visit_forms` no-delete-policy): resolved by leaving as-is, confirmed correct for a
+  signed-off record type. No RLS change.
+- E1 (Home subtitle): fixed, conditional on the real `leads_sel` RLS condition, verified live both
+  roles.
+- B5 (`attendance_policy`/`attendance_reviews` realtime): `attendance_policy` wired to its real
+  `['attendancePolicy']` query key; `attendance_reviews` confirmed to have zero real consumers,
+  correctly left unwired.
+- B6 (`notice_board_reports` realtime): fixed — was also missing from the `supabase_realtime`
+  publication itself (added), wired to the existing `invalidateNoticeBoard`.
+
+`npx tsc -b` clean. Live-verified as both Adams and Management, zero console errors (only known
+harmless HMR noise). Committed and pushed to `rebuild`.
 
 ### Phase 3 — Foundational schema additions (unlocks Phase 4)
 Add nullable `lead_id uuid references leads(id)` to: `enquiries`, `complaints` (C2.2), `notes`
