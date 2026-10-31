@@ -312,12 +312,27 @@ and pushed across Batches 3-7. Nothing to do.
 `npx tsc -b` clean. Live-verified as both Adams and Management, zero console errors (only known
 harmless HMR noise). Committed and pushed to `rebuild`.
 
-### Phase 3 — Foundational schema additions (unlocks Phase 4)
-Add nullable `lead_id uuid references leads(id)` to: `enquiries`, `complaints` (C2.2), `notes`
-(C2.9). Same column shape, same migration pattern, can be done together. Populate existing rows
-retroactively via the same phone-digit-match helper `client_portal_login` already uses, where a
-real match exists (don't force-match everything — leave genuinely unmatched rows null, same honesty
-principle used throughout this sweep).
+### Phase 3 — Foundational schema additions (unlocks Phase 4) — **DONE**
+Added nullable `lead_id uuid references public.leads(id)` to `enquiries`, `complaints`, `notes`
+(same shape as Referrals' existing `referrer_lead_id`/`referred_lead_id`). Domain types
+(`Enquiry`/`Complaint`/`Note` in `src/webnext/types/domain.ts`) and their row mappers
+(`src/webnext/data/mappers.ts`) updated with `leadId`; no `source.ts` changes needed since every
+real list/create query already used `select("*")`/`.select().single()`, so the new column flows
+through automatically.
+
+**Retroactive population — honest result, not padded**: both `enquiries` and `complaints` turned
+out to have only 2 real rows each in production (a genuinely tiny real dataset, not a large backlog)
+— ran the same digit-match approach `client_portal_login` uses (last-9-digits + case-insensitive
+trimmed name, unambiguous single-match only), **0 of 2 matched in each table**. This is a correct,
+honest result (these specific 4 rows' contacts/names don't correspond to any current lead), not a
+bug in the matching logic — verified by checking the real row counts first. `notes` has no
+contact/name column at all (`owner_key, title, body` only), so it was never a retroactive-match
+candidate — the column exists purely for the Phase 4+ "attach to a lead" compose UI.
+
+`npx tsc -b` clean (note: hit a transient out-of-memory failure from concurrent node processes on
+the shared dev machine on the first two attempts — unrelated to this change; resolved by running
+with `NODE_OPTIONS="--max-old-space-size=4096"`, which then passed clean. Worth remembering as a
+root cause if tsc OOMs again in future sessions on this machine, rather than assuming broken code).
 
 ### Phase 4 — Surface the new connections on the lead detail page
 Once Phase 3 lands, add real "Complaints"/"Enquiries"/"Notes" sections to the Pipeline lead detail

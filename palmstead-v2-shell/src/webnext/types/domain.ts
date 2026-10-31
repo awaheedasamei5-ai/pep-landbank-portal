@@ -1178,6 +1178,7 @@ export interface Enquiry {
   agentName: string | null;
   name: string | null;
   contact: string | null;
+  leadId: string | null;
   location: string | null;
   types: string | null;
   plot: string | null;
@@ -1656,6 +1657,7 @@ export interface Complaint {
   agentName: string | null;
   name: string | null;
   contact: string | null;
+  leadId: string | null;
   plot: string | null;
   category: string | null;
   details: string | null;
@@ -2062,6 +2064,7 @@ export interface Note {
   ownerKey: string;
   title: string;
   body: string;
+  leadId: string | null;
   createdAt: string;
   updatedAt: string;
 }

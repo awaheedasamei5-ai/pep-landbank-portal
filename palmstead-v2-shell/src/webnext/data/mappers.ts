@@ -463,6 +463,7 @@ export function mapEnquiryRow(r: Record<string, unknown>): Enquiry {
     agentName: (r.agent_name as string) ?? null,
     name: (r.name as string) ?? null,
     contact: (r.contact as string) ?? null,
+    leadId: (r.lead_id as string) ?? null,
     location: (r.location as string) ?? null,
     types: (r.types as string) ?? null,
     plot: (r.plot as string) ?? null,
@@ -626,6 +627,7 @@ export function mapComplaintRow(r: Record<string, unknown>): Complaint {
     agentName: (r.agent_name as string) ?? null,
     name: (r.name as string) ?? null,
     contact: (r.contact as string) ?? null,
+    leadId: (r.lead_id as string) ?? null,
     plot: (r.plot as string) ?? null,
     category: (r.category as string) ?? null,
     details: (r.details as string) ?? null,
@@ -748,6 +750,7 @@ export function mapNoteRow(r: Record<string, unknown>): Note {
     ownerKey: r.owner_key as string,
     title: (r.title as string) ?? "",
     body: (r.body as string) ?? "",
+    leadId: (r.lead_id as string) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   };
