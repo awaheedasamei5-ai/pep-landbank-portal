@@ -411,10 +411,46 @@ noted as a standing follow-up, not silently assumed fine.
 - C2.6: "Save as lead" action on Quotation.
 Both are additive, low-risk, directly reduce manual re-entry — the user's stated core goal.
 
-### Phase 6 — Staff-availability awareness
-- C2.7: reuse `useColleagueAvailability.ts`'s pattern in Allocations (and anywhere else work gets
-  assigned), as a soft warning.
-- C2.8: surface live attendance/leave status on Directory's staff cards.
+### Phase 6 — Staff-availability awareness — **DONE** (code-complete, substitute-verified)
+
+**Correction found before building**: `useColleagueAvailability.ts` (the hook this item was supposed to
+reuse, per Batch 3's own finding) **no longer exists anywhere in the codebase** — confirmed by grep for
+both the filename and its real query key (`colleagueAvailability`), only a stale comment in
+`useDashboardRealtime.ts` still references it. Almost certainly removed/refactored during Operations
+Tracker's own active concurrent rework throughout this sweep. Rather than reuse a pattern that's gone,
+built a fresh, minimal, additive equivalent — two new SECURITY DEFINER RPCs, same real discipline as
+the already-proven `get_leave_conflict_dates` (summary-only, never exposes another staff member's leave
+reason/letter/raw timestamps, works for any authenticated viewer without needing broadened
+`leave_requests`/`attendance_log` RLS, both of which are hardcoded owner-or-manager and NOT routed
+through `has_permission()`):
+- `public.is_agent_on_leave(p_agent_key, p_date) returns boolean`
+- `public.get_staff_today_status(p_agent_key) returns text` ('on_leave' | 'present' | 'not_checked_in'),
+  built on top of the first.
+
+**C2.7**: `AllocationRequestsScreen.tsx`'s `AwaitingPanel` (where Management/an allocator confirms a
+request) now shows a soft amber warning — "`<agent>` is on approved leave today — confirming is still
+allowed, but any client follow-up may need to wait or be reassigned" — via a new
+`useIsAgentOnLeaveToday` hook in `useLeaveRequests.ts`. Confirming is never blocked, matching the
+system's existing Emergency Leave "inform, don't block" philosophy exactly.
+
+**C2.8**: Directory's `StaffCard` gets a new `TodayStatusBadge` (amber "On leave today" / emerald
+"Present today" / neutral "Not checked in") via a new `useStaffTodayStatus` hook in `use-directory.ts`,
+shown for every agent card (not Management's own card, which already shows a distinct "Management"
+badge).
+
+Both features are strictly read-only against `leave_requests`/`attendance_log` — no write path, no RLS
+change, no business-logic change to either table, per this sweep's own HR-data conservatism rule.
+
+**Verification**: `npx tsc -b` clean (`NODE_OPTIONS="--max-old-space-size=4096"`). **Live click-through
+still blocked** — the Browser pane tool remains unresponsive after multiple independent retries across
+several phases now (Phase 4, 5, and again here), confirmed as a persistent environment/tool issue, not
+an app bug. Substitute verification: the new RPCs' own auth guard correctly rejects an unauthenticated
+service-role call (matching `get_leave_conflict_dates`'s identical real behavior — a good sign, not an
+error); the underlying query logic was run directly against real data for all 7 real agents and returned
+clean, sane results (nobody is on approved leave covering today in the real dataset right now, so every
+agent correctly shows `not_checked_in`/`present` depending on real attendance — the on-leave path has
+correct logic but no real positive case to click-test against today). Phases 4, 5, and 6 should all get
+one real click-through pass as soon as the Browser pane tool recovers.
 
 ### Phase 7 — Money/accounting reconciliation (higher stakes — scope carefully, confirm before building)
 - C2.3: Site Visit Authorization actual-costs → Accounting Expenses trigger.

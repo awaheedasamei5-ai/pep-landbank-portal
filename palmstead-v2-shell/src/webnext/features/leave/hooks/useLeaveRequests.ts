@@ -44,6 +44,22 @@ export function useLeaveConflictDates(year: number, excludeRequestId?: string) {
   });
 }
 
+// Phase 6 (C2.7) -- a single agent's today-status, for a soft warning
+// elsewhere in the app (Allocations) before work gets assigned. Same
+// SECURITY DEFINER RPC discipline as useLeaveConflictDates above: works
+// for any authenticated viewer, not just Management, and never exposes
+// the agent's actual leave reason/letter.
+export function useIsAgentOnLeaveToday(agentKey: string | undefined, dateIso: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const profileKey = useSessionStore((s) => s.profile?.key);
+  return useQuery({
+    queryKey: ['isAgentOnLeaveToday', agentKey, dateIso],
+    queryFn: () => getDataSource(demoMode).leaveRequests.isOnLeaveOn(agentKey as string, dateIso),
+    enabled: !!profileKey && !!agentKey,
+    staleTime: 30_000,
+  });
+}
+
 // The database commits the request, recipient inbox messages, and SMS outbox
 // together. Keeping notification sends off the client avoids lost messages
 // when a tab closes and duplicates when an action is retried.

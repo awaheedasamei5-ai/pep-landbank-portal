@@ -963,6 +963,11 @@ export interface DataSource {
     retryFailedReminder(id: string): Promise<void>;
     list(): Promise<LeaveRequest[]>;
     conflictDates(startDate: string, endDate: string, excludeRequestId?: string): Promise<string[]>;
+    // Single-agent, date-only yes/no check (Phase 6, C2.7) -- same real
+    // SECURITY DEFINER pattern as conflictDates above, so any canAllocate
+    // viewer (not just manager) gets a correct answer for a specific
+    // agent without needing broadened leave_requests RLS.
+    isOnLeaveOn(agentKey: string, dateIso: string): Promise<boolean>;
     create(agentKey: string, agentName: string, input: NewLeaveRequest): Promise<LeaveRequest>;
     // Master Spec 12.4: "Management may approve, decline or reschedule
     // with reason". Exact port of v1's own split (index.html:5503-5532):
@@ -3556,6 +3561,14 @@ function createLiveDataSource(): DataSource {
         });
         if (error) throw error;
         return (data ?? []).map((row: { conflict_date: string }) => row.conflict_date);
+      },
+      async isOnLeaveOn(agentKey, dateIso) {
+        const { data, error } = await requireClient().rpc("is_agent_on_leave", {
+          p_agent_key: agentKey,
+          p_date: dateIso,
+        });
+        if (error) throw error;
+        return !!data;
       },
       async create(agentKey, agentName, input) {
         const client = requireClient();

@@ -20,6 +20,7 @@ import {
   useDeleteContact,
   useDirectory,
   useMyContacts,
+  useStaffTodayStatus,
   type DirectoryStaff,
 } from "./use-directory";
 
@@ -34,6 +35,35 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+// Phase 6 (C2.8) -- real attendance/leave status, not a new invented
+// category: "on_leave" (approved leave covers today), "present" (a real
+// attendance_log sign-in exists for today), "not_checked_in" (neither --
+// most staff before their workday starts, so this is deliberately a
+// neutral badge, not a warning one).
+function TodayStatusBadge({ agentKey }: { agentKey: string }) {
+  const { data: status } = useStaffTodayStatus(agentKey);
+  if (!status) return null;
+  if (status === "on_leave") {
+    return (
+      <Badge variant="outline" className="shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400">
+        On leave today
+      </Badge>
+    );
+  }
+  if (status === "present") {
+    return (
+      <Badge variant="outline" className="shrink-0 border-emerald-500/50 text-emerald-600 dark:text-emerald-400">
+        Present today
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="shrink-0 text-muted-foreground">
+      Not checked in
+    </Badge>
+  );
 }
 
 function StaffCard({ staff }: { staff: DirectoryStaff }) {
@@ -53,6 +83,7 @@ function StaffCard({ staff }: { staff: DirectoryStaff }) {
                 Management
               </Badge>
             )}
+            {staff.role !== "manager" && <TodayStatusBadge agentKey={staff.agentKey} />}
           </div>
           <p className="truncate text-muted-foreground text-xs">{staff.position || "No title set"}</p>
           {staff.department && <p className="truncate text-muted-foreground text-xs">{staff.department}</p>}

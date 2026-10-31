@@ -54,6 +54,27 @@ export function useDirectory() {
   return useQuery({ queryKey: ["staffDirectory"], queryFn: fetchDirectory, refetchInterval: 30_000 });
 }
 
+// Phase 6 (C2.8) -- today's attendance/leave status for one staff
+// member, via a summary-only SECURITY DEFINER RPC (get_staff_today_status)
+// since attendance_log/leave_requests RLS is owner-or-manager-only and
+// Directory is visible to every staff member for every colleague.
+export type StaffTodayStatus = "on_leave" | "present" | "not_checked_in";
+
+async function fetchStaffTodayStatus(agentKey: string): Promise<StaffTodayStatus> {
+  const sb = requireSupabase();
+  const { data, error } = await sb.rpc("get_staff_today_status", { p_agent_key: agentKey });
+  if (error) throw error;
+  return data as StaffTodayStatus;
+}
+
+export function useStaffTodayStatus(agentKey: string) {
+  return useQuery({
+    queryKey: ["staffTodayStatus", agentKey],
+    queryFn: () => fetchStaffTodayStatus(agentKey),
+    staleTime: 30_000,
+  });
+}
+
 export interface ExternalContact {
   id: string;
   name: string;

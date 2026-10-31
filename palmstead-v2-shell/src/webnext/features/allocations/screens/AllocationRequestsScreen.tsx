@@ -17,6 +17,7 @@ import { allocationUnitsNeeded, computeDepositStatus } from '../../pipeline/lib/
 import { candidatesForUnit, nearbyCandidates, searchCandidates, suggestAlternatives, suggestSet } from '../lib/suggestionEngine';
 import { combosAreComplete, decodeSuggestionCombos, emptyCombos, encodeSuggestionCombos, lockedPlotNumbers } from '../lib/suggestionCombos';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useIsAgentOnLeaveToday } from '../../leave/hooks/useLeaveRequests';
 import { techBaseAreaSqft, techHalfAreaSqft } from '../../quotation/lib/quotationLogic';
 import {
   useAllocationRequests,
@@ -817,6 +818,13 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
   const [sendingBack, setSendingBack] = useState(false);
   const [reason, setReason] = useState('');
 
+  // Phase 6 (C2.7) -- soft warning only, never a block: Management/an
+  // allocator can still confirm even if the requesting agent is on
+  // approved leave today, same "inform, don't block" rule Emergency
+  // Leave already uses elsewhere in this app.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const onLeave = useIsAgentOnLeaveToday(request.agentKey, todayIso);
+
   const units = allocationUnitsNeeded(lead?.noPlots ?? 1);
   // Decodes both the new 3-combo format and every real row saved before
   // this feature existed -- see suggestionCombos.ts's own comment for the
@@ -877,6 +885,12 @@ function AwaitingPanel({ request, lead }: { request: AllocationRequest; lead: Le
 
   return (
     <div className={styles.suggestForm}>
+      {onLeave.data && (
+        <div className={`${styles.authDocBanner} ${styles.authDocBannerMismatch}`}>
+          <AlertTriangle size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+          {request.agentName ?? request.agentKey} is on approved leave today — confirming is still allowed, but any client follow-up may need to wait or be reassigned.
+        </div>
+      )}
       <p className={styles.helpText}>
         {multi
           ? `This client is buying ${units.length} units. Pick which of the ${combos.length} suggested combos Management physically signed for.`
