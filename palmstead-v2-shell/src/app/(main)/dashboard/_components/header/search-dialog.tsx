@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/command";
 import type { NavMainItem } from "@/navigation/sidebar/sidebar-items";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
+import { useNotesAccess } from "@/lib/permissions/use-notes-access";
+import { useAuthStore } from "@/stores/auth/auth-store";
 import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { useLeads } from "@/webnext/features/pipeline/hooks/useLeads";
 import { useAllLeads } from "@/webnext/features/payments/hooks/useLogPayment";
@@ -93,6 +95,8 @@ export function SearchDialog() {
   // own-vs-company-wide hooks Pipeline's own list screen already uses,
   // not a new search endpoint.
   const isManager = useSessionStore((s) => s.profile?.role === "manager");
+  const profileKey = useAuthStore((s) => s.profile?.key);
+  const notesAccess = useNotesAccess(profileKey);
   const mine = useLeads();
   const master = useAllLeads();
   const leads = (isManager ? master.data : mine.data) ?? [];
@@ -192,10 +196,13 @@ export function SearchDialog() {
                 <CommandSeparator />
               </>
             )}
-            {query ? renderGroups(searchItems) : renderGroups(recommendations)}
+            {renderGroups((query ? searchItems : recommendations).filter(
+              (item) => item.id !== "notes" || isManager || notesAccess.data?.view === true,
+            ))}
           </CommandList>
         </Command>
       </CommandDialog>
     </>
   );
 }
+
