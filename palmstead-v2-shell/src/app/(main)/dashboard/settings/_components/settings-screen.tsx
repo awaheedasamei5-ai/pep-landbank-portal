@@ -110,11 +110,13 @@ export function SettingsScreen() {
         <h1 className="font-semibold text-2xl tracking-tight">My settings</h1>
         <p className="text-muted-foreground text-sm">Your staff identity, contact details and account security.</p>
       </div>
-      {profile?.role === "manager" && process.env.NEXT_PUBLIC_ACCESS_SETTINGS_ENABLED === "true" && (
+      {profile?.role === "manager" && (
         <Card>
           <CardHeader>
             <CardTitle>Management access</CardTitle>
-            <CardDescription>Review and change staff feature permissions with an audit trail.</CardDescription>
+            <CardDescription>
+              Set staff access to Operations to-dos. Other app controls are being added in phases.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline">
@@ -257,3 +259,4 @@ export function SettingsScreen() {
     </div>
   );
 }
+
