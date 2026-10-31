@@ -815,6 +815,22 @@ export function MyScheduleScreen() {
   });
   const canViewTodos = !todoAccess.isError && todoAccess.data?.view === true;
   const canManageTodos = canViewTodos && todoAccess.data?.manage === true;
+  const meetingAccess = useQuery({
+    queryKey: ["operationsMeetingAccess", profile?.key],
+    enabled: Boolean(profile?.key),
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const client = requireSupabase();
+      const [view, manage] = await Promise.all([
+        client.rpc("has_permission", { p_key: "operations.meetings.view" }),
+        client.rpc("has_permission", { p_key: "operations.meetings.manage" }),
+      ]);
+      if (view.error || manage.error) throw new Error("Operations meeting access could not be checked.");
+      return { view: view.data === true, manage: manage.data === true };
+    },
+  });
+  const canViewMeetings = !meetingAccess.isError && meetingAccess.data?.view === true;
+  const canManageMeetings = canViewMeetings && meetingAccess.data?.manage === true;
   const controller = useCalendarController();
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 639px)");
@@ -858,19 +874,19 @@ export function MyScheduleScreen() {
     addScheduleDays(today, -90),
     addScheduleDays(today, 3),
   );
-  const meetingsQuery = useScheduleMeetings(profile?.key, range.from, range.to);
+  const meetingsQuery = useScheduleMeetings(canViewMeetings ? profile?.key : undefined, range.from, range.to);
   const meetings = meetingsQuery.data;
 
   const events = useMemo(
     () => [
       ...(canViewTodos ? (todos ?? []) : []).filter((todo) => isVisibleScheduleTodo(todo.status)).map(toEventInput),
-      ...(meetings ?? [])
+      ...(canViewMeetings ? (meetings ?? []) : [])
         .filter((meeting) => isVisibleScheduleMeeting(meeting.status))
-        .map((meeting) => toMeetingEvent(meeting, profile?.role === "manager" || meeting.ownerKey === profile?.key)),
+        .map((meeting) => toMeetingEvent(meeting, canManageMeetings && (profile?.role === "manager" || meeting.ownerKey === profile?.key))),
     ],
-    [canViewTodos, meetings, profile?.key, profile?.role, todos],
+    [canViewTodos, canViewMeetings, canManageMeetings, meetings, profile?.key, profile?.role, todos],
   );
-  const selectedMeeting = meetings?.find((meeting) => meeting.id === selectedMeetingId) ?? null;
+  const selectedMeeting = canViewMeetings ? meetings?.find((meeting) => meeting.id === selectedMeetingId) ?? null : null;
 
   const urgency = useMemo(
     () =>
@@ -894,6 +910,7 @@ export function MyScheduleScreen() {
     if (!newStart) return;
     const newDate = calendarDateOnly(newStart);
     if (props.kind === "meeting" && props.meeting) {
+      if (!canManageMeetings) { info.revert(); return; }
       try {
         await updateMeeting.mutateAsync({
           id: props.meeting.id,
@@ -939,6 +956,7 @@ export function MyScheduleScreen() {
     if (!newStart || !newEnd) return;
     try {
       if (props.kind === "meeting" && props.meeting) {
+        if (!canManageMeetings) { info.revert(); return; }
         await updateMeeting.mutateAsync({
           id: props.meeting.id,
           patch: {
@@ -1001,7 +1019,7 @@ export function MyScheduleScreen() {
         <Alert>
           <AlertTitle>To-do access restricted</AlertTitle>
           <AlertDescription>
-            Your meetings remain available. Management controls access to Operations to-dos.
+            Management controls access to Operations to-dos. Meetings have separate access settings.
           </AlertDescription>
         </Alert>
       )}
@@ -1012,6 +1030,15 @@ export function MyScheduleScreen() {
             You can review assigned tasks, but Management has restricted task changes.
           </AlertDescription>
         </Alert>
+      )}
+      {meetingAccess.isError && (
+        <Alert variant="destructive"><AlertTitle>Meeting access could not be checked</AlertTitle><AlertDescription>Refresh this page before working on meetings.</AlertDescription></Alert>
+      )}
+      {meetingAccess.data && !canViewMeetings && (
+        <Alert><AlertTitle>Meeting access restricted</AlertTitle><AlertDescription>Your to-dos remain available according to their own access settings.</AlertDescription></Alert>
+      )}
+      {meetingAccess.data && canViewMeetings && !canManageMeetings && (
+        <Alert><AlertTitle>Meetings are read-only</AlertTitle><AlertDescription>You can review and respond to invitations, but cannot schedule or edit meetings.</AlertDescription></Alert>
       )}
       {overdue.length > 0 && (
         <Alert variant="destructive" className="border-destructive/40 bg-destructive/5">
@@ -1072,7 +1099,7 @@ export function MyScheduleScreen() {
             <div className="font-medium text-lg leading-none">{range.title}</div>
             <p className="text-muted-foreground text-sm">
               {(canViewTodos ? (todos ?? []) : []).filter((todo) => isVisibleScheduleTodo(todo.status)).length +
-                (meetings ?? []).filter((meeting) => isVisibleScheduleMeeting(meeting.status)).length}{" "}
+                (canViewMeetings ? (meetings ?? []) : []).filter((meeting) => isVisibleScheduleMeeting(meeting.status)).length}{" "}
               scheduled items
               {(todosLoading || meetingsQuery.isFetching) && <span className="ml-2">· syncing</span>}
             </p>
@@ -1080,7 +1107,7 @@ export function MyScheduleScreen() {
               {profile?.role === "manager" && teamScheduleKey
                 ? `Viewing ${staffQuery.data?.find((person) => person.key === teamScheduleKey)?.name ?? "staff"}’s tasks and meetings shared with you`
                 : "Personal to-dos and meetings shared with you"}
-              {profile?.role === "manager" ? "; management can view all meetings" : ""} · Africa/Accra
+              {profile?.role === "manager" && canViewMeetings ? "; management can view all meetings" : ""} · Africa/Accra
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1144,7 +1171,7 @@ export function MyScheduleScreen() {
                 Schedule task
               </Button>
             )}
-            <Button
+            {canManageMeetings && <Button
               variant="outline"
               onClick={() => {
                 setMeetingDefaultDate(today);
@@ -1154,7 +1181,7 @@ export function MyScheduleScreen() {
             >
               <CalendarDays />
               Meeting
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -1211,13 +1238,13 @@ export function MyScheduleScreen() {
             </div>
           )}
 
-        <ScheduleMeetingComposer
+        {canManageMeetings && <ScheduleMeetingComposer
           open={showMeetingForm}
           onOpenChange={setShowMeetingForm}
           profile={profile}
           defaultDate={meetingDefaultDate}
           defaultStartTime={meetingDefaultStart}
-        />
+        />}
 
         <EventCalendarViews
           controller={controller}
@@ -1252,6 +1279,7 @@ export function MyScheduleScreen() {
         <ScheduleMeetingDetails
           meeting={selectedMeeting}
           profile={profile}
+          canManageAccess={canManageMeetings}
           onClose={() => setSelectedMeetingId(null)}
         />
       )}
