@@ -315,13 +315,16 @@ concurrent Finance session** — same reason as Phase H.
 
 ---
 
-## 7. Open questions for the user, before execution begins
+## 7. Open questions for the user, before execution begins — ANSWERED 2026-10-31
 
-1. Receipt client-ID display: print the raw `leads.id` (a full UUID, not very readable) or a
-   shorter derived reference? If shorter, what format (first 8 chars? a new sequential
-   "client number" minted once per lead, similar to how `receiptNumber` already works)?
-2. Phase I: confirm the one-tap-confirm middle ground is acceptable, or that fully automatic
-   (zero review) is genuinely wanted despite the risk explained in §5.2.
-3. Phases H and I both depend on coordinating with whoever is running the concurrent Finance
-   session — should that happen before this plan's execution starts, or should Phases A-G proceed
-   first while that coordination happens in parallel?
+1. **Receipt client-ID display** — ANSWERED: short, sequential, human-readable client number
+   (same minting pattern as `receiptNumber`), not the raw `leads.id` UUID. Implement this in
+   Phase E.
+2. **Phase I — overpayment recalculation** — ANSWERED: the one-tap-confirm middle ground from
+   §5.2 is confirmed, not fully automatic. The system computes and drafts everything; one
+   manager tap releases the SMS. Build Phase I exactly as designed in §5.2/§5.3, no further
+   confirmation needed before writing that code when its turn comes.
+3. **Phases H/I coordination with the concurrent Finance session** — not yet explicitly answered;
+   default to the plan's own stated approach (Phases A-G proceed first; H and I wait for a real
+   coordination check with that session before any code touches `finance_monthly_payment_*`
+   tables) unless the user says otherwise.
