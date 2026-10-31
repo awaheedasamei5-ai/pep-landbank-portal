@@ -205,6 +205,7 @@ export function QuotationScreen() {
                   totals,
                   noPlots,
                   plotType,
+                  plan,
                   client: { name: clientName.trim(), contact: clientContact.trim(), address: clientAddress.trim(), email: clientEmail.trim() },
                   config,
                 })

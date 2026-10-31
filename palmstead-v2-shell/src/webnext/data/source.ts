@@ -945,6 +945,26 @@ export interface DataSource {
   contractShareLinks: {
     create(input: { contractGenerationId: string | null; contractId: string | null; leadId: string; storagePath: string; createdBy: string }): Promise<string>;
   };
+  // docs/plans/42-urgent-bug-fixes-oct31.md -- same real pattern as
+  // contractShareLinks/contractGenerations.uploadPdf, purpose-built for
+  // Quotation (lead_id nullable -- a quotation can be generated for a
+  // walk-in prospect with no lead record yet). Resolved only via the
+  // get-quotation edge function's service role, same as every other
+  // share-link token in this app.
+  quotationPdfs: {
+    uploadPdf(path: string, blob: Blob): Promise<string>;
+  };
+  quotationShareLinks: {
+    create(input: {
+      leadId: string | null;
+      storagePath: string;
+      clientName: string;
+      clientContact: string | null;
+      plotType: string | null;
+      paymentPlan: string | null;
+      createdBy: string | null;
+    }): Promise<string>;
+  };
   // docs/plans/19-data-check-plan.md -- real server-side Data Check
   // dismiss state. RLS already scopes list() to "mine or company-wide"
   // (data_check_dismissals_sel) -- no agent filter needed client-side.
@@ -3525,6 +3545,35 @@ function createLiveDataSource(): DataSource {
             contract_id: input.contractId,
             lead_id: input.leadId,
             storage_path: input.storagePath,
+            created_by: input.createdBy,
+          })
+          .select('token')
+          .single();
+        if (error) throw error;
+        return data.token as string;
+      },
+    },
+    quotationPdfs: {
+      async uploadPdf(path, blob) {
+        const client = requireClient();
+        const { error: uploadError } = await client.storage
+          .from("quotation-pdfs")
+          .upload(path, blob, { contentType: "application/pdf", upsert: true });
+        if (uploadError) throw uploadError;
+        return path;
+      },
+    },
+    quotationShareLinks: {
+      async create(input) {
+        const { data, error } = await requireClient()
+          .from('quotation_share_links')
+          .insert({
+            lead_id: input.leadId,
+            storage_path: input.storagePath,
+            client_name: input.clientName,
+            client_contact: input.clientContact,
+            plot_type: input.plotType,
+            payment_plan: input.paymentPlan,
             created_by: input.createdBy,
           })
           .select('token')
