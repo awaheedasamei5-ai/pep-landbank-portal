@@ -14,7 +14,12 @@ type Permission = { key: string; label: string; description: string | null };
 type Override = { staff_key: string; permission_key: string; granted: boolean; granted_at: string | null };
 type RoleDefault = { role: string; permission_key: string };
 type Setting = "allow" | "deny" | "default";
-const SUPPORTED_KEYS = ["operations.todos.view", "operations.todos.manage"];
+const SUPPORTED_KEYS = [
+  "operations.todos.view",
+  "operations.todos.manage",
+  "operations.projects.view",
+  "operations.projects.manage",
+];
 
 export function AccessSettings() {
   const [authorized, setAuthorized] = useState(false);
@@ -105,8 +110,8 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then allow or restrict their Operations to-dos. Project and meeting access controls
-          will be added after their database checks are complete.
+          Choose a staff member, then allow or restrict their Operations to-dos and shared projects. Changes to
+          projects also affect work items, comments, and project reports.
         </p>
       </div>
       {loading && (
@@ -125,7 +130,7 @@ export function AccessSettings() {
             <CardHeader>
               <CardTitle>Staff member</CardTitle>
               <CardDescription>
-                These changes take effect in the database. Restricting view access also prevents to-do changes.
+                These changes take effect in the database. Restricting view access also prevents changes in that area.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -165,16 +170,17 @@ export function AccessSettings() {
                 );
                 let setting: Setting = "default";
                 if (override) setting = override.granted ? "allow" : "deny";
+                const viewKey = permission.key.replace(/\.manage$/, ".view");
                 const viewOverride = overrides.find(
-                  (entry) => entry.staff_key === person.agent_key && entry.permission_key === "operations.todos.view",
+                  (entry) => entry.staff_key === person.agent_key && entry.permission_key === viewKey,
                 );
                 const viewRoleAllows = roleDefaults.some(
-                  (entry) => entry.role === person.role && entry.permission_key === "operations.todos.view",
+                  (entry) => entry.role === person.role && entry.permission_key === viewKey,
                 );
                 const viewAllowed = viewOverride ? viewOverride.granted : viewRoleAllows;
                 const effective =
                   (override ? override.granted : roleAllows) &&
-                  (permission.key !== "operations.todos.manage" || viewAllowed);
+                  (!permission.key.endsWith(".manage") || viewAllowed);
                 return (
                   <Card key={permission.key} className="min-w-0">
                     <CardHeader className="gap-2">
