@@ -10,8 +10,8 @@ import { redactPII } from '../../../shared/lib/redact';
 import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
-import { buildSveDayReportPdf, sveDayReportFilename } from '../lib/sveReportPdf';
-import type { SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
+import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename } from '../lib/sveReportPdf';
+import type { SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
 export function useSveVisits() {
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -282,6 +282,29 @@ export function useDownloadSveDayReportPdf() {
       }
       const doc = buildSveDayReportPdf(report, logo, profile?.name);
       const filename = sveDayReportFilename(report.visitDate);
+      doc.save(filename);
+      logDownload(filename, 'pdf', doc.output('datauristring'));
+    },
+  });
+}
+
+// Real user ask (2026-10-31): a single client's raw feedback could only
+// ever be viewed on screen -- no way to download it without building a
+// whole day report first. Same real pattern as
+// useDownloadSveDayReportPdf, just for one submission.
+export function useDownloadSveSubmissionPdf() {
+  const profile = useSessionStore((s) => s.profile);
+  const logDownload = useLogDownload();
+  return useMutation({
+    mutationFn: async ({ siteVisit, submission }: { siteVisit: SiteVisit; submission: SveSubmissionRecord }) => {
+      let logo: string | null = null;
+      try {
+        logo = await loadImageAsDataUri('/logo.png');
+      } catch {
+        // Missing/blocked logo shouldn't stop the PDF from generating.
+      }
+      const doc = buildSveSubmissionPdf(siteVisit, submission, logo, profile?.name);
+      const filename = sveSubmissionFilename(siteVisit.name || submission.fullName, siteVisit.visitDate);
       doc.save(filename);
       logDownload(filename, 'pdf', doc.output('datauristring'));
     },

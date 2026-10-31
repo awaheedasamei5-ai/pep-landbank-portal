@@ -3,7 +3,7 @@ import { sitePdfFields, sitePdfHeader, sitePdfSectionBar, SITE_MUTED, SITE_NAVY 
 import { pdfGeneratedStamp, pdfReportFooter } from '../../../shared/lib/pdfReport';
 import { sanitizePdfText } from '../../../shared/lib/pdfText';
 import { reviewDigest } from './sveReviewDigest';
-import type { SveDayReport } from '../../../types/domain';
+import type { SveDayReport, SiteVisit, SveSubmissionRecord } from '../../../types/domain';
 
 // Full rebuild, real user asks (2026-09-05): (1) "the report isn't
 // supposed to be for a single client after client but a full report
@@ -89,4 +89,66 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
 
 export function sveDayReportFilename(visitDate: string): string {
   return `SVE_Report_${visitDate}.pdf`;
+}
+
+// Real user ask (2026-10-31): "the customer experience, we are unable to
+// download their feedbacks, it only shows on the screen." The Feedback
+// tab's own expanded card already shows one client's real raw submission
+// but had no export -- staff were told to build a whole day report just
+// to get one client's answers on paper. This is deliberately a single
+// raw-submission export (no AI summary, no manager debrief -- those only
+// exist once a day report is built), reusing the exact same visual
+// primitives as buildSveDayReportPdf so this reads as the same document
+// family, not a bespoke one-off.
+export function buildSveSubmissionPdf(siteVisit: SiteVisit, submission: SveSubmissionRecord, logoDataUri: string | null, generatedByName?: string | null): jsPDF {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  let y = sitePdfHeader(doc, 'CLIENT FEEDBACK', logoDataUri);
+  y += 6;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...SITE_NAVY);
+  doc.text(sanitizePdfText(siteVisit.name || submission.fullName), 12, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...SITE_MUTED);
+  const metaBits = [siteVisit.site, siteVisit.plot, siteVisit.visitDate, submission.phone].filter(Boolean);
+  doc.text(sanitizePdfText(metaBits.join(' · ')), 12, y + 6);
+  y += 13;
+
+  y = sitePdfSectionBar(doc, y, pageW, 'RATINGS');
+  const ratingFields: [string, string | number | null][] = [
+    ['Overall rating', submission.overallRating != null ? `${submission.overallRating} / 5` : null],
+    ['Relationship/handling rating', submission.relationshipRating != null ? `${submission.relationshipRating} / 5` : null],
+    ['Net promoter score (NPS)', submission.npsScore],
+  ];
+  y = sitePdfFields(
+    doc,
+    y,
+    ratingFields.filter(([, v]) => v != null)
+  );
+  y += 2;
+
+  y = sitePdfSectionBar(doc, y, pageW, 'CLIENT FEEDBACK');
+  const feedbackFields: [string, string | null][] = [
+    ['Journey to the site', submission.journeyRating],
+    ['How the site matched expectations', submission.siteDescriptionRating],
+    ['Why below expectation (if any)', submission.belowExpectationReason],
+    ['On how their visit was handled', submission.handlingFeedback],
+    ['Purchase intent', submission.purchaseIntent],
+    ['Improvement suggestions', submission.improvementSuggestions],
+    ['Additional comments', submission.additionalComments],
+  ];
+  const presentFeedback = feedbackFields.filter(([, v]) => v);
+  y = sitePdfFields(doc, y, presentFeedback.length > 0 ? presentFeedback : [['Feedback', 'No additional feedback provided.']]);
+
+  pdfReportFooter(doc, 'Trulander JSF Limited');
+  pdfGeneratedStamp(doc, generatedByName);
+  return doc;
+}
+
+export function sveSubmissionFilename(clientName: string, visitDate: string): string {
+  const safeName = clientName.trim().replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'Client';
+  return `SVE_Feedback_${safeName}_${visitDate}.pdf`;
 }

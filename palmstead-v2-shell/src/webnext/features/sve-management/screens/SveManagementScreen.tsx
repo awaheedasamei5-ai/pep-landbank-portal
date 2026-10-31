@@ -6,6 +6,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import {
   useDeleteSveEntry,
   useDownloadSveDayReportPdf,
+  useDownloadSveSubmissionPdf,
   useGenerateClientFeedback,
   usePolishManagerNarrative,
   useSaveSveDayReport,
@@ -75,6 +76,7 @@ export function SveManagementScreen() {
   useSveRealtime();
   const { data: visits, isLoading } = useSveVisits();
   const sendInvite = useSendSveInvite();
+  const downloadSubmission = useDownloadSveSubmissionPdf();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'feedback' | 'reports'>('feedback');
@@ -235,6 +237,22 @@ export function SveManagementScreen() {
                         <span className={styles.detailValue}>{submission.additionalComments}</span>
                       </div>
                     )}
+                    <div className={styles.row} style={{ marginTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className={styles.copyBtn}
+                        disabled={downloadSubmission.isPending}
+                        onClick={() => downloadSubmission.mutate({ siteVisit, submission })}
+                      >
+                        {downloadSubmission.isPending ? (
+                          'Preparing…'
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            <Download className="size-4" aria-hidden="true" /> Download this feedback
+                          </span>
+                        )}
+                      </button>
+                    </div>
                     <p className={styles.reportHint}>Build this client into a full day report from the &quot;Day reports&quot; tab above.</p>
                   </div>
                 )}
