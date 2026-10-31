@@ -4171,12 +4171,28 @@ function createLiveDataSource(): DataSource {
         // scopes this correctly per real session (own rows, or every row
         // for manager), kept only so the interface matches demo mode's
         // explicit scoping.
-        const { data, error } = await requireClient()
+        const client = requireClient();
+        const { data, error } = await client
           .from("downloads")
-          .select("id,user_key,user_name,filename,kind,created_at")
+          .select("id,user_key,user_name,filename,kind,created_at,source_type,source_id")
           .order("created_at", { ascending: false });
         if (error) throw error;
-        return (data ?? []).map(mapDownloadRow);
+        const rows = data ?? [];
+        // C2.13 -- downloads has no direct FK to leads (source_id is
+        // polymorphic by source_type), so a 'payment' row's real lead_id
+        // is resolved here with one extra lookup, same two-query-merge
+        // pattern leadBannerCounts() already uses elsewhere in this file.
+        const paymentIds = [...new Set(rows.filter((r) => r.source_type === "payment" && r.source_id).map((r) => r.source_id as string))];
+        const leadByPaymentId = new Map<string, string>();
+        if (paymentIds.length > 0) {
+          const { data: payRows } = await client.from("payments").select("id,lead_id").in("id", paymentIds);
+          (payRows ?? []).forEach((p: { id: string; lead_id: string | null }) => {
+            if (p.lead_id) leadByPaymentId.set(p.id, p.lead_id);
+          });
+        }
+        return rows.map((r) =>
+          mapDownloadRow({ ...r, source_lead_id: r.source_type === "payment" && r.source_id ? (leadByPaymentId.get(r.source_id) ?? null) : null }),
+        );
       },
       async log(userKey, userName, filename, kind, fileData) {
         const { data, error } = await requireClient()

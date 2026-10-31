@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, FileSpreadsheet, File as FileIcon, Download } from "lucide-react";
+import { useNavigate } from "react-router";
+import { FileText, FileSpreadsheet, File as FileIcon, Download, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -104,6 +105,7 @@ export function DocumentVaultScreen() {
 
 function DownloadRow({ record, showUser }: { record: DownloadRecord; showUser: boolean }) {
   const Icon = KIND_ICON[record.kind] ?? FileIcon;
+  const navigate = useNavigate();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -147,10 +149,23 @@ function DownloadRow({ record, showUser }: { record: DownloadRecord; showUser: b
       <TableCell className="text-muted-foreground">{fmtDateTime(record.createdAt)}</TableCell>
       <TableCell className="text-right">
         <div className="flex flex-col items-end gap-1">
-          <Button type="button" variant="outline" size="sm" disabled={downloading} onClick={download}>
-            <Download />
-            {downloading ? "Preparing…" : "Download"}
-          </Button>
+          <div className="flex gap-1">
+            {record.sourceType === "payment" && record.sourceLeadId && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate(`/dashboard/pipeline/${record.sourceLeadId}`)}
+              >
+                <ExternalLink />
+                View source
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" disabled={downloading} onClick={download}>
+              <Download />
+              {downloading ? "Preparing…" : "Download"}
+            </Button>
+          </div>
           {error && <span role="alert" className="max-w-48 text-xs text-destructive">{error}</span>}
         </div>
       </TableCell>

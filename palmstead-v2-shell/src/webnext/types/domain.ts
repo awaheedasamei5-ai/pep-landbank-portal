@@ -2264,6 +2264,14 @@ export interface DownloadRecord {
   kind: string;
   fileData: string | null;
   createdAt: string;
+  // C2.13 -- real source_type/source_id on the row (currently only
+  // 'payment' is backfilled, from a Receipt_<receipt_number>.pdf
+  // filename match). sourceLeadId is resolved client-side in list()
+  // for 'payment' rows (downloads has no direct FK to leads), null for
+  // anything unresolved/unmatched.
+  sourceType: string | null;
+  sourceId: string | null;
+  sourceLeadId: string | null;
 }
 
 // Real table `import_batches` (ported to staging 2026-09-03, already live

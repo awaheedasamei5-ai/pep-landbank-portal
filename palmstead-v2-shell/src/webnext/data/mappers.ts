@@ -1097,6 +1097,9 @@ export function mapDownloadRow(r: Record<string, unknown>): DownloadRecord {
     kind: r.kind as string,
     fileData: (r.file_data as string) ?? null,
     createdAt: r.created_at as string,
+    sourceType: (r.source_type as string) ?? null,
+    sourceId: (r.source_id as string) ?? null,
+    sourceLeadId: (r.source_lead_id as string) ?? null,
   };
 }
 
