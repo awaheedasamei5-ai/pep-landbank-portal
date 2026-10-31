@@ -19,13 +19,14 @@ interface NoteDialogProps {
   onOpenChange: (open: boolean) => void;
   note: Note | null;
   myKey: string | undefined;
+  canManage: boolean;
 }
 
-export function NoteDialog({ open, onOpenChange, note, myKey }: NoteDialogProps) {
+export function NoteDialog({ open, onOpenChange, note, myKey, canManage }: NoteDialogProps) {
   const [title, setTitle] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const saveNote = useSaveNote(myKey);
-  const editor = useNoteEditor({ content: bodyHtml, onChange: setBodyHtml });
+  const editor = useNoteEditor({ content: bodyHtml, onChange: setBodyHtml, editable: canManage });
   const dirty = useRef(false);
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export function NoteDialog({ open, onOpenChange, note, myKey }: NoteDialogProps)
   }, [open, note]);
 
   async function persist() {
-    if (!dirty.current) return;
+    if (!canManage || !dirty.current) return;
     const plain = editor?.getText().trim() ?? "";
     if (!title.trim() && !plain) return;
     try {
@@ -56,9 +57,10 @@ export function NoteDialog({ open, onOpenChange, note, myKey }: NoteDialogProps)
     >
       <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
         <DialogHeader className="border-b border-border px-6 py-4">
-          <DialogTitle className="sr-only">{note ? "Edit note" : "New note"}</DialogTitle>
+          <DialogTitle className="sr-only">{note ? (canManage ? "Edit note" : "Read note") : "New note"}</DialogTitle>
           <Input
             value={title}
+            readOnly={!canManage}
             onChange={(e) => {
               dirty.current = true;
               setTitle(e.target.value);
@@ -74,7 +76,7 @@ export function NoteDialog({ open, onOpenChange, note, myKey }: NoteDialogProps)
               dirty.current = true;
             }}
           >
-            <NoteEditorToolbar editor={editor} />
+            {canManage && <NoteEditorToolbar editor={editor} />}
             <NoteEditorSurface editor={editor} />
           </div>
         </div>
@@ -82,3 +84,4 @@ export function NoteDialog({ open, onOpenChange, note, myKey }: NoteDialogProps)
     </Dialog>
   );
 }
+
