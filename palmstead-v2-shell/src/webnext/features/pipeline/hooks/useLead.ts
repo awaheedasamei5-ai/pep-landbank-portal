@@ -171,6 +171,20 @@ export function useActivityForLead(leadId: string) {
   return useQuery({ queryKey: ['activityForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).activityLog.listForLead(leadId) });
 }
 
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4
+// (C2.2) -- surfaces Complaints/Enquiries on the lead they're linked to via
+// their real lead_id FK (added Phase 3). Same query-key-per-lead shape as
+// useSiteVisitsForLead/useActivityForLead above.
+export function useComplaintsForLead(leadId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['complaintsForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).complaints.listForLead(leadId) });
+}
+
+export function useEnquiriesForLead(leadId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['enquiriesForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).enquiries.listForLead(leadId) });
+}
+
 // Master Spec Section 4's lifecycle-automation gap: a manual stage
 // change (e.g. FollowUpSection's "Mark as Lost") previously left no
 // trace anywhere -- fire-and-forget, matches useLogDownload's own

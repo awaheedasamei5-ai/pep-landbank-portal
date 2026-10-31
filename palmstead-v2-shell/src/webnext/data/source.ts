@@ -759,6 +759,10 @@ export interface DataSource {
     // that colleague's own view, same fix as complaints.
     listForAgent(agentKey: string): Promise<Enquiry[]>;
     listAll(): Promise<Enquiry[]>;
+    // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4
+    // (C2.2) -- surfaces an enquiry on the lead it was retroactively/
+    // explicitly linked to via its real lead_id FK (Phase 3).
+    listForLead(leadId: string): Promise<Enquiry[]>;
     create(agentKey: string, agentName: string, input: NewEnquiry): Promise<Enquiry>;
     update(id: string, patch: EnquiryUpdate): Promise<Enquiry>;
     // Real user ask: "customer enquire... apps, we would be able to
@@ -777,6 +781,9 @@ export interface DataSource {
   complaints: {
     listForAgent(agentKey: string): Promise<Complaint[]>;
     listAll(): Promise<Complaint[]>;
+    // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4
+    // (C2.2) -- same reasoning as enquiries.listForLead above.
+    listForLead(leadId: string): Promise<Complaint[]>;
     create(agentKey: string, agentName: string, input: NewComplaint): Promise<Complaint>;
     update(id: string, patch: ComplaintUpdate): Promise<Complaint>;
     // Real user ask: "complains apps, we would be able to delete logged
@@ -2983,6 +2990,15 @@ function createLiveDataSource(): DataSource {
         if (error) throw error;
         return (data ?? []).map(mapEnquiryRow);
       },
+      async listForLead(leadId) {
+        const { data, error } = await requireClient()
+          .from("enquiries")
+          .select("*")
+          .eq("lead_id", leadId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapEnquiryRow);
+      },
       async create(agentKey, agentName, input) {
         const { data, error } = await requireClient()
           .from("enquiries")
@@ -3040,6 +3056,15 @@ function createLiveDataSource(): DataSource {
         const { data, error } = await requireClient()
           .from("complaints")
           .select("*")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapComplaintRow);
+      },
+      async listForLead(leadId) {
+        const { data, error } = await requireClient()
+          .from("complaints")
+          .select("*")
+          .eq("lead_id", leadId)
           .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapComplaintRow);

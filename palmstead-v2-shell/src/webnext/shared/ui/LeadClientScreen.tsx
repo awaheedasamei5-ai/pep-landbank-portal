@@ -14,11 +14,14 @@ import {
   AllocationEligibilitySection,
   AuditTrailSection,
   ClientSection,
+  ComplaintsSection,
   DangerZoneSection,
   DepositScheduleSection,
   DocumentationSection,
+  EnquiriesSection,
   FollowUpSection,
   LeadDetailsSection,
+  NotesSection,
   PaymentHistorySection,
   PlotPricingSection,
   SiteVisitsSection,
@@ -110,6 +113,9 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
               {config && <PlotPricingSection lead={lead} config={config} />}
               <FollowUpSection lead={lead} />
               <ActivitySection lead={lead} />
+              <ComplaintsSection lead={lead} />
+              <EnquiriesSection lead={lead} />
+              <NotesSection lead={lead} />
               <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
               <DocumentationSection lead={lead} />
               <DangerZoneSection lead={lead} onDeleted={() => navigate(backHref)} />

@@ -16,11 +16,12 @@ import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal, qtyOfT
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { StageBadge } from '../components/StageBadge';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
-import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useDeleteLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
+import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useComplaintsForLead, useDeleteLead, useEnquiriesForLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { LogCallDialog } from '../../company-leads/components/LogCallDialog';
+import { useNotes, useNotesForLead, useSaveNote, type Note } from '@/app/(main)/dashboard/notes/_components/use-notes';
 import styles from './PipelineDetailScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -158,6 +159,9 @@ export function PipelineDetailScreen() {
 
       <SiteVisitsSection lead={lead} />
       <ActivitySection lead={lead} />
+      <ComplaintsSection lead={lead} />
+      <EnquiriesSection lead={lead} />
+      <NotesSection lead={lead} />
       <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
 
       <DocumentationSection lead={lead} />
@@ -1105,6 +1109,161 @@ export function ActivitySection({ lead }: { lead: Lead }) {
         </div>
       ))}
       <LogCallDialog lead={lead} open={logOpen} onOpenChange={setLogOpen} />
+    </div>
+  );
+}
+
+// docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4
+// (C2.2): Enquiries/Complaints have no structural link to a real lead today
+// -- read-only, same real list-of-rows pattern as SiteVisitsSection above
+// (no "log a new one from here" action, since both apps' own real create
+// flows live on their own standalone screens, not this one).
+export function ComplaintsSection({ lead }: { lead: Lead }) {
+  const { data: complaints } = useComplaintsForLead(lead.id);
+  if (!complaints || complaints.length === 0) return null;
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Complaints</h2>
+      {complaints.map((c) => (
+        <div className={styles.readRow} key={c.id}>
+          <span className={styles.readLabel}>{c.createdAt.slice(0, 10)}</span>
+          <span>
+            {c.category || 'Complaint'} · {c.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EnquiriesSection({ lead }: { lead: Lead }) {
+  const { data: enquiries } = useEnquiriesForLead(lead.id);
+  if (!enquiries || enquiries.length === 0) return null;
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Enquiries</h2>
+      {enquiries.map((e) => (
+        <div className={styles.readRow} key={e.id}>
+          <span className={styles.readLabel}>{e.createdAt.slice(0, 10)}</span>
+          <span>
+            {e.types || 'Enquiry'} · {e.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// C2.9: Notes had zero linkage to any business entity before Phase 3 added
+// a real lead_id FK. This is the one of the three that needs a real write
+// action (not just a read-only list) -- a note doesn't exist anywhere else
+// to link from, unlike Complaints/Enquiries which already have their own
+// standalone create screens. "Attach an existing note" searches the
+// viewer's own notes (RLS already scopes notes to owner_key=my_key()); "New
+// note for this lead" creates one pre-linked.
+export function NotesSection({ lead }: { lead: Lead }) {
+  const profile = useSessionStore((s) => s.profile);
+  const { data: notes } = useNotesForLead(lead.id);
+  const saveNote = useSaveNote(profile?.key);
+  const [composing, setComposing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function createLinkedNote() {
+    setError(null);
+    if (!title.trim() && !body.trim()) return;
+    try {
+      await saveNote.mutateAsync({ title: title.trim(), body: body.trim(), leadId: lead.id });
+      setTitle('');
+      setBody('');
+      setComposing(false);
+    } catch (e) {
+      setError(friendlyError(e, 'Failed to save note'));
+    }
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeadRow}>
+        <h2 className={styles.sectionTitle}>Notes</h2>
+        {!composing && (
+          <button type="button" className={styles.editLink} onClick={() => setComposing(true)}>
+            Add a note
+          </button>
+        )}
+      </div>
+      {(!notes || notes.length === 0) && !composing && <p className={styles.emptyMsg}>No notes linked to this lead yet.</p>}
+      {notes?.map((n) => (
+        <div className={styles.readRow} key={n.id}>
+          <span className={styles.readLabel}>{n.updatedAt.slice(0, 10)}</span>
+          <span>{n.title || 'Untitled note'}</span>
+        </div>
+      ))}
+      {composing && (
+        <>
+          <div className={styles.field}>
+            <label className={styles.label}>Title</label>
+            <input className={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Untitled note" autoFocus />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Note</label>
+            <textarea className={styles.input} style={{ minHeight: 70 }} value={body} onChange={(e) => setBody(e.target.value)} />
+          </div>
+          {error && <p className={styles.errorMsg}>{error}</p>}
+          <div className={styles.actionsRow}>
+            <button type="button" className={styles.cancelBtn} onClick={() => { setComposing(false); setTitle(''); setBody(''); setError(null); }}>
+              Cancel
+            </button>
+            <button type="button" className={styles.btn} style={{ flex: 1 }} disabled={saveNote.isPending} onClick={createLinkedNote}>
+              {saveNote.isPending ? 'Saving…' : 'Save, linked to this lead'}
+            </button>
+          </div>
+        </>
+      )}
+      <ExistingNoteLinker lead={lead} ownKey={profile?.key} />
+    </div>
+  );
+}
+
+// "Attach an existing note" -- search the viewer's own notes (useNotes,
+// already scoped to owner_key=my_key() by the real notes_sel RLS) and link
+// one that was written before this lead's own Notes section existed.
+function ExistingNoteLinker({ lead, ownKey }: { lead: Lead; ownKey: string | undefined }) {
+  const { data: myNotes } = useNotes(ownKey);
+  const saveNote = useSaveNote(ownKey);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  if (!open) {
+    return (
+      <button type="button" className={styles.editLink} style={{ marginTop: 8 }} onClick={() => setOpen(true)}>
+        Attach an existing note
+      </button>
+    );
+  }
+
+  const unlinked = (myNotes ?? []).filter((n) => !n.leadId);
+  const filtered = unlinked.filter((n) => !query.trim() || n.title.toLowerCase().includes(query.trim().toLowerCase()));
+
+  function pick(note: Note) {
+    saveNote.mutateAsync({ id: note.id, title: note.title, body: note.body, leadId: lead.id }).then(() => setOpen(false));
+  }
+
+  return (
+    <div className={styles.field} style={{ marginTop: 8 }}>
+      <input className={styles.input} placeholder="Search your notes by title…" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
+      <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 6 }}>
+        {filtered.length === 0 && <p className={styles.emptyMsg}>No unlinked notes match.</p>}
+        {filtered.map((n) => (
+          <button type="button" key={n.id} className={styles.dangerOptionBtn} style={{ marginBottom: 6, width: '100%' }} onClick={() => pick(n)}>
+            <div className={styles.dangerOptionTitle}>{n.title || 'Untitled note'}</div>
+          </button>
+        ))}
+      </div>
+      <button type="button" className={styles.cancelBtn} style={{ marginTop: 6 }} onClick={() => setOpen(false)}>
+        Cancel
+      </button>
     </div>
   );
 }

@@ -334,10 +334,42 @@ the shared dev machine on the first two attempts — unrelated to this change; r
 with `NODE_OPTIONS="--max-old-space-size=4096"`, which then passed clean. Worth remembering as a
 root cause if tsc OOMs again in future sessions on this machine, rather than assuming broken code).
 
-### Phase 4 — Surface the new connections on the lead detail page
-Once Phase 3 lands, add real "Complaints"/"Enquiries"/"Notes" sections to the Pipeline lead detail
-screen, same visual/structural pattern already used for Payment History/Site Visits/Contract of
-Sale. This is where the schema work in Phase 3 actually becomes visible value to Management.
+**Correction found and fixed in Phase 4**: this entry originally said "no `source.ts` changes
+needed" for all three tables — true for Enquiries/Complaints, but wrong for Notes. The real Notes
+app (`src/app/(main)/dashboard/notes/_components/use-notes.ts`) is a completely separate
+implementation from `src/webnext/data/source.ts`'s own unused `notes` block — the real file still
+needed its own `leadId` wiring, which Phase 4 found and fixed (see below). Recorded here so this
+specific "two implementations of the same concept" trap isn't re-hit.
+
+### Phase 4 — Surface the new connections on the lead detail page — **DONE**
+Added real "Complaints"/"Enquiries"/"Notes" sections to `PipelineDetailScreen.tsx` (rendered for
+both Pipeline and Company Leads via `LeadClientScreen.tsx`), same visual/structural pattern already
+used for Payment History/Site Visits/Contract of Sale on that screen.
+
+- **Complaints/Enquiries**: read-only list sections (`useComplaintsForLead`/`useEnquiriesForLead` in
+  `useLead.ts`, backed by new `listForLead(leadId)` methods on `source.ts`'s `complaints`/`enquiries`
+  data sources) — no "log new" action here, since both apps' real create flows live on their own
+  standalone screens, not this one.
+- **Notes**: the one of the three needing a real write path, since nothing else links to a note.
+  Built both "New note for this lead" (creates pre-linked via `useSaveNote`) and "Attach an existing
+  note" (searches the viewer's own unlinked notes via `useNotes`, re-saves with the lead's id) in a
+  new `NotesSection`/`ExistingNoteLinker` pair in `PipelineDetailScreen.tsx`. This is the piece that
+  required the Phase 3 correction above — `use-notes.ts` (the real implementation) got its
+  `useNotesForLead` query and `leadId` support added here.
+- `useDashboardRealtime.ts`: `notes` added to the publication and wired (it was never in the
+  publication at all until this phase); `complaintsForLead`/`enquiriesForLead` query-key prefixes
+  added to the existing Complaints/Enquiries invalidation functions, so a change reaches an
+  already-open lead detail page's own sections, not just the standalone list screens.
+
+`npx tsc -b` clean (`NODE_OPTIONS="--max-old-space-size=4096"`). **Live verification incomplete**:
+the Browser pane tooling became unresponsive partway through this phase's testing (navigation/
+screenshot timeouts, confirmed as an environment/tool-level issue, not an app bug — the dev server's
+own logs show zero compile or runtime errors throughout, and a successful login as Adams did load
+the real Pipeline list with correct data before the pane locked up). The implementation is complete,
+type-safe, and follows every established pattern in the codebase exactly, but a full live click-
+through of the 3 new sections and the real note-link round-trip (create → link → verify → delete)
+could not be completed and should be done as a quick follow-up once the browser tooling is working
+again — treat this phase as code-complete but not yet visually confirmed in the running app.
 
 ### Phase 5 — Funnel-capture automation
 - C2.1: "Convert to lead" quick-action on unlinked site visits.

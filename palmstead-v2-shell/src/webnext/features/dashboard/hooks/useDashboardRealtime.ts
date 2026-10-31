@@ -147,9 +147,15 @@ export function useDashboardRealtime() {
     // path) -- they were just never pushed live before.
     const invalidateComplaints = () => {
       queryClient.invalidateQueries({ queryKey: ['complaints'] });
+      // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4
+      // (C2.2) -- the per-lead query key is a different prefix, needs its own
+      // invalidation or a complaint change never reaches an already-open
+      // lead detail page's own Complaints section.
+      queryClient.invalidateQueries({ queryKey: ['complaintsForLead'] });
     };
     const invalidateEnquiries = () => {
       queryClient.invalidateQueries({ queryKey: ['enquiries'] });
+      queryClient.invalidateQueries({ queryKey: ['enquiriesForLead'] });
     };
     const invalidateMemos = () => {
       queryClient.invalidateQueries({ queryKey: ['memos'] });
@@ -219,6 +225,15 @@ export function useDashboardRealtime() {
     // only on that device until a manual refresh elsewhere.
     const invalidateDataCheckDismissals = () => {
       queryClient.invalidateQueries({ queryKey: ['dataCheckDismissals'] });
+    };
+    // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 4 --
+    // notes was never in the publication at all until this same phase's
+    // migration. Real query keys: ['notes', myKey] (the Notes app's own
+    // use-notes.ts) and ['notesForLead', leadId] (the new lead-detail-page
+    // section added this phase).
+    const invalidateNotes = () => {
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: ['notesForLead'] });
     };
     // Phase 3 of docs/plans/30-master-system-audit-and-unification-plan.md --
     // these tables were in no bridge, and weren't even in the
@@ -381,7 +396,8 @@ export function useDashboardRealtime() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_request_logs' }, invalidateLeaveRequestLogs)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'office_locations' }, invalidateOfficeLocations)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_policy' }, invalidateAttendancePolicy)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notice_board_reports' }, invalidateNoticeBoard);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notice_board_reports' }, invalidateNoticeBoard)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, invalidateNotes);
     channel.subscribe();
 
     return () => {
