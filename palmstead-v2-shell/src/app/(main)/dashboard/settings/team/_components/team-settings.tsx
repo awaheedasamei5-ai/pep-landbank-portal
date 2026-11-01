@@ -19,6 +19,9 @@ type Staff = {
   department: string | null;
   position: string | null;
   phone: string | null;
+  whatsapp: string | null;
+  desk_extension: string | null;
+  birthday: string | null;
 };
 type Invite = { email: string; name: string | null; created_at: string | null; expires_at?: string | null };
 
@@ -32,6 +35,9 @@ export function TeamSettings() {
   const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
   const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [deskExtension, setDeskExtension] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -49,7 +55,7 @@ export function TeamSettings() {
       throw new Error("Only active Management can manage staff accounts.");
     }
     const [people, pending] = await Promise.all([
-      client.from("profiles").select("id,agent_key,name,email,role,active,department,position,phone").order("name"),
+      client.from("profiles").select("id,agent_key,name,email,role,active,department,position,phone,whatsapp,desk_extension,birthday").order("name"),
       client.from("allowed_emails").select("email,name,created_at").order("created_at", { ascending: false }),
     ]);
     if (people.error || pending.error) throw new Error("The team roster could not be loaded.");
@@ -77,6 +83,9 @@ export function TeamSettings() {
     setDepartment(person.department ?? "");
     setPosition(person.position ?? "");
     setPhone(person.phone ?? "");
+    setWhatsapp(person.whatsapp ?? "");
+    setDeskExtension(person.desk_extension ?? "");
+    setBirthday(person.birthday ?? "");
     setMessage("");
   }
 
@@ -125,6 +134,14 @@ export function TeamSettings() {
       setMessage("Enter a Ghana number starting with 0 or +233, or leave the phone empty.");
       return;
     }
+    const enteredWhatsapp = whatsapp.replace(/[\s()-]/g, "");
+    const cleanWhatsapp = /^0\d{9}$/.test(enteredWhatsapp)
+      ? `+233${enteredWhatsapp.slice(1)}`
+      : enteredWhatsapp;
+    if (cleanWhatsapp && !/^\+233\d{9}$/.test(cleanWhatsapp)) {
+      setMessage("Enter a WhatsApp number starting with 0 or +233, or leave it empty.");
+      return;
+    }
     setBusy(true);
     const { error } = await requireSupabase()
       .from("profiles")
@@ -132,6 +149,9 @@ export function TeamSettings() {
         department: department.trim().slice(0, 100) || null,
         position: position.trim().slice(0, 100) || null,
         phone: cleanPhone || null,
+        whatsapp: cleanWhatsapp || null,
+        desk_extension: deskExtension.trim().slice(0, 12) || null,
+        birthday: birthday || null,
       })
       .eq("id", selected);
     setMessage(
@@ -139,7 +159,11 @@ export function TeamSettings() {
         ? "Staff changes could not be saved."
         : "Staff details saved. A contact phone is separate from a verified sign-in phone.",
     );
-    if (!error) await load();
+    if (!error) {
+      setPhone(cleanPhone);
+      setWhatsapp(cleanWhatsapp);
+      await load();
+    }
     setBusy(false);
   }
 
@@ -230,6 +254,35 @@ export function TeamSettings() {
                           placeholder="0XXXXXXXXX or +233XXXXXXXXX"
                           value={phone}
                           onChange={(event) => setPhone(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="staff-whatsapp">WhatsApp</FieldLabel>
+                        <Input
+                          id="staff-whatsapp"
+                          type="tel"
+                          autoComplete="tel"
+                          placeholder="0XXXXXXXXX or +233XXXXXXXXX"
+                          value={whatsapp}
+                          onChange={(event) => setWhatsapp(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="staff-desk-extension">Desk extension</FieldLabel>
+                        <Input
+                          id="staff-desk-extension"
+                          value={deskExtension}
+                          maxLength={12}
+                          onChange={(event) => setDeskExtension(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="staff-birthday">Birthday</FieldLabel>
+                        <Input
+                          id="staff-birthday"
+                          type="date"
+                          value={birthday}
+                          onChange={(event) => setBirthday(event.target.value)}
                         />
                       </Field>
                     </FieldGroup>
