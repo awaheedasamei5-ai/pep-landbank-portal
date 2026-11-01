@@ -117,9 +117,12 @@ export function TeamSettings() {
   async function savePerson(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected || busy) return;
-    const cleanPhone = phone.replace(/[\s()-]/g, "");
+    const enteredPhone = phone.replace(/[\s()-]/g, "");
+    const cleanPhone = /^0\d{9}$/.test(enteredPhone)
+      ? `+233${enteredPhone.slice(1)}`
+      : enteredPhone;
     if (cleanPhone && !/^\+233\d{9}$/.test(cleanPhone)) {
-      setMessage("Enter a Ghana number in +233 format, or leave the phone empty.");
+      setMessage("Enter a Ghana number starting with 0 or +233, or leave the phone empty.");
       return;
     }
     setBusy(true);
@@ -223,7 +226,8 @@ export function TeamSettings() {
                         <Input
                           id="staff-contact-phone"
                           type="tel"
-                          placeholder="+233XXXXXXXXX"
+                          autoComplete="tel"
+                          placeholder="0XXXXXXXXX or +233XXXXXXXXX"
                           value={phone}
                           onChange={(event) => setPhone(event.target.value)}
                         />
