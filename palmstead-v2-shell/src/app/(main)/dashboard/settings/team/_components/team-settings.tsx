@@ -18,10 +18,6 @@ type Staff = {
   active: boolean;
   department: string | null;
   position: string | null;
-  phone: string | null;
-  whatsapp: string | null;
-  desk_extension: string | null;
-  birthday: string | null;
 };
 type Invite = { email: string; name: string | null; created_at: string | null; expires_at?: string | null };
 
@@ -31,13 +27,6 @@ export function TeamSettings() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [selected, setSelected] = useState("");
-  const [department, setDepartment] = useState("");
-  const [position, setPosition] = useState("");
-  const [phone, setPhone] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [deskExtension, setDeskExtension] = useState("");
-  const [birthday, setBirthday] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -55,7 +44,7 @@ export function TeamSettings() {
       throw new Error("Only active Management can manage staff accounts.");
     }
     const [people, pending] = await Promise.all([
-      client.from("profiles").select("id,agent_key,name,email,role,active,department,position,phone,whatsapp,desk_extension,birthday").order("name"),
+      client.from("profiles").select("id,agent_key,name,email,role,active,department,position").order("name"),
       client.from("allowed_emails").select("email,name,created_at").order("created_at", { ascending: false }),
     ]);
     if (people.error || pending.error) throw new Error("The team roster could not be loaded.");
@@ -77,17 +66,6 @@ export function TeamSettings() {
       cancelled = true;
     };
   }, [load]);
-
-  function selectPerson(person: Staff) {
-    setSelected(person.id);
-    setDepartment(person.department ?? "");
-    setPosition(person.position ?? "");
-    setPhone(person.phone ?? "");
-    setWhatsapp(person.whatsapp ?? "");
-    setDeskExtension(person.desk_extension ?? "");
-    setBirthday(person.birthday ?? "");
-    setMessage("");
-  }
 
   async function invite(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -123,57 +101,12 @@ export function TeamSettings() {
     setBusy(false);
   }
 
-  async function savePerson(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selected || busy) return;
-    const enteredPhone = phone.replace(/[\s()-]/g, "");
-    const cleanPhone = /^0\d{9}$/.test(enteredPhone)
-      ? `+233${enteredPhone.slice(1)}`
-      : enteredPhone;
-    if (cleanPhone && !/^\+233\d{9}$/.test(cleanPhone)) {
-      setMessage("Enter a Ghana number starting with 0 or +233, or leave the phone empty.");
-      return;
-    }
-    const enteredWhatsapp = whatsapp.replace(/[\s()-]/g, "");
-    const cleanWhatsapp = /^0\d{9}$/.test(enteredWhatsapp)
-      ? `+233${enteredWhatsapp.slice(1)}`
-      : enteredWhatsapp;
-    if (cleanWhatsapp && !/^\+233\d{9}$/.test(cleanWhatsapp)) {
-      setMessage("Enter a WhatsApp number starting with 0 or +233, or leave it empty.");
-      return;
-    }
-    setBusy(true);
-    const { error } = await requireSupabase()
-      .from("profiles")
-      .update({
-        department: department.trim().slice(0, 100) || null,
-        position: position.trim().slice(0, 100) || null,
-        phone: cleanPhone || null,
-        whatsapp: cleanWhatsapp || null,
-        desk_extension: deskExtension.trim().slice(0, 12) || null,
-        birthday: birthday || null,
-      })
-      .eq("id", selected);
-    setMessage(
-      error
-        ? "Staff changes could not be saved."
-        : "Staff details saved. A contact phone is separate from a verified sign-in phone.",
-    );
-    if (!error) {
-      setPhone(cleanPhone);
-      setWhatsapp(cleanWhatsapp);
-      await load();
-    }
-    setBusy(false);
-  }
-
-  const current = staff.find((person) => person.id === selected);
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Team roster</h1>
         <p className="text-muted-foreground text-sm">
-          Invite staff, review the team and maintain work contact details.
+          Invite staff and review the roster. Each person maintains their biodata in My settings.
         </p>
       </div>
       {loading && (
@@ -196,11 +129,9 @@ export function TeamSettings() {
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
                 {staff.map((person) => (
-                  <button
+                  <div
                     key={person.id}
-                    type="button"
-                    onClick={() => selectPerson(person)}
-                    className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                    className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border p-3"
                   >
                     <span className="min-w-0">
                       <strong className="block break-words text-sm">{person.name}</strong>
@@ -214,85 +145,10 @@ export function TeamSettings() {
                         {person.active ? "Active" : "Inactive"}
                       </Badge>
                     </span>
-                  </button>
+                  </div>
                 ))}
               </CardContent>
             </Card>
-            {current && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{current.name}</CardTitle>
-                  <CardDescription>Management-maintained employment and SMS contact fields.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={savePerson} className="flex flex-col gap-4">
-                    <FieldGroup>
-                      <Field>
-                        <FieldLabel htmlFor="staff-department">Department</FieldLabel>
-                        <Input
-                          id="staff-department"
-                          value={department}
-                          maxLength={100}
-                          onChange={(event) => setDepartment(event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="staff-position">Position</FieldLabel>
-                        <Input
-                          id="staff-position"
-                          value={position}
-                          maxLength={100}
-                          onChange={(event) => setPosition(event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="staff-contact-phone">Contact phone</FieldLabel>
-                        <Input
-                          id="staff-contact-phone"
-                          type="tel"
-                          autoComplete="tel"
-                          placeholder="0XXXXXXXXX or +233XXXXXXXXX"
-                          value={phone}
-                          onChange={(event) => setPhone(event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="staff-whatsapp">WhatsApp</FieldLabel>
-                        <Input
-                          id="staff-whatsapp"
-                          type="tel"
-                          autoComplete="tel"
-                          placeholder="0XXXXXXXXX or +233XXXXXXXXX"
-                          value={whatsapp}
-                          onChange={(event) => setWhatsapp(event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="staff-desk-extension">Desk extension</FieldLabel>
-                        <Input
-                          id="staff-desk-extension"
-                          value={deskExtension}
-                          maxLength={12}
-                          onChange={(event) => setDeskExtension(event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="staff-birthday">Birthday</FieldLabel>
-                        <Input
-                          id="staff-birthday"
-                          type="date"
-                          value={birthday}
-                          onChange={(event) => setBirthday(event.target.value)}
-                        />
-                      </Field>
-                    </FieldGroup>
-                    <Button type="submit" disabled={busy}>
-                      {busy ? "Saving…" : "Save staff details"}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            )}
           </div>
           <div className="flex min-w-0 flex-col gap-4">
             <Card>
