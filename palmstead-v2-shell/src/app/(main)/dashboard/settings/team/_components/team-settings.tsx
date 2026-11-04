@@ -35,7 +35,7 @@ export function TeamSettings() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [workReviews, setWorkReviews] = useState<WorkReview[]>([]);
-  const [reviewReason, setReviewReason] = useState("");
+  const [reviewReasons, setReviewReasons] = useState<Record<string, string>>({});
   const [reviewBusy, setReviewBusy] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -119,7 +119,8 @@ export function TeamSettings() {
   }
 
   async function reviewWork(profileId: string, approve: boolean) {
-    if (reviewBusy || reviewReason.trim().length < 3) {
+    const reason = reviewReasons[profileId]?.trim() ?? "";
+    if (reviewBusy || reason.length < 3) {
       setMessage("Enter a review reason of at least three characters.");
       return;
     }
@@ -127,11 +128,11 @@ export function TeamSettings() {
     const { error } = await requireSupabase().rpc("review_staff_work_profile", {
       p_profile_id: profileId,
       p_approve: approve,
-      p_note: reviewReason.trim(),
+      p_note: reason,
     });
     if (error) setMessage("The work-role decision could not be saved.");
     else {
-      setReviewReason("");
+      setReviewReasons((current) => ({ ...current, [profileId]: "" }));
       setMessage(approve ? "Work roles confirmed." : "Work roles returned to staff.");
       await load();
     }
@@ -208,8 +209,8 @@ export function TeamSettings() {
                         .filter(Boolean).join(" · ") || "No roles entered"}
                     </p>
                     <FieldLabel htmlFor={`review-reason-${item.profile_id}`}>Decision reason</FieldLabel>
-                    <Input id={`review-reason-${item.profile_id}`} value={reviewReason} maxLength={500}
-                      onChange={(event) => setReviewReason(event.target.value)} />
+                    <Input id={`review-reason-${item.profile_id}`} value={reviewReasons[item.profile_id] ?? ""} maxLength={500}
+                      onChange={(event) => setReviewReasons((current) => ({ ...current, [item.profile_id]: event.target.value }))} />
                     <div className="flex flex-wrap gap-2">
                       <Button size="sm" disabled={!!reviewBusy} onClick={() => void reviewWork(item.profile_id, true)}>
                         Confirm
