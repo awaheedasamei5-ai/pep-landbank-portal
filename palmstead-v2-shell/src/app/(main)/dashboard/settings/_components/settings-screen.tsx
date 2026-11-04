@@ -21,6 +21,9 @@ type StaffSettingsProfile = {
   department: string | null;
   position: string | null;
   phone: string | null;
+  whatsapp: string | null;
+  desk_extension: string | null;
+  birthday: string | null;
   address: string | null;
   active: boolean;
 };
@@ -28,6 +31,10 @@ type StaffSettingsProfile = {
 export function SettingsScreen() {
   const [profile, setProfile] = useState<StaffSettingsProfile | null>(null);
   const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [deskExtension, setDeskExtension] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -45,13 +52,17 @@ export function SettingsScreen() {
         if (authError || !auth.user) throw new Error("Sign in again to load your settings.");
         const { data, error } = await client
           .from("profiles")
-          .select("id,name,email,role,department,position,phone,address,active")
+          .select("id,name,email,role,department,position,phone,whatsapp,desk_extension,birthday,address,active")
           .eq("id", auth.user.id)
           .single();
         if (error || !data) throw new Error("Your staff profile could not be loaded.");
         if (!cancelled) {
           setProfile(data as StaffSettingsProfile);
           setAddress(data.address ?? "");
+          setPhone(data.phone ?? "");
+          setWhatsapp(data.whatsapp ?? "");
+          setDeskExtension(data.desk_extension ?? "");
+          setBirthday(data.birthday ?? "");
         }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Settings could not be loaded.");
@@ -67,18 +78,34 @@ export function SettingsScreen() {
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile || saving) return;
+    const normalize = (value: string) => {
+      const compact = value.replace(/[\s()-]/g, "");
+      return /^0\d{9}$/.test(compact) ? `+233${compact.slice(1)}` : compact;
+    };
+    const contact = normalize(phone);
+    const whatsappContact = normalize(whatsapp);
+    if ((contact && !/^\+233\d{9}$/.test(contact)) ||
+        (whatsappContact && !/^\+233\d{9}$/.test(whatsappContact))) {
+      setMessage("Enter Ghana contact numbers starting with 0 or +233.");
+      return;
+    }
     setSaving(true);
     setMessage("");
-    const value = address.trim().slice(0, 300);
-    const { error } = await requireSupabase()
-      .from("profiles")
-      .update({ address: value || null })
-      .eq("id", profile.id);
-    if (error) setMessage("Could not save your address. Please try again.");
+    const updates = {
+      address: address.trim().slice(0, 300) || null,
+      phone: contact || null,
+      whatsapp: whatsappContact || null,
+      desk_extension: deskExtension.trim().slice(0, 12) || null,
+      birthday: birthday || null,
+    };
+    const { error } = await requireSupabase().from("profiles").update(updates).eq("id", profile.id);
+    if (error) setMessage("Your details could not be saved. Please try again.");
     else {
-      setProfile({ ...profile, address: value || null });
-      setAddress(value);
-      setMessage("Your address was saved.");
+      setProfile({ ...profile, ...updates });
+      setAddress(updates.address ?? "");
+      setPhone(contact);
+      setWhatsapp(whatsappContact);
+      setMessage("Your personal and contact details were saved.");
     }
     setSaving(false);
   }
@@ -115,7 +142,7 @@ export function SettingsScreen() {
           <CardHeader>
             <CardTitle>Management access</CardTitle>
             <CardDescription>
-              Set staff access to Operations to-dos. Other app controls are being added in phases.
+              Set staff access to Operations and Notes. Other app controls are being added in phases.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -129,7 +156,7 @@ export function SettingsScreen() {
         <Card>
           <CardHeader>
             <CardTitle>Team roster</CardTitle>
-            <CardDescription>Invite staff and keep their company records current.</CardDescription>
+            <CardDescription>Invite staff and review their company records.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline">
@@ -148,7 +175,7 @@ export function SettingsScreen() {
           <Card className="min-w-0">
             <CardHeader>
               <CardTitle>Staff profile</CardTitle>
-              <CardDescription>Employment details are maintained by Management.</CardDescription>
+              <CardDescription>Maintain your own contact and personal details. Your work assignment appears below.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -172,14 +199,9 @@ export function SettingsScreen() {
                   <dt className="text-muted-foreground">Position</dt>
                   <dd>{profile.position ?? "Not assigned"}</dd>
                 </div>
-                <div>
-                  <dt className="text-muted-foreground">Contact phone</dt>
-                  <dd>{profile.phone ?? "Not set"}</dd>
-                </div>
               </dl>
               <p className="text-muted-foreground text-xs">
-                A contact number is not automatically a verified sign-in number. Management can correct staff contact
-                records.
+                Your contact number is used for work reminders. It is not automatically a verified sign-in number.
               </p>
               <form onSubmit={saveProfile} className="flex flex-col gap-3">
                 <FieldGroup>
@@ -193,9 +215,29 @@ export function SettingsScreen() {
                       onChange={(event) => setAddress(event.target.value)}
                     />
                   </Field>
+                  <Field>
+                    <FieldLabel htmlFor="staff-contact-phone">Mobile for work reminders</FieldLabel>
+                    <Input id="staff-contact-phone" type="tel" autoComplete="tel" placeholder="0XXXXXXXXX or +233XXXXXXXXX"
+                      value={phone} onChange={(event) => setPhone(event.target.value)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="staff-whatsapp">WhatsApp</FieldLabel>
+                    <Input id="staff-whatsapp" type="tel" autoComplete="tel" placeholder="0XXXXXXXXX or +233XXXXXXXXX"
+                      value={whatsapp} onChange={(event) => setWhatsapp(event.target.value)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="staff-extension">Desk extension</FieldLabel>
+                    <Input id="staff-extension" maxLength={12} value={deskExtension}
+                      onChange={(event) => setDeskExtension(event.target.value)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="staff-birthday">Birthday</FieldLabel>
+                    <Input id="staff-birthday" type="date" value={birthday}
+                      onChange={(event) => setBirthday(event.target.value)} />
+                  </Field>
                 </FieldGroup>
-                <Button type="submit" disabled={saving || address.trim() === (profile.address ?? "")}>
-                  {saving ? "Saving…" : "Save address"}
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Save my details"}
                 </Button>
                 {message && (
                   <p role="status" className="text-sm">
