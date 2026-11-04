@@ -1,6 +1,6 @@
 # Staff profile and role settings — V2 correction
 
-Status: design and implementation in progress. Scope: V2 `rebuild` and Supabase `sbydzrlzqxcdbudjaube` only. V1 remains read only.
+Status: phase 1 released in PR #65. Work-role review phase prepared in PR #66; production release pending authenticated browser verification. Scope: V2 `rebuild` and Supabase `sbydzrlzqxcdbudjaube` only. V1 remains read only.
 
 ## Why this correction is needed
 
@@ -49,3 +49,7 @@ Management Settings shows an invitation roster, profile completion and review qu
 - The old Manager editor deployment is being corrected. Until the corrected slice is verified, do not ask Management to maintain personal biodata there.
 - Previous V1 password hashes match V2, but an actual signed-in V1-password browser journey needs current credentials or a user sign-in session; build/RLS checks do not substitute for it.
 
+
+## 4 November 2026 work-role checkpoint
+
+V2 table/RPC migration `20261104110000_staff_work_profiles.sql` is applied; its schema-migration version and source filename match. The role form and Management review queue are on PR #66, with a READY Vercel preview at commit `64615dd5a647fffb43c072c35ecdc5125222e21c`. Rollback-only tests proved a Staff submission plus Management approval updates canonical title/department while creating zero Finance roles; a rejected submission leaves canonical fields unchanged and records two events. Staff self-approval and direct table inserts are denied. No role declarations or finance assignments remain in production data after those tests. Browser control is disabled in Work settings, so Staff/Management visual and form-submission checks are not complete. Keep PR #66 out of `rebuild` until that verification gate is satisfied. Approved sales-role display across Directory and payroll sync remain later phase 4 work; the private table must not be exposed through broad directory RLS.
