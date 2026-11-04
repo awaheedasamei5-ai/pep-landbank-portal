@@ -28,8 +28,24 @@ type StaffSettingsProfile = {
   active: boolean;
 };
 
+type WorkProfile = {
+  professional_title: string | null;
+  sales_role: string | null;
+  department_name: string | null;
+  head_of_department_requested: boolean;
+  status: string;
+  review_note: string | null;
+};
+
 export function SettingsScreen() {
   const [profile, setProfile] = useState<StaffSettingsProfile | null>(null);
+  const [work, setWork] = useState<WorkProfile | null>(null);
+  const [professionalTitle, setProfessionalTitle] = useState("");
+  const [salesRole, setSalesRole] = useState("");
+  const [departmentName, setDepartmentName] = useState("");
+  const [headRequested, setHeadRequested] = useState(false);
+  const [workBusy, setWorkBusy] = useState(false);
+  const [workMessage, setWorkMessage] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -56,8 +72,19 @@ export function SettingsScreen() {
           .eq("id", auth.user.id)
           .single();
         if (error || !data) throw new Error("Your staff profile could not be loaded.");
+        const { data: workData, error: workError } = await client
+          .from("staff_work_profiles")
+          .select("professional_title,sales_role,department_name,head_of_department_requested,status,review_note")
+          .eq("profile_id", auth.user.id)
+          .maybeSingle();
+        if (workError) throw new Error("Your work roles could not be loaded.");
         if (!cancelled) {
           setProfile(data as StaffSettingsProfile);
+          setWork((workData ?? null) as WorkProfile | null);
+          setProfessionalTitle(workData?.professional_title ?? "");
+          setSalesRole(workData?.sales_role ?? "");
+          setDepartmentName(workData?.department_name ?? "");
+          setHeadRequested(workData?.head_of_department_requested ?? false);
           setAddress(data.address ?? "");
           setPhone(data.phone ?? "");
           setWhatsapp(data.whatsapp ?? "");
@@ -108,6 +135,32 @@ export function SettingsScreen() {
       setMessage("Your personal and contact details were saved.");
     }
     setSaving(false);
+  }
+
+  async function submitWork(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile || workBusy) return;
+    setWorkBusy(true);
+    setWorkMessage("");
+    const { error } = await requireSupabase().rpc("submit_staff_work_profile", {
+      p_professional_title: professionalTitle.trim(),
+      p_sales_role: salesRole.trim(),
+      p_department_name: departmentName.trim(),
+      p_head_of_department_requested: headRequested,
+    });
+    if (error) setWorkMessage("Your work roles could not be submitted. Check the fields and try again.");
+    else {
+      setWork({
+        professional_title: professionalTitle.trim() || null,
+        sales_role: salesRole.trim() || null,
+        department_name: departmentName.trim() || null,
+        head_of_department_requested: headRequested,
+        status: "pending",
+        review_note: null,
+      });
+      setWorkMessage("Work roles submitted for Management review.");
+    }
+    setWorkBusy(false);
   }
 
   async function changePassword(event: React.FormEvent<HTMLFormElement>) {
@@ -244,6 +297,50 @@ export function SettingsScreen() {
                     {message}
                   </p>
                 )}
+              </form>
+            </CardContent>
+          </Card>
+          <Card className="min-w-0">
+            <CardHeader>
+              <CardTitle>My work roles</CardTitle>
+              <CardDescription>
+                Record both your professional job and any sales responsibility. Management confirms assignments before
+                they affect company records. A department-head request does not grant approval rights.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={submitWork} className="flex flex-col gap-4">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="professional-title">Professional role</FieldLabel>
+                    <Input id="professional-title" maxLength={100} placeholder="e.g. Digital Operations Officer"
+                      value={professionalTitle} onChange={(event) => setProfessionalTitle(event.target.value)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="sales-role">Sales role, if applicable</FieldLabel>
+                    <Input id="sales-role" maxLength={100} placeholder="e.g. Sales representative"
+                      value={salesRole} onChange={(event) => setSalesRole(event.target.value)} />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="work-department">Department</FieldLabel>
+                    <Input id="work-department" maxLength={100} placeholder="e.g. Sales"
+                      value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} />
+                  </Field>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" checked={headRequested}
+                      onChange={(event) => setHeadRequested(event.target.checked)} />
+                    <span>I am a head of this department</span>
+                  </label>
+                </FieldGroup>
+                {work && (
+                  <p className="text-muted-foreground text-sm">
+                    Review: {work.status}{work.review_note ? ` · ${work.review_note}` : ""}
+                  </p>
+                )}
+                <Button type="submit" disabled={workBusy}>
+                  {workBusy ? "Submitting…" : "Submit work roles"}
+                </Button>
+                {workMessage && <p role="status" className="text-sm">{workMessage}</p>}
               </form>
             </CardContent>
           </Card>
