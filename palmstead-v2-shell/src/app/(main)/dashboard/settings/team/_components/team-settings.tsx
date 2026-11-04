@@ -19,12 +19,24 @@ type Staff = {
   department: string | null;
   position: string | null;
 };
+type WorkReview = {
+  profile_id: string;
+  professional_title: string | null;
+  sales_role: string | null;
+  department_name: string | null;
+  head_of_department_requested: boolean;
+  status: string;
+  submitted_at: string;
+};
 type Invite = { email: string; name: string | null; created_at: string | null; expires_at?: string | null };
 
 export function TeamSettings() {
   const [managerKey, setManagerKey] = useState("");
   const [staff, setStaff] = useState<Staff[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [workReviews, setWorkReviews] = useState<WorkReview[]>([]);
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewBusy, setReviewBusy] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,14 +55,19 @@ export function TeamSettings() {
     if (managerError || manager?.role !== "manager" || manager.active !== true) {
       throw new Error("Only active Management can manage staff accounts.");
     }
-    const [people, pending] = await Promise.all([
+    const [people, pending, workPending] = await Promise.all([
       client.from("profiles").select("id,agent_key,name,email,role,active,department,position").order("name"),
       client.from("allowed_emails").select("email,name,created_at").order("created_at", { ascending: false }),
+      client.from("staff_work_profiles")
+        .select("profile_id,professional_title,sales_role,department_name,head_of_department_requested,status,submitted_at")
+        .eq("status", "pending")
+        .order("submitted_at"),
     ]);
-    if (people.error || pending.error) throw new Error("The team roster could not be loaded.");
+    if (people.error || pending.error || workPending.error) throw new Error("The team roster could not be loaded.");
     setManagerKey(manager.agent_key);
     setStaff((people.data ?? []) as Staff[]);
     setInvites((pending.data ?? []) as Invite[]);
+    setWorkReviews((workPending.data ?? []) as WorkReview[]);
   }, []);
 
   useEffect(() => {
@@ -99,6 +116,26 @@ export function TeamSettings() {
     setMessage(error ? "Invitation could not be removed." : "Invitation removed.");
     if (!error) await load();
     setBusy(false);
+  }
+
+  async function reviewWork(profileId: string, approve: boolean) {
+    if (reviewBusy || reviewReason.trim().length < 3) {
+      setMessage("Enter a review reason of at least three characters.");
+      return;
+    }
+    setReviewBusy(profileId);
+    const { error } = await requireSupabase().rpc("review_staff_work_profile", {
+      p_profile_id: profileId,
+      p_approve: approve,
+      p_note: reviewReason.trim(),
+    });
+    if (error) setMessage("The work-role decision could not be saved.");
+    else {
+      setReviewReason("");
+      setMessage(approve ? "Work roles confirmed." : "Work roles returned to staff.");
+      await load();
+    }
+    setReviewBusy("");
   }
 
   return (
@@ -151,6 +188,39 @@ export function TeamSettings() {
             </Card>
           </div>
           <div className="flex min-w-0 flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Work roles awaiting review</CardTitle>
+                <CardDescription>
+                  Confirm reported job and department details. Department-head Finance approval rights are assigned
+                  separately in Accounting.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {workReviews.length ? workReviews.map((item) => (
+                  <div key={item.profile_id} className="space-y-2 rounded-md border p-3 text-sm">
+                    <strong className="block break-words">
+                      {staff.find((person) => person.id === item.profile_id)?.name ?? "Staff member"}
+                    </strong>
+                    <p className="break-words text-muted-foreground">
+                      {[item.professional_title, item.sales_role && `Sales: ${item.sales_role}`,
+                        item.department_name, item.head_of_department_requested && "Head of department requested"]
+                        .filter(Boolean).join(" · ") || "No roles entered"}
+                    </p>
+                    <FieldLabel htmlFor={`review-reason-${item.profile_id}`}>Decision reason</FieldLabel>
+                    <Input id={`review-reason-${item.profile_id}`} value={reviewReason} maxLength={500}
+                      onChange={(event) => setReviewReason(event.target.value)} />
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" disabled={!!reviewBusy} onClick={() => void reviewWork(item.profile_id, true)}>
+                        Confirm
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={!!reviewBusy}
+                        onClick={() => void reviewWork(item.profile_id, false)}>Return</Button>
+                    </div>
+                  </div>
+                )) : <p className="text-muted-foreground text-sm">No work roles awaiting review.</p>}
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>Invite staff</CardTitle>
