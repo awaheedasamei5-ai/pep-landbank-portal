@@ -1631,6 +1631,13 @@ export interface DataSource {
     // day report instead of a single submission (sve_report_links.
     // day_report_id, added alongside the existing nullable submission_id).
     issueDayReportLink(dayReportId: string, pdfBlob: Blob, createdBy: string, createdByName: string): Promise<string>;
+    // Real column `site_visits.attended` (Phase B, docs/plans/43 section
+    // 2.1) -- routed through a narrow security-definer RPC
+    // (set_site_visit_attendance) rather than a plain client-side update,
+    // since the site manager reviewing a day's report may not be the
+    // owning agent of every visit that day and site_visits_upd's own RLS
+    // only allows the owning agent or a manager to touch a row otherwise.
+    setVisitAttendance(siteVisitId: string, attended: boolean): Promise<void>;
   };
   // Real table `messages` -- strictly 1:1 staff-to-staff, kind IS NULL
   // rows only (the same table also carries system notifications with a
@@ -5315,6 +5322,13 @@ function createLiveDataSource(): DataSource {
           .eq("id", dayReportId);
         if (updError) throw updError;
         return data.token as string;
+      },
+      async setVisitAttendance(siteVisitId, attended) {
+        const { error } = await requireClient().rpc("set_site_visit_attendance", {
+          p_site_visit_id: siteVisitId,
+          p_attended: attended,
+        });
+        if (error) throw error;
       },
     },
     chat: {

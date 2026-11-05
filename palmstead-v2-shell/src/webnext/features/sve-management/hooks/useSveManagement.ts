@@ -311,4 +311,19 @@ export function useDownloadSveSubmissionPdf() {
   });
 }
 
+// Real user ask (2026-11-05, Phase B): "who showed up vs. who booked" --
+// attendance lives on site_visits itself (not the day report's own
+// entries jsonb), so marking it here just re-fetches the visits list
+// (useSveVisits), which DayReportEditor already reads to render each
+// entry's live attended value.
+export function useSetSiteVisitAttendance() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ siteVisitId, attended }: { siteVisitId: string; attended: boolean }) =>
+      getDataSource(demoMode).sve.setVisitAttendance(siteVisitId, attended),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sveVisits'] }),
+  });
+}
+
 export type { SveDayReportEntry };

@@ -12,6 +12,7 @@ import {
   useSaveSveDayReport,
   useSendSveDayReport,
   useSendSveInvite,
+  useSetSiteVisitAttendance,
   useSveDayReport,
   useSveDayReportsList,
   useSveRealtime,
@@ -370,7 +371,9 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   const genFeedback = useGenerateClientFeedback();
   const polish = usePolishManagerNarrative();
   const deleteEntry = useDeleteSveEntry();
+  const setAttendance = useSetSiteVisitAttendance();
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  const [markingAttendanceId, setMarkingAttendanceId] = useState<string | null>(null);
 
   const [entries, setEntries] = useState<SveDayReportEntry[]>([]);
   const [siteSummary, setSiteSummary] = useState('');
@@ -436,6 +439,24 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
     setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, managerReview: { ...(e.managerReview ?? {}), [key]: value } } : e)));
   }
 
+  // attendance lives on the real site_visits row, not this report's own
+  // entries jsonb -- read it live from the already-loaded visits list.
+  function attendedFor(siteVisitId: string): boolean | null {
+    return (visits ?? []).find((v) => v.siteVisit.id === siteVisitId)?.siteVisit.attended ?? null;
+  }
+
+  async function markAttendance(siteVisitId: string, attended: boolean) {
+    setError(null);
+    setMarkingAttendanceId(siteVisitId);
+    try {
+      await setAttendance.mutateAsync({ siteVisitId, attended });
+    } catch (e) {
+      setError(friendlyError(e, 'Could not mark attendance'));
+    } finally {
+      setMarkingAttendanceId(null);
+    }
+  }
+
   async function polishDaySummary() {
     setError(null);
     if (!siteSummary.trim()) return;
@@ -479,7 +500,15 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   // actually be filled in, before the report can go to Management --
   // matches the "zero room for error" bar rather than letting a half-done
   // report out the door just because the button happened to be tappable.
-  const canSubmit = entries.length > 0 && entries.every((e) => reviewIsAnswered(e.managerReview)) && siteSummary.trim() !== '';
+  // Real user ask (Phase B): attendance is part of the same "every client
+  // must be reviewed" discipline this gate already enforces -- a report
+  // can't go to Management until the site manager has marked who actually
+  // showed up vs. who just booked.
+  const canSubmit =
+    entries.length > 0 &&
+    entries.every((e) => reviewIsAnswered(e.managerReview)) &&
+    entries.every((e) => attendedFor(e.siteVisitId) !== null) &&
+    siteSummary.trim() !== '';
 
   return (
     <div className={styles.card}>
@@ -526,6 +555,25 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
           <div key={entry.siteVisitId} className={styles.clientCard}>
             <div className={styles.name}>{entry.clientName}</div>
             <div className={styles.meta}>{entry.clientContact}</div>
+
+            <div className={styles.attendanceRow}>
+              <button
+                type="button"
+                className={`${styles.attendanceBtn} ${attendedFor(entry.siteVisitId) === true ? styles.attendanceBtnAttendedOn : ''}`}
+                disabled={markingAttendanceId === entry.siteVisitId}
+                onClick={() => markAttendance(entry.siteVisitId, true)}
+              >
+                Attended
+              </button>
+              <button
+                type="button"
+                className={`${styles.attendanceBtn} ${attendedFor(entry.siteVisitId) === false ? styles.attendanceBtnNoShowOn : ''}`}
+                disabled={markingAttendanceId === entry.siteVisitId}
+                onClick={() => markAttendance(entry.siteVisitId, false)}
+              >
+                No-show
+              </button>
+            </div>
 
             {deletingEntryId === entry.siteVisitId ? (
               <div className={styles.reportActions} style={{ marginTop: 8 }}>
@@ -624,7 +672,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
         {entries.length === 0 && <p className={styles.emptyMsg}>No site visits were logged for this day.</p>}
 
         {!canSubmit && entries.length > 0 && (
-          <p className={styles.reportHint}>Review every client below and fill in the day summary before this report can be submitted.</p>
+          <p className={styles.reportHint}>Mark attendance, review every client below, and fill in the day summary before this report can be submitted.</p>
         )}
         <div className={styles.reportActions} style={{ marginTop: 18 }}>
           <button type="button" className={styles.reportCancelBtn} disabled={busy} onClick={saveDraft}>

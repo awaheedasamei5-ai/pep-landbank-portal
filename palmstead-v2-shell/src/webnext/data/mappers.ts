@@ -405,6 +405,7 @@ export function mapSiteVisitRow(r: Record<string, unknown>): SiteVisit {
     status: (r.status as string) ?? "Pending",
     createdAt: r.created_at as string,
     leadId: (r.lead_id as string) ?? null,
+    attended: (r.attended as boolean | null) ?? null,
     deletedAt: (r.deleted_at as string) ?? null,
     deletedBy: (r.deleted_by as string) ?? null,
     deletedByName: (r.deleted_by_name as string) ?? null,

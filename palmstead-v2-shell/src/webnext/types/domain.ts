@@ -1043,6 +1043,13 @@ export interface SiteVisit {
   // match against `leads`; new ones are set explicitly by the picker on
   // AddSiteVisitScreen instead of relying on fuzzy matching going forward.
   leadId: string | null;
+  // Real column added 2026-11-05 (Phase B, docs/plans/43 section 2.1):
+  // "who showed up vs. who booked" had no field anywhere -- `status` is a
+  // free-text scheduling status, not an attendance flag. null = not yet
+  // marked by the site manager; true = actually showed up; false = booked
+  // but did not attend. Lives here (not in sve_day_reports' own entries
+  // jsonb) because attendance is a fact about the visit itself.
+  attended: boolean | null;
   // Real columns added 2026-09-05 (Master Spec 9.4: "Delete icon must
   // work. Deletion requires confirmation and reason; it archives/cancels
   // the visit and preserves audit history.") -- a soft cancel via UPDATE,
