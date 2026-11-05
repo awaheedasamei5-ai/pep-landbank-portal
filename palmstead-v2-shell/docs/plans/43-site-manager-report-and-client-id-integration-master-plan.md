@@ -407,10 +407,25 @@ from the live Finance > Payments screen for a real client with 2 real approved p
 • Client No. CL-000065` in the header and a PAYMENT HISTORY table with both real rows (29/04/2026
 GHS 40,000; 02/09/2026 RCT-000005 GHS 51,500), matching SQL exactly. `npx tsc -b` clean throughout.
 
-**Phase F — Allocation → contract-request auto-trigger** (§4.4). One RPC addition, carefully
-tested (confirm it doesn't create duplicate `contract_requests` rows if an allocation is
-reconfirmed/edited — check the real uniqueness/idempotency the table may or may not already
-enforce before writing the trigger).
+**Phase F — Allocation → contract-request auto-trigger** (§4.4). **DONE.** `confirm_allocation()`
+now auto-inserts a real `contract_requests` row (once per allocation, not once per plot in a
+multi-plot allocation — the insert sits after the per-plot loop) whenever the allocated lead has
+no other `status = 'pending'` request already open, using the allocating staff member as
+`requested_by`/`requested_by_name` and a new `source = 'allocation'` value (widened the existing
+`contract_requests_source_check` constraint — confirmed safe since `ContractRequest`'s own TS type
+never surfaces `source` in the UI, same dormant-column treatment Complaints already gives its
+unused `source`/`sentiment`). No TS changes needed (`npx tsc -b` clean) — pure SQL/RPC change.
+**Live verification: CONFIRMED (2026-11-05)**, via the same transaction-rollback pattern Phase E
+used (no irreversible real allocation): ran `confirm_allocation()` as Management against the real
+pending Theresa Yesutor allocation with a real free plot (`A7`), inside a `begin`/`rollback` block.
+Confirmed in the same transaction: `plots.lead_id` set correctly, a real `contract_requests` row
+inserted with `source: "allocation"`, `requested_by: "manager"`, `requested_by_name: "Management"`,
+and the expected auto-generated note; `pending_count = 1` (the dedup guard works — a second call
+would not double-insert). Rolled back, then confirmed via a fresh query that production was left
+untouched (allocation still `Awaiting Authorization`, no leftover `contract_requests` row). Also
+confirmed `ContractRequestsScreen.tsx` lists `requests` unfiltered (RLS already scopes it per
+viewer) and sorts pending-first by `createdAt` — an auto-inserted row needs no extra UI wiring to
+surface in the real Contract of Sale request queue.
 
 **Phase G — Cost-attribution ledger** (§4.2). New table + the first real population path (site
 visit costs, once Phase C exists to source the per-client figure from).
