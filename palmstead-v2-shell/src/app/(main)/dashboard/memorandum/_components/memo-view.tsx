@@ -23,6 +23,7 @@ import type { Memo } from "./use-memoranda";
 interface MemoViewProps {
   memo: Memo | null;
   canDelete: boolean;
+  canReply: boolean;
   isOwnDraft: boolean;
   onClose?: () => void;
   onReply: () => void;
@@ -31,7 +32,17 @@ interface MemoViewProps {
   onDelete: () => void;
 }
 
-export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEditDraft, onDownloadPdf, onDelete }: MemoViewProps) {
+export function MemoView({
+  memo,
+  canDelete,
+  canReply,
+  isOwnDraft,
+  onClose,
+  onReply,
+  onEditDraft,
+  onDownloadPdf,
+  onDelete,
+}: MemoViewProps) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 px-2 py-3">
       <div className="flex items-center">
@@ -75,7 +86,7 @@ export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEdit
               </TooltipTrigger>
               <TooltipContent>Edit draft</TooltipContent>
             </Tooltip>
-          ) : (
+          ) : canReply ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="Reply" onClick={onReply}>
@@ -84,7 +95,7 @@ export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEdit
               </TooltipTrigger>
               <TooltipContent>Reply</TooltipContent>
             </Tooltip>
-          )}
+          ) : null}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="Download PDF" onClick={onDownloadPdf}>
@@ -116,7 +127,9 @@ export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEdit
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="space-y-1.5">
               <div className="font-medium leading-none">{memo.subject || "(no subject)"}</div>
-              <div className="text-muted-foreground text-xs leading-none">{format(new Date(memo.createdAt), "EEE, d MMM yyyy, h:mm a")}</div>
+              <div className="text-muted-foreground text-xs leading-none">
+                {format(new Date(memo.createdAt), "EEE, d MMM yyyy, h:mm a")}
+              </div>
             </div>
 
             <Separator />
@@ -148,6 +161,7 @@ export function MemoView({ memo, canDelete, isOwnDraft, onClose, onReply, onEdit
             <div
               className="scrollbar-none prose prose-sm dark:prose-invert min-h-0 max-w-none flex-1 overflow-y-auto text-sm"
               // eslint-disable-next-line react/no-danger -- sanitized at this render boundary (safeOperationCommentHtml's own allowlist), same real fix already applied to Operations comments. A memo body is user-composed rich text, not trusted markup -- it must never be rendered raw.
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: Memo HTML passes the tested safeOperationCommentHtml allowlist at this sink.
               dangerouslySetInnerHTML={{ __html: safeOperationCommentHtml(memo.bodyHtml) }}
             />
           </div>
