@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { ghs } from "../lib/format";
+import { fmtLongDate, ghs } from "../lib/format";
 import type { ActivityLogEntry, Lead, Payment, SiteVisit } from "../../types/domain";
-import { useEngagementDashboard } from "../hooks/useEngagementDashboard";
+import { periodToRange } from "../lib/engagementPeriod";
+import { useEngagementDashboard, type EngagementDrillDownKey } from "../hooks/useEngagementDashboard";
+import { EngagementDrillDownSheet } from "./EngagementDrillDownSheet";
 import { EngagementPeriodFilterBar } from "./EngagementPeriodFilterBar";
 import styles from "./EngagementDashboardPanel.module.css";
 
@@ -34,28 +37,32 @@ export function EngagementDashboardPanel({
   isLoading?: boolean;
   heading?: string;
 }) {
-  const { filter, setFilter, metrics, activityDates } = useEngagementDashboard(leads, activity, visits, payments);
+  const { filter, setFilter, metrics, drilldown, activityDates } = useEngagementDashboard(leads, activity, visits, payments);
+  const [openKey, setOpenKey] = useState<EngagementDrillDownKey | null>(null);
 
   if (isLoading) {
     return <p className={styles.loading}>Loading dashboard…</p>;
   }
 
-  const row1 = [
-    { label: "Calls logged", value: String(metrics.callsLogged) },
-    { label: "Avg calls / active day", value: metrics.avgCallsPerActiveDay.toFixed(1) },
-    { label: "Site visits in period", value: String(metrics.siteVisitsInPeriod) },
-    { label: "Clients ever visited", value: String(metrics.clientsEverVisited) },
-    { label: "Bought clients", value: String(metrics.boughtClients) },
-    { label: "Not yet bought", value: String(metrics.notYetBought) },
+  const row1: { label: string; value: string; key: EngagementDrillDownKey }[] = [
+    { label: "Calls logged", value: String(metrics.callsLogged), key: "callsLogged" },
+    { label: "Avg calls / active day", value: metrics.avgCallsPerActiveDay.toFixed(1), key: "avgCallsPerActiveDay" },
+    { label: "Site visits in period", value: String(metrics.siteVisitsInPeriod), key: "siteVisitsInPeriod" },
+    { label: "Clients ever visited", value: String(metrics.clientsEverVisited), key: "clientsEverVisited" },
+    { label: "Bought clients", value: String(metrics.boughtClients), key: "boughtClients" },
+    { label: "Not yet bought", value: String(metrics.notYetBought), key: "notYetBought" },
   ];
-  const row2 = [
-    { label: "Cash in — period", value: ghs(metrics.cashInPeriod) },
-    { label: "Outstanding balance", value: ghs(metrics.outstandingBalance) },
-    { label: "Clients in register", value: String(metrics.clientsInRegister) },
-    { label: "Open follow-ups due", value: String(metrics.openFollowUpsDue), warn: metrics.openFollowUpsDue > 0 },
-    { label: "Active deals", value: String(metrics.activeDeals) },
-    { label: "Call days in period", value: String(metrics.callDaysInPeriod) },
+  const row2: { label: string; value: string; warn?: boolean; key: EngagementDrillDownKey }[] = [
+    { label: "Cash in — period", value: ghs(metrics.cashInPeriod), key: "cashInPeriod" },
+    { label: "Outstanding balance", value: ghs(metrics.outstandingBalance), key: "outstandingBalance" },
+    { label: "Clients in register", value: String(metrics.clientsInRegister), key: "clientsInRegister" },
+    { label: "Open follow-ups due", value: String(metrics.openFollowUpsDue), warn: metrics.openFollowUpsDue > 0, key: "openFollowUpsDue" },
+    { label: "Active deals", value: String(metrics.activeDeals), key: "activeDeals" },
+    { label: "Call days in period", value: String(metrics.callDaysInPeriod), key: "callDaysInPeriod" },
   ];
+
+  const range = periodToRange(filter);
+  const periodLabel = range.from === range.to ? fmtLongDate(range.from) : `${fmtLongDate(range.from)} – ${fmtLongDate(range.to)}`;
 
   return (
     <section className={styles.wrap}>
@@ -66,10 +73,10 @@ export function EngagementDashboardPanel({
 
       <div className={styles.tileGrid}>
         {[...row1, ...row2].map((t) => (
-          <div key={t.label} className={styles.tile}>
+          <button key={t.label} type="button" className={styles.tile} onClick={() => setOpenKey(t.key)}>
             <div className={`${styles.tileValue} ${"warn" in t && t.warn ? styles.tileValueWarn : ""}`}>{t.value}</div>
             <div className={styles.tileLabel}>{t.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -110,6 +117,8 @@ export function EngagementDashboardPanel({
           </CardContent>
         </Card>
       </div>
+
+      <EngagementDrillDownSheet entry={openKey ? drilldown[openKey] : null} periodLabel={periodLabel} onOpenChange={(open) => !open && setOpenKey(null)} />
     </section>
   );
 }

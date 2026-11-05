@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ActivityLogEntry, Lead, Payment, SiteVisit } from "../../types/domain";
-import { getOpenFollowUps } from "../lib/callActivityLogic";
+import { getOpenFollowUps, type OpenFollowUp } from "../lib/callActivityLogic";
 import {
   activeDaysCount,
   avgPerActiveDay,
@@ -15,6 +15,32 @@ import {
   type PeriodFilter,
 } from "../lib/engagementPeriod";
 import { today } from "../lib/format";
+
+// Phase A, docs/plans/43-site-manager-report-and-client-id-integration-master-plan.md
+// -- the dashboard already filters by period; what's missing is exposing the
+// real underlying rows behind each tile's number so a click can drill into
+// them. One discriminated union per tile so the UI can render each kind's
+// own real columns without `any`.
+export type EngagementDrillDownEntry =
+  | { kind: "activity"; label: string; rows: ActivityLogEntry[] }
+  | { kind: "visits"; label: string; rows: SiteVisit[] }
+  | { kind: "leads"; label: string; rows: Lead[] }
+  | { kind: "payments"; label: string; rows: Payment[] }
+  | { kind: "followUps"; label: string; rows: OpenFollowUp[] };
+
+export type EngagementDrillDownKey =
+  | "callsLogged"
+  | "avgCallsPerActiveDay"
+  | "siteVisitsInPeriod"
+  | "clientsEverVisited"
+  | "boughtClients"
+  | "notYetBought"
+  | "cashInPeriod"
+  | "outstandingBalance"
+  | "clientsInRegister"
+  | "openFollowUpsDue"
+  | "activeDeals"
+  | "callDaysInPeriod";
 
 // docs/plans/29-company-leads-full-system-blueprint.md, generalized for
 // Pipeline (My + Master) and Client Database -- the real
@@ -49,7 +75,7 @@ export function useEngagementDashboard(leads: Lead[], activity: ActivityLogEntry
 
     const openFollowUps = getOpenFollowUps(activity);
     const todayIso = today();
-    const followUpsDue = openFollowUps.filter((f) => f.follow <= todayIso).length;
+    const followUpsDueList = openFollowUps.filter((f) => f.follow <= todayIso);
 
     const dayChart = filter.month === "all" ? bucketByMonthOfYear(filterDatesInRange(callDates, range), filter.year) : bucketByDayOfMonth(callDates, filter.year, filter.month);
     const monthChart = bucketByMonthOfYear(
@@ -57,25 +83,49 @@ export function useEngagementDashboard(leads: Lead[], activity: ActivityLogEntry
       filter.year,
     );
 
+    const cashPaymentsInPeriod = allPayments.filter((p) => inRange(p.date, range));
+    const visitedLeads = leads.filter((l) => visitedLeadIds.has(l.id));
+    const notBoughtLeads = leads.filter((l) => !(l.grandTotal > 0 && l.amtPaid >= l.grandTotal));
+    const outstandingLeads = leads.filter((l) => l.grandTotal - l.amtPaid > 0);
+    const activeDealLeads = leads.filter((l) => l.amtPaid > 0 && l.amtPaid < l.grandTotal);
+
+    const drilldown: Record<EngagementDrillDownKey, EngagementDrillDownEntry> = {
+      callsLogged: { kind: "activity", label: "Calls logged", rows: callsInPeriod },
+      avgCallsPerActiveDay: { kind: "activity", label: "Calls logged", rows: callsInPeriod },
+      siteVisitsInPeriod: { kind: "visits", label: "Site visits in period", rows: visitsInPeriod },
+      clientsEverVisited: { kind: "leads", label: "Clients ever visited", rows: visitedLeads },
+      boughtClients: { kind: "leads", label: "Bought clients", rows: purchased },
+      notYetBought: { kind: "leads", label: "Not yet bought", rows: notBoughtLeads },
+      cashInPeriod: { kind: "payments", label: "Cash in — period", rows: cashPaymentsInPeriod },
+      outstandingBalance: { kind: "leads", label: "Outstanding balance", rows: outstandingLeads },
+      clientsInRegister: { kind: "leads", label: "Clients in register", rows: leads },
+      openFollowUpsDue: { kind: "followUps", label: "Open follow-ups due", rows: followUpsDueList },
+      activeDeals: { kind: "leads", label: "Active deals", rows: activeDealLeads },
+      callDaysInPeriod: { kind: "activity", label: "Calls logged", rows: callsInPeriod },
+    };
+
     return {
-      callsLogged: callsInPeriod.length,
-      avgCallsPerActiveDay: avgPerActiveDay(callsInPeriod.length, callDays),
-      siteVisitsInPeriod: visitsInPeriod.length,
-      clientsEverVisited: visitedLeadIds.size,
-      boughtClients: boughtCount,
-      notYetBought: notBoughtCount,
-      cashInPeriod,
-      outstandingBalance,
-      clientsInRegister: leads.length,
-      openFollowUpsDue: followUpsDue,
-      activeDeals,
-      callDaysInPeriod: callDays,
-      dayChart,
-      monthChart,
+      metrics: {
+        callsLogged: callsInPeriod.length,
+        avgCallsPerActiveDay: avgPerActiveDay(callsInPeriod.length, callDays),
+        siteVisitsInPeriod: visitsInPeriod.length,
+        clientsEverVisited: visitedLeadIds.size,
+        boughtClients: boughtCount,
+        notYetBought: notBoughtCount,
+        cashInPeriod,
+        outstandingBalance,
+        clientsInRegister: leads.length,
+        openFollowUpsDue: followUpsDueList.length,
+        activeDeals,
+        callDaysInPeriod: callDays,
+        dayChart,
+        monthChart,
+      },
+      drilldown,
     };
   }, [leads, activity, visits, payments, filter]);
 
-  return { filter, setFilter, metrics, activityDates: activity.map((e) => e.createdAt) };
+  return { filter, setFilter, metrics: metrics.metrics, drilldown: metrics.drilldown, activityDates: activity.map((e) => e.createdAt) };
 }
 
 export type EngagementDashboardMetrics = ReturnType<typeof useEngagementDashboard>["metrics"];

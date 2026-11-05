@@ -281,7 +281,24 @@ Ordered by real dependency — each phase is independently testable, matching th
 established discipline (typecheck clean, live or substitute-verified, committed before moving on).
 
 **Phase A — Engagement dashboard drill-down** (§3). Self-contained, no schema change, lowest risk,
-highest immediate visible value. Good first phase.
+highest immediate visible value. Good first phase. **DONE** — confirmed §1.2's analysis exactly
+matched the real code (period filter already worked, zero `onClick` on any tile). `useEngagementDashboard`
+now returns a `drilldown` map (one discriminated entry per tile: `activity`/`visits`/`leads`/
+`payments`/`followUps`, each reusing the identical filter predicate its corresponding count already
+used — no new logic, no new queries) alongside the existing `metrics`. Every one of the 12 tiles on
+`EngagementDashboardPanel` is now a real button opening a new `EngagementDrillDownSheet` showing the
+real underlying rows for the current period (present or past — the existing filter bar's day/month/
+year/"all" granularity already applies). Since this is the one shared component Pipeline, Client
+Database, and Company Leads all render, all three get this automatically — no per-screen changes
+needed. `npx tsc -b` clean. **Live verification blocked**: the known Management test account
+(`fapeprah@landbankghana.com`) could not log in during this phase — the login form submits but
+never reaches the Supabase auth endpoint at all (no request fired, no redirect, confirmed via
+network-request inspection, not a Browser-pane tool outage this time). This is a separate, real
+finding outside Phase A's scope — flagged for the user/parent session to look into, not fixed here.
+Substituted with a direct SQL check confirming real non-empty data exists for every drill-down kind
+(75 activity rows, 3 lead-linked site visits, 17 approved payments, 6 active deals) and a code-level
+review confirming each `rows` array's filter predicate is byte-for-byte identical to its existing,
+already-correct count's predicate.
 
 **Phase B — Site Manager Report: attendance field** (§2.1). One column, one UI toggle, extends an
 existing gate. Low risk.
