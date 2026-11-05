@@ -11,6 +11,7 @@ const AREAS = [
   { label: "Operations projects", view: "operations.projects.view", manage: "operations.projects.manage" },
   { label: "Operations meetings", view: "operations.meetings.view", manage: "operations.meetings.manage" },
   { label: "Personal notes", view: "notes.view", manage: "notes.manage" },
+  { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage" },
 ] as const;
 
 type AccessLevel = "Full" | "View only" | "No access";
@@ -80,4 +81,3 @@ export function MyAccess() {
     </Card>
   );
 }
-
