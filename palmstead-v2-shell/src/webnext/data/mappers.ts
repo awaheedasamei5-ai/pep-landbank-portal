@@ -111,6 +111,7 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     deletedBy: (r.deleted_by as string) ?? null,
     deletedByName: (r.deleted_by_name as string) ?? null,
     deletionReason: (r.deletion_reason as string) ?? null,
+    clientNo: (r.client_no as string) ?? null,
   };
 }
 
@@ -374,6 +375,7 @@ export function mapPlotRow(r: Record<string, unknown>): Plot {
     areaSqft: r.area_sqft == null ? null : Number(r.area_sqft),
     factor: r.factor == null ? null : Number(r.factor),
     customerCode: (r.customer_code as string) ?? null,
+    leadId: (r.lead_id as string) ?? null,
   };
 }
 

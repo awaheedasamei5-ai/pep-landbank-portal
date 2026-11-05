@@ -63,7 +63,7 @@ export function useReceiptLeadInfo(leadId: string | null) {
       const sb = requireSupabase();
       const { data, error } = await sb
         .from("leads")
-        .select("name,contact,plot_type,grand_total,amt_paid")
+        .select("name,contact,plot_type,grand_total,amt_paid,client_no")
         .eq("id", leadId as string)
         .single();
       if (error) throw error;
@@ -73,16 +73,59 @@ export function useReceiptLeadInfo(leadId: string | null) {
         plot_type: string | null;
         grand_total: number | null;
         amt_paid: number | null;
+        client_no: string | null;
       };
       return {
+        id: leadId as string,
         name: row.name,
         contact: row.contact,
         plotType: row.plot_type,
         grandTotal: Number(row.grand_total ?? 0),
         amtPaid: Number(row.amt_paid ?? 0),
+        clientNo: row.client_no,
       };
     },
   });
+}
+
+// Real itemized payment history for the receipt's "PAYMENT HISTORY" table
+// (Phase E, docs/plans/43 §4.3) -- approved payments only, same table
+// usePayments() reads from, just scoped to one lead and the few columns
+// the PDF actually renders.
+async function fetchApprovedPaymentHistory(leadId: string): Promise<WebnextPayment[]> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("payments")
+    .select("id,lead_id,amount,payment_method,reference_number,receipt_number,status,payment_date")
+    .eq("lead_id", leadId)
+    .eq("status", "approved")
+    .order("payment_date", { ascending: true });
+  if (error) throw error;
+  return (
+    data as {
+      id: string;
+      lead_id: string;
+      amount: number;
+      payment_method: string | null;
+      reference_number: string | null;
+      receipt_number: string | null;
+      status: string;
+      payment_date: string;
+    }[]
+  ).map(
+    (row) =>
+      ({
+        id: row.id,
+        leadId: row.lead_id,
+        agentKey: "",
+        amount: Number(row.amount),
+        date: row.payment_date,
+        paymentMethod: row.payment_method as WebnextPayment["paymentMethod"],
+        referenceNumber: row.reference_number ?? undefined,
+        receiptNumber: row.receipt_number,
+        status: row.status as WebnextPayment["status"],
+      }) as WebnextPayment,
+  );
 }
 
 function toWebnextPayment(p: Payment): WebnextPayment {
@@ -100,19 +143,23 @@ function toWebnextPayment(p: Payment): WebnextPayment {
 }
 
 function toWebnextLead(input: {
+  id: string;
   name: string;
   contact: string | null;
   plotType: string | null;
   grandTotal: number;
   amtPaid: number;
+  clientNo: string | null;
 }): Lead {
   return {
+    id: input.id,
     name: input.name,
     contact: input.contact ?? "",
     plotType: input.plotType ?? "Full Plot",
     noPlots: 1,
     grandTotal: input.grandTotal,
     amtPaid: input.amtPaid,
+    clientNo: input.clientNo,
   } as unknown as Lead;
 }
 
@@ -124,11 +171,13 @@ async function ensureReceiptNumber(paymentId: string): Promise<string> {
 }
 
 export interface ReceiptLeadInfo {
+  id: string;
   name: string;
   contact: string | null;
   plotType: string | null;
   grandTotal: number;
   amtPaid: number;
+  clientNo: string | null;
 }
 
 export function useDownloadReceipt(
@@ -141,6 +190,7 @@ export function useDownloadReceipt(
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: ReceiptLeadInfo | null }) => {
       if (!config) throw new Error("Receipt config not loaded yet");
       const receiptNumber = await ensureReceiptNumber(payment.id);
+      const paymentHistory = lead ? await fetchApprovedPaymentHistory(lead.id) : [];
       const doc = buildReceiptPdf({
         clientName: payment.clientName ?? payment.leadName,
         payment: toWebnextPayment(payment),
@@ -152,6 +202,7 @@ export function useDownloadReceipt(
         contractTotalAsOf: payment.approvalSnapshotIsLegacy ? null : payment.contractTotalAtApproval,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
+        paymentHistory,
       });
       const filename = `Receipt_${receiptNumber}.pdf`;
       doc.save(filename);
@@ -172,6 +223,7 @@ export function useIssueReceiptLink(
       if (!config) throw new Error("Receipt config not loaded yet");
       const sb = requireSupabase();
       const receiptNumber = await ensureReceiptNumber(payment.id);
+      const paymentHistory = lead ? await fetchApprovedPaymentHistory(lead.id) : [];
       const doc = buildReceiptPdf({
         clientName: payment.clientName ?? payment.leadName,
         payment: toWebnextPayment(payment),
@@ -183,6 +235,7 @@ export function useIssueReceiptLink(
         contractTotalAsOf: payment.approvalSnapshotIsLegacy ? null : payment.contractTotalAtApproval,
         issuerSignature: issuerSignature ?? null,
         issuerName: issuerName ?? null,
+        paymentHistory,
       });
       const blob = doc.output("blob");
       const path = `${payment.id}/receipt-${Date.now()}.pdf`;

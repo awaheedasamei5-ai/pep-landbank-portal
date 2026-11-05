@@ -42,7 +42,14 @@ function receiptRow(doc: jsPDF, x: number, y: number, colW: number, label: strin
   doc.text(fitText(doc, value, colW), x, y + 4.8);
 }
 
-function headerBand(doc: jsPDF, pageW: number, ref: string, dateStr: string, companyName: string): number {
+function headerBand(
+  doc: jsPDF,
+  pageW: number,
+  ref: string,
+  dateStr: string,
+  companyName: string,
+  clientNo: string | null,
+): number {
   const bandH = 40;
   doc.setFillColor(...INK);
   doc.rect(0, 0, pageW, bandH, "F");
@@ -59,7 +66,7 @@ function headerBand(doc: jsPDF, pageW: number, ref: string, dateStr: string, com
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(205, 213, 222);
-  doc.text(`Receipt No. ${ref}`, 14, 34);
+  doc.text(clientNo ? `Receipt No. ${ref}  •  Client No. ${clientNo}` : `Receipt No. ${ref}`, 14, 34);
   doc.text(dateStr, pageW - 14, 34, { align: "right" });
   return bandH + 1.1;
 }
@@ -75,6 +82,12 @@ export interface BuildReceiptParams {
   contractTotalAsOf?: number | null;
   issuerSignature?: string | null;
   issuerName?: string | null;
+  // Real itemized payment history for this lead (ds.payments.listForLead),
+  // sorted oldest-first by the caller or here -- rendered as a new table
+  // below the balance summary so the client can see every previous
+  // payment with its own date, not just the current balance (Phase E,
+  // docs/plans/43 §4.3).
+  paymentHistory?: Payment[];
 }
 
 export function buildReceiptPdf({
@@ -88,6 +101,7 @@ export function buildReceiptPdf({
   contractTotalAsOf,
   issuerSignature,
   issuerName,
+  paymentHistory,
 }: BuildReceiptParams): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
@@ -106,7 +120,7 @@ export function buildReceiptPdf({
 
   doc.setFillColor(...PAPER);
   doc.rect(0, 0, pageW, pageH, "F");
-  let y = headerBand(doc, pageW, ref, dateStr, companyName);
+  let y = headerBand(doc, pageW, ref, dateStr, companyName, lead?.clientNo ?? null);
   doc.setTextColor(...DARK);
   y += 10;
   if (config.companyTin) {
@@ -266,6 +280,62 @@ export function buildReceiptPdf({
     ny += lines.length * 4.2 + 2.4;
   });
   y = Math.max(y + 4 * rowH, ny) + 6;
+
+  const approvedHistory = (paymentHistory ?? []).filter((p) => p.status === "approved" || p.status === undefined);
+  if (approvedHistory.length > 0) {
+    const sorted = [...approvedHistory].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const headerH = 7;
+    const rowStep = 6.4;
+    const neededH = headerH + sorted.length * rowStep + 12;
+    if (y + neededH > pageH - 20) {
+      doc.addPage();
+      doc.setFillColor(...PAPER);
+      doc.rect(0, 0, pageW, pageH, "F");
+      doc.setTextColor(...DARK);
+      y = 20;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...INK);
+    doc.text("PAYMENT HISTORY", L, y);
+    doc.setDrawColor(...GOLD);
+    doc.line(L, y + 1.5, L + 16, y + 1.5);
+    y += 6;
+    const hX = [L, L + 32, L + 112, L + 150];
+    const hW = [32, 80, 38, 28];
+    doc.setFillColor(...INK);
+    doc.rect(L, y, R - L, headerH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(255, 255, 255);
+    doc.text("DATE", hX[0] + 3, y + 4.8);
+    doc.text("METHOD / REFERENCE", hX[1] + 3, y + 4.8);
+    doc.text("RECEIPT NO.", hX[2] + 3, y + 4.8);
+    doc.text("AMOUNT", hX[3] + hW[3] - 3, y + 4.8, { align: "right" });
+    y += headerH;
+    sorted.forEach((p, i) => {
+      const rowY = y + i * rowStep + 4.4;
+      if (i % 2 === 1) {
+        doc.setFillColor(243, 245, 247);
+        doc.rect(L, y + i * rowStep, R - L, rowStep, "F");
+      }
+      const pDate = p.date ? new Date(`${p.date}T00:00:00`).toLocaleDateString("en-GB") : "—";
+      const isCurrent = p.id === payment.id;
+      doc.setFont("helvetica", isCurrent ? "bold" : "normal");
+      doc.setFontSize(7.6);
+      doc.setTextColor(...DARK);
+      doc.text(pDate, hX[0] + 3, rowY);
+      doc.text(
+        fitText(doc, `${p.paymentMethod ?? "—"}${p.referenceNumber ? ` · ${p.referenceNumber}` : ""}`, hW[1] - 6),
+        hX[1] + 3,
+        rowY,
+      );
+      doc.text(fitText(doc, p.receiptNumber ?? "—", hW[2] - 6), hX[2] + 3, rowY);
+      doc.setFont("helvetica", "bold");
+      doc.text(ghs(p.amount), hX[3] + hW[3] - 3, rowY, { align: "right" });
+    });
+    y += sorted.length * rowStep + 6;
+  }
 
   if (issuerSignature) pdfStampSignature(doc, L, y - 2, 40, 14, issuerSignature);
   doc.setDrawColor(...GOLD);

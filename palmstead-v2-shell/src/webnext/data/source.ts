@@ -2849,6 +2849,7 @@ function createLiveDataSource(): DataSource {
                 areaSqft: null,
                 factor: 0.5,
                 customerCode: null,
+                leadId: null,
               }
             : null;
         return { alreadySplit: r.alreadySplit, plotA: norm(r.plotA), plotB: norm(r.plotB) };

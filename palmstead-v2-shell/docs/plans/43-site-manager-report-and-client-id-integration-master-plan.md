@@ -380,10 +380,32 @@ lead has yet reached `amtPaid >= grandTotal` among those with a matched site vis
 and "— cost per conversion" everywhere is the real current state, not a bug — confirmed by the same
 underlying SQL, not assumed.
 
-**Phase E — `plots.lead_id` + receipt redesign** (§4.1, §4.3). Two independent, additive changes;
-bundle them since both are "client ID becomes visible/linked where it wasn't," but verify
-separately. Receipt change needs real visual review (a PDF a real client receives) before
-considering done.
+**Phase E — `plots.lead_id` + receipt redesign** (§4.1, §4.3). **DONE (2026-11-05), verified live.**
+Built: `plots.lead_id` (nullable FK to `leads`), set by `confirm_allocation()` on both the
+update-existing-plot and insert-new-plot branches, alongside the pre-existing free-text
+`client_name`/`client_contact` (kept as-is). A new `leads.client_no` column (sequential,
+`CL-000123` format, via a Postgres sequence + a `before insert` trigger), backfilled for every
+existing real lead in `created_at` order and set `not null unique`. `buildReceiptPdf` now prints
+the client number next to the receipt number in the header band, and a new "PAYMENT HISTORY" table
+below the existing balance summary lists every real approved payment for that lead (date, method/
+reference, receipt no., amount), sourced from `ds.payments.listForLead` (web-next caller) / a new
+`fetchApprovedPaymentHistory` (Finance dashboard caller, which had its own simplified `Lead`
+shape and needed `id`/`clientNo` added to `ReceiptLeadInfo`). Paginates to a new page if the
+history table would overflow.
+
+Verification: confirmed via SQL that all 317 existing real leads got a unique, sequential
+`client_no` (`CL-000001`..`CL-000317`, no nulls, no duplicates) after the backfill, and that a real
+test insert inside a rolled-back transaction got the next number (`CL-000318`) from the trigger.
+Verified `confirm_allocation`'s real plot-ID linkage safely — downloading an allocation to confirm
+it live would be an irreversible production write, so instead ran the real RPC inside a `begin`/
+`rollback` transaction (impersonating Management's real `auth.uid()` via `request.jwt.claims`) against
+a real pending allocation (Theresa Yesutor, plot A15): confirmed `plots.lead_id` populated with the
+exact real `allocation_requests.lead_id`, then rolled back, leaving production untouched (confirmed
+the allocation's status was still `Awaiting Authorization` afterward). Downloaded a real receipt PDF
+from the live Finance > Payments screen for a real client with 2 real approved payments
+(Priscilla/Emmanuel Otu., `CL-000065`) and confirmed the rendered PDF shows `Receipt No. RCT-000005
+• Client No. CL-000065` in the header and a PAYMENT HISTORY table with both real rows (29/04/2026
+GHS 40,000; 02/09/2026 RCT-000005 GHS 51,500), matching SQL exactly. `npx tsc -b` clean throughout.
 
 **Phase F — Allocation → contract-request auto-trigger** (§4.4). One RPC addition, carefully
 tested (confirm it doesn't create duplicate `contract_requests` rows if an allocation is

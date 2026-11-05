@@ -130,6 +130,13 @@ export interface Lead {
   deletedBy?: string | null;
   deletedByName?: string | null;
   deletionReason?: string | null;
+  // Real column `client_no` (added Phase E, sequential like `CL-000123`,
+  // assigned once per lead via a DB trigger and stable forever) -- the
+  // short, human-readable client identifier the user asked for on
+  // receipts, instead of printing the raw UUID or a receipt's own
+  // auto-incrementing number (which identifies the payment, not the
+  // client).
+  clientNo?: string | null;
 }
 
 // Every field the Pipeline Update accordion's "Save update" can change in
@@ -948,6 +955,13 @@ export interface Plot {
   areaSqft: number | null;
   factor: number | null;
   customerCode: string | null;
+  // Real column `lead_id` (added Phase E, client-ID cross-app integration
+  // plan) -- set by confirm_allocation() alongside the pre-existing
+  // free-text client_name/client_contact, which stay as-is for plots
+  // allocated outside the normal flow. Closes the Pipeline -> Allocation
+  // -> Plot identity chain: the plot now knows which real lead it belongs
+  // to, not just a name string.
+  leadId: string | null;
 }
 
 export interface NewPlot {

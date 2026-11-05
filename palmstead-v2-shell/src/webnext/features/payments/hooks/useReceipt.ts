@@ -52,6 +52,7 @@ export function useIssueReceiptLink() {
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: Lead | null }) => {
       if (!config) throw new Error("Config not loaded yet");
       const receiptNumber = await getDataSource(demoMode).payments.ensureReceiptNumber(payment.id);
+      const paymentHistory = lead ? await getDataSource(demoMode).payments.listForLead(lead.id) : [];
       const doc = buildReceiptPdf({
         clientName: payment.clientName ?? lead?.name ?? "Client",
         payment,
@@ -61,6 +62,7 @@ export function useIssueReceiptLink() {
         ...receiptBalanceSnapshot(payment),
         issuerSignature: profile?.signatureData ?? null,
         issuerName: profile?.name ?? null,
+        paymentHistory,
       });
       const blob = doc.output("blob");
       const token = await getDataSource(demoMode).payments.issueReceiptLink(payment.id, blob, profile?.key ?? "");
@@ -82,6 +84,7 @@ export function useDownloadReceipt() {
     mutationFn: async ({ payment, lead }: { payment: Payment; lead: Lead | null }) => {
       if (!config) throw new Error("Config not loaded yet");
       const receiptNumber = await getDataSource(demoMode).payments.ensureReceiptNumber(payment.id);
+      const paymentHistory = lead ? await getDataSource(demoMode).payments.listForLead(lead.id) : [];
       const doc = buildReceiptPdf({
         clientName: payment.clientName ?? lead?.name ?? "Client",
         payment,
@@ -91,6 +94,7 @@ export function useDownloadReceipt() {
         ...receiptBalanceSnapshot(payment),
         issuerSignature: profile?.signatureData ?? null,
         issuerName: profile?.name ?? null,
+        paymentHistory,
       });
       const filename = `Receipt_${receiptNumber}.pdf`;
       doc.save(filename);
