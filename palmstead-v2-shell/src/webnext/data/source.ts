@@ -111,6 +111,7 @@ import type {
   WeeklyVisitForm,
   WeeklyVisitFormCostPatch,
 } from "../types/domain";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "./client";
 import {
   domainStatusToDb,
@@ -1695,6 +1696,36 @@ let cachedLive: DataSource | null = null;
 export function getDataSource(_demoMode?: boolean): DataSource {
   if (!cachedLive) cachedLive = createLiveDataSource();
   return cachedLive;
+}
+
+// Phase C, docs/plans/43 section 2.2: a Day Report and the Site Visit
+// Authorization form covering the same real visit_date are keyed by
+// visit_date in both tables, so the link is a straightforward lookup, not
+// a new input step. Self-healing: an already-linked report just fetches
+// its linked form; an unlinked one looks the form up by date and persists
+// the link if found, so older reports pick up the connection the first
+// time they're reopened. Read-only toward weekly_visit_forms -- this never
+// creates a row there, only attaches one that already exists.
+async function linkAndAttachWeeklyVisitForm(client: SupabaseClient, report: SveDayReport): Promise<SveDayReport> {
+  let formId = report.weeklyVisitFormId;
+  if (!formId) {
+    const found = await client
+      .from("weekly_visit_forms")
+      .select("id")
+      .eq("visit_date", report.visitDate)
+      .maybeSingle();
+    if (found.error) throw found.error;
+    if (!found.data) return report;
+    formId = found.data.id as string;
+    const { error: linkError } = await client
+      .from("sve_day_reports")
+      .update({ weekly_visit_form_id: formId })
+      .eq("id", report.id);
+    if (linkError) throw linkError;
+  }
+  const { data, error } = await client.from("weekly_visit_forms").select("*").eq("id", formId).maybeSingle();
+  if (error) throw error;
+  return { ...report, weeklyVisitFormId: formId, weeklyVisitForm: data ? mapWeeklyVisitFormRow(data) : null };
 }
 
 function createLiveDataSource(): DataSource {
@@ -5226,7 +5257,7 @@ function createLiveDataSource(): DataSource {
         const client = requireClient();
         const existing = await client.from("sve_day_reports").select("*").eq("visit_date", visitDate).maybeSingle();
         if (existing.error) throw existing.error;
-        if (existing.data) return mapSveDayReportRow(existing.data);
+        if (existing.data) return linkAndAttachWeeklyVisitForm(client, mapSveDayReportRow(existing.data));
 
         // Real starting point for a new day report: every client actually
         // visited that day, each carrying whatever feedback submission
@@ -5265,9 +5296,9 @@ function createLiveDataSource(): DataSource {
           // out, just fall back to whichever row won the insert race.
           const retry = await client.from("sve_day_reports").select("*").eq("visit_date", visitDate).maybeSingle();
           if (retry.error || !retry.data) throw retry.error ?? ins.error;
-          return mapSveDayReportRow(retry.data);
+          return linkAndAttachWeeklyVisitForm(client, mapSveDayReportRow(retry.data));
         }
-        return mapSveDayReportRow(ins.data);
+        return linkAndAttachWeeklyVisitForm(client, mapSveDayReportRow(ins.data));
       },
       async saveDayReport(id, patch) {
         const client = requireClient();
@@ -5279,7 +5310,7 @@ function createLiveDataSource(): DataSource {
         if ("preparedByName" in patch) dbPatch.prepared_by_name = patch.preparedByName;
         const { data, error } = await client.from("sve_day_reports").update(dbPatch).eq("id", id).select().single();
         if (error) throw error;
-        return mapSveDayReportRow(data);
+        return linkAndAttachWeeklyVisitForm(client, mapSveDayReportRow(data));
       },
       async listDayReports() {
         const { data, error } = await requireClient()

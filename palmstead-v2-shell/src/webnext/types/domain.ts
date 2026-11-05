@@ -1591,6 +1591,18 @@ export interface SveDayReport {
   sentAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // Real column added 2026-11-05 (Phase C, docs/plans/43 section 2.2):
+  // links this day's report to the Site Visit Authorization form covering
+  // the same real visit_date, so the real estimate-vs-actual cost data it
+  // already tracks becomes visible here instead of living on a separate
+  // screen nobody cross-references. Nullable -- not every visit_date has a
+  // weekly_visit_forms row yet. `weeklyVisitForm` is not a DB column; it's
+  // the joined row attached by the data layer at read time for display
+  // only (the same getOrCreate-by-date pattern weeklyVisitForms itself
+  // already uses, just read-only here -- this report never creates a
+  // weekly_visit_forms row, only links to one if it already exists).
+  weeklyVisitFormId: string | null;
+  weeklyVisitForm: WeeklyVisitForm | null;
 }
 
 export interface SveDayReportPatch {

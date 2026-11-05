@@ -330,8 +330,30 @@ clients were marked attended and reviewed and the summary was filled — the com
 attendance + summary) behaves exactly as designed. Saved as a draft rather than submitting, to
 avoid sending a real SMS to Management with test data.
 
-**Phase C — Site Manager Report: SVA budget link** (§2.2). One FK column + a read-side join +
-new UI section on an existing screen. Low risk, no money is written, only reconciled/displayed.
+**Phase C — Site Manager Report: SVA budget link** (§2.2). **DONE (2026-11-05).** Added nullable
+`sve_day_reports.weekly_visit_form_id uuid references weekly_visit_forms(id)`. Linking is
+self-healing and read-only toward `weekly_visit_forms` (never creates a row there): whenever a day
+report is fetched or saved, if it has no linked form yet, the data layer looks one up by matching
+`visit_date` and persists the link if found — so even reports built before this phase pick up the
+connection the first time they're reopened. The Day Report editor now shows a real budget section
+above the day summary: total spent (sum of the linked form's `*_act` columns — the exact same
+formula as the real `sync_sva_actual_costs_to_expenses()` trigger already posting these to
+Accounting Expenses, confirmed by reading its live definition rather than guessing), spend per
+attended client (total ÷ count of Phase B's `attended = true` entries, computed client-side from
+the already-loaded entries/visits — no new query), and the fuel/refreshment/etc. breakdown read
+directly from the linked form. `npx tsc -b` clean. **Live verification: CONFIRMED.** Found the one
+real `weekly_visit_forms` row with nonzero actual costs via direct SQL (2026-10-18: vehicle rental
+0, driver's tip 200, fuel 200, refreshment 36, T&T 100 = GHS 536 total, 2 real site visits that day,
+no day report yet). Logged in as Management, opened "Build report" for 18 October 2026 — the budget
+section appeared immediately (self-healing link fired on first creation) showing GHS 536 total and
+the exact same per-field breakdown as the raw row, confirmed via `get_page_text` (screenshot alone
+clipped the right-aligned values at the viewport edge). Marked both real clients (Mr. A.B, Daniel)
+Attended and watched "Per attended client" recompute live from "—" to GHS 268 (536 ÷ 2). Confirmed
+via SQL that `sve_day_reports.weekly_visit_form_id` persisted correctly for both 18 October (the
+new link) and 16 October (a pre-existing report with a GHS 0 form, confirming the empty-budget case
+also renders correctly, not just the populated one) and that `site_visits.attended = true` persisted
+for both clients. Saved as a draft rather than submitting, to avoid a real SMS to Management with
+test data.
 
 **Phase D — Conversion-rate analytics tab** (§2.3). Pure read-side, reuses existing "purchased"
 definition. Low risk.

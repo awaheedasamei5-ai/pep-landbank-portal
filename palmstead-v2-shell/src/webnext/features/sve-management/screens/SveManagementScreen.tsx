@@ -44,6 +44,10 @@ function fmtLongDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function fmtGHS(n: number): string {
+  return `GHS ${n.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
 // Staff-side companion to the public SveFeedbackScreen -- see the
 // SveInviteRecord/SveVisitStatus comments in types/domain.ts. Gated the
 // same way real RLS gates the underlying tables: manager + the
@@ -527,6 +531,50 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
       <div className={styles.detail}>
         {error && <p className={styles.reportError}>{error}</p>}
         {savedNote && <p className={styles.reportSentNote}>{savedNote}</p>}
+
+        {report.weeklyVisitForm && (() => {
+          const wvf = report.weeklyVisitForm;
+          const totalSpent = wvf.vehicleRentalAct + wvf.driversTipAct + wvf.fuelAct + wvf.refreshmentAct + wvf.tntAct;
+          const attendedCount = entries.filter((e) => attendedFor(e.siteVisitId) === true).length;
+          const perAttended = attendedCount > 0 ? totalSpent / attendedCount : null;
+          return (
+            <div className={styles.budgetBox}>
+              <div className={styles.reportHead}>Budget — reconciled with Site Visit Authorization</div>
+              <div className={styles.budgetStats}>
+                <div>
+                  <div className={styles.budgetStatVal}>{fmtGHS(totalSpent)}</div>
+                  <div className={styles.budgetStatLbl}>Total spent</div>
+                </div>
+                <div>
+                  <div className={styles.budgetStatVal}>{perAttended === null ? '—' : fmtGHS(perAttended)}</div>
+                  <div className={styles.budgetStatLbl}>Per attended client{attendedCount > 0 ? ` (${attendedCount})` : ''}</div>
+                </div>
+              </div>
+              <div className={styles.budgetBreakdown}>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>Vehicle rental</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(wvf.vehicleRentalAct)}</span>
+                </div>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>Driver&apos;s tip</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(wvf.driversTipAct)}</span>
+                </div>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>Fuel</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(wvf.fuelAct)}</span>
+                </div>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>Refreshment</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(wvf.refreshmentAct)}</span>
+                </div>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>T&amp;T</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(wvf.tntAct)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className={styles.reportHead}>Site manager&apos;s summary of the day</div>
         <textarea

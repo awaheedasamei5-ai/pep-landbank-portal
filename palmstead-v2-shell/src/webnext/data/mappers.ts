@@ -599,6 +599,10 @@ export function mapSveDayReportRow(r: Record<string, unknown>): SveDayReport {
     sentAt: (r.sent_at as string) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
+    weeklyVisitFormId: (r.weekly_visit_form_id as string) ?? null,
+    // Attached by the caller (source.ts) via a real lookup/link step, not
+    // derivable from this row alone -- see the type's own comment.
+    weeklyVisitForm: null,
   };
 }
 
