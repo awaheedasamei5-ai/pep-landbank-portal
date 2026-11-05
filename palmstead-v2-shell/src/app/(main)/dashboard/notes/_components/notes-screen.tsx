@@ -5,18 +5,19 @@ import { useState } from "react";
 import { Download, FileEdit, FileText, Plus, Send, StickyNote, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader } from "@/components/page-header";
-import { useAuthStore } from "@/stores/auth/auth-store";
-import { useNotesAccess } from "@/lib/permissions/use-notes-access";
 import { ComposeMemoDialog, type ComposeSeed } from "@/app/(main)/dashboard/memorandum/_components/compose-memo-dialog";
 import { useSaveMemo } from "@/app/(main)/dashboard/memorandum/_components/use-memoranda";
+import { useMemorandumAccess } from "@/app/(main)/dashboard/memorandum/_components/use-memorandum-access";
+import { PageHeader } from "@/components/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useNotesAccess } from "@/lib/permissions/use-notes-access";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { NoteDialog } from "./note-dialog";
-import { useDeleteNote, useNotes, type Note } from "./use-notes";
+import { type Note, useDeleteNote, useNotes } from "./use-notes";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -61,8 +62,10 @@ export function NotesScreen() {
   const myKey = profile?.key;
 
   const access = useNotesAccess(myKey);
+  const memoAccess = useMemorandumAccess(myKey);
   const canView = !access.isError && access.data?.view === true;
   const canManage = canView && access.data?.manage === true;
+  const canManageMemos = memoAccess.data?.view === true && memoAccess.data?.manage === true;
   const { data: notes, isLoading, isError: notesError } = useNotes(canView ? myKey : undefined);
   const deleteNote = useDeleteNote(myKey);
   const saveMemo = useSaveMemo();
@@ -79,12 +82,13 @@ export function NotesScreen() {
   }
 
   function sendAsMemo(note: Note) {
+    if (!canManageMemos) return;
     setComposeSeed({ fromNote: { title: note.title || "Untitled note", bodyHtml: note.body } });
     setComposeOpen(true);
   }
 
   async function saveAsDraft(note: Note) {
-    if (!myKey || !canManage) return;
+    if (!myKey || !canManage || !canManageMemos) return;
     try {
       await saveMemo.mutateAsync({
         fromKey: myKey,
@@ -120,17 +124,41 @@ export function NotesScreen() {
         title="Notes"
         description="Your private notes, available here whenever you need them."
         action={
-          canManage ? <Button onClick={() => openNote(null)} className="gap-2">
-            <Plus className="size-4" />
-            New note
-          </Button> : undefined
+          canManage ? (
+            <Button onClick={() => openNote(null)} className="gap-2">
+              <Plus className="size-4" />
+              New note
+            </Button>
+          ) : undefined
         }
       />
 
-      {access.isError && <Alert variant="destructive"><AlertTitle>Notes access could not be checked</AlertTitle><AlertDescription>Refresh this page before opening notes.</AlertDescription></Alert>}
-      {access.data && !canView && <Alert><AlertTitle>Notes access restricted</AlertTitle><AlertDescription>Management controls access to personal Notes.</AlertDescription></Alert>}
-      {canView && !canManage && <Alert><AlertTitle>Notes are read-only</AlertTitle><AlertDescription>You can read and download your notes. Editing and sharing are unavailable.</AlertDescription></Alert>}
-      {canView && notesError && <Alert variant="destructive"><AlertTitle>Notes could not be loaded</AlertTitle><AlertDescription>Refresh this page and try again.</AlertDescription></Alert>}
+      {access.isError && (
+        <Alert variant="destructive">
+          <AlertTitle>Notes access could not be checked</AlertTitle>
+          <AlertDescription>Refresh this page before opening notes.</AlertDescription>
+        </Alert>
+      )}
+      {access.data && !canView && (
+        <Alert>
+          <AlertTitle>Notes access restricted</AlertTitle>
+          <AlertDescription>Management controls access to personal Notes.</AlertDescription>
+        </Alert>
+      )}
+      {canView && !canManage && (
+        <Alert>
+          <AlertTitle>Notes are read-only</AlertTitle>
+          <AlertDescription>
+            You can read and download your notes. Editing and sharing are unavailable.
+          </AlertDescription>
+        </Alert>
+      )}
+      {canView && notesError && (
+        <Alert variant="destructive">
+          <AlertTitle>Notes could not be loaded</AlertTitle>
+          <AlertDescription>Refresh this page and try again.</AlertDescription>
+        </Alert>
+      )}
       {!access.data && !access.isError ? (
         <Skeleton className="h-44 w-full" />
       ) : !canView || notesError ? null : isLoading ? (
@@ -145,7 +173,9 @@ export function NotesScreen() {
             <StickyNote className="size-8 text-muted-foreground" />
             <div>
               <p className="font-medium">No notes yet</p>
-              <p className="text-sm text-muted-foreground">{canManage ? 'Tap "New note" to jot something down.' : "There are no notes to read."}</p>
+              <p className="text-sm text-muted-foreground">
+                {canManage ? 'Tap "New note" to jot something down.' : "There are no notes to read."}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -165,31 +195,57 @@ export function NotesScreen() {
                   <FileEdit className="size-3.5" />
                   {canManage ? "Open" : "Read"}
                 </Button>
-                {canManage && <Button size="sm" variant="ghost" onClick={() => saveAsDraft(note)}>
-                  <FileText className="size-3.5" />
-                  Save as Draft
-                </Button>}
-                {canManage && <Button size="sm" variant="ghost" onClick={() => sendAsMemo(note)}>
-                  <Send className="size-3.5" />
-                  Send as Memo
-                </Button>}
+                {canManage && canManageMemos && (
+                  <Button size="sm" variant="ghost" onClick={() => saveAsDraft(note)}>
+                    <FileText className="size-3.5" />
+                    Save as Draft
+                  </Button>
+                )}
+                {canManage && canManageMemos && (
+                  <Button size="sm" variant="ghost" onClick={() => sendAsMemo(note)}>
+                    <Send className="size-3.5" />
+                    Send as Memo
+                  </Button>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => downloadNote(note)}>
                   <Download className="size-3.5" />
                   Download
                 </Button>
-                {canManage && <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => handleDelete(note)}>
-                  <Trash2 className="size-3.5" />
-                  Delete
-                </Button>}
+                {canManage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDelete(note)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           ))}
         </div>
       )}
 
-      {canView && <NoteDialog open={dialogOpen} onOpenChange={setDialogOpen} note={editingNote} myKey={myKey} canManage={canManage} />}
-      {canManage && <ComposeMemoDialog open={composeOpen} onOpenChange={setComposeOpen} myKey={myKey} myName={profile?.name ?? ""} seed={composeSeed} />}
+      {canView && (
+        <NoteDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          note={editingNote}
+          myKey={myKey}
+          canManage={canManage}
+        />
+      )}
+      {canManage && canManageMemos && (
+        <ComposeMemoDialog
+          open={composeOpen}
+          onOpenChange={setComposeOpen}
+          myKey={myKey}
+          myName={profile?.name ?? ""}
+          seed={composeSeed}
+        />
+      )}
     </div>
   );
 }
-
