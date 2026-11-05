@@ -6,15 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireSupabase } from "@/lib/supabase.client";
 
-const AREAS = [
+const AREAS: { label: string; view: string; manage: string; fullLabel?: "View + comment" }[] = [
   { label: "Operations to-dos", view: "operations.todos.view", manage: "operations.todos.manage" },
   { label: "Operations projects", view: "operations.projects.view", manage: "operations.projects.manage" },
   { label: "Operations meetings", view: "operations.meetings.view", manage: "operations.meetings.manage" },
   { label: "Personal notes", view: "notes.view", manage: "notes.manage" },
   { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage" },
-] as const;
+  { label: "Announcements", view: "announcements.view", manage: "announcements.comment", fullLabel: "View + comment" },
+];
 
-type AccessLevel = "Full" | "View only" | "No access";
+type AccessLevel = "Full" | "View + comment" | "View only" | "No access";
 
 export function MyAccess() {
   const [levels, setLevels] = useState<AccessLevel[] | null>(null);
@@ -31,7 +32,7 @@ export function MyAccess() {
         ]);
         if (view.error || manage.error) throw new Error("Access could not be loaded.");
         if (!view.data) return "No access";
-        return manage.data ? "Full" : "View only";
+        return manage.data ? (area.fullLabel ?? "Full") : "View only";
       }),
     )
       .then((result) => {

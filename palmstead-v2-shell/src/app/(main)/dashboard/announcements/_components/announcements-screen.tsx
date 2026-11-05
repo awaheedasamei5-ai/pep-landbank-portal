@@ -1,19 +1,23 @@
 "use client";
 
 import { useState } from "react";
+
 import { formatDistanceToNow } from "date-fns";
 import { Megaphone, MessageCircle, Plus, Users, X } from "lucide-react";
 
+import { PageHeader } from "@/components/page-header";
+import { SubmitButton } from "@/components/submit-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { PageHeader } from "@/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SubmitButton } from "@/components/submit-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/auth/auth-store";
+
+import { useAnnouncementAccess } from "./use-announcement-access";
 import {
   ANNOUNCEMENT_CATEGORIES,
   type Announcement,
@@ -26,16 +30,18 @@ import {
   useRetractAnnouncement,
 } from "./use-announcements";
 
-const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(ANNOUNCEMENT_CATEGORIES.map((c) => [c.value, c.label]));
+const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  ANNOUNCEMENT_CATEGORIES.map((c) => [c.value, c.label]),
+);
 
-function CommentThread({ announcementId }: { announcementId: string }) {
+function CommentThread({ announcementId, canComment }: { announcementId: string; canComment: boolean }) {
   const profile = useAuthStore((s) => s.profile);
   const { data: comments, isLoading } = useAnnouncementComments(announcementId);
   const postComment = usePostComment(announcementId);
   const [body, setBody] = useState("");
 
   async function submit() {
-    if (!body.trim() || !profile) return;
+    if (!canComment || !body.trim() || !profile) return;
     await postComment.mutateAsync({ body: body.trim(), authorKey: profile.key, authorName: profile.name });
     setBody("");
   }
@@ -46,21 +52,41 @@ function CommentThread({ announcementId }: { announcementId: string }) {
       {comments?.map((c) => (
         <div key={c.id} className="text-sm">
           <span className="font-medium">{c.authorName}</span>{" "}
-          <span className="text-muted-foreground text-xs">{formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}</span>
+          <span className="text-muted-foreground text-xs">
+            {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
+          </span>
           <p className="text-muted-foreground">{c.body}</p>
         </div>
       ))}
-      <div className="flex gap-2">
-        <Input placeholder="Add a comment..." value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} className="h-8" />
-        <Button size="sm" variant="outline" disabled={postComment.isPending} onClick={submit}>
-          Post
-        </Button>
-      </div>
+      {canComment ? (
+        <div className="flex gap-2">
+          <Input
+            placeholder="Add a comment..."
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            className="h-8"
+          />
+          <Button size="sm" variant="outline" disabled={postComment.isPending} onClick={submit}>
+            Post
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground text-sm">Comments are read-only for your account.</p>
+      )}
     </div>
   );
 }
 
-function AnnouncementCard({ announcement, isManager }: { announcement: Announcement; isManager: boolean }) {
+function AnnouncementCard({
+  announcement,
+  isManager,
+  canComment,
+}: {
+  announcement: Announcement;
+  isManager: boolean;
+  canComment: boolean;
+}) {
   const markRead = useMarkAnnouncementRead(useAuthStore((s) => s.profile?.key));
   const retract = useRetractAnnouncement();
   const [showComments, setShowComments] = useState(false);
@@ -75,7 +101,9 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
               <CardTitle className="text-base">{announcement.title}</CardTitle>
               <Badge variant="outline">{CATEGORY_LABEL[announcement.category] ?? announcement.category}</Badge>
             </div>
-            <CardDescription>{formatDistanceToNow(new Date(announcement.createdAt), { addSuffix: true })}</CardDescription>
+            <CardDescription>
+              {formatDistanceToNow(new Date(announcement.createdAt), { addSuffix: true })}
+            </CardDescription>
           </div>
           {isManager && (
             <Button variant="ghost" size="icon-sm" onClick={() => retract.mutate(announcement.id)} title="Retract">
@@ -93,17 +121,26 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
               {announcement.readCount} seen
             </span>
           )}
-          <button type="button" className="flex items-center gap-1 hover:underline" onClick={() => setShowComments((v) => !v)}>
+          <button
+            type="button"
+            className="flex items-center gap-1 hover:underline"
+            onClick={() => setShowComments((v) => !v)}
+          >
             <MessageCircle className="size-3" />
             {announcement.commentCount} comment{announcement.commentCount === 1 ? "" : "s"}
           </button>
           {!announcement.isRead && (
-            <Button size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => markRead.mutate(announcement.id)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto h-6 text-xs"
+              onClick={() => markRead.mutate(announcement.id)}
+            >
               Mark as read
             </Button>
           )}
         </div>
-        {showComments && <CommentThread announcementId={announcement.id} />}
+        {showComments && <CommentThread announcementId={announcement.id} canComment={canComment} />}
       </CardContent>
     </Card>
   );
@@ -119,7 +156,12 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
 
   async function submit() {
     if (!title.trim() || !body.trim()) return;
-    await createAnnouncement.mutateAsync({ title: title.trim(), body: body.trim(), category, expiresAt: expiresAt || null });
+    await createAnnouncement.mutateAsync({
+      title: title.trim(),
+      body: body.trim(),
+      category,
+      expiresAt: expiresAt || null,
+    });
     setTitle("");
     setBody("");
     setCategory("general");
@@ -131,7 +173,12 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
     <Card className="mb-4">
       <CardContent className="grid gap-3 pt-6">
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Textarea placeholder="What's the announcement?" value={body} onChange={(e) => setBody(e.target.value)} rows={4} />
+        <Textarea
+          placeholder="What's the announcement?"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={4}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Select value={category} onValueChange={(v) => setCategory(v as AnnouncementCategory)}>
             <SelectTrigger className="w-48">
@@ -145,7 +192,13 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="w-40" title="Optional expiry" />
+          <Input
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+            className="w-40"
+            title="Optional expiry"
+          />
           <SubmitButton type="button" loading={createAnnouncement.isPending} onClick={submit} className="ml-auto">
             Publish
           </SubmitButton>
@@ -158,11 +211,31 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
 export function AnnouncementsScreen() {
   const profile = useAuthStore((s) => s.profile);
   const isManager = profile?.role === "manager";
-  const { data, isLoading } = useAnnouncements(profile?.key);
+  const access = useAnnouncementAccess(profile?.key);
+  const canView = !access.isError && access.data?.view === true;
+  const canComment = canView && access.data?.comment === true;
+  const { data, isLoading, isError } = useAnnouncements(canView ? profile?.key : undefined);
   const [showCompose, setShowCompose] = useState(false);
 
   const unread = (data ?? []).filter((a) => !a.isRead);
   const read = (data ?? []).filter((a) => a.isRead);
+
+  if (!profile?.key) return null;
+  if (access.isError)
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Announcement access could not be checked</AlertTitle>
+        <AlertDescription>Refresh this page to try again.</AlertDescription>
+      </Alert>
+    );
+  if (!access.data) return <Skeleton className="h-44 w-full" />;
+  if (!canView)
+    return (
+      <Alert>
+        <AlertTitle>Announcements access restricted</AlertTitle>
+        <AlertDescription>Management controls access to company notices.</AlertDescription>
+      </Alert>
+    );
 
   return (
     <div>
@@ -178,6 +251,17 @@ export function AnnouncementsScreen() {
           )
         }
       />
+      {!canComment && (
+        <p className="mb-4 text-muted-foreground text-sm">
+          You can read notices and mark them as seen. Comments are read-only.
+        </p>
+      )}
+      {isError && (
+        <Alert variant="destructive">
+          <AlertTitle>Announcements could not be loaded</AlertTitle>
+          <AlertDescription>Refresh this page to try again.</AlertDescription>
+        </Alert>
+      )}
 
       {showCompose && <ComposeForm onDone={() => setShowCompose(false)} />}
 
@@ -189,7 +273,7 @@ export function AnnouncementsScreen() {
         </div>
       )}
 
-      {!isLoading && (data?.length ?? 0) === 0 && (
+      {!isLoading && !isError && (data?.length ?? 0) === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
             <Megaphone className="size-8" />
@@ -202,7 +286,7 @@ export function AnnouncementsScreen() {
         <div className="mb-6 grid gap-3">
           <h2 className="font-semibold text-sm text-muted-foreground">Unread</h2>
           {unread.map((a) => (
-            <AnnouncementCard key={a.id} announcement={a} isManager={isManager} />
+            <AnnouncementCard key={a.id} announcement={a} isManager={isManager} canComment={canComment} />
           ))}
         </div>
       )}
@@ -211,7 +295,7 @@ export function AnnouncementsScreen() {
         <div className="grid gap-3">
           <h2 className="font-semibold text-sm text-muted-foreground">Archive</h2>
           {read.map((a) => (
-            <AnnouncementCard key={a.id} announcement={a} isManager={isManager} />
+            <AnnouncementCard key={a.id} announcement={a} isManager={isManager} canComment={canComment} />
           ))}
         </div>
       )}

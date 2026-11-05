@@ -1,19 +1,25 @@
 "use client";
 
 import Link from "next/link";
+
 import { Bell } from "lucide-react";
 
+import { useAnnouncementAccess } from "@/app/(main)/dashboard/announcements/_components/use-announcement-access";
+import { useAnnouncements } from "@/app/(main)/dashboard/announcements/_components/use-announcements";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/auth/auth-store";
-import { useAnnouncements } from "@/app/(main)/dashboard/announcements/_components/use-announcements";
 
 // Real bell/badge unread indicator (OSS item 2, B.2) -- same real pattern
 // V1's bubble had (unread count visible at a glance), pointed at the real
 // Announcements page instead of a dismiss-only overlay.
 export function AnnouncementsBell() {
   const profile = useAuthStore((s) => s.profile);
-  const { data } = useAnnouncements(profile?.key);
+  const access = useAnnouncementAccess(profile?.key);
+  const canView = !access.isError && access.data?.view === true;
+  const { data } = useAnnouncements(canView ? profile?.key : undefined);
   const unreadCount = (data ?? []).filter((a) => !a.isRead).length;
+
+  if (!canView) return null;
 
   return (
     <Button asChild variant="ghost" size="icon" className="relative">
