@@ -310,8 +310,25 @@ real tiles on all three screens that render `EngagementDashboardPanel`:
 All three screens, two different period granularities (current month, past month), both populated
 and empty states — real, live, verified. No further work needed on Phase A.
 
-**Phase B — Site Manager Report: attendance field** (§2.1). One column, one UI toggle, extends an
-existing gate. Low risk.
+**Phase B — Site Manager Report: attendance field** (§2.1). **DONE (2026-11-05).** Added nullable
+`site_visits.attended boolean` plus a narrow `set_site_visit_attendance(uuid, boolean)` RPC (the
+Day Report's site manager may need to mark attendance for a visit belonging to a different sales
+agent — `site_visits_upd`'s own RLS only allows the owning agent or a manager to touch a row
+otherwise, so a plain client-side update would have failed for exactly the real site-manager
+allowlist, elias/emmanuel/elizabeth, that `sve_day_reports` itself already grants write access to;
+the RPC checks that same allowlist, or manager, or the owning agent, and only ever touches the
+single `attended` column). `DayReportEditor`'s client-by-client section now has a real
+Attended/No-show toggle per client, read live from `site_visits` (not duplicated into the report's
+own `entries` jsonb, matching the plan's own instruction), and `canSubmit` now also requires every
+client's attendance to be marked. `npx tsc -b` clean. **Live verification: CONFIRMED.** Logged in
+as Management, opened the real 1 November 2026 day report (2 real clients, Mary and Ama
+Ahwirenbea): marked Mary Attended — confirmed via direct SQL (`attended = true`) and confirmed it
+survived a full page reload/re-navigation. Filled in the day summary and one review-question star
+for each client; watched `Submit report` stay disabled (`.disabled === true`, checked via JS) while
+Ama's attendance/review were still unmarked, then enable (`.disabled === false`) only once both
+clients were marked attended and reviewed and the summary was filled — the combined gate (review +
+attendance + summary) behaves exactly as designed. Saved as a draft rather than submitting, to
+avoid sending a real SMS to Management with test data.
 
 **Phase C — Site Manager Report: SVA budget link** (§2.2). One FK column + a read-side join +
 new UI section on an existing screen. Low risk, no money is written, only reconciled/displayed.
