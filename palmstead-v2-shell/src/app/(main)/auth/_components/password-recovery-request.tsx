@@ -11,19 +11,25 @@ export function PasswordRecoveryRequest() {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [deliveryError, setDeliveryError] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(0);
 
   async function send(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || Date.now() < cooldownUntil) return;
     setPending(true);
+    setSent(false);
+    setDeliveryError(false);
     try {
       const redirectTo = `${window.location.origin}/auth/v1/reset-password`;
-      await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo });
-    } catch {
-      // Recovery deliberately gives the same response for unknown users and delivery failures.
-    } finally {
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) throw error;
       setSent(true);
+    } catch {
+      // Do not claim that a link was sent when the provider or network rejected the request.
+      // Unknown accounts still receive Supabase's generic successful response.
+      setDeliveryError(true);
+    } finally {
       setCooldownUntil(Date.now() + 60_000);
       window.setTimeout(() => setCooldownUntil(0), 60_000);
       setPending(false);
@@ -53,6 +59,12 @@ export function PasswordRecoveryRequest() {
           If this email belongs to a staff account, a reset link is on its way. Check your inbox and spam folder.
         </p>
       )}
+      {deliveryError && (
+        <p role="alert" className="text-destructive text-sm">
+          We could not submit your request right now. Wait a minute and try again.
+        </p>
+      )}
     </form>
   );
 }
+
