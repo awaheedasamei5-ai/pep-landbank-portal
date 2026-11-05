@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { getSupabaseClient } from '../../../data/client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { redactPII } from '../../../shared/lib/redact';
 import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
+import { inPeriodRange, type PeriodRange } from '../../../shared/lib/periodFilter';
 import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename } from '../lib/sveReportPdf';
-import type { SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
+import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
 export function useSveVisits() {
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -324,6 +326,111 @@ export function useSetSiteVisitAttendance() {
       getDataSource(demoMode).sve.setVisitAttendance(siteVisitId, attended),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sveVisits'] }),
   });
+}
+
+// Real user ask (2026-11-05, Phase D, docs/plans/43 section 2.3): "which
+// salesperson is converting their site goers and who isn't." Pure
+// read-side analytics -- no new mutation, reuses data already fetched
+// elsewhere (site_visits via useSveVisits, every lead via leads.listAll(),
+// the real per-day actual-spend figure via the new weeklyVisitForms.
+// listAll()). The "purchased" predicate below is byte-for-byte the same
+// one useEngagementDashboard's boughtClients metric already uses --
+// deliberately not re-derived, so "converted" means the same thing here
+// as it does on the Pipeline/Client Database/Company Leads dashboards.
+export interface SalespersonConversionStats {
+  agentKey: string;
+  agentName: string;
+  visitorsBrought: number;
+  matchedLeads: number;
+  converted: number;
+  attributedCost: number | null;
+  costPerConversion: number | null;
+}
+
+function useAllLeadsForConversion() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['leadsForConversion'], queryFn: () => getDataSource(demoMode).leads.listAll() });
+}
+
+function useAllWeeklyVisitForms() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({ queryKey: ['weeklyVisitFormsAll'], queryFn: () => getDataSource(demoMode).weeklyVisitForms.listAll() });
+}
+
+export function useConversionAnalytics(range: PeriodRange | null) {
+  const { data: visitStatuses, isLoading: visitsLoading } = useSveVisits();
+  const { data: leads, isLoading: leadsLoading } = useAllLeadsForConversion();
+  const { data: staff, isLoading: staffLoading } = useStaffDirectory();
+  const { data: forms, isLoading: formsLoading } = useAllWeeklyVisitForms();
+
+  const stats = useMemo<SalespersonConversionStats[]>(() => {
+    if (!visitStatuses || !leads || !staff) return [];
+
+    const visitsInPeriod = visitStatuses
+      .map((v) => v.siteVisit)
+      .filter((v) => !v.deletedAt && inPeriodRange(v.visitDate, range));
+
+    const leadsById = new Map<string, Lead>(leads.map((l) => [l.id, l]));
+    const isPurchased = (l: Lead) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal;
+
+    // Real per-day actual-spend total (Phase C's own formula, reused
+    // rather than re-derived) keyed by visit_date, so the cost attributed
+    // to a salesperson's visits can be looked up per day without a second
+    // round-trip per date.
+    const spentByDate = new Map<string, number>();
+    for (const f of forms ?? []) {
+      const total = f.vehicleRentalAct + f.driversTipAct + f.fuelAct + f.refreshmentAct + f.tntAct;
+      spentByDate.set(f.visitDate, (spentByDate.get(f.visitDate) ?? 0) + total);
+    }
+    // Company-wide attended headcount per day -- the same denominator
+    // Phase C's "per attended client" figure uses, needed here to split
+    // one day's shared transport/refreshment spend across whichever
+    // salespeople actually brought attended clients that day.
+    const attendedCountByDate = new Map<string, number>();
+    for (const v of visitsInPeriod) {
+      if (v.attended === true) attendedCountByDate.set(v.visitDate, (attendedCountByDate.get(v.visitDate) ?? 0) + 1);
+    }
+
+    const byAgent = new Map<string, SiteVisit[]>();
+    for (const v of visitsInPeriod) {
+      const list = byAgent.get(v.agentKey) ?? [];
+      list.push(v);
+      byAgent.set(v.agentKey, list);
+    }
+
+    const staffNameByKey = new Map(staff.map((s) => [s.key, s.name]));
+
+    return [...byAgent.entries()]
+      .map(([agentKey, visits]): SalespersonConversionStats => {
+        const matchedLeadIds = new Set(visits.map((v) => v.leadId).filter((id): id is string => !!id));
+        const matchedLeads = [...matchedLeadIds].map((id) => leadsById.get(id)).filter((l): l is Lead => !!l);
+        const converted = matchedLeads.filter(isPurchased).length;
+
+        let attributedCost = 0;
+        let hasAnyCostData = false;
+        for (const v of visits) {
+          if (v.attended !== true) continue;
+          const dayTotal = spentByDate.get(v.visitDate);
+          const dayAttended = attendedCountByDate.get(v.visitDate);
+          if (dayTotal === undefined || !dayAttended) continue;
+          hasAnyCostData = true;
+          attributedCost += dayTotal / dayAttended;
+        }
+
+        return {
+          agentKey,
+          agentName: staffNameByKey.get(agentKey) ?? agentKey,
+          visitorsBrought: visits.length,
+          matchedLeads: matchedLeadIds.size,
+          converted,
+          attributedCost: hasAnyCostData ? attributedCost : null,
+          costPerConversion: hasAnyCostData && converted > 0 ? attributedCost / converted : null,
+        };
+      })
+      .sort((a, b) => b.visitorsBrought - a.visitorsBrought);
+  }, [visitStatuses, leads, staff, forms, range]);
+
+  return { stats, isLoading: visitsLoading || leadsLoading || staffLoading || formsLoading };
 }
 
 export type { SveDayReportEntry };

@@ -355,8 +355,30 @@ also renders correctly, not just the populated one) and that `site_visits.attend
 for both clients. Saved as a draft rather than submitting, to avoid a real SMS to Management with
 test data.
 
-**Phase D — Conversion-rate analytics tab** (§2.3). Pure read-side, reuses existing "purchased"
-definition. Low risk.
+**Phase D — Conversion-rate analytics tab** (§2.3). **DONE (2026-11-05).** Pure read-side, no
+schema change. Added `weeklyVisitForms.listAll()` to the data layer (same RLS as every other
+`weekly_visit_forms` read — manager/elias/emmanuel/elizabeth; a viewer outside that allowlist just
+sees no cost data, the same null-safe fallback Phase C established) and a new `useConversionAnalytics`
+hook that groups `site_visits` by `agent_key` within the chosen period and computes, per
+salesperson: visitors brought (raw visit count), matched leads (distinct `lead_id` count), converted
+(matched leads where `grandTotal > 0 && amtPaid >= grandTotal` — byte-for-byte the same predicate
+`useEngagementDashboard`'s `boughtClients` metric already uses, not re-derived), and a real
+cost-per-conversion figure (each attended visit's day is weighted by that day's real
+`weekly_visit_forms` actual-spend total ÷ that day's company-wide attended headcount, summed per
+agent, divided by their converted count). New "Conversion" tab on `SveManagementScreen`, reusing the
+existing `usePeriodFilter`/`PeriodFilterBar` already used by this screen's other two tabs rather than
+inventing a third period-picker pattern. `npx tsc -b` clean. **Live verification: CONFIRMED.**
+Cross-checked via direct SQL first (grouping `site_visits` by `agent_key`, joining `leads` on
+`lead_id` for the purchased check, and joining `weekly_visit_forms` by `visit_date` for the one real
+non-zero-cost day, 18 October 2026, GHS 536 ÷ 2 attended = GHS 268 per agent that day). Logged in as
+Management, opened Conversion tab, switched the period filter to "All time": the on-screen numbers
+matched exactly — Elizabeth Misiame 33 visitors/0 matched/0 converted; Philip Mensah 12 visitors, GHS
+268 attributed cost; Elias Torgbuivi 12 visitors/1 matched/0 converted; Adams 11 visitors/1
+matched/0 converted; Bridget Opoku Agyemang 10 visitors, GHS 268 attributed cost; every other
+salesperson correctly showed "No linked Site Visit Authorization cost data" where none existed. No
+lead has yet reached `amtPaid >= grandTotal` among those with a matched site visit, so "0 converted"
+and "— cost per conversion" everywhere is the real current state, not a bug — confirmed by the same
+underlying SQL, not assumed.
 
 **Phase E — `plots.lead_id` + receipt redesign** (§4.1, §4.3). Two independent, additive changes;
 bundle them since both are "client ID becomes visible/linked where it wasn't," but verify

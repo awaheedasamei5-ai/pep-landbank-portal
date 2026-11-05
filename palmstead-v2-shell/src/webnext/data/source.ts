@@ -1195,6 +1195,13 @@ export interface DataSource {
       approvedByName: string,
       signature: string | null,
     ): Promise<WeeklyVisitForm>;
+    // Real user ask (2026-11-05, Phase D, docs/plans/43 section 2.3):
+    // conversion analytics needs the real per-day actual-spend figure for
+    // every day in a chosen period at once, not one date at a time --
+    // same wvf_staff_sel RLS as every other weeklyVisitForms read (manager/
+    // elias/emmanuel/elizabeth), so a viewer outside that allowlist simply
+    // gets an empty list back, same null-safe fallback Phase C established.
+    listAll(): Promise<WeeklyVisitForm[]>;
   };
   // Real table `downloads` (confirmed live, both projects) -- every PDF/
   // Excel report a staff member generates gets logged here with its full
@@ -4252,6 +4259,11 @@ function createLiveDataSource(): DataSource {
           .single();
         if (error) throw error;
         return mapWeeklyVisitFormRow(data);
+      },
+      async listAll() {
+        const { data, error } = await requireClient().from("weekly_visit_forms").select("*");
+        if (error) throw error;
+        return (data ?? []).map(mapWeeklyVisitFormRow);
       },
     },
     downloads: {

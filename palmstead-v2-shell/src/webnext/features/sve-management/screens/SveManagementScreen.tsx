@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, Download, Sparkles, Star } from 'lucide-react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import {
+  useConversionAnalytics,
   useDeleteSveEntry,
   useDownloadSveDayReportPdf,
   useDownloadSveSubmissionPdf,
@@ -84,7 +85,7 @@ export function SveManagementScreen() {
   const downloadSubmission = useDownloadSveSubmissionPdf();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'feedback' | 'reports'>('feedback');
+  const [tab, setTab] = useState<'feedback' | 'reports' | 'conversion'>('feedback');
   const [smsFailedId, setSmsFailedId] = useState<string | null>(null);
   const feedbackPeriod = usePeriodFilter();
   const filteredVisits = (visits ?? []).filter((v) => inPeriodRange(v.siteVisit.visitDate, feedbackPeriod.range));
@@ -126,6 +127,9 @@ export function SveManagementScreen() {
         </button>
         <button type="button" className={`${styles.tabBtn} ${tab === 'reports' ? styles.tabBtnOn : ''}`} onClick={() => setTab('reports')}>
           Day reports
+        </button>
+        <button type="button" className={`${styles.tabBtn} ${tab === 'conversion' ? styles.tabBtnOn : ''}`} onClick={() => setTab('conversion')}>
+          Conversion
         </button>
       </div>
 
@@ -272,7 +276,69 @@ export function SveManagementScreen() {
       )}
 
       {tab === 'reports' && <DayReportsTab visits={visits ?? []} />}
+      {tab === 'conversion' && <ConversionTab />}
     </div>
+  );
+}
+
+// Real user ask (2026-11-05, Phase D, docs/plans/43 section 2.3): "which
+// salesperson is converting their site goers and who isn't." A read-only
+// report for Management, not a thing a site manager fills in -- its own
+// tab rather than crammed into the per-day editor, per the plan's own
+// recommendation.
+function ConversionTab() {
+  const period = usePeriodFilter();
+  const { stats, isLoading } = useConversionAnalytics(period.range);
+
+  return (
+    <>
+      <p className={styles.sub}>For each salesperson: how many site visitors they brought, how many are real pipeline leads, how many converted, and the real site-visit cost per conversion.</p>
+      <PeriodFilterBar state={period} resultCount={stats.length} totalCount={stats.length} />
+      {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
+      {!isLoading && stats.length === 0 && <p className={styles.emptyMsg}>No site visits for {period.label}. Widen the filter above to see older ones.</p>}
+      {stats.map((s) => (
+        <div key={s.agentKey} className={styles.card}>
+          <div className={styles.row}>
+            <span className={styles.avatar}>{initials(s.agentName)}</span>
+            <div className={styles.rowMain}>
+              <div className={styles.name}>{s.agentName}</div>
+              <div className={styles.meta}>
+                {s.visitorsBrought} visitor{s.visitorsBrought === 1 ? '' : 's'} · {s.matchedLeads} matched to a pipeline lead · {s.converted} converted
+              </div>
+            </div>
+          </div>
+          <div className={styles.budgetBox} style={{ margin: '0 16px 14px' }}>
+            <div className={styles.budgetStats}>
+              <div>
+                <div className={styles.budgetStatVal}>{s.visitorsBrought}</div>
+                <div className={styles.budgetStatLbl}>Visitors brought</div>
+              </div>
+              <div>
+                <div className={styles.budgetStatVal}>{s.matchedLeads}</div>
+                <div className={styles.budgetStatLbl}>Matched to a lead</div>
+              </div>
+              <div>
+                <div className={styles.budgetStatVal}>{s.converted}</div>
+                <div className={styles.budgetStatLbl}>Converted</div>
+              </div>
+              <div>
+                <div className={styles.budgetStatVal}>{s.costPerConversion === null ? '—' : fmtGHS(s.costPerConversion)}</div>
+                <div className={styles.budgetStatLbl}>Cost per conversion</div>
+              </div>
+            </div>
+            {s.attributedCost !== null && (
+              <div className={styles.budgetBreakdown}>
+                <div className={styles.budgetBreakdownRow}>
+                  <span className={styles.budgetBreakdownLabel}>Total site-visit cost attributed</span>
+                  <span className={styles.budgetBreakdownValue}>{fmtGHS(s.attributedCost)}</span>
+                </div>
+              </div>
+            )}
+            {s.attributedCost === null && <p className={styles.reportHint}>No linked Site Visit Authorization cost data for this period&apos;s visits.</p>}
+          </div>
+        </div>
+      ))}
+    </>
   );
 }
 
