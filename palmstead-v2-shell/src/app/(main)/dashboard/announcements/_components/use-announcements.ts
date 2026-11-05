@@ -56,7 +56,11 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
   const sb = requireSupabase();
   const todayIso = isoDateOnly(new Date());
   const [annRes, readsRes, commentsRes] = await Promise.all([
-    sb.from("announcements").select("id,title,body,category,image_b64,active,created_by,created_at,expires_at").eq("active", true).order("created_at", { ascending: false }),
+    sb
+      .from("announcements")
+      .select("id,title,body,category,image_b64,active,created_by,created_at,expires_at")
+      .eq("active", true)
+      .order("created_at", { ascending: false }),
     sb.from("announcement_reads").select("announcement_id,staff_key"),
     sb.from("announcement_comments").select("announcement_id"),
   ]);
@@ -73,7 +77,8 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
     if (r.staff_key === staffKey) myReads.add(r.announcement_id);
   }
   const commentCountByAnn = new Map<string, number>();
-  for (const c of comments) commentCountByAnn.set(c.announcement_id, (commentCountByAnn.get(c.announcement_id) ?? 0) + 1);
+  for (const c of comments)
+    commentCountByAnn.set(c.announcement_id, (commentCountByAnn.get(c.announcement_id) ?? 0) + 1);
 
   type Raw = {
     id: string;
@@ -105,7 +110,11 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
 }
 
 export function useAnnouncements(staffKey: string | undefined) {
-  return useQuery({ queryKey: ["announcements", staffKey], queryFn: () => fetchAnnouncements(staffKey), enabled: Boolean(staffKey) });
+  return useQuery({
+    queryKey: ["announcements", staffKey],
+    queryFn: () => fetchAnnouncements(staffKey),
+    enabled: Boolean(staffKey),
+  });
 }
 
 export function useMarkAnnouncementRead(staffKey: string | undefined) {
@@ -114,8 +123,12 @@ export function useMarkAnnouncementRead(staffKey: string | undefined) {
     mutationFn: async (announcementId: string) => {
       if (!staffKey) return;
       const sb = requireSupabase();
-      const { error } = await sb.from("announcement_reads").upsert({ announcement_id: announcementId, staff_key: staffKey }, { onConflict: "announcement_id,staff_key" });
-      if (error) throw error;
+      const { error } = await sb
+        .from("announcement_reads")
+        .insert({ announcement_id: announcementId, staff_key: staffKey });
+      // A repeated click is already acknowledged. Upsert would require a
+      // broader UPDATE grant on otherwise immutable read receipts.
+      if (error && error.code !== "23505") throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements", staffKey] }),
   });
@@ -124,7 +137,12 @@ export function useMarkAnnouncementRead(staffKey: string | undefined) {
 export function useCreateAnnouncement(staffKey: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { title: string; body: string; category: AnnouncementCategory; expiresAt: string | null }) => {
+    mutationFn: async (data: {
+      title: string;
+      body: string;
+      category: AnnouncementCategory;
+      expiresAt: string | null;
+    }) => {
       const sb = requireSupabase();
       const { error } = await sb.from("announcements").insert({
         title: data.title,
@@ -154,13 +172,27 @@ export function useRetractAnnouncement() {
 
 async function fetchComments(announcementId: string): Promise<AnnouncementComment[]> {
   const sb = requireSupabase();
-  const { data, error } = await sb.from("announcement_comments").select("id,author_key,author_name,body,created_at").eq("announcement_id", announcementId).order("created_at");
+  const { data, error } = await sb
+    .from("announcement_comments")
+    .select("id,author_key,author_name,body,created_at")
+    .eq("announcement_id", announcementId)
+    .order("created_at");
   if (error) throw error;
-  return (data ?? []).map((c) => ({ id: c.id, authorKey: c.author_key, authorName: c.author_name, body: c.body, createdAt: c.created_at }));
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    authorKey: c.author_key,
+    authorName: c.author_name,
+    body: c.body,
+    createdAt: c.created_at,
+  }));
 }
 
 export function useAnnouncementComments(announcementId: string | null) {
-  return useQuery({ queryKey: ["announcementComments", announcementId], queryFn: () => fetchComments(announcementId as string), enabled: Boolean(announcementId) });
+  return useQuery({
+    queryKey: ["announcementComments", announcementId],
+    queryFn: () => fetchComments(announcementId as string),
+    enabled: Boolean(announcementId),
+  });
 }
 
 export function usePostComment(announcementId: string | null) {
@@ -168,7 +200,9 @@ export function usePostComment(announcementId: string | null) {
   return useMutation({
     mutationFn: async ({ body, authorKey, authorName }: { body: string; authorKey: string; authorName: string }) => {
       const sb = requireSupabase();
-      const { error } = await sb.from("announcement_comments").insert({ announcement_id: announcementId, author_key: authorKey, author_name: authorName, body });
+      const { error } = await sb
+        .from("announcement_comments")
+        .insert({ announcement_id: announcementId, author_key: authorKey, author_name: authorName, body });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcementComments", announcementId] }),
