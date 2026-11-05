@@ -23,6 +23,8 @@ const SUPPORTED_KEYS = [
   "operations.meetings.manage",
   "notes.view",
   "notes.manage",
+  "memorandum.view",
+  "memorandum.manage",
 ];
 
 export function AccessSettings() {
@@ -59,7 +61,7 @@ export function AccessSettings() {
     }
     setStaff((people.data ?? []) as Staff[]);
     if (defs.data?.length !== SUPPORTED_KEYS.length) {
-      throw new Error("Operations access controls are not ready. Please retry later.");
+      throw new Error("App access controls are not ready. Please retry later.");
     }
     setAuthorized(true);
     setPermissions((defs.data ?? []) as Permission[]);
@@ -114,8 +116,9 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then set their access to Operations and personal Notes. View-only access keeps records
-          readable while preventing changes. Project access also covers work items, comments, and project reports.
+          Choose a staff member, then set their access to Operations, personal Notes and Memorandum. View-only access
+          keeps records readable while preventing changes. Project access also covers work items, comments, and project
+          reports.
         </p>
       </div>
       {loading && (
@@ -183,8 +186,7 @@ export function AccessSettings() {
                 );
                 const viewAllowed = viewOverride ? viewOverride.granted : viewRoleAllows;
                 const effective =
-                  (override ? override.granted : roleAllows) &&
-                  (!permission.key.endsWith(".manage") || viewAllowed);
+                  (override ? override.granted : roleAllows) && (!permission.key.endsWith(".manage") || viewAllowed);
                 return (
                   <Card key={permission.key} className="min-w-0">
                     <CardHeader className="gap-2">
@@ -232,4 +234,3 @@ export function AccessSettings() {
     </div>
   );
 }
-
