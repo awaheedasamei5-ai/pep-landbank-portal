@@ -11,6 +11,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { requireSupabase } from "@/lib/supabase.client";
 
+import { MyAccess } from "./my-access";
 import { PhoneSettings } from "./phone-settings";
 
 type StaffSettingsProfile = {
@@ -387,6 +388,7 @@ export function SettingsScreen() {
               </form>
             </CardContent>
           </Card>
+          <MyAccess />
           {process.env.NEXT_PUBLIC_PHONE_OTP_ENABLED === "true" && <PhoneSettings />}
         </div>
       )}
@@ -398,4 +400,5 @@ export function SettingsScreen() {
     </div>
   );
 }
+
 
