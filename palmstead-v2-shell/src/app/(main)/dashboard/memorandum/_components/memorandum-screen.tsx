@@ -119,6 +119,35 @@ export function MemorandumScreen() {
       </Alert>
     );
 
+  const letter = (
+    <MemoView
+      memo={selected}
+      canDelete={canManage && !!selected && (selected.fromKey === myKey || profile?.role === "manager")}
+      canReply={canManage}
+      isOwnDraft={canManage && folder === "drafts" && selected?.fromKey === myKey}
+      onClose={() => setSelectedId(null)}
+      onReply={() =>
+        selected &&
+        startCompose({
+          replyTo: { toKey: selected.fromKey, toName: selected.fromName, subject: selected.subject },
+          parentId: selected.id,
+        })
+      }
+      onEditDraft={() => selected && startCompose({ editingMemo: selected })}
+      onDownloadPdf={() => selected && downloadPdf(selected)}
+      onDelete={() => selected && handleDelete(selected)}
+    />
+  );
+  const list = isLoading ? (
+    <div className="space-y-3 p-3">
+      {[...Array(5)].map((_, i) => (
+        <Skeleton key={i} className="h-14 w-full" />
+      ))}
+    </div>
+  ) : (
+    <MemoList folder={folder} memos={memos ?? []} myKey={myKey} selectedId={selectedId} onSelectMemo={selectMemo} />
+  );
+
   return (
     <div className="flex h-[calc(100dvh-var(--dashboard-header-height))] min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-border px-4 py-3 lg:px-6">
@@ -130,7 +159,39 @@ export function MemorandumScreen() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
+        {selected ? (
+          <div className="min-h-0 flex-1">{letter}</div>
+        ) : (
+          <>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3">
+              {FOLDERS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Button
+                    key={item.id}
+                    size="sm"
+                    variant={folder === item.id ? "secondary" : "ghost"}
+                    onClick={() => setFolder(item.id)}
+                  >
+                    <Icon className="size-4" />
+                    {item.label}
+                    {item.id === "inbox" && !!unread && <span className="text-xs">{unread}</span>}
+                  </Button>
+                );
+              })}
+              {canManage && (
+                <Button size="sm" className="ml-auto" onClick={() => startCompose()}>
+                  <PenSquare className="size-4" /> New memo
+                </Button>
+              )}
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{list}</div>
+          </>
+        )}
+      </div>
+
+      <div className="hidden min-h-0 flex-1 overflow-hidden md:block">
         <ResizablePanelGroup orientation="horizontal" className="h-full">
           <ResizablePanel defaultSize="18%" minSize="14%" maxSize="28%" className="min-h-0">
             <div className="flex h-full flex-col border-r border-border p-3">
@@ -176,42 +237,12 @@ export function MemorandumScreen() {
           <ResizableHandle />
 
           <ResizablePanel defaultSize="32%" minSize="24%" maxSize="45%" className="min-h-0">
-            {isLoading ? (
-              <div className="space-y-3 p-3">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))}
-              </div>
-            ) : (
-              <MemoList
-                folder={folder}
-                memos={memos ?? []}
-                myKey={myKey}
-                selectedId={selectedId}
-                onSelectMemo={selectMemo}
-              />
-            )}
+            {list}
           </ResizablePanel>
           <ResizableHandle />
 
           <ResizablePanel defaultSize="50%" minSize="30%" className="min-h-0">
-            <MemoView
-              memo={selected}
-              canDelete={canManage && !!selected && (selected.fromKey === myKey || profile?.role === "manager")}
-              canReply={canManage}
-              isOwnDraft={canManage && folder === "drafts" && selected?.fromKey === myKey}
-              onClose={() => setSelectedId(null)}
-              onReply={() =>
-                selected &&
-                startCompose({
-                  replyTo: { toKey: selected.fromKey, toName: selected.fromName, subject: selected.subject },
-                  parentId: selected.id,
-                })
-              }
-              onEditDraft={() => selected && startCompose({ editingMemo: selected })}
-              onDownloadPdf={() => selected && downloadPdf(selected)}
-              onDelete={() => selected && handleDelete(selected)}
-            />
+            {letter}
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
