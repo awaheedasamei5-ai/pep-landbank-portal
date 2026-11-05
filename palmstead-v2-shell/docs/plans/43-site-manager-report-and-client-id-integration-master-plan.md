@@ -290,15 +290,25 @@ used — no new logic, no new queries) alongside the existing `metrics`. Every o
 real underlying rows for the current period (present or past — the existing filter bar's day/month/
 year/"all" granularity already applies). Since this is the one shared component Pipeline, Client
 Database, and Company Leads all render, all three get this automatically — no per-screen changes
-needed. `npx tsc -b` clean. **Live verification blocked**: the known Management test account
-(`fapeprah@landbankghana.com`) could not log in during this phase — the login form submits but
-never reaches the Supabase auth endpoint at all (no request fired, no redirect, confirmed via
-network-request inspection, not a Browser-pane tool outage this time). This is a separate, real
-finding outside Phase A's scope — flagged for the user/parent session to look into, not fixed here.
-Substituted with a direct SQL check confirming real non-empty data exists for every drill-down kind
-(75 activity rows, 3 lead-linked site visits, 17 approved payments, 6 active deals) and a code-level
-review confirming each `rows` array's filter predicate is byte-for-byte identical to its existing,
-already-correct count's predicate.
+needed. `npx tsc -b` clean. **Live verification: CONFIRMED (2026-11-05).** The earlier login
+block was traced to a real, intentional password rotation (new staff self-service system shipped
+2026-10-31) — not a bug. Logged in live as Management with the current real password and clicked
+real tiles on all three screens that render `EngagementDashboardPanel`:
+- **Master Pipeline**: "Open follow-ups due" opened the drill-down sheet with real overdue rows
+  (David ECG, Shauntrece, Kess); "Bought clients" opened "Not yet bought" with real per-client rows.
+  Switched the period filter from Nov 2026 (0 calls) to Jul 2026 (51 calls, GHS 95,410 cash in) —
+  tiles and the "Calls logged" drill-down both updated to the real July rows (`1 July 2026 – 31 July
+  2026 · 51`), confirming the drill-down tracks the active period filter correctly, not just the
+  default.
+- **Client Database**: same shared panel: "Calls logged" (0 for Nov 2026) correctly opened an empty
+  "No records for" state — confirms the empty case renders correctly, not just the populated one.
+- **Company Leads**: has its own distinct real dataset (176 clients, GHS 2,915,157, separate from
+  Pipeline's 310/9.8M) — "Calls logged" drill-down opened "Outstanding balance" with real per-client
+  rows (Tabitha, Eugene, Alhassan, etc.), confirming the shared component is correctly scoped per
+  screen, not leaking Pipeline's data into Company Leads.
+
+All three screens, two different period granularities (current month, past month), both populated
+and empty states — real, live, verified. No further work needed on Phase A.
 
 **Phase B — Site Manager Report: attendance field** (§2.1). One column, one UI toggle, extends an
 existing gate. Low risk.
