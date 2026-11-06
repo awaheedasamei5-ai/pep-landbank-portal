@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { AlertTriangle, BarChart3, Download, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
+import { AlertTriangle, BarChart3, Download, FileText, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
@@ -195,6 +195,9 @@ export function CompanyLeadsScreen() {
           </button>
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/analytics')}>
             <BarChart3 className="size-4" aria-hidden="true" /> Analytics
+          </button>
+          <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/company-leads/reports')}>
+            <FileText className="size-4" aria-hidden="true" /> Sales report
           </button>
           <button type="button" className={styles.iconBtn} title="Export Company Leads (.xlsx)" disabled={downloadCompanyLeads.isPending} onClick={() => downloadCompanyLeads.mutate()}>
             <Download className="size-4" aria-hidden="true" />

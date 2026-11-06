@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { takeDailyReportReturn } from "@/lib/palmstead/auth-return";
 import { loadActiveStaffProfile } from "@/lib/palmstead/use-live-login";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -69,7 +70,7 @@ export function PhoneOtpLogin({ onBack }: { onBack: () => void }) {
       try {
         const profile = await loadActiveStaffProfile(data.user.id);
         useAuthStore.getState().loginLive(profile);
-        router.replace("/dashboard/default");
+        router.replace(takeDailyReportReturn(profile.role) ?? "/dashboard/default");
       } catch {
         setMessage("This phone is not linked to an active staff account.");
       }

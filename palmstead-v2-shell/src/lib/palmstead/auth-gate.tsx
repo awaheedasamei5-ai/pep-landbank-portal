@@ -7,6 +7,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { rememberDailyReportReturn } from "./auth-return";
+
 // Builds the login URL's `redirect` param from wherever the gate caught an
 // unauthenticated visit, so a staff member who opens a deep link (e.g. an
 // SMS pointing straight at Log Payment) lands back there after signing in,
@@ -69,7 +71,6 @@ function AuthGateInner({ children }: { children: ReactNode }) {
   // network round trip) once `profile` is confirmed present client-side.
   const [ready, setReady] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only check -- fires once on the client after hydration, re-reading the freshly-rehydrated profile is the point.
   useEffect(() => {
     if (useAuthStore.getState().profile) setReady(true);
   }, []);
@@ -88,6 +89,7 @@ function AuthGateInner({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (!session) {
         useAuthStore.setState({ profile: null });
+        rememberDailyReportReturn(pathname);
         router.replace(loginWithRedirect(pathname, search));
         return;
       }
@@ -96,6 +98,7 @@ function AuthGateInner({ children }: { children: ReactNode }) {
       if (!row || row.active === false) {
         await supabase.auth.signOut();
         useAuthStore.setState({ profile: null });
+        rememberDailyReportReturn(pathname);
         router.replace("/auth/v1/login");
         return;
       }

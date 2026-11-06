@@ -13,6 +13,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { takeDailyReportReturn } from "@/lib/palmstead/auth-return";
 import { useLiveLogin } from "@/lib/palmstead/use-live-login";
 
 import { GoogleSignIn } from "./google-sign-in";
@@ -62,7 +63,12 @@ export function LoginForm() {
       toast.error("Couldn't sign in", { description: "Check your email and password and try again." });
       return;
     }
-    router.push(redirectTo);
+    const dailyReportReturn = takeDailyReportReturn(profile.role);
+    const target =
+      profile.role !== "manager" && redirectTo.startsWith("/dashboard/pipeline/daily-reports")
+        ? "/dashboard/default"
+        : redirectTo;
+    router.replace(dailyReportReturn ?? target);
   }
 
   let submitLabel = "Login";
