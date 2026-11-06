@@ -127,6 +127,24 @@ export function useDismissDraft() {
   });
 }
 
+export type QueueSummaryRow = {
+  source_label: string;
+  pending_count: number;
+  problem_count: number;
+  last_activity_at: string | null;
+};
+
+export function useOutgoingSmsQueueSummary() {
+  return useQuery({
+    queryKey: ["outgoing-sms-queue-summary"],
+    queryFn: async (): Promise<QueueSummaryRow[]> => {
+      const { data, error } = await requireSupabase().rpc("get_outgoing_sms_queue_summary");
+      if (error) throw error;
+      return (data ?? []) as QueueSummaryRow[];
+    },
+  });
+}
+
 export function friendlyError(error: unknown): string {
   return error instanceof Error ? error.message : "That could not be completed. Try again.";
 }

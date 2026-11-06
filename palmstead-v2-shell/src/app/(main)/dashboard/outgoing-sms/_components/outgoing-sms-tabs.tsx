@@ -6,10 +6,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { usePortalTab } from "../../_components/portal-navigation";
 
-const tabs = ["templates", "drafts", "sent"] as const;
+const tabs = ["templates", "drafts", "queue", "sent"] as const;
 const labels: Record<(typeof tabs)[number], string> = {
   templates: "Templates",
   drafts: "Drafts",
+  queue: "Send queue",
   sent: "Sent history",
 };
 

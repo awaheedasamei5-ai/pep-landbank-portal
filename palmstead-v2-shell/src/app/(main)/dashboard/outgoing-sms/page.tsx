@@ -5,6 +5,7 @@ import { PortalBackLink } from "../_components/portal-navigation";
 import { DraftsPanel } from "./_components/drafts-panel";
 import { OutgoingSmsGuard } from "./_components/outgoing-sms-guard";
 import { OutgoingSmsTabs } from "./_components/outgoing-sms-tabs";
+import { QueuePanel } from "./_components/queue-panel";
 import { SentHistoryPanel } from "./_components/sent-history-panel";
 import { TemplatesPanel } from "./_components/templates-panel";
 
@@ -32,6 +33,9 @@ export default function Page() {
           </TabsContent>
           <TabsContent value="drafts">
             <DraftsPanel />
+          </TabsContent>
+          <TabsContent value="queue">
+            <QueuePanel />
           </TabsContent>
           <TabsContent value="sent">
             <SentHistoryPanel />
