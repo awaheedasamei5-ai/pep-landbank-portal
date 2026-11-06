@@ -563,10 +563,62 @@ follow-up's own verification. `npx tsc -b` clean.
 and is unrelated to whether the new templates/digest work correctly — it still needs a human check
 against Arkesel's own send log.
 
-**Phase I — Overpayment recalculation (safer design)** (§5.2, §5.3). The highest-risk, most
-valuable phase. Needs explicit user sign-off on the "one-tap confirm" middle ground (or their
-informed choice to go fully automatic) before any code is written. **Coordinate with the
-concurrent Finance session** — same reason as Phase H.
+**Phase I — Overpayment recalculation (safer design)** (§5.2, §5.3). **DONE (2026-11-06)** — user
+confirmed "go ahead with Phase I" using the one-tap-confirm design, Finance coordination already
+cleared for Phase H.
+
+**Design decision worth stating plainly**: the REAL money allocation (`apply_finance_monthly_payment`'s
+existing loop, which rolls an overpayment forward into future instalments in due-date order) is
+NOT held pending — it still applies immediately and deterministically, exactly as it already did.
+Holding the real instalment numbers pending would have been actively harmful: it would leave a
+client who genuinely overpaid looking "still overdue" to Phase H's missed-payment SMS system in the
+meantime. The only thing gated behind Management's one tap is the **client-facing SMS announcing
+the change** — exactly the risk the plan flagged.
+
+Built: the trigger now also snapshots the schedule's real unpaid instalments immediately before
+and after applying a payment, and — only when the payment exceeded what the earliest unpaid
+instalment needed (a genuine overpayment) — inserts a row into a new
+`finance_schedule_recalc_proposals` table (`schedule_id, lead_id, payment_id, overpayment_amount,
+old_installments, new_installments, sms_draft, status: pending|confirmed|dismissed`). New
+`ai-insights` kind `payment_schedule_change_sms` (v37) drafts one sentence from the real
+overpayment amount, how many instalments it settled, and whether the plan is now fully paid off —
+never given the client's name/phone, same `redactPII`-era discipline as `follow_up_draft`. A new
+card on Finance's "Monthly instalments" tab (`recalc-proposals-panel.tsx`, Management-only) lists
+pending proposals with the real new next-due instalment, lets Management review/edit the full
+drafted SMS (deterministic client name/plot-type/Royal-Palm-Enclave wrapper around the AI's one
+sentence, reusing Phase H's own `plots.plot_type` → `leads.plot_type` fallback), then either
+**Confirm & send** (applies via `confirm_finance_schedule_recalc_proposal`, which requires a
+non-empty draft, then the real `send-sms` function fires fire-and-forget, matching `ds.sms.send`'s
+established non-blocking discipline elsewhere in this app) or **Dismiss**
+(`dismiss_finance_schedule_recalc_proposal`, no SMS, proposal marked dismissed). Both RPCs are
+manager-only and idempotent against double-action (confirming/dismissing an already-decided
+proposal raises a real error instead of silently no-opping).
+
+**Verification — entirely inside `begin ... rollback`, learning directly from the Phase H
+incident**: production currently has zero real `finance_monthly_payment_schedules` rows (same real
+state Phase H's own verification found), so a fully synthetic lead/schedule/instalments/payment was
+created, used, and rolled back three separate times, each confirmed back to 0 rows via a `count(*)`
+afterward:
+1. **Trigger + detection**: a 3-instalment GHS 1,000/month schedule, one GHS 2,500 payment approved
+   (impersonating Management via `request.jwt.claims`, the same mechanism Phase E used) —
+   instalments 1 and 2 ended `paid`, instalment 3 `part_paid` at GHS 500, and exactly one proposal
+   was inserted with `overpayment_amount = 1500` (2500 − the first instalment's 1000 remaining),
+   `old_installments` showing all 3 at `scheduled`/`0 paid`, `new_installments` showing the correct
+   post-application state — matching hand-computed arithmetic exactly.
+2. **Guard rails**: confirming with no `sms_draft` set correctly raised `'Draft the SMS text before
+   confirming'`; saving a draft then confirming correctly set `status = 'confirmed'` and
+   `confirmed_at`; confirming a second time correctly raised rather than silently succeeding.
+3. **Dismiss path**: a second synthetic scenario confirmed `dismiss_finance_schedule_recalc_proposal`
+   sets `status = 'dismissed'`/`dismissed_at` with no SMS side effect.
+4. **AI draft, real call, zero client data**: the deployed `payment_schedule_change_sms` kind was
+   invoked for real with only synthetic numbers (`overpaymentAmount: 1500, settledCount: 2,
+   fullyPaid: false`) and returned a correct, grounded sentence with no invented figures.
+
+`npx tsc -b` clean. **No real client's data was touched outside a transaction at any point in this
+phase** — a deliberate, explicit correction from how Phase H's own verification was run.
+
+**This does not resolve the still-open Mr Joe incident from Phase H** (§5.1's own note above) —
+that remains a separate, unconfirmed matter for Arkesel's delivery log to settle.
 
 ---
 

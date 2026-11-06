@@ -18,6 +18,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
+import { RecalcProposalsPanel } from "./recalc-proposals-panel";
+
 type ApprovedPaymentDate = { payment_date: string; status: string };
 type CandidateRaw = {
   id: string;
@@ -277,6 +279,7 @@ export function MonthlyPlansPanel() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      {manager && <RecalcProposalsPanel />}
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="flex items-start gap-3 p-4">
           <Info className="mt-0.5 size-4 shrink-0 text-primary" />
