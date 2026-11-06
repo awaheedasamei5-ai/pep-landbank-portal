@@ -49,6 +49,37 @@ function renderTemplate(template: string | null | undefined, fallback: string, v
   return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
 }
 
+const GSM_BASIC =
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+const GSM_EXTENDED = "^{}\\[~]|€";
+
+// deno-lint-ignore no-explicit-any
+async function logSmsSend(supabase: any, kind: string, phone: string, providerReference: string | null, message: string): Promise<void> {
+  let effectiveLength = 0;
+  let isGsm7 = true;
+  for (const ch of message) {
+    if (GSM_BASIC.includes(ch)) effectiveLength += 1;
+    else if (GSM_EXTENDED.includes(ch)) effectiveLength += 2;
+    else {
+      isGsm7 = false;
+      break;
+    }
+  }
+  const encoding = isGsm7 ? "gsm7" : "unicode";
+  const messageLength = Array.from(message).length;
+  if (!isGsm7) effectiveLength = messageLength;
+  const singleLimit = isGsm7 ? 160 : 70;
+  const multiLimit = isGsm7 ? 153 : 67;
+  const segmentCount = effectiveLength <= singleLimit ? 1 : Math.ceil(effectiveLength / multiLimit);
+  try {
+    await supabase
+      .from("sms_send_log")
+      .insert({ kind, recipient_phone: phone, provider_reference: providerReference, message_length: messageLength, encoding, segment_count: segmentCount });
+  } catch {
+    // Never let logging failure break a real notice send.
+  }
+}
+
 function classifyProvider(httpStatus: number, body: unknown, recipient: string): Delivery {
   const response = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const rawData = response.data;
@@ -223,7 +254,7 @@ Deno.serve(async (request) => {
     const percent = Math.round((Number(lead.amt_paid) / Number(lead.grand_total)) * 100);
     const message = renderTemplate(
       template,
-      `Hello {staffName}, {clientName} has paid {percent}% of the purchase price and is due for plot allocation. Review the request in Palmstead Allocations: {link} - Trulander JSF`,
+      `Hello {staffName}, {clientName} has paid {percent}% of the purchase price and is due for plot allocation. Review the request in Palmstead Allocations: {link} - Palmstead`,
       {
         staffName,
         clientName,
@@ -234,10 +265,11 @@ Deno.serve(async (request) => {
 
     let delivery: Delivery;
     try {
+      const callbackUrl = `${url}/functions/v1/arkesel-delivery-webhook`;
       const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
         method: "POST",
         headers: { "api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "Palmstead", message, recipients: [phone] }),
+        body: JSON.stringify({ sender: "Palmstead", message, recipients: [phone], callback_url: callbackUrl }),
         signal: AbortSignal.timeout(12_000),
       });
       const body: unknown = await response.json().catch(() => null);
@@ -250,6 +282,7 @@ Deno.serve(async (request) => {
         providerStatus: null,
       };
     }
+    await logSmsSend(supabase, "allocation_staff_notice", phone, delivery.providerReference, message);
 
     const error = await persist(supabase, row, delivery);
     if (error) persistenceErrors += 1;

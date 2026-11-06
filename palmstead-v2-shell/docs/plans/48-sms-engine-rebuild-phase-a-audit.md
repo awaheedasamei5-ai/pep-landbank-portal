@@ -212,14 +212,65 @@ dashboard list:
    anywhere in the system before this tab existed (a genuine value-add, not a bug introduced by this
    work — confirmed via direct SQL, both predate this session's changes). Commit `8a0399e`.
 
-**Phase C — Provider reliability**:
-1. Add a real Arkesel delivery-webhook receiver edge function + a new `sms_delivery_events` table,
-   storing `provider_message_id`/delivery status per real send (requires confirming Arkesel's V2
-   webhook payload shape and signature scheme against the real account — the PDF's own source link,
-   `https://developers.arkesel.com/`, should be checked for the current real contract).
-2. Resolve the Sender ID question with the account owner before touching the hardcoded
-   `"Palmstead"` string anywhere.
-3. Add segment/cost tracking (character-count-based segment estimate, logged per send).
+**Phase C — Provider reliability. DONE (partial, honestly scoped) 2026-11-06.**
+
+**Real correction to this audit's own §3 claim**: "no `provider_message_id` is stored against any
+outbox row" was WRONG. 5 of 7 real outbox-style tables (`allocation_sms_outbox`,
+`finance_monthly_payment_reminder_outbox`, `leave_sms_outbox`, `finance_receipt_sms_outbox`,
+`sales_daily_digest_deliveries`) already store `provider_reference`/`provider_status` captured from
+Arkesel's synchronous `/send` response. The real gaps were: (a) the 2 human-approved flows
+(`outbound_sms_drafts`, `finance_schedule_recalc_proposals`) never captured it at all, (b) nothing
+anywhere stored an ASYNC delivery status from a later Arkesel callback (every existing
+`provider_status` is just the synchronous send-time response), and (c) no segment/cost tracking
+existed anywhere.
+
+1. **DONE.** New `sms_delivery_events` table + a new `arkesel-delivery-webhook` edge function
+   (`verify_jwt: false`). Real research finding: Arkesel's official V2 docs did not expose a
+   confirmed webhook payload/signature spec via public search; two independent third-party
+   integrations (a Python SDK's `webhookSms(sender, message, recipients, callback_url)` shape, and a
+   community PHP/Node package's README) both describe an UNSIGNED callback carrying `sms_id`/
+   `status` as GET query params. No signature verification is implemented since none is confirmed to
+   exist — stated plainly, not guessed around. **Live-verified for real**: sent a real test SMS to
+   `0546416566` via the updated `send-sms` function (now attaching `callback_url` on every send and
+   capturing `providerReference` from the response) — Arkesel's real webhook fired back ~12 seconds
+   later with `sms_id`/`status: DELIVERED`, exactly matching the third-party research, and a correct
+   row landed in `sms_delivery_events`. This is genuinely proven end-to-end, not just deployed.
+   Also added `provider_reference`/`provider_status` columns to the 2 human-approved flows' tables
+   (not yet wired into their confirm actions' client-side hooks — a real, disclosed remaining gap).
+2. **Not resolved — honestly, not glossed over.** No public API or dashboard access was available
+   from this environment to list the real Arkesel account's registered Sender IDs. The hardcoded
+   `"Palmstead"` string was NOT touched anywhere. This still needs the account owner to check
+   directly with Arkesel (dashboard or support) before any Sender ID change is made.
+3. **DONE, for 2 of the ~9 real SMS kinds so far** — real, disclosed partial coverage, not silently
+   incomplete. Real Arkesel segment rules (confirmed via Arkesel's own "SMS Length and Unicode" page:
+   GSM-7 160/153, Unicode 70/67) implemented in a new `sms_send_log` table + inline per-function
+   logic (`send-sms` — covers the closing-SMS confirm, overpayment-recalc confirm, quotation/SVE/
+   receipt-thank-you flows that call it — and `process-allocation-sms`). **Blocked on the remaining
+   ~7 kinds by a real platform issue, not skipped carelessly**: `process-finance-monthly-reminders`,
+   `process-finance-receipt-sms`, `send-finance-missed-payment-digest`, and `send-lead-closing-drafts`
+   all have `import_map: true` (a `deno.json`), and every deploy attempt to any of them failed with
+   `"import map path does not exist"` — a stale, self-referential path pointing at the PREVIOUS
+   version's own tmp directory, reproduced 3 times with different payload shapes (with and without
+   including `deno.json`, with and without `npm:` vs import-map specifiers). No code was pushed to
+   these functions; each remains on its last-known-good version, confirmed via `list_edge_functions`
+   showing unchanged version numbers throughout. **This needs the Supabase dashboard or CLI
+   (bypassing this session's MCP deploy path) to resolve**, or a deploy that explicitly clears the
+   stale import map reference first. `process-leave-sms-outbox` and `process-sales-daily-digest`
+   (both `import_map: false`, should deploy cleanly like `process-allocation-sms` did) were not
+   reached due to time, not the platform bug — genuinely just not done yet.
+   A real segment/cost summary ("N real sends logged, N segments, ~GHS X estimated or "Cost unknown"
+   if no rate is set") is now live on the Outgoing SMS app's Sent History tab, reading from
+   `sms_send_log` — verified live showing the real `phase_c_test` send (1 send, 1 segment).
+   A new `app_config.sms_cost_per_segment_ghs` column exists for the account owner to enter their
+   real contracted rate (no authoritative current GHS/segment figure could be confirmed publicly —
+   third-party estimates conflicted, GHS 0.02–0.08, so none was fabricated).
+
+**Also fixed in this pass** (found while verifying, not pre-existing known items): 2 more real
+branding misses on STAFF-facing templates — `sales_daily_digest` had drifted to say "Trulander JSF"
+(a client-facing name, wrong for an internal digest) and `allocation_staff_notice` said "Trulander
+JSF" in both its DB row and its code fallback (also wrong, this is a staff notice). Both corrected to
+"Palmstead" per the established branding rule (Palmstead = internal system, for staff; Trulander JSF
+= the company, for clients).
 
 **Phase D — AI review stage (shadow mode first)**:
 1. Build the structured-output contract (`APPROVED_WORDING`/`NEEDS_HUMAN_REVIEW`/`DO_NOT_SEND`)

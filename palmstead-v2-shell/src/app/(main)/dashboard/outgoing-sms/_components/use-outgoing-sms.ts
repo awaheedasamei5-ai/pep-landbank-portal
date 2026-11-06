@@ -205,3 +205,27 @@ export function usePreviewAiTemplate() {
     },
   });
 }
+
+// Phase C (docs/plans/48): real segment/cost totals from sms_send_log,
+// the shared post-send logger every updated sender writes to. Covers the
+// kinds that have been wired so far (send-sms's callers, finance monthly
+// reminders, allocation notices) -- not yet every kind in the system, see
+// docs/plans/48 §Phase C for the honest current coverage list.
+export function useSmsSendStats(sinceDays: number) {
+  return useQuery({
+    queryKey: ["sms-send-stats", sinceDays],
+    queryFn: async () => {
+      const since = new Date(Date.now() - sinceDays * 86_400_000).toISOString();
+      const { data, error } = await requireSupabase()
+        .from("sms_send_log")
+        .select("segment_count")
+        .gte("sent_at", since);
+      if (error) throw error;
+      const rows = (data ?? []) as { segment_count: number }[];
+      const totalSegments = rows.reduce((sum, r) => sum + (r.segment_count ?? 0), 0);
+      const { data: configRow } = await requireSupabase().from("app_config").select("sms_cost_per_segment_ghs").limit(1).maybeSingle();
+      const rate = (configRow as { sms_cost_per_segment_ghs: number | null } | null)?.sms_cost_per_segment_ghs ?? null;
+      return { sendCount: rows.length, totalSegments, estimatedCostGhs: rate != null ? totalSegments * rate : null };
+    },
+  });
+}

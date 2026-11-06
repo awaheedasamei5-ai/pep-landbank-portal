@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import { friendlyError, useOutboundDrafts } from "./use-outgoing-sms";
+import { friendlyError, useOutboundDrafts, useSmsSendStats } from "./use-outgoing-sms";
 
 const KIND_LABELS: Record<string, string> = {
   lead_closing_sms: "Closing / nurture",
@@ -13,6 +13,28 @@ const KIND_LABELS: Record<string, string> = {
 function dateLabel(value: string | null): string {
   if (!value) return "--";
   return new Date(value).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function SegmentCostSummary() {
+  const stats = useSmsSendStats(30);
+  if (stats.isLoading || !stats.data) return null;
+  const { sendCount, totalSegments, estimatedCostGhs } = stats.data;
+  return (
+    <div className="mb-3 flex flex-wrap gap-4 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+      <span>
+        <span className="font-medium">{sendCount}</span> real sends logged (last 30 days)
+      </span>
+      <span>
+        <span className="font-medium">{totalSegments}</span> segments
+      </span>
+      <span className="text-muted-foreground">
+        {estimatedCostGhs != null
+          ? `~GHS ${estimatedCostGhs.toFixed(2)} estimated`
+          : "Cost unknown -- set a per-segment GHS rate in app_config.sms_cost_per_segment_ghs"}
+      </span>
+      <span className="text-muted-foreground">(not every SMS kind is logged here yet -- see docs/plans/48)</span>
+    </div>
+  );
 }
 
 export function SentHistoryPanel() {
@@ -27,11 +49,18 @@ export function SentHistoryPanel() {
   );
 
   if (rows.length === 0) {
-    return <p className="text-muted-foreground text-sm">No outgoing SMS has been sent or dismissed yet.</p>;
+    return (
+      <div>
+        <SegmentCostSummary />
+        <p className="text-muted-foreground text-sm">No outgoing SMS has been sent or dismissed yet.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div>
+      <SegmentCostSummary />
+      <div className="overflow-x-auto rounded-lg border border-border">
       <Table>
         <TableHeader>
           <TableRow>
@@ -54,6 +83,7 @@ export function SentHistoryPanel() {
           ))}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
