@@ -196,6 +196,12 @@ export const sidebarItems: NavGroup[] = [
 				icon: Wallet,
 			},
 			{
+				id: "outgoing-sms",
+				title: "Outgoing SMS",
+				url: "/dashboard/outgoing-sms",
+				icon: Send,
+			},
+			{
 				id: "contract-of-sale",
 				title: "Contract of Sale",
 				url: "/dashboard/contract-of-sale",
