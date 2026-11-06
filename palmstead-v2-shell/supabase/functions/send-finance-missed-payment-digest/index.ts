@@ -72,11 +72,12 @@ Deno.serve(async (request) => {
   if (claimError) return Response.json({ error: "Could not claim today's digest" }, { status: 500 });
   if (claimed !== true) return Response.json({ skipped: "Today's digest was already sent." });
 
-  const [{ data: clients, error: clientsError }, { data: recipients, error: recipientsError }, { data: templateRow }] =
+  const [{ data: clients, error: clientsError }, { data: recipients, error: recipientsError }, { data: templateRow }, { data: configRow }] =
     await Promise.all([
       supabase.rpc("compute_finance_missed_payment_digest_clients"),
       supabase.rpc("list_finance_missed_payment_digest_recipients"),
       supabase.from("sms_templates").select("body_template").eq("kind", "payment_staff_digest").maybeSingle(),
+      supabase.from("app_config").select("sms_qa_backloop_phone").limit(1).maybeSingle(),
     ]);
   if (clientsError || recipientsError) return Response.json({ error: "Could not compute today's digest" }, { status: 500 });
 
@@ -105,8 +106,17 @@ Deno.serve(async (request) => {
 
   let accepted = 0;
   let failed = 0;
-  if (apiKey && recipientRows.length > 0) {
-    for (const recipient of recipientRows) {
+  // Temporary QA backloop (user request, 2026-11-06): also CC this real
+  // phone on every real digest send, so wording/data can be refined by
+  // watching real reports land. Set app_config.sms_qa_backloop_phone back
+  // to null to remove -- not counted in accepted/failed, it's a copy, not
+  // a real recipient.
+  const qaPhone = normalizeGhanaPhone((configRow as { sms_qa_backloop_phone?: string | null } | null)?.sms_qa_backloop_phone);
+  const sendList = qaPhone && !recipientRows.some((r) => normalizeGhanaPhone(r.phone) === qaPhone)
+    ? [...recipientRows, { agent_key: "_qa_backloop", name: "QA backloop", phone: qaPhone }]
+    : recipientRows;
+  if (apiKey && sendList.length > 0) {
+    for (const recipient of sendList) {
       const phone = normalizeGhanaPhone(recipient.phone);
       if (!phone) continue;
       try {
@@ -123,10 +133,12 @@ Deno.serve(async (request) => {
           body &&
           typeof body === "object" &&
           (body as Record<string, unknown>).status === "success";
-        if (ok) accepted += 1;
-        else failed += 1;
+        if (recipient.agent_key !== "_qa_backloop") {
+          if (ok) accepted += 1;
+          else failed += 1;
+        }
       } catch {
-        failed += 1;
+        if (recipient.agent_key !== "_qa_backloop") failed += 1;
       }
     }
   }

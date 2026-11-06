@@ -260,3 +260,41 @@ session token -- both confirmed delivered (`"ok":true,"status":200`). No real SM
 real client during this fix.
 
 Commit: see git log for this file's own commit alongside these changes.
+
+## 3. QA backloop on the real daily Management reports (2026-11-06)
+
+User's exact request: "create a backloop where the daily report that goes to management also goes
+to the number i take u so that we can follow and fix all errors to perfect the reports."
+
+**Found two real, recurring, Management-facing digests** (searched every `pg_cron.schedule` call
+in the migrations, not just the ones from today's work):
+1. `payment_staff_digest` -- Phase H's missed-payment staff digest, `send-finance-missed-payment-digest`,
+   cron `finance-missed-payment-staff-digest` at `0 7 * * *` UTC daily. Real recipients: Management
+   plus any staff with a real `payments.manage` grant.
+2. `sales_daily_digest` (built by a different, earlier session, not part of today's SMS work) --
+   `process-sales-daily-digest`, two daily runs ("morning plan" / "evening results"), real
+   recipients: active `role = 'manager'` profiles only.
+
+**Fix**: added `app_config.sms_qa_backloop_phone` (nullable text, single source of truth for both
+digests). Set to `233546416566` now. Both edge functions read it and, if set, send an identical
+extra copy of the real message to that number alongside whoever the digest would normally reach --
+not counted in either digest's own accepted/failed stats, so it doesn't skew the real delivery
+metrics. **To remove the backloop**, set `app_config.sms_qa_backloop_phone` back to `null` -- no
+code change needed.
+
+**Verification**: deployed both edge functions (`send-finance-missed-payment-digest` v3,
+`process-sales-daily-digest` v2), confirmed each preserves its original `verify_jwt: false` setting
+and matches the real deployed source exactly aside from the backloop addition. Did not force a live
+re-trigger of either digest today, since today's morning sales-digest run had already sent for real
+at 08:00 UTC (before this fix deployed) and re-triggering would have sent a real duplicate text to
+the real Management number for no real benefit -- confirmed via code review instead that the
+recipient list construction is correct, and confirmed `app_config.sms_qa_backloop_phone` reads back
+`233546416566` as expected. The evening sales-digest run and tomorrow's 07:00 UTC finance digest
+will be the first real natural exercises of this change.
+
+**Real finding, out of scope for this task, flagged not fixed**: `process-sales-daily-digest`'s
+message text still says `PEP Landbank {date} {kind} report:` -- a leftover from the earlier
+company-branding sweep, which only covered client-facing surfaces. This report is staff/Management-
+only, so "Palmstead" would be the correct internal name per the user's own branding rule ("Palmstead
+is the name of the system... for internal staff alerts"), not "PEP Landbank" or "Trulander" --
+worth a follow-up fix.

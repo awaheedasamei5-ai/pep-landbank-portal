@@ -43,6 +43,14 @@ Deno.serve(async (request: Request) => {
   const { data: claimed, error: claimError } = await supabase.rpc("claim_sales_daily_digest_deliveries", { p_limit: 10 });
   if (claimError) return Response.json({ error: "Could not claim digest deliveries" }, { status: 500 });
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
+  // Temporary QA backloop (user request, 2026-11-06): also send a copy of
+  // every real Management digest to this real phone, so wording/data can
+  // be refined by watching real reports land. Set
+  // app_config.sms_qa_backloop_phone back to null to remove.
+  const { data: qaConfigRow } = await supabase.from("app_config").select("sms_qa_backloop_phone").limit(1).maybeSingle();
+  const qaPhoneRaw = (qaConfigRow as { sms_qa_backloop_phone?: string | null } | null)?.sms_qa_backloop_phone ?? null;
+  const qaDigits = (qaPhoneRaw ?? "").replace(/\D/g, "");
+  const qaPhone = /^0\d{9}$/.test(qaDigits) ? `233${qaDigits.slice(1)}` : /^233\d{9}$/.test(qaDigits) ? qaDigits : null;
   let accepted = 0;
   let blocked = 0;
   let failed = 0;
@@ -73,6 +81,14 @@ Deno.serve(async (request: Request) => {
           signal: AbortSignal.timeout(12_000),
         });
         outcome = providerOutcome(response.status, await response.json().catch(() => null), phone);
+        if (qaPhone && qaPhone !== phone && outcome.status === "accepted") {
+          fetch("https://sms.arkesel.com/api/v2/sms/send", {
+            method: "POST",
+            headers: { "api-key": apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ sender: "Palmstead", message, recipients: [qaPhone] }),
+            signal: AbortSignal.timeout(12_000),
+          }).catch(() => {});
+        }
       } catch {
         outcome = { status: "needs_review", reference: null, error: "SMS outcome uncertain; check Arkesel history before retrying." };
       }
