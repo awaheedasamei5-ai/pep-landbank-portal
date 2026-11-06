@@ -22,7 +22,7 @@ const sections: { id: ReportSection; title: string; url: string; columns: { key:
   { id: 'attendance', title: 'Attendance', url: '/dashboard/attendance/reports', columns: [{ key: 'work_date', title: 'Day' }, { key: 'sign_in_at', title: 'In' }, { key: 'sign_out_at', title: 'Out' }] },
   { id: 'calls', title: 'Calls and activity', url: '/dashboard/pipeline/reports', columns: [{ key: 'created_at', title: 'When' }, { key: 'client', title: 'Client' }, { key: 'action', title: 'Action' }, { key: 'outcome', title: 'Outcome' }] },
   { id: 'leads', title: 'New leads', url: '/dashboard/pipeline/reports', columns: [{ key: 'date_added', title: 'Added' }, { key: 'name', title: 'Client' }, { key: 'stage', title: 'Stage' }, { key: 'lead_source', title: 'Source' }] },
-  { id: 'visits', title: 'Site visits', url: '/dashboard/site-visits', columns: [{ key: 'visit_date', title: 'Visit day' }, { key: 'name', title: 'Client' }, { key: 'site', title: 'Site' }, { key: 'status', title: 'Status' }] },
+  { id: 'visits', title: 'Site visits', url: '/dashboard/site-visits/reports', columns: [{ key: 'visit_date', title: 'Visit day' }, { key: 'name', title: 'Client' }, { key: 'site', title: 'Site' }, { key: 'status', title: 'Status' }] },
   { id: 'tasks', title: 'Scheduled work', url: '/dashboard/operations/reports', columns: [{ key: 'item_date', title: 'Day' }, { key: 'title', title: 'Task' }, { key: 'status', title: 'Status' }, { key: 'completed_at', title: 'Completed' }] },
   { id: 'banners', title: 'Banners I logged', url: '/dashboard/banners', columns: [{ key: 'created_at', title: 'Logged' }, { key: 'name', title: 'Banner' }, { key: 'area', title: 'Area' }, { key: 'status', title: 'Status' }] },
 ];
