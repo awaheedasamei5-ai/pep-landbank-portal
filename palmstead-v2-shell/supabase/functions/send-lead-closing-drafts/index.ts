@@ -1,17 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
 
-// Outgoing SMS app, closing/nurture campaign (docs/plans/43 follow-up
-// request, 2026-11-06). Runs monthly via dispatch_lead_closing_drafts()
-// (pg_cron -> net.http_post, same pattern as every other finance worker
-// in this project). For each real lead who has made no commitment yet
-// (compute_lead_closing_candidates()), drafts one AI message via the
-// shared ai-insights function, in a rotating "angle" so consecutive
-// months to the same lead read genuinely differently, and inserts it as
-// a PENDING row in outbound_sms_drafts -- it never sends on its own.
-// Management reviews, edits if needed, and approves each one in the new
-// Outgoing SMS app before anything reaches a real client.
-
 const ANGLES = [
   "reassurance",
   "addressing_objections",
@@ -21,6 +10,15 @@ const ANGLES = [
   "social_proof",
   "plot_benefits",
 ] as const;
+
+// Real limit per invocation -- docs/plans/47 open item 2: processing all
+// real candidates sequentially (one Groq call per lead) hit the edge
+// function execution-time limit. The cron now runs every 20 minutes
+// (instead of monthly) so a backlog larger than this batch drains over a
+// few ticks; compute_lead_closing_candidates() already excludes leads
+// drafted in the last 30 real days, so frequent runs are self-limiting.
+const BATCH_LIMIT = 25;
+const CONCURRENCY = 5;
 
 type Candidate = {
   lead_id: string;
@@ -44,6 +42,15 @@ function cleanText(value: string, maxLength: number): string {
   return value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+// Processes up to CONCURRENCY leads at a time instead of one at a time --
+// the same total work finishes in a fraction of the wall-clock time, well
+// inside the platform's per-invocation execution budget.
+async function processInBatches<T>(items: T[], size: number, worker: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(worker));
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const token = request.headers.get("x-internal-secret");
@@ -53,9 +60,6 @@ Deno.serve(async (request) => {
     return Response.json({ error: "Worker authorization is unavailable" }, { status: 401 });
 
   const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  // Reuses the same worker-token RPC/secret the finance monthly reminder
-  // worker already uses -- this is still finance/CRM automation, same
-  // trust domain, no reason to mint a second token.
   const { data: validToken, error: tokenError } = await supabase.rpc("verify_finance_monthly_reminder_worker_token", {
     p_token: token,
   });
@@ -64,17 +68,24 @@ Deno.serve(async (request) => {
   const companyPhoneRow = await supabase.from("app_config").select("company_phone").limit(1).maybeSingle();
   const companyPhone = companyPhoneRow.data?.company_phone ?? "";
 
-  const { data: candidates, error: candidatesError } = await supabase.rpc("compute_lead_closing_candidates");
+  const { data: candidates, error: candidatesError } = await supabase.rpc("compute_lead_closing_candidates", {
+    p_limit: BATCH_LIMIT,
+  });
   if (candidatesError) return Response.json({ error: "Could not compute eligible leads" }, { status: 500 });
 
   let drafted = 0;
   let skipped = 0;
   let aiFailed = 0;
-  for (const row of (candidates ?? []) as Candidate[]) {
+
+  await processInBatches((candidates ?? []) as Candidate[], CONCURRENCY, async (row) => {
     const phone = normalizeGhanaPhone(row.contact);
     if (!phone) {
+      // Real data-quality gap, not transient -- record it so this lead
+      // doesn't reoccupy a batch slot on every 20-minute tick forever.
+      const angle = ANGLES[row.prior_draft_count % ANGLES.length];
+      await supabase.rpc("insert_lead_closing_skip", { p_lead_id: row.lead_id, p_name: row.name, p_angle: angle });
       skipped += 1;
-      continue;
+      return;
     }
     const hasAgent = !!row.agent_name && !!row.agent_phone;
     const angle = ANGLES[row.prior_draft_count % ANGLES.length];
@@ -98,7 +109,7 @@ Deno.serve(async (request) => {
     const draft = typeof (aiBody as { message?: unknown })?.message === "string" ? (aiBody as { message: string }).message.trim() : "";
     if (!draft) {
       aiFailed += 1;
-      continue;
+      return;
     }
     const firstName = cleanText(row.name, 40).split(" ")[0] || "there";
     const body = cleanText(draft.replace(/\{ClientName\}/g, firstName), 480);
@@ -111,10 +122,10 @@ Deno.serve(async (request) => {
     });
     if (insertError) {
       aiFailed += 1;
-      continue;
+      return;
     }
     drafted += 1;
-  }
+  });
 
   return Response.json({ candidates: (candidates ?? []).length, drafted, skipped, aiFailed });
 });
