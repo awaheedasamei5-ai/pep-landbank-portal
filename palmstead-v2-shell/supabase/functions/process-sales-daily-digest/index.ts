@@ -11,6 +11,11 @@ function phoneNumber(value: string | null): string | null {
   return /^233\d{9}$/.test(digits) ? digits : null;
 }
 
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
+}
+
 function providerOutcome(httpStatus: number, body: unknown, recipient: string): Outcome {
   const response = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const raw = response.data;
@@ -42,6 +47,12 @@ Deno.serve(async (request: Request) => {
   if (!settings.enabled) return Response.json({ accepted: 0, disabled: true });
   const { data: claimed, error: claimError } = await supabase.rpc("claim_sales_daily_digest_deliveries", { p_limit: 10 });
   if (claimError) return Response.json({ error: "Could not claim digest deliveries" }, { status: 500 });
+  const { data: templateRow } = await supabase
+    .from("sms_templates")
+    .select("body_template")
+    .eq("kind", "sales_daily_digest")
+    .maybeSingle();
+  const template = templateRow?.body_template as string | null | undefined;
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
   // Temporary QA backloop (user request, 2026-11-06): also send a copy of
   // every real Management digest to this real phone, so wording/data can
@@ -72,7 +83,12 @@ Deno.serve(async (request: Request) => {
     } else {
       const origin = "https://palmstead-v2-shell.vercel.app";
       const kind = run.kind === "morning" ? "morning plan" : "evening results";
-      const message = `PEP Landbank ${run.local_date} ${kind} report: ${origin}/dashboard/pipeline/daily-reports/${run.id} Sign in as Management to view and download the PDF.`;
+      const link = `${origin}/dashboard/pipeline/daily-reports/${run.id}`;
+      const message = renderTemplate(
+        template,
+        `Trulander JSF {date} {kind} report: {link} Sign in as Management to view and download the PDF.`,
+        { date: String(run.local_date), kind, link },
+      );
       try {
         const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
           method: "POST",

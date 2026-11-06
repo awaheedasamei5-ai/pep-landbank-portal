@@ -41,6 +41,14 @@ function normalizeGhanaPhone(value: string | null | undefined): string | null {
   return null;
 }
 
+// {token} substitution against a DB-editable body_template (Outgoing SMS
+// app, docs/plans/47/48); a fallback string is used if the row is missing
+// so a deleted/misconfigured template row never breaks a real notice.
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
+}
+
 function classifyProvider(httpStatus: number, body: unknown, recipient: string): Delivery {
   const response = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const rawData = response.data;
@@ -107,6 +115,13 @@ Deno.serve(async (request) => {
   const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: validToken, error: tokenError } = await supabase.rpc("verify_allocation_sms_worker_token", { p_token: token });
   if (tokenError || validToken !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: templateRow } = await supabase
+    .from("sms_templates")
+    .select("body_template")
+    .eq("kind", "allocation_staff_notice")
+    .maybeSingle();
+  const template = templateRow?.body_template as string | null | undefined;
 
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
   const { data: rows, error: claimError } = await supabase.rpc("claim_allocation_sms_outbox", { p_limit: 10 });
@@ -206,7 +221,16 @@ Deno.serve(async (request) => {
     const staffName = (agent.name || "there").replace(/[\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
     const clientName = (lead.name || allocation.client_name || "your client").replace(/[\r\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
     const percent = Math.round((Number(lead.amt_paid) / Number(lead.grand_total)) * 100);
-    const message = `Hello ${staffName}, ${clientName} has paid ${percent}% of the purchase price and is due for plot allocation. Review the request in Palmstead Allocations: https://palmstead-v2-shell.vercel.app/dashboard/allocations - PEP Landbank`;
+    const message = renderTemplate(
+      template,
+      `Hello {staffName}, {clientName} has paid {percent}% of the purchase price and is due for plot allocation. Review the request in Palmstead Allocations: {link} - Trulander JSF`,
+      {
+        staffName,
+        clientName,
+        percent: String(percent),
+        link: "https://palmstead-v2-shell.vercel.app/dashboard/allocations",
+      },
+    );
 
     let delivery: Delivery;
     try {
