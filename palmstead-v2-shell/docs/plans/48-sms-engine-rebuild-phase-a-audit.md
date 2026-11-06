@@ -286,14 +286,51 @@ JSF" in both its DB row and its code fallback (also wrong, this is a staff notic
 "Palmstead" per the established branding rule (Palmstead = internal system, for staff; Trulander JSF
 = the company, for clients).
 
-**Phase D — AI review stage (shadow mode first)**:
-1. Build the structured-output contract (`APPROVED_WORDING`/`NEEDS_HUMAN_REVIEW`/`DO_NOT_SEND`)
-   using the existing Groq integration (pending final user confirmation on Grok vs. Groq).
-2. Run it in shadow mode only initially (compute what it would decide, log it, don't act on it) to
-   measure rejection rates before trusting it to gate any real send.
-3. Build the independent server-side validator (compare every token in the AI's draft against the
-   trusted source payload) — this is the part of the blueprint most worth building regardless of
-   the Grok/Groq decision, since it protects against AI error either way.
+**Phase D — AI review stage (shadow mode first). DONE, 2026-11-06.**
+1. **Structured-output contract, built on Groq** (the user never explicitly chose Grok vs. Groq;
+   per this session's standing default, Groq stays — `ai-insights`'s existing `response_format:
+   json_object` support, confirmed via Groq's own OpenAI-compatible API). New `sms_copy_review`
+   kind, system prompt adapted from blueprint §7 (Trulander JSF SMS Copy Reviewer — reviews
+   `draftText` against a `verifiedFields` trusted payload, never determines facts itself, returns
+   `{decision, event_type, draft_text, used_fields, reason_codes, tone, requires_review}`). Falls
+   back to `NEEDS_HUMAN_REVIEW`/`ai_parse_failure` if Groq ever returns non-JSON. Deployed as
+   `ai-insights` v39.
+2. **Independent deterministic validator** — `validate_sms_review_tokens(generated_text, trusted)`,
+   a pure-SQL function extracting every real GHS amount and Ghana-format phone number actually
+   present in the message and comparing against the trusted payload's own `amounts`/`phones`/
+   `must_contain`/`must_not_contain` arrays. **Verified against the blueprint's own acceptance-test
+   example**: "GHS 3,500 changed to GHS 3,000" → real `FAIL` with `unverified_amount`; a wrong phone
+   number → real `FAIL` with `unverified_phone`; the correct message → real `PASS`.
+3. **Shadow-mode measurement, real data**: ran the deterministic validator across all 93 real
+   pending `lead_closing_sms` drafts (cheap, no AI call needed) — **93/93 PASS** (no amounts appear
+   in a closing SMS, and every phone number used was the real routed one). Ran the live AI reviewer
+   against a representative sample of 10 real drafts (mixing company-routed and agent-routed,
+   several different real staff) — **8/10 `APPROVED_WORDING`, 2/10 `DO_NOT_SEND`**, both correctly
+   catching the same real bug: `recipient_name` truncated to a title/first-token only in the
+   greeting (e.g. "Mad Patience" → "Hello Mad", "Heart of God" → "Hello Heart"). This is a genuine,
+   previously-undetected bug in the closing-SMS draft generator's name-substitution logic, confirmed
+   independently by the AI reviewer on real data — not a synthetic test case.
+4. **New real finding, also surfaced while sampling, not previously known**: every one of the 93
+   real pending drafts has `angle = 'reassurance'` — the 7-angle rotation described in Phase 47 does
+   not appear to actually be rotating in production; every real draft so far used the same angle.
+   Worth a dedicated follow-up fix (not done in this task — Phase D's job was measurement, not
+   fixing what it found).
+5. **Read-only surface**: a new "AI review: …" badge on each row of the Outgoing SMS Drafts tab,
+   reading from the new `sms_review_shadow_log` table (outline badge for `APPROVED_WORDING`/no
+   data yet, destructive/red badge for `DO_NOT_SEND` or a validator `FAIL`). Confirmed live in the
+   browser as Management — correctly shows `APPROVED_WORDING` and `DO_NOT_SEND` badges matching the
+   real logged rows.
+
+**Honest assessment for Phase E**: the deterministic validator is trustworthy as a hard gate today
+— it caught the blueprint's own adversarial example and found zero false positives on 93 real
+messages. The AI reviewer is also already finding genuine real bugs (2/10, a 20% real catch rate on
+an actual, previously-unknown defect) — a strong sign it's worth having, but 10 samples is too few
+to set a numeric rejection-rate threshold with confidence. Recommend: keep shadow mode running
+against every future real closing-SMS batch (cheap — attach the same two calls to the existing
+monthly draft-creation worker) to build up a larger real sample before Phase E considers gating any
+real send on either check. Neither should gate the EXISTING kinds that are already auto-sent
+without human review (due-soon, missed-payment, etc.) without separate, deliberate Phase E design —
+this task only measured, per the blueprint's own explicit Phase D sequencing.
 
 **Phase E — Controlled go-live**:
 1. Feature-flag the new unified engine per SMS kind, migrating one kind at a time rather than a

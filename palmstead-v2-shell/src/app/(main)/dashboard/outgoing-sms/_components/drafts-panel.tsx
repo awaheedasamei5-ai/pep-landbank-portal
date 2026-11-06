@@ -11,7 +11,14 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
-import { type OutboundDraft, friendlyError, useApproveAndSendDraft, useDismissDraft, useOutboundDrafts } from "./use-outgoing-sms";
+import {
+  type OutboundDraft,
+  friendlyError,
+  useApproveAndSendDraft,
+  useDismissDraft,
+  useOutboundDrafts,
+  useShadowReviews,
+} from "./use-outgoing-sms";
 
 const ANGLE_LABELS: Record<string, string> = {
   reassurance: "Reassurance",
@@ -27,6 +34,28 @@ function dateLabel(value: string): string {
   return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Phase D (docs/plans/48): shadow-mode AI review, read-only. Does not block
+// sending -- Management still reviews and confirms every closing SMS by
+// hand regardless of what this badge says, this is purely informational
+// while rejection rates are being measured.
+function ShadowReviewBadge({
+  outboxRowId,
+  reviews,
+}: {
+  outboxRowId: string;
+  reviews: Record<string, { ai_decision: string | null; validator_verdict: string }> | undefined;
+}) {
+  const review = reviews?.[outboxRowId];
+  if (!review) return <Badge variant="outline">AI review: not yet run</Badge>;
+  const flagged = review.ai_decision === "DO_NOT_SEND" || review.validator_verdict === "FAIL";
+  return (
+    <Badge variant={flagged ? "destructive" : "outline"}>
+      AI review: {review.ai_decision ?? "pending"}
+      {review.validator_verdict === "FAIL" && " · validator flagged"}
+    </Badge>
+  );
+}
+
 export function DraftsPanel() {
   const drafts = useOutboundDrafts("pending");
   const approve = useApproveAndSendDraft();
@@ -35,9 +64,11 @@ export function DraftsPanel() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const rows = drafts.data ?? [];
+  const shadow = useShadowReviews(rows.map((r) => r.id));
+
   if (drafts.isLoading) return <Skeleton className="h-40 w-full" />;
   if (drafts.error) return <p className="text-destructive text-sm">{friendlyError(drafts.error)}</p>;
-  const rows = drafts.data ?? [];
 
   if (rows.length === 0) {
     return (
@@ -62,6 +93,7 @@ export function DraftsPanel() {
                 <span>{row.recipient_phone ?? "No phone on file"}</span>
                 {row.angle && <Badge variant="secondary">{ANGLE_LABELS[row.angle] ?? row.angle}</Badge>}
                 <span>{dateLabel(row.created_at)}</span>
+                <ShadowReviewBadge outboxRowId={row.id} reviews={shadow.data} />
               </div>
             </div>
             <div className="flex shrink-0 gap-2">

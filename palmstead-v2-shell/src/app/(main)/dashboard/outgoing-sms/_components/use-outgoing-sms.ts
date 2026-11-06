@@ -145,6 +145,37 @@ export function useOutgoingSmsQueueSummary() {
   });
 }
 
+// Phase D (docs/plans/48): shadow-mode AI review results, keyed by the
+// outbox row they were computed for. Read-only, informational only -- this
+// does not gate sending anything yet, it's the measurement step before
+// Phase E decides whether to trust it to.
+export type ShadowReview = {
+  outbox_row_id: string;
+  ai_decision: string | null;
+  ai_reason_codes: string[];
+  validator_verdict: string;
+  validator_issues: { code: string; value: string }[];
+};
+
+export function useShadowReviews(draftIds: string[]) {
+  return useQuery({
+    queryKey: ["sms-review-shadow-log", draftIds],
+    enabled: draftIds.length > 0,
+    queryFn: async (): Promise<Record<string, ShadowReview>> => {
+      const { data, error } = await requireSupabase()
+        .from("sms_review_shadow_log")
+        .select("outbox_row_id,ai_decision,ai_reason_codes,validator_verdict,validator_issues")
+        .in("outbox_row_id", draftIds);
+      if (error) throw error;
+      const byId: Record<string, ShadowReview> = {};
+      for (const row of (data ?? []) as ShadowReview[]) {
+        if (row.outbox_row_id) byId[row.outbox_row_id] = row;
+      }
+      return byId;
+    },
+  });
+}
+
 export function friendlyError(error: unknown): string {
   return error instanceof Error ? error.message : "That could not be completed. Try again.";
 }
