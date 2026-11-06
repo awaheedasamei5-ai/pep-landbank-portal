@@ -116,6 +116,9 @@ export function SiteVisitsScreen() {
               Experience feedback <Icon name="chevronRight" size={14} />
             </button>
           )}
+          <button type="button" className={styles.experienceLink} onClick={() => navigate('/dashboard/site-visits/reports')}>
+            Visit reports <Icon name="chevronRight" size={14} />
+          </button>
         </div>
         <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/site-visits/new')}>
           + Log visit
