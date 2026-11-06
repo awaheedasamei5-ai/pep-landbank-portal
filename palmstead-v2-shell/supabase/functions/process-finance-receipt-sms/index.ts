@@ -68,6 +68,14 @@ function cleanSmsText(value: string, maxLength: number): string {
   return value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+// {token} substitution against a DB-editable body_template (Outgoing SMS
+// app, docs/plans/47); a fallback string is used if the row is missing so a
+// deleted/misconfigured template row never breaks the real receipt SMS.
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
+}
+
 function drawReceipt(payment: PaymentRow, lead: LeadRow, config: ReceiptConfig): Uint8Array {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
@@ -283,11 +291,12 @@ Deno.serve(async (request: Request) => {
   let persistenceErrors = 0;
   const outboxRows = (rows ?? []) as OutboxRow[];
   for (const row of outboxRows) {
-    const [{ data: payment }, { data: lead }, { data: link }, { data: config }] = await Promise.all([
+    const [{ data: payment }, { data: lead }, { data: link }, { data: config }, { data: templateRow }] = await Promise.all([
       supabase.from("payments").select("id,lead_id,amount,payment_date,payment_method,reference_number,receipt_number,status,paid_after_approval,balance_after_approval,contract_total_at_approval,approval_snapshot_is_legacy").eq("id", row.payment_id).maybeSingle(),
       supabase.from("leads").select("id,name,contact,plot_type,no_plots,grand_total,amt_paid,deleted_at").eq("id", row.lead_id).maybeSingle(),
       supabase.from("receipt_share_links").select("id,token,storage_path").eq("id", row.share_link_id).maybeSingle(),
       supabase.from("app_config").select("quote_company_name,quote_site_name,company_phone,company_email,company_tin,quote_footer_address,receipt_thanks_text").limit(1).maybeSingle(),
+      supabase.from("sms_templates").select("body_template").eq("kind", "receipt_issued_thank_you").maybeSingle(),
     ]);
 
     let outcome: Delivery;
@@ -312,7 +321,16 @@ Deno.serve(async (request: Request) => {
           const origin = "https://palmstead-v2-shell.vercel.app";
           const receiptUrl = `${origin}/receipt/${link.token}`;
           const clientName = cleanSmsText((lead as LeadRow).name, 45) || "Client";
-          message = `Hi ${clientName}, thank you for your payment of ${ghs(Number((payment as PaymentRow).amount))}. Receipt ${(payment as PaymentRow).receipt_number}: ${receiptUrl} - PEP Landbank`;
+          message = renderTemplate(
+            templateRow?.body_template as string | undefined,
+            `Hi {clientName}, thank you for your payment of {amount}. Receipt {receiptNumber}: {receiptUrl} - PEP Landbank`,
+            {
+              clientName,
+              amount: ghs(Number((payment as PaymentRow).amount)),
+              receiptNumber: String((payment as PaymentRow).receipt_number),
+              receiptUrl,
+            },
+          );
           const apiKey = Deno.env.get("ARKESEL_API_KEY");
           if (!apiKey) {
             outcome = { status: "failed", providerReference: null, error: "SMS provider is not configured on the server.", providerStatus: null };

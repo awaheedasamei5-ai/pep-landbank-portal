@@ -5,6 +5,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { getDataSource } from '../../../data/source';
+import { requireSupabase } from '@/lib/supabase.client';
 import { buildQuotationPdf, quotationFilename, type QuotationClientInfo } from '../lib/quotationPdf';
 import { computeLeadQuotationTotals, pricingFor } from '../lib/quotationLogic';
 import type { Config, Lead, PlotType } from '../../../types/domain';
@@ -19,6 +20,24 @@ import type { QuotationTotals } from '../lib/quotationLogic';
 // local "Download PDF" behaviour, never a replacement for it: any failure
 // in the upload/link/SMS chain is swallowed so the staff member always
 // still gets their local PDF.
+// {token} substitution against a DB-editable sms_templates.body_template
+// (Outgoing SMS app, docs/plans/47) -- a fallback is used if the row is
+// ever missing so a deleted/misconfigured template never breaks the real
+// quotation SMS.
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key) => (key in vars ? vars[key] : `{${key}}`));
+}
+
+async function quotationThankYouTemplate(): Promise<string | null> {
+  try {
+    const { data } = await requireSupabase().from('sms_templates').select('body_template').eq('kind', 'quotation_thank_you').maybeSingle();
+    return (data?.body_template as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function tryShareQuotationWithClient(
   doc: ReturnType<typeof buildQuotationPdf>,
   client: QuotationClientInfo,
@@ -44,12 +63,13 @@ async function tryShareQuotationWithClient(
     });
     const link = `${window.location.origin}/quotation/${token}`;
     const firstName = client.name.split(' ')[0] || client.name;
-    await ds.sms.send(
-      client.contact,
-      `Hi ${firstName}, thank you for requesting a quotation from Trulander JSF for a ${plotType} on the ${paymentPlan} plan. A staff member will reach out shortly to explain the payment schedule. Download your quotation here: ${link}`,
-      'quotation_ready',
-      createdBy,
+    const template = await quotationThankYouTemplate();
+    const message = renderTemplate(
+      template,
+      `Hi {firstName}, thank you for requesting a quotation from Trulander JSF for a {plotType} on the {paymentPlan} plan. A staff member will reach out shortly to explain the payment schedule. Download your quotation here: {link}`,
+      { firstName, plotType, paymentPlan, link },
     );
+    await ds.sms.send(client.contact, message, 'quotation_ready', createdBy);
   } catch {
     // Intentionally non-fatal -- see function comment. The staff member's
     // own local PDF download must never be blocked by this.

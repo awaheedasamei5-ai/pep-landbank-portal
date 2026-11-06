@@ -15,6 +15,26 @@ import { inPeriodRange, type PeriodRange } from '../../../shared/lib/periodFilte
 import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename } from '../lib/sveReportPdf';
 import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
+// {token} substitution against a DB-editable sms_templates.body_template
+// (Outgoing SMS app, docs/plans/47) -- a fallback is used if the row is
+// ever missing or unreachable (e.g. demo mode) so the real SVE invite SMS
+// never breaks.
+function renderSveTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key) => (key in vars ? vars[key] : `{${key}}`));
+}
+
+async function sveFeedbackThankYouTemplate(): Promise<string | null> {
+  try {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    const { data } = await client.from('sms_templates').select('body_template').eq('kind', 'sve_feedback_thank_you').maybeSingle();
+    return (data?.body_template as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function useSveVisits() {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({ queryKey: ['sveVisits'], queryFn: () => getDataSource(demoMode).sve.listVisitsWithStatus() });
@@ -87,7 +107,12 @@ export function useSendSveInvite() {
       if (clientContact) {
         const link = `${window.location.origin}/visit-feedback/${invite.token}`;
         const firstName = clientName ? clientName.split(' ')[0] : 'there';
-        const msg = `Hi ${firstName}, thank you for honoring our invitation for a site visit to Royal Palm Enclave! We'd love your feedback -- please share your experience here: ${link}`;
+        const template = await sveFeedbackThankYouTemplate();
+        const msg = renderSveTemplate(
+          template,
+          `Hi {firstName}, thank you for honoring our invitation for a site visit to Royal Palm Enclave! We'd love your feedback -- please share your experience here: {link}`,
+          { firstName, link },
+        );
         smsSent = await getDataSource(demoMode)
           .sms.send(clientContact, msg, 'site_visit_experience_invite', profile?.key ?? null)
           .catch(() => false);
