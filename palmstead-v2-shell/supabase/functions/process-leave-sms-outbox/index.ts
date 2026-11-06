@@ -16,6 +16,39 @@ function normalizeGhanaPhone(value: string | null): string | null {
   return null;
 }
 
+// Real Arkesel segment-counting rules (SMS Length and Unicode,
+// arkesel.com/sms-length-and-unicode): GSM-7 160/153, Unicode (UCS-2) 70/67.
+const GSM_BASIC =
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+const GSM_EXTENDED = "^{}\\[~]|€";
+
+// deno-lint-ignore no-explicit-any
+async function logSmsSend(supabase: any, kind: string, phone: string, providerReference: string | null, message: string): Promise<void> {
+  let effectiveLength = 0;
+  let isGsm7 = true;
+  for (const ch of message) {
+    if (GSM_BASIC.includes(ch)) effectiveLength += 1;
+    else if (GSM_EXTENDED.includes(ch)) effectiveLength += 2;
+    else {
+      isGsm7 = false;
+      break;
+    }
+  }
+  const encoding = isGsm7 ? "gsm7" : "unicode";
+  const messageLength = Array.from(message).length;
+  if (!isGsm7) effectiveLength = messageLength;
+  const singleLimit = isGsm7 ? 160 : 70;
+  const multiLimit = isGsm7 ? 153 : 67;
+  const segmentCount = effectiveLength <= singleLimit ? 1 : Math.ceil(effectiveLength / multiLimit);
+  try {
+    await supabase
+      .from("sms_send_log")
+      .insert({ kind, recipient_phone: phone, provider_reference: providerReference, message_length: messageLength, encoding, segment_count: segmentCount });
+  } catch {
+    // Never let logging failure break a real leave reminder send.
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
 
@@ -74,6 +107,7 @@ Deno.serve(async (request) => {
         const body: unknown = await response.json().catch(() => null);
         providerStatus = { httpStatus: response.status };
         outcome = classifyProviderResponse(response.status, body, phone);
+        await logSmsSend(supabase, "leave_reminder", phone, outcome.providerReference, row.message_body);
       } catch {
         outcome = {
           status: "needs_review", providerReference: null,

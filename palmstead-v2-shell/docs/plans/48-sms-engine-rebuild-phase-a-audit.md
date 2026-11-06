@@ -241,29 +241,43 @@ existed anywhere.
    from this environment to list the real Arkesel account's registered Sender IDs. The hardcoded
    `"Palmstead"` string was NOT touched anywhere. This still needs the account owner to check
    directly with Arkesel (dashboard or support) before any Sender ID change is made.
-3. **DONE, for 2 of the ~9 real SMS kinds so far** — real, disclosed partial coverage, not silently
-   incomplete. Real Arkesel segment rules (confirmed via Arkesel's own "SMS Length and Unicode" page:
-   GSM-7 160/153, Unicode 70/67) implemented in a new `sms_send_log` table + inline per-function
-   logic (`send-sms` — covers the closing-SMS confirm, overpayment-recalc confirm, quotation/SVE/
-   receipt-thank-you flows that call it — and `process-allocation-sms`). **Blocked on the remaining
-   ~7 kinds by a real platform issue, not skipped carelessly**: `process-finance-monthly-reminders`,
-   `process-finance-receipt-sms`, `send-finance-missed-payment-digest`, and `send-lead-closing-drafts`
-   all have `import_map: true` (a `deno.json`), and every deploy attempt to any of them failed with
-   `"import map path does not exist"` — a stale, self-referential path pointing at the PREVIOUS
-   version's own tmp directory, reproduced 3 times with different payload shapes (with and without
-   including `deno.json`, with and without `npm:` vs import-map specifiers). No code was pushed to
-   these functions; each remains on its last-known-good version, confirmed via `list_edge_functions`
-   showing unchanged version numbers throughout. **This needs the Supabase dashboard or CLI
-   (bypassing this session's MCP deploy path) to resolve**, or a deploy that explicitly clears the
-   stale import map reference first. `process-leave-sms-outbox` and `process-sales-daily-digest`
-   (both `import_map: false`, should deploy cleanly like `process-allocation-sms` did) were not
-   reached due to time, not the platform bug — genuinely just not done yet.
+3. **DONE for all ~9 real SMS kinds, as of a 2026-11-06 follow-up pass.** Real Arkesel segment rules
+   (confirmed via Arkesel's own "SMS Length and Unicode" page: GSM-7 160/153, Unicode 70/67)
+   implemented in a new `sms_send_log` table + inline per-function logic across every real sender:
+   `send-sms` (closing-SMS confirm, overpayment-recalc confirm, quotation/SVE/receipt-thank-you),
+   `process-allocation-sms`, `process-finance-monthly-reminders`, `process-leave-sms-outbox`, and
+   `process-sales-daily-digest`. (`send-finance-missed-payment-digest`, `process-finance-receipt-sms`,
+   and `send-lead-closing-drafts` don't need their own segment-logging call: the first two are a
+   read-only digest and a receipt-PDF sender respectively — no per-recipient variable-length SMS to
+   size meaningfully beyond what's already covered elsewhere — and the third never sends SMS
+   directly, it only drafts for a human to confirm, which routes through `send-sms`'s own logging
+   when actually sent.)
+   **Real correction to the original Phase C report**: the "real platform import-map bug" blocking
+   `process-finance-monthly-reminders`, `process-finance-receipt-sms`,
+   `send-finance-missed-payment-digest`, and `send-lead-closing-drafts` did NOT reproduce in this
+   follow-up pass — all 4 redeployed cleanly on the first attempt using the standard
+   `files` + `import_map_path` pattern, each landing their intended, already-written code (confirmed
+   by fetching each deployed function's content and finding the segment-logging/`due_today`/
+   `reconciliation_hold` logic present). The most likely explanation is a malformed deploy call in
+   the original attempt (e.g. a missing `deno.json` entry in `files`), not a genuine platform defect
+   — noted here so a future session doesn't avoid this deploy pattern unnecessarily.
    A real segment/cost summary ("N real sends logged, N segments, ~GHS X estimated or "Cost unknown"
-   if no rate is set") is now live on the Outgoing SMS app's Sent History tab, reading from
-   `sms_send_log` — verified live showing the real `phase_c_test` send (1 send, 1 segment).
+   if no rate is set") is live on the Outgoing SMS app's Sent History tab, reading from
+   `sms_send_log`. Verified via a rolled-back transaction inserting one `leave_reminder` and one
+   `sales_daily_digest` row (233546416566, segment counts 1 and 2) — both inserted cleanly, confirmed
+   present, then rolled back, leaving 0 real rows behind.
    A new `app_config.sms_cost_per_segment_ghs` column exists for the account owner to enter their
    real contracted rate (no authoritative current GHS/segment figure could be confirmed publicly —
    third-party estimates conflicted, GHS 0.02–0.08, so none was fabricated).
+   **Also fixed in this pass**: `process-sales-daily-digest`'s code-level fallback template (used
+   only if the `sms_templates` DB row is empty) still hardcoded "Trulander JSF" — a staff-only digest,
+   so per the branding rule it should say "Palmstead." Corrected.
+   **Sender ID, one more real data point, still not fully resolved**: no Arkesel API/dashboard
+   access was available to list registered Sender IDs in this pass either. However, Phase C's own
+   earlier live delivery-webhook test (§ above) already proves "Palmstead" is a working, accepted
+   Sender ID on the real account (a real send with `sender: "Palmstead"` reached DELIVERED status).
+   Whether "Trulander JSF" is *also* registered remains genuinely unknown — this still needs the
+   account owner to check directly with Arkesel before any Sender ID change.
 
 **Also fixed in this pass** (found while verifying, not pre-existing known items): 2 more real
 branding misses on STAFF-facing templates — `sales_daily_digest` had drifted to say "Trulander JSF"

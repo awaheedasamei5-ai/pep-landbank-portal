@@ -16,6 +16,39 @@ function renderTemplate(template: string | null | undefined, fallback: string, v
   return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
 }
 
+// Real Arkesel segment-counting rules (SMS Length and Unicode,
+// arkesel.com/sms-length-and-unicode): GSM-7 160/153, Unicode (UCS-2) 70/67.
+const GSM_BASIC =
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+const GSM_EXTENDED = "^{}\\[~]|€";
+
+// deno-lint-ignore no-explicit-any
+async function logSmsSend(supabase: any, kind: string, phone: string, providerReference: string | null, message: string): Promise<void> {
+  let effectiveLength = 0;
+  let isGsm7 = true;
+  for (const ch of message) {
+    if (GSM_BASIC.includes(ch)) effectiveLength += 1;
+    else if (GSM_EXTENDED.includes(ch)) effectiveLength += 2;
+    else {
+      isGsm7 = false;
+      break;
+    }
+  }
+  const encoding = isGsm7 ? "gsm7" : "unicode";
+  const messageLength = Array.from(message).length;
+  if (!isGsm7) effectiveLength = messageLength;
+  const singleLimit = isGsm7 ? 160 : 70;
+  const multiLimit = isGsm7 ? 153 : 67;
+  const segmentCount = effectiveLength <= singleLimit ? 1 : Math.ceil(effectiveLength / multiLimit);
+  try {
+    await supabase
+      .from("sms_send_log")
+      .insert({ kind, recipient_phone: phone, provider_reference: providerReference, message_length: messageLength, encoding, segment_count: segmentCount });
+  } catch {
+    // Never let logging failure break a real digest send.
+  }
+}
+
 function providerOutcome(httpStatus: number, body: unknown, recipient: string): Outcome {
   const response = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const raw = response.data;
@@ -86,7 +119,7 @@ Deno.serve(async (request: Request) => {
       const link = `${origin}/dashboard/pipeline/daily-reports/${run.id}`;
       const message = renderTemplate(
         template,
-        `Trulander JSF {date} {kind} report: {link} Sign in as Management to view and download the PDF.`,
+        `Palmstead {date} {kind} report: {link} Sign in as Management to view and download the PDF.`,
         { date: String(run.local_date), kind, link },
       );
       try {
@@ -97,6 +130,7 @@ Deno.serve(async (request: Request) => {
           signal: AbortSignal.timeout(12_000),
         });
         outcome = providerOutcome(response.status, await response.json().catch(() => null), phone);
+        await logSmsSend(supabase, "sales_daily_digest", phone, outcome.reference, message);
         if (qaPhone && qaPhone !== phone && outcome.status === "accepted") {
           fetch("https://sms.arkesel.com/api/v2/sms/send", {
             method: "POST",
