@@ -4,6 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
+import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import type { Lead } from '../../../types/domain';
 
 // docs/plans/29-company-leads-full-system-blueprint.md Section 7.6/Phase F
@@ -54,7 +55,7 @@ export function useSendContractToClient() {
         storagePath: uploadedPath,
         createdBy: profile.key,
       });
-      const link = `${window.location.origin}/contract/${token}`;
+      const link = `${APP_ORIGIN}/contract/${token}`;
 
       if (contractRequestId) {
         await ds.contractRequests.markGenerated(contractRequestId, null);

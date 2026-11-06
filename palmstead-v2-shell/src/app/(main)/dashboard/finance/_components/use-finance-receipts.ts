@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { requireSupabase } from "@/lib/supabase.client";
 import { buildReceiptPdf } from "@/webnext/features/payments/lib/receiptPdf";
 import { useLogDownload } from "@/webnext/shared/hooks/useLogDownload";
+import { APP_ORIGIN } from "@/webnext/shared/lib/appOrigin";
 import type { Config, Lead, Payment as WebnextPayment } from "@/webnext/types/domain";
 
 import type { Payment } from "./use-finance-payments";
@@ -249,7 +250,7 @@ export function useIssueReceiptLink(
         .select("token")
         .single();
       if (error) throw error;
-      return `${window.location.origin}/receipt/${(data as { token: string }).token}`;
+      return `${APP_ORIGIN}/receipt/${(data as { token: string }).token}`;
     },
   });
 }

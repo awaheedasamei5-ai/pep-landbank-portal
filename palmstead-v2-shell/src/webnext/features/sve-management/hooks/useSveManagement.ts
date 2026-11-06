@@ -13,6 +13,7 @@ import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { inPeriodRange, type PeriodRange } from '../../../shared/lib/periodFilter';
 import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename } from '../lib/sveReportPdf';
+import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
 // {token} substitution against a DB-editable sms_templates.body_template
@@ -105,7 +106,7 @@ export function useSendSveInvite() {
       const invite = await getDataSource(demoMode).sve.createInvite(siteVisitId, clientName, clientContact, profile?.key ?? '');
       let smsSent = false;
       if (clientContact) {
-        const link = `${window.location.origin}/visit-feedback/${invite.token}`;
+        const link = `${APP_ORIGIN}/visit-feedback/${invite.token}`;
         const firstName = clientName ? clientName.split(' ')[0] : 'there';
         const template = await sveFeedbackThankYouTemplate();
         const msg = renderSveTemplate(
@@ -267,7 +268,7 @@ export function useSendSveDayReport() {
       const doc = buildSveDayReportPdf(report, logo, profile?.name);
       const blob = doc.output('blob');
       const token = await ds.sve.issueDayReportLink(report.id, blob, profile?.key ?? '', profile?.name ?? '');
-      const link = `${window.location.origin}/sve-report/${token}`;
+      const link = `${APP_ORIGIN}/sve-report/${token}`;
       const body = `Site Visit Experience report ready for ${report.site} (${report.visitDate}), ${report.entries.length} client${report.entries.length === 1 ? '' : 's'}. View it: ${link}`;
 
       const managers = await ds.staff.list().catch(() => []);

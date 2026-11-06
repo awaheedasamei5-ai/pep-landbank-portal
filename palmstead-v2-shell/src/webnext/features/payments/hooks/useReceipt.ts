@@ -8,6 +8,7 @@ import { useLogDownload } from "../../../shared/hooks/useLogDownload";
 import type { Lead, Payment } from "../../../types/domain";
 import { useConfig } from "../../manager/hooks/useConfigSettings";
 import { buildReceiptPdf } from "../lib/receiptPdf";
+import { APP_ORIGIN } from "../../../shared/lib/appOrigin";
 
 function receiptBalanceSnapshot(payment: Payment) {
   const exact =
@@ -66,7 +67,7 @@ export function useIssueReceiptLink() {
       });
       const blob = doc.output("blob");
       const token = await getDataSource(demoMode).payments.issueReceiptLink(payment.id, blob, profile?.key ?? "");
-      return `${window.location.origin}/receipt/${token}`;
+      return `${APP_ORIGIN}/receipt/${token}`;
     },
   });
 }

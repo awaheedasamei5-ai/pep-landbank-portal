@@ -7,6 +7,7 @@ import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { getDataSource } from '../../../data/source';
 import { requireSupabase } from '@/lib/supabase.client';
 import { buildQuotationPdf, quotationFilename, type QuotationClientInfo } from '../lib/quotationPdf';
+import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import { computeLeadQuotationTotals, pricingFor } from '../lib/quotationLogic';
 import type { Config, Lead, PlotType } from '../../../types/domain';
 import type { QuotationTotals } from '../lib/quotationLogic';
@@ -61,7 +62,7 @@ async function tryShareQuotationWithClient(
       paymentPlan,
       createdBy,
     });
-    const link = `${window.location.origin}/quotation/${token}`;
+    const link = `${APP_ORIGIN}/quotation/${token}`;
     const firstName = client.name.split(' ')[0] || client.name;
     const template = await quotationThankYouTemplate();
     const message = renderTemplate(

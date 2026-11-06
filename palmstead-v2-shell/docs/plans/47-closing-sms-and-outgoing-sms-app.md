@@ -205,3 +205,58 @@ contact Trulander or reach out to us on 0544330390" -- the dialog was closed wit
 `npx tsc -b` clean. No real SMS was sent to any real client during this fix.
 
 Commit: see git log for this file's own commit alongside these changes.
+
+## 5. Broken links + harsh tone fix (2026-11-06)
+
+After reviewing the real sample SMS sent to the test number 0546416566, the user flagged two real
+bugs: "the link for the various sms link is invalid" and "u dont sound hash to the customer, u try
+to be polite." This is a scoped fix pass, not the full SMS rebuild the user separately requested
+next (tracked in memory `project-sms-engine-full-rebuild-decision`, starting only after this).
+
+**Root cause of the broken links**: every client-facing share-link hook (quotation, SVE invite, SVE
+report, receipt x2, contract) built its link from `window.location.origin` -- the STAFF MEMBER'S
+current browser origin, not a fixed public domain. Since nearly all of this session's testing ran
+against `localhost:3000`, every one of these SMS sent during testing carried an unreachable
+`http://localhost:3000/...` link. The one server-side flow (`process-finance-receipt-sms`, an edge
+function with no `window`) already correctly hardcoded the real domain
+(`https://palmstead-v2-shell.vercel.app`); the client-side hooks never matched it.
+
+**Fix**: new `src/webnext/shared/lib/appOrigin.ts` exporting `APP_ORIGIN` (real production domain,
+overridable via `NEXT_PUBLIC_APP_URL`), now used by all 5 affected hooks/screens instead of
+`window.location.origin`:
+- `useQuotationPdf.ts` (quotation link)
+- `SveManagementScreen.tsx` + `useSveManagement.ts` (visit-feedback invite link, sve-report link)
+- `useReceipt.ts` + `use-finance-receipts.ts` (receipt link, both real call sites)
+- `useSendContractToClient.ts` (contract link)
+
+The two internal auth-redirect uses of `window.location.origin` (password recovery,
+Google sign-in) were deliberately left untouched -- those correctly need the current browser's own
+origin since they redirect the same signed-in session back to itself, not a different device.
+
+**Real verification**: `npx tsc -b` clean. Confirmed a real existing `receipt_share_links` token
+resolves correctly on the real production domain (`https://palmstead-v2-shell.vercel.app/receipt/
+<token>`) -- loaded live in the browser pane, page correctly reads "Trulander JSF — Royal Palm
+Enclave" with a working "View receipt" action.
+
+**Tone rewrite**: compared every `sms_templates.body_template` row against the blueprint PDF's
+standard ("plain professional English... never add 'ignore if already paid' by default... avoid
+hypothetical threats") and rewrote all 7 static templates for a warmer, more respectful tone while
+keeping every fact (amounts, dates, names, routing) unchanged:
+- `payment_due_soon`: removed "If you have already paid, please ignore this reminder" entirely
+  (the blueprint explicitly prohibits this line by default) -- the real-time re-validation and
+  Phase H's staff-digest safety net already cover this case without asking the client to
+  self-police.
+- `payment_missed_first` / `payment_missed_escalated`: softened from commanding ("Please make
+  payment as soon as possible") to a respectful request ("Kindly settle this at your earliest
+  convenience"); the escalated template's penalty line was reframed as "may attract a penalty under
+  your agreement" rather than a bare threat.
+- `payment_staff_digest`, `quotation_thank_you`, `receipt_issued_thank_you`,
+  `sve_feedback_thank_you`: lightly polished for warmth/politeness; `quotation_thank_you` and
+  `receipt_issued_thank_you` gained a consistent "- Trulander JSF" sign-off they were missing.
+
+**Real verification**: sent the new `payment_due_soon` and `payment_missed_escalated` wording live
+to the test number 0546416566 via the real `send-sms` edge function (Arkesel), using a real Adams
+session token -- both confirmed delivered (`"ok":true,"status":200`). No real SMS was sent to any
+real client during this fix.
+
+Commit: see git log for this file's own commit alongside these changes.

@@ -25,6 +25,7 @@ import { SVE_REVIEW_QUESTIONS } from '../../../types/domain';
 import type { SveDayReportEntry } from '../../../types/domain';
 import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
 import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
+import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import styles from './SveManagementScreen.module.css';
 
 function initials(name: string): string {
@@ -37,7 +38,7 @@ function initials(name: string): string {
 }
 
 function inviteLink(token: string): string {
-  return `${window.location.origin}/visit-feedback/${token}`;
+  return `${APP_ORIGIN}/visit-feedback/${token}`;
 }
 
 function fmtLongDate(iso: string): string {
