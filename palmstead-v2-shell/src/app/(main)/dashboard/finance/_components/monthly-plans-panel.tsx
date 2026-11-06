@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, Info, Pause, Play, Plus, ShieldCheck } from "lucide-react";
+import { CalendarClock, Check, Info, Pause, PauseCircle, Play, PlayCircle, Plus, ShieldCheck } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
@@ -35,11 +36,14 @@ type CandidateRaw = {
   payments: ApprovedPaymentDate[] | null;
 };
 type InstallmentRaw = {
+  id: string;
   installment_no: number;
   due_date: string;
   due_amount: number;
   paid_amount: number;
   status: "scheduled" | "part_paid" | "paid" | "cancelled";
+  reconciliation_hold: boolean;
+  reconciliation_hold_reason: string | null;
 };
 type ScheduleRaw = {
   id: string;
@@ -139,7 +143,7 @@ function useMonthlySchedules() {
       const { data, error } = await requireSupabase()
         .from("finance_monthly_payment_schedules")
         .select(
-          "id,lead_id,plan_months,first_payment_date,sms_reminders_enabled,sms_consent_recorded_at,sms_consent_revoked_at,sms_consent_phone,status,created_at,leads(name,agent_key,contact),finance_monthly_payment_installments(installment_no,due_date,due_amount,paid_amount,status),finance_monthly_payment_reminder_outbox(status,created_at,provider_accepted_at)",
+          "id,lead_id,plan_months,first_payment_date,sms_reminders_enabled,sms_consent_recorded_at,sms_consent_revoked_at,sms_consent_phone,status,created_at,leads(name,agent_key,contact),finance_monthly_payment_installments(id,installment_no,due_date,due_amount,paid_amount,status,reconciliation_hold,reconciliation_hold_reason),finance_monthly_payment_reminder_outbox(status,created_at,provider_accepted_at)",
         )
         .order("created_at", { ascending: false })
         .limit(300);
@@ -234,6 +238,26 @@ export function MonthlyPlansPanel() {
     onSuccess: async () => {
       setConsentTarget(null);
       setEnableConsentConfirmed(false);
+      setErrorText(null);
+      await queryClient.invalidateQueries({ queryKey: ["finance-monthly-schedules"] });
+    },
+    onError: (error) => setErrorText(friendlyError(error)),
+  });
+
+  const [holdTarget, setHoldTarget] = useState<{ installmentId: string; hold: boolean; clientName: string } | null>(null);
+  const [holdReason, setHoldReason] = useState("");
+  const setHold = useMutation({
+    mutationFn: async ({ installmentId, hold, reason }: { installmentId: string; hold: boolean; reason: string }) => {
+      const { error } = await requireSupabase().rpc("set_finance_installment_reconciliation_hold", {
+        p_installment_id: installmentId,
+        p_hold: hold,
+        p_reason: hold ? reason : null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setHoldTarget(null);
+      setHoldReason("");
       setErrorText(null);
       await queryClient.invalidateQueries({ queryKey: ["finance-monthly-schedules"] });
     },
@@ -490,10 +514,39 @@ export function MonthlyPlansPanel() {
                                 {row.next.due_date < new Date().toISOString().slice(0, 10) && (
                                   <Badge variant="destructive">Overdue</Badge>
                                 )}
+                                {row.next.reconciliation_hold && (
+                                  <Badge variant="outline" className="gap-1 text-amber-700 dark:text-amber-400">
+                                    <PauseCircle className="size-3" /> On hold
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-muted-foreground text-xs">
                                 {ghs(Math.max(0, Number(row.next.due_amount) - Number(row.next.paid_amount)))} remaining
                               </div>
+                              {row.next.reconciliation_hold && row.next.reconciliation_hold_reason && (
+                                <div className="mt-1 text-amber-700 text-xs dark:text-amber-400">
+                                  {row.next.reconciliation_hold_reason}
+                                </div>
+                              )}
+                              {manager && (
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="mt-1 h-auto p-0 text-xs"
+                                  onClick={() => {
+                                    const installment = row.next;
+                                    if (!installment) return;
+                                    setHoldTarget({
+                                      installmentId: installment.id,
+                                      hold: !installment.reconciliation_hold,
+                                      clientName: row.clientName,
+                                    });
+                                    setHoldReason("");
+                                  }}
+                                >
+                                  {row.next.reconciliation_hold ? "Resume reminders" : "Hold reminders"}
+                                </Button>
+                              )}
                             </>
                           ) : (
                             <span className="text-muted-foreground">No remaining instalments</span>
@@ -615,6 +668,69 @@ export function MonthlyPlansPanel() {
               onClick={() => consentTarget && updateReminder.mutate({ scheduleId: consentTarget.id, enabled: true })}
             >
               <Check data-icon="inline-start" /> Enable reminders
+            </SubmitButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(holdTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHoldTarget(null);
+            setHoldReason("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{holdTarget?.hold ? "Hold automated reminders" : "Resume automated reminders"}</DialogTitle>
+          </DialogHeader>
+          {holdTarget?.hold ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-muted-foreground text-sm">
+                No due-soon, due-today or missed-payment SMS will be sent to {holdTarget.clientName} for this
+                instalment while it is under reconciliation. A reason is required.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="hold-reason">Reason</Label>
+                <Textarea
+                  id="hold-reason"
+                  value={holdReason}
+                  onChange={(e) => setHoldReason(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Client disputes this instalment was already settled, investigating a bank transfer."
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Automated reminders will resume for {holdTarget?.clientName}'s next unpaid instalment as normal.
+            </p>
+          )}
+          {errorText && (
+            <p role="alert" className="text-destructive text-sm">
+              {errorText}
+            </p>
+          )}
+          <DialogFooter>
+            <SubmitButton
+              loading={setHold.isPending}
+              disabled={!holdTarget || (holdTarget.hold && !holdReason.trim())}
+              onClick={() =>
+                holdTarget &&
+                setHold.mutate({ installmentId: holdTarget.installmentId, hold: holdTarget.hold, reason: holdReason })
+              }
+            >
+              {holdTarget?.hold ? (
+                <>
+                  <PauseCircle data-icon="inline-start" /> Place hold
+                </>
+              ) : (
+                <>
+                  <PlayCircle data-icon="inline-start" /> Resume reminders
+                </>
+              )}
             </SubmitButton>
           </DialogFooter>
         </DialogContent>
