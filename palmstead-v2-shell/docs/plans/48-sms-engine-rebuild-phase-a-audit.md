@@ -367,13 +367,77 @@ real send on either check. Neither should gate the EXISTING kinds that are alrea
 without human review (due-soon, missed-payment, etc.) without separate, deliberate Phase E design —
 this task only measured, per the blueprint's own explicit Phase D sequencing.
 
-**Phase E — Controlled go-live**:
-1. Feature-flag the new unified engine per SMS kind, migrating one kind at a time rather than a
-   single cutover.
-2. Internal/staff pilot first (the existing test-number pattern, `0546416566`, already established
-   this session, is a natural fit here).
-3. Build the acceptance-test catalogue from the blueprint's §9 as real automated tests before
-   calling any kind "migrated."
+**Phase E — Controlled go-live. DONE, 2026-11-06.**
+
+1. **DONE.** New `sms_templates.review_enforced` flag, enabled for `lead_closing_sms` only (the
+   other 8 kinds stay in Phase D's shadow mode — not migrated this pass). "Enforced" means
+   `approve_outbound_sms_draft` now runs the deterministic validator (§ Phase D) against a **fresh**
+   read of the lead/agent/company-phone data at approval time (not the draft's stale creation-time
+   snapshot) before letting a human-confirmed send through. The AI reviewer's `DO_NOT_SEND` verdict
+   deliberately stays advisory/shadow-only for now — Phase D's own honest assessment ("10 samples is
+   too few to set a numeric rejection-rate threshold with confidence") still holds; only the
+   validator, which had zero false positives on 93 real messages, was promoted to a hard gate. A
+   failing draft moves to a new `needs_review` status (reusing the exact vocabulary the finance
+   outbox already defines) instead of silently vanishing or crashing — visible in the same Drafts
+   tab with a destructive badge, editable and re-submittable, or dismissible, by Management.
+
+   **A real, previously-latent bug was found and fixed while wiring this**: the pre-existing
+   `approve_outbound_sms_draft`'s own `UPDATE ... RETURNING recipient_phone, body` was genuinely
+   ambiguous (Postgres raises `42702`, not a silent guess) against its own `RETURNS TABLE`-declared
+   OUT parameters of the same names. This almost certainly pre-dates Phase E and may never have been
+   exercised by a real human "Confirm & send" click before now. Fixed by table-qualifying the
+   `RETURNING` list.
+
+   **Live-verified** inside a rolled-back transaction, impersonating a real manager: a deliberately
+   bad message ("Hello Mr, ... pay GHS 9,999 today" — wrong truncated name, a hallucinated amount) on
+   a real lead → `blocked=true`, reason `missing_required_field: "Mr Joe"`, row moved to
+   `needs_review`. A correct message on the same lead → `blocked=false`, row moved to `approved`.
+   Confirmed via a direct count that neither synthetic row persisted after rollback.
+
+2. **DONE.** Built and ran all 9 of the blueprint's §9 acceptance-test scenarios as real, executed
+   SQL (not just a document) against this codebase's actual tables/functions, each inside its own
+   `begin...rollback` so zero synthetic data touched production. **All 9 PASS**:
+
+   | # | Scenario | Result |
+   |---|---|---|
+   | T1 | Advance reminder, correct predicate, idempotent on re-run | PASS (1 outbox row, 0 new rows on 2nd run) |
+   | T2 | Payment posted before dispatch → excluded from re-validation | PASS |
+   | T3 | Partial payment → reduced balance (GHS 2,500 of GHS 3,500) used, due-today picked up | PASS |
+   | T4 | Schedule revision → old (cancelled) installment's reminder excluded, only the new one claimable | PASS |
+   | T5 | Same webhook event replayed twice → one logical row, not two | PASS (see real fix below) |
+   | T6 | `reconciliation_hold` → zero reminders of any kind (due-today/missed/due-soon all tried) | PASS |
+   | T7 | Two overdue installments, one partial → accurate escalation total (GHS 2,500 + GHS 3,500 = GHS 6,000, count 2), replicating the real edge function's own query exactly | PASS |
+   | T8 | `sms_opt_out` → lead genuinely eligible before, genuinely excluded after (proper before/after, not just a trivially-false check) | PASS |
+   | T9 | The blueprint's own named test: validator rejects GHS 3,500 silently altered to GHS 3,000 | PASS |
+
+   **Real gap found and fixed by T5, not just documented**: `sms_delivery_events` (Phase C's new
+   delivery-tracking table) had zero dedupe — a replayed Arkesel callback created a duplicate row
+   every single time, which would have failed this exact acceptance test as originally built. Added
+   a real partial unique index on `(provider_reference, status)` and changed the webhook receiver
+   (`arkesel-delivery-webhook`, now v2) to upsert with `ignoreDuplicates: true` instead of a bare
+   insert — a genuine status *transition* for the same `sms_id` (e.g. submitted → delivered) still
+   inserts correctly, only an exact replay is suppressed.
+
+3. **DONE.** Internal/staff pilot number (`app_config.sms_qa_backloop_phone = 233546416566`)
+   reconfirmed still correctly set, unaffected by this phase's changes.
+
+**Honest final status of the whole rebuild (Phases A-E)**:
+
+- **Fully live and enforced today**: `lead_closing_sms` — the only kind whose send is actually
+  gated on the deterministic validator. All 9 kinds have editable templates, delivery tracking, and
+  segment/cost logging (Phases B/C). The 2 human-approved kinds (`lead_closing_sms`,
+  `payment_schedule_change_sms`) have shadow AI review visible as a badge.
+- **Still shadow-mode only, not gating real sends**: the other 8 kinds' validator/AI checks, and
+  `payment_schedule_change_sms`'s own validator (it was not promoted to `review_enforced` this pass
+  — recommend doing so next, since it already has the same one-tap-confirm human gate
+  `lead_closing_sms` does, making it the next safest candidate).
+- **Genuinely unresolved, needs a human outside this codebase**: whether "Trulander JSF" is a
+  registered Arkesel Sender ID (only "Palmstead" is confirmed working); the real Arkesel webhook
+  payload/signature shape (inferred from third-party docs, not Arkesel's own confirmed spec).
+- **Recommendation**: monitor `lead_closing_sms`'s real `needs_review` rate for a week or two of
+  real cron activity (every 20 minutes) before promoting `payment_schedule_change_sms` to enforced,
+  then work through the remaining 8 kinds one at a time, cheapest/lowest-risk first (likely the
+  thank-you kinds, since they carry no financial figures the validator would ever need to check).
 
 ---
 

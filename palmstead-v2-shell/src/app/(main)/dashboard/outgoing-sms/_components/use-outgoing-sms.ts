@@ -32,7 +32,7 @@ export type OutboundDraft = {
   recipient_phone: string | null;
   body: string;
   angle: string | null;
-  status: "pending" | "approved" | "sent" | "dismissed";
+  status: "pending" | "approved" | "sent" | "dismissed" | "needs_review";
   created_at: string;
   approved_by: string | null;
   approved_at: string | null;
@@ -94,6 +94,25 @@ export function useOutboundDrafts(status: OutboundDraft["status"] | "all") {
   });
 }
 
+// A draft held by Phase E's enforced validator (kinds with sms_templates.
+// review_enforced = true) needs to stay visible for Management to edit and
+// resubmit, alongside the normal pending queue -- not a separate tab.
+export function useReviewableOutboundDrafts() {
+  return useQuery({
+    queryKey: ["outbound-sms-drafts", "reviewable"],
+    queryFn: async (): Promise<OutboundDraft[]> => {
+      const { data, error } = await requireSupabase()
+        .from("outbound_sms_drafts")
+        .select("*")
+        .in("status", ["pending", "needs_review"])
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (error) throw error;
+      return (data ?? []) as OutboundDraft[];
+    },
+  });
+}
+
 export function useApproveAndSendDraft() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -101,6 +120,14 @@ export function useApproveAndSendDraft() {
       const { data, error } = await requireSupabase().rpc("approve_outbound_sms_draft", { p_id: id, p_body: body });
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
+      // Phase E: a kind with review_enforced=true can hold the draft at
+      // 'needs_review' instead of approving it, if the deterministic
+      // validator finds a real factual mismatch against a fresh read of
+      // the trusted data. Surface that as a normal thrown error so the
+      // existing dialog's catch(e) path shows it -- no real send happens.
+      if ((row as { blocked?: boolean } | null)?.blocked) {
+        throw new Error((row as { block_reason?: string }).block_reason ?? "This message was held for review.");
+      }
       const phone = (row as { recipient_phone?: string | null } | null)?.recipient_phone ?? null;
       const finalBody = (row as { body?: string } | null)?.body ?? body;
       if (phone) {
@@ -113,6 +140,10 @@ export function useApproveAndSendDraft() {
       await requireSupabase().rpc("mark_outbound_sms_draft_sent", { p_id: id });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outbound-sms-drafts"] }),
+    // A blocked attempt still moved the draft to 'needs_review' in the DB
+    // before throwing -- refetch so the list reflects that, not just the
+    // error dialog.
+    onError: () => queryClient.invalidateQueries({ queryKey: ["outbound-sms-drafts"] }),
   });
 }
 

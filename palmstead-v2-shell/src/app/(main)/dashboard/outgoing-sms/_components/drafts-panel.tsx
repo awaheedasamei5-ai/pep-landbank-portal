@@ -16,7 +16,7 @@ import {
   friendlyError,
   useApproveAndSendDraft,
   useDismissDraft,
-  useOutboundDrafts,
+  useReviewableOutboundDrafts,
   useShadowReviews,
 } from "./use-outgoing-sms";
 
@@ -57,7 +57,7 @@ function ShadowReviewBadge({
 }
 
 export function DraftsPanel() {
-  const drafts = useOutboundDrafts("pending");
+  const drafts = useReviewableOutboundDrafts();
   const approve = useApproveAndSendDraft();
   const dismiss = useDismissDraft();
   const [open, setOpen] = useState<OutboundDraft | null>(null);
@@ -93,6 +93,9 @@ export function DraftsPanel() {
                 <span>{row.recipient_phone ?? "No phone on file"}</span>
                 {row.angle && <Badge variant="secondary">{ANGLE_LABELS[row.angle] ?? row.angle}</Badge>}
                 <span>{dateLabel(row.created_at)}</span>
+                {row.status === "needs_review" && (
+                  <Badge variant="destructive">Held: failed an automatic accuracy check</Badge>
+                )}
                 <ShadowReviewBadge outboxRowId={row.id} reviews={shadow.data} />
               </div>
             </div>
