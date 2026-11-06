@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Camera, Images, MapPin, X } from 'lucide-react';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
-import { parseGoogleMapsLatLng } from '../lib/bannerLogic';
+import { parseGoogleMapsLatLng, validBannerCoordinates } from '../lib/bannerLogic';
 import { useCreateBanner, useLogBannerStatusUpdate } from '../hooks/useBanners';
 import type { BannerStatus, NewBanner } from '../../../types/domain';
 import styles from './BannerAddModal.module.css';
@@ -55,6 +55,12 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
 
   function handleMapsLinkChange(value: string) {
     setMapsLink(value);
+    const coords = parseGoogleMapsLatLng(value);
+    if (coords) {
+      setError(null);
+      setLat(coords.lat.toFixed(6));
+      setLng(coords.lng.toFixed(6));
+    }
   }
 
   function parseMapsLink() {
@@ -98,6 +104,10 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
     }
     if (!area.trim()) {
       setError('Add an area');
+      return;
+    }
+    if ((lat === '') !== (lng === '') || (lat !== '' && !validBannerCoordinates(Number(lat), Number(lng)))) {
+      setError('Enter both coordinates in their valid ranges, or leave both blank.');
       return;
     }
     setSaving(true);
@@ -180,7 +190,6 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
             placeholder="https://maps.google.com/…"
             value={mapsLink}
             onChange={(e) => handleMapsLinkChange(e.target.value)}
-            onPaste={() => setTimeout(parseMapsLink, 0)}
             onBlur={parseMapsLink}
           />
           <p className={styles.hint}>pulls the coordinates out automatically — use the full link from the address bar, not a shortened maps.app.goo.gl one</p>

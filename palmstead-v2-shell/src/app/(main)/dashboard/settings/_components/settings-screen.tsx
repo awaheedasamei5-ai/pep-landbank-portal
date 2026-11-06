@@ -11,6 +11,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireSupabase } from "@/lib/supabase.client";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 import { MyAccess } from "./my-access";
 import { PhoneSettings } from "./phone-settings";
@@ -130,10 +131,15 @@ export function SettingsScreen() {
     if (error) setMessage("Your details could not be saved. Please try again.");
     else {
       setProfile({ ...profile, ...updates });
+      useAuthStore.setState((state) => ({
+        profile: state.profile ? { ...state.profile, phone: contact || undefined } : null,
+      }));
       setAddress(updates.address ?? "");
       setPhone(contact);
       setWhatsapp(whatsappContact);
-      setMessage("Your personal and contact details were saved.");
+      setMessage(profile.role === "manager" && contact && !profile.phone
+        ? "Your contact details were saved. Daily report SMS is now scheduled for this number."
+        : "Your personal and contact details were saved.");
     }
     setSaving(false);
   }
