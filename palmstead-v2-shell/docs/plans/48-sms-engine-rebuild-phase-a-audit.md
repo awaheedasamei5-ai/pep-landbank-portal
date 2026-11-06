@@ -321,6 +321,41 @@ JSF" in both its DB row and its code fallback (also wrong, this is a staff notic
    browser as Management — correctly shows `APPROVED_WORDING` and `DO_NOT_SEND` badges matching the
    real logged rows.
 
+## Phase D follow-up — both real bugs found above are now fixed
+
+**Bug 1 — name truncation, root cause and fix**: `send-lead-closing-drafts/index.ts` built the SMS
+greeting with `cleanText(row.name, 40).split(" ")[0]` — deliberately keeping only the first
+whitespace-separated token of the lead's stored name. For a name like "Mr Joe" or "Aunty Becky" that
+first token is a title, not the person's actual name, producing "Hello Mr"/"Hello Aunty". Fixed by
+using the lead's full stored name directly (`cleanText(row.name, 60)`), matching every other
+client-facing SMS template's own convention (e.g. the payment reminders already greet "Hello Mr
+Joe" using the full name, never a split). **Verified**: ran the real `sms_copy_review` AI endpoint 5
+times each against the old truncated text and the new full-name text for the same real client
+("Aunty Becky") — old version: 4/5 `DO_NOT_SEND`; new version: 5/5 `APPROVED_WORDING`. Deployed as
+`send-lead-closing-drafts` v5.
+
+**Bug 2 — angle rotation, root cause and fix**: the angle was picked with
+`ANGLES[row.prior_draft_count % ANGLES.length]`. `prior_draft_count` is 0 for every lead's first-ever
+closing SMS, and since all 93 real pending drafts were each lead's FIRST message (the initial
+backlog drain), every single one resolved to `ANGLES[0]` = `"reassurance"` — the rotation logic
+itself was fine for a given lead's 2nd/3rd/etc. message, it just had no source of cross-lead variety
+on first contact. Fixed by adding a deterministic per-lead hash offset
+(`leadAngleOffset(leadId)`, a simple string hash mod 7) added to `prior_draft_count` before indexing
+into `ANGLES`, so different leads' first messages land on different angles while a given lead's
+own sequence still advances by +1 each time (preserving "never repeat this lead's last angle").
+**Verified**: simulated the new formula against 20 real lead IDs from the drafts table — spread
+across 6 of the 7 angles (`gentle_urgency` 5, `reassurance` 5, `personal_checkin` 3, `social_proof`
+3, `flexible_plans` 2, `addressing_objections` 1, `plot_benefits` 1), vs. 20/20 `reassurance` before
+the fix. Deployed in the same `send-lead-closing-drafts` v5.
+
+**The 93 existing pending drafts**: deleted outright, not left in place or merely dismissed.
+`compute_lead_closing_candidates()`'s 30-day exclusion checks for *any* row (regardless of status)
+in `outbound_sms_drafts` for that lead — leaving the 93 bad rows there (even marked `dismissed`)
+would have blocked these same leads from getting a corrected draft for 30 real days. Confirmed via
+SQL: 93 `pending` rows deleted, the unrelated 37 `dismissed` (invalid-phone) rows left untouched.
+The next real cron tick (`dispatch_lead_closing_drafts`, every 20 minutes) will regenerate correct,
+varied, full-name drafts for these same leads from scratch.
+
 **Honest assessment for Phase E**: the deterministic validator is trustworthy as a hard gate today
 — it caught the blueprint's own adversarial example and found zero false positives on 93 real
 messages. The AI reviewer is also already finding genuine real bugs (2/10, a 20% real catch rate on

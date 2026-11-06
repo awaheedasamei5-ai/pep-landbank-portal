@@ -42,6 +42,24 @@ function cleanText(value: string, maxLength: number): string {
   return value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+// Deterministic per-lead offset so different leads' FIRST closing SMS land on
+// different angles. prior_draft_count alone is 0 for every lead's first
+// message, which collapsed the whole initial backlog onto ANGLES[0]
+// ("reassurance") for all 93 real pending drafts -- caught by the Phase D
+// shadow AI reviewer. Subsequent messages to the same lead still advance by
+// +1 each time, so the "don't repeat this lead's last angle" guarantee holds.
+function leadAngleOffset(leadId: string): number {
+  let hash = 0;
+  for (let i = 0; i < leadId.length; i++) {
+    hash = (hash * 31 + leadId.charCodeAt(i)) >>> 0;
+  }
+  return hash % ANGLES.length;
+}
+
+function angleFor(row: Pick<Candidate, "lead_id" | "prior_draft_count">): (typeof ANGLES)[number] {
+  return ANGLES[(leadAngleOffset(row.lead_id) + row.prior_draft_count) % ANGLES.length];
+}
+
 // Processes up to CONCURRENCY leads at a time instead of one at a time --
 // the same total work finishes in a fraction of the wall-clock time, well
 // inside the platform's per-invocation execution budget.
@@ -82,13 +100,13 @@ Deno.serve(async (request) => {
     if (!phone) {
       // Real data-quality gap, not transient -- record it so this lead
       // doesn't reoccupy a batch slot on every 20-minute tick forever.
-      const angle = ANGLES[row.prior_draft_count % ANGLES.length];
+      const angle = angleFor(row);
       await supabase.rpc("insert_lead_closing_skip", { p_lead_id: row.lead_id, p_name: row.name, p_angle: angle });
       skipped += 1;
       return;
     }
     const hasAgent = !!row.agent_name && !!row.agent_phone;
-    const angle = ANGLES[row.prior_draft_count % ANGLES.length];
+    const angle = angleFor(row);
     const aiResp = await fetch(`${url}/functions/v1/ai-insights`, {
       method: "POST",
       headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
@@ -111,8 +129,13 @@ Deno.serve(async (request) => {
       aiFailed += 1;
       return;
     }
-    const firstName = cleanText(row.name, 40).split(" ")[0] || "there";
-    const body = cleanText(draft.replace(/\{ClientName\}/g, firstName), 480);
+    // Use the lead's real, full stored name for the greeting -- matching
+    // every other client-facing SMS template's convention (e.g. "Hello Mr
+    // Joe"). Splitting to the first whitespace token previously truncated
+    // names like "Mr Joe" / "Aunty Becky" to a bare title ("Mr"/"Aunty"),
+    // caught by the Phase D shadow AI reviewer.
+    const fullName = cleanText(row.name, 60) || "there";
+    const body = cleanText(draft.replace(/\{ClientName\}/g, fullName), 480);
     const { error: insertError } = await supabase.rpc("insert_lead_closing_draft", {
       p_lead_id: row.lead_id,
       p_name: row.name,
