@@ -115,7 +115,8 @@ export function SiteVisitReportsScreen(){
       const staffLabel=manager?(report.data.staff.find((s)=>s.agent_key===staffKey)?.name??'All staff'):profile.name;
       let y=pdfBrandedHeader(doc,'Site visits report',from+' to '+to,[staffLabel,'Generated '+new Date().toLocaleString('en-GB',{timeZone:'Africa/Accra'})],null);
       doc.setFontSize(9);
-      doc.text('Date basis: scheduled visit date. Attendance is counted only when explicitly marked.',14,y);y+=13;
+      doc.text('Date basis: scheduled visit date. Attendance is counted only when explicitly marked.',14,y);y+=6;
+      doc.text('Unconfirmed is not a no-show. A linked lead is not a sale.',14,y);y+=13;
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scope and outcomes');
       autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
         ['Site',site||'All sites'],['Source',source||'All sources'],['Outcome',status==='all'?'All outcomes':outcomeLabel(status)],
@@ -150,13 +151,6 @@ export function SiteVisitReportsScreen(){
       if(y>245){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit register',filtered.length+' records');
       autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,v.agent_name,v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
-      y=nextY(doc,y);
-      y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Definitions');
-      doc.setFont('helvetica','normal');doc.setFontSize(9);
-      ['Unconfirmed means the attendance field has not been set; it is not a no-show.',
-       'Lead linkage is a record link, not a sale or payment conversion.',
-       'Cancelled visits remain in the audit register and are excluded from the confirmation-rate denominator.'
-      ].forEach((line)=>{doc.text(line,16,y);y+=6});
       pdfReportFooter(doc,'Palmstead');
       doc.save('Palmstead-site-visits-'+from+'-to-'+to+'.pdf');
     }catch(cause){setPdfError(cause instanceof Error?cause.message:'Could not create the PDF.')}finally{setPdfBusy(false)}
