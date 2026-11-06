@@ -209,6 +209,7 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   if ("bannerId" in patch) dbPatch.banner_id = patch.bannerId;
   if ("address" in patch) dbPatch.address = patch.address;
   if ("kyc" in patch) dbPatch.kyc = patch.kyc;
+  if ("smsOptOut" in patch) dbPatch.sms_opt_out = patch.smsOptOut;
   if ("amtPaid" in patch && "grandTotal" in patch)
     dbPatch.balance = Math.max((patch.grandTotal ?? 0) - (patch.amtPaid ?? 0), 0);
   return dbPatch;

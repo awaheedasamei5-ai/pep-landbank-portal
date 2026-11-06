@@ -113,6 +113,7 @@ export function mapLeadRow(r: Record<string, unknown>): Lead {
     deletedByName: (r.deleted_by_name as string) ?? null,
     deletionReason: (r.deletion_reason as string) ?? null,
     clientNo: (r.client_no as string) ?? null,
+    smsOptOut: Boolean(r.sms_opt_out),
   };
 }
 

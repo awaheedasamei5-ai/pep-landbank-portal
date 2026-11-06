@@ -102,10 +102,49 @@ page). Three tabs:
   Phases H/I, nothing in this feature can reach a real client's phone without a human's explicit
   "Confirm & send" afterward.
 
-## 3. Open items (not done in this pass, stated plainly)
-- The 7 static SMS kinds' real call sites are not yet refactored to read from `sms_templates`.
-- The closing-SMS worker's single-invocation batch limit (see 1.3) needs a real fix before a
-  future month's cron run can be trusted to finish unattended.
-- No real do-not-contact/opt-out flag exists on `leads` today, so the closing-SMS audience has no
-  way to exclude someone who has asked not to be contacted -- flagged, not fixed, since no such
-  flag exists anywhere in this schema to read from.
+## 3. Follow-up pass (2026-11-06) -- all 3 open items closed
+
+### 3.1 All 9 SMS kinds now read from `sms_templates`
+The 7 static kinds (`payment_due_soon`, `payment_missed_first`, `payment_missed_escalated`,
+`payment_staff_digest`, `quotation_thank_you`, `sve_feedback_thank_you`, `receipt_issued_thank_you`)
+were refactored one at a time, each re-deployed and confirmed against its own real call site:
+`process-finance-monthly-reminders` (v4/v5), `send-finance-missed-payment-digest` (v2),
+`process-finance-receipt-sms` (v2), `useQuotationPdf.ts`, `useSveManagement.ts`. `sms_templates`'s
+`SELECT` RLS was widened from manager-only to any authenticated staff member (read-only -- the
+template text isn't sensitive), since quotation/SVE/receipt SMS fire under an agent's own session,
+not just Management's. Editing any of the 9 rows in the Templates tab now genuinely changes what
+the system sends.
+
+### 3.2 Closing-SMS batching fixed, real backlog fully drained
+`compute_lead_closing_candidates()` now takes a real `p_limit` (default 25); `send-lead-closing-drafts`
+processes a batch with 5-way concurrency instead of one lead at a time; the cron runs every 20
+minutes (self-limiting -- a lead drafted in the last 30 days is never re-selected) instead of
+monthly, so a future large batch drains over a few ticks rather than needing to finish in one
+invocation. New `insert_lead_closing_skip()` records a real `dismissed` row (with a plain-English
+reason) for a lead with no valid Ghana phone, so it stops reoccupying a batch slot forever.
+**Real verification**: drained the entire live backlog -- all 130 real eligible leads now have a
+real outcome (93 real pending drafts, 37 correctly dismissed for an invalid/malformed phone number
+-- "." placeholders, missing leading zero, international numbers; a genuine pre-existing
+data-quality gap, not something this pass invented or silently papered over). Confirmed idempotent:
+a follow-up invocation changed nothing (0 new candidates, counts unchanged).
+
+### 3.3 Real `sms_opt_out` flag
+New nullable-default-`false` `leads.sms_opt_out` column. Every automated client-facing SMS queueing
+query now excludes it: `compute_lead_closing_candidates()`, `queue_finance_monthly_payment_reminders()`,
+`queue_finance_missed_payment_reminders()` -- and `process-finance-monthly-reminders`'s own real-time
+re-check (the last gate before an actual send) was also updated to re-verify it, in case a client
+opts out after a reminder is already queued. A real toggle ("Do not send automated SMS") was added
+to the Client section of a lead's detail page (Master Pipeline/Client Database), next to the
+existing Edit action.
+**Real verification**: toggled it live on a real lead (Master Pipeline's `abdul`) as Management --
+confirmed via SQL it persisted (`sms_opt_out = true`), confirmed the checkbox still showed checked
+after a full page reload, then toggled it back off and confirmed the real lead's data was restored
+exactly as it was. Separately confirmed the exclusion logic itself inside a `begin...rollback`
+transaction using the real "Mr Joe" lead (the one real candidate remaining after deleting its
+existing draft): 1 candidate before setting `sms_opt_out = true`, 0 candidates after -- then rolled
+back, leaving Mr Joe's real pending draft and `sms_opt_out` flag untouched.
+
+All writes in this follow-up pass that touched real finance/lead tables for verification purposes
+were made inside `begin...rollback` transactions, except the one real, intentional, reversed-back
+UI toggle test above and the real (non-reversible but harmless) backlog-draining calls, which only
+ever insert `pending`/`dismissed` draft rows -- never an actual SMS send.

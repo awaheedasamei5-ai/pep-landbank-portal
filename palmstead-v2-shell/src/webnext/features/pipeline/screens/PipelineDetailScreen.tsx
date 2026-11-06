@@ -208,7 +208,19 @@ export function ClientSection({ lead }: { lead: Lead }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(lead.name);
   const [contact, setContact] = useState(lead.contact);
+  const [smsOptOut, setSmsOptOut] = useState(lead.smsOptOut ?? false);
   const [error, setError] = useState<string | null>(null);
+
+  // docs/plans/47 open item 3 -- toggled separately from the name/contact
+  // edit flow below so staff can set it in one tap without opening the
+  // full edit form.
+  const toggleOptOut = (next: boolean) => {
+    setSmsOptOut(next);
+    update.mutateAsync({ id: lead.id, patch: { smsOptOut: next, expectedVersion: lead.version ?? undefined } }).catch((e) => {
+      setSmsOptOut(!next);
+      setError(friendlyError(e, 'Failed to save'));
+    });
+  };
 
   if (!editing) {
     return (
@@ -227,6 +239,11 @@ export function ClientSection({ lead }: { lead: Lead }) {
           <span className={styles.readLabel}>Contact</span>
           <span>{lead.contact || '—'}</span>
         </div>
+        <label className={styles.readRow} style={{ cursor: 'pointer' }}>
+          <span className={styles.readLabel}>Do not send automated SMS</span>
+          <input type="checkbox" checked={smsOptOut} disabled={update.isPending} onChange={(e) => toggleOptOut(e.target.checked)} />
+        </label>
+        {error && <p className={styles.errorMsg}>{error}</p>}
       </div>
     );
   }

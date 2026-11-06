@@ -137,6 +137,11 @@ export interface Lead {
   // auto-incrementing number (which identifies the payment, not the
   // client).
   clientNo?: string | null;
+  // Real column `sms_opt_out` (docs/plans/47 open item 3) -- a real
+  // do-not-contact flag every automated client-facing SMS queueing query
+  // (closing/nurture, due-soon, missed-payment/escalated) now excludes.
+  // Defaults false; staff set it per lead on request.
+  smsOptOut?: boolean;
 }
 
 // Every field the Pipeline Update accordion's "Save update" can change in
@@ -193,6 +198,9 @@ export interface LeadUpdate {
   // last-write-wins behavior, matching every existing call site until each
   // is deliberately updated to pass it.
   expectedVersion?: number;
+  // docs/plans/47 open item 3 -- real do-not-contact flag, settable from
+  // the Client section of a lead's detail page.
+  smsOptOut?: boolean;
 }
 
 export interface LeadKyc {

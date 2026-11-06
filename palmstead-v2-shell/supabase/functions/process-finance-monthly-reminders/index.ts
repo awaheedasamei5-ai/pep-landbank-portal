@@ -150,7 +150,7 @@ Deno.serve(async (request) => {
       { data: schedule, error: scheduleError },
       { data: installment, error: installmentError },
     ] = await Promise.all([
-      supabase.from("leads").select("name,contact,deleted_at,plot_type").eq("id", row.lead_id).maybeSingle(),
+      supabase.from("leads").select("name,contact,deleted_at,plot_type,sms_opt_out").eq("id", row.lead_id).maybeSingle(),
       supabase
         .from("finance_monthly_payment_schedules")
         .select("status,sms_reminders_enabled,sms_consent_recorded_at,sms_consent_phone")
@@ -182,6 +182,7 @@ Deno.serve(async (request) => {
     } else if (
       !lead ||
       lead.deleted_at ||
+      lead.sms_opt_out ||
       !schedule ||
       schedule.status !== "active" ||
       !schedule.sms_reminders_enabled ||
