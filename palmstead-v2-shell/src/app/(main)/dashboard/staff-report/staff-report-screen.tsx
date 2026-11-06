@@ -19,7 +19,7 @@ type Row = Record<string, unknown>;
 type ReportSection = 'attendance' | 'calls' | 'leads' | 'visits' | 'tasks' | 'banners';
 type ReportRows = Record<ReportSection, Row[]>;
 const sections: { id: ReportSection; title: string; url: string; columns: { key: string; title: string }[] }[] = [
-  { id: 'attendance', title: 'Attendance', url: '/dashboard/attendance', columns: [{ key: 'work_date', title: 'Day' }, { key: 'sign_in_at', title: 'In' }, { key: 'sign_out_at', title: 'Out' }] },
+  { id: 'attendance', title: 'Attendance', url: '/dashboard/attendance/reports', columns: [{ key: 'work_date', title: 'Day' }, { key: 'sign_in_at', title: 'In' }, { key: 'sign_out_at', title: 'Out' }] },
   { id: 'calls', title: 'Calls and activity', url: '/dashboard/pipeline/reports', columns: [{ key: 'created_at', title: 'When' }, { key: 'client', title: 'Client' }, { key: 'action', title: 'Action' }, { key: 'outcome', title: 'Outcome' }] },
   { id: 'leads', title: 'New leads', url: '/dashboard/pipeline/reports', columns: [{ key: 'date_added', title: 'Added' }, { key: 'name', title: 'Client' }, { key: 'stage', title: 'Stage' }, { key: 'lead_source', title: 'Source' }] },
   { id: 'visits', title: 'Site visits', url: '/dashboard/site-visits', columns: [{ key: 'visit_date', title: 'Visit day' }, { key: 'name', title: 'Client' }, { key: 'site', title: 'Site' }, { key: 'status', title: 'Status' }] },
