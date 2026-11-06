@@ -8,7 +8,7 @@ type OutboxRow = {
   lead_id: string;
   idempotency_key: string;
   attempt_count: number;
-  reminder_type: "due_soon" | "missed_payment";
+  reminder_type: "due_soon" | "due_today" | "missed_payment";
 };
 
 type Delivery = {
@@ -128,7 +128,7 @@ Deno.serve(async (request) => {
   const { data: templateRows } = await supabase
     .from("sms_templates")
     .select("kind,body_template")
-    .in("kind", ["payment_due_soon", "payment_missed_first", "payment_missed_escalated"]);
+    .in("kind", ["payment_due_soon", "payment_due_today", "payment_missed_first", "payment_missed_escalated"]);
   const templates = new Map((templateRows ?? []).map((row) => [row.kind as string, row.body_template as string | null]));
 
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
@@ -144,7 +144,8 @@ Deno.serve(async (request) => {
   let blocked = 0;
   let persistenceErrors = 0;
   for (const row of (rows ?? []) as OutboxRow[]) {
-    const reminderType = row.reminder_type === "missed_payment" ? "missed_payment" : "due_soon";
+    const reminderType =
+      row.reminder_type === "missed_payment" ? "missed_payment" : row.reminder_type === "due_today" ? "due_today" : "due_soon";
     const [
       { data: lead, error: leadError },
       { data: schedule, error: scheduleError },
@@ -158,7 +159,7 @@ Deno.serve(async (request) => {
         .maybeSingle(),
       supabase
         .from("finance_monthly_payment_installments")
-        .select("due_date,due_amount,paid_amount,status")
+        .select("due_date,due_amount,paid_amount,status,reconciliation_hold")
         .eq("id", row.installment_id)
         .maybeSingle(),
     ]);
@@ -169,7 +170,9 @@ Deno.serve(async (request) => {
       (reminderType === "due_soon"
         ? new Date(`${installment.due_date}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime() ===
           7 * 86_400_000
-        : new Date(`${installment.due_date}T00:00:00Z`).getTime() < new Date(`${today}T00:00:00Z`).getTime());
+        : reminderType === "due_today"
+          ? installment.due_date === today
+          : new Date(`${installment.due_date}T00:00:00Z`).getTime() < new Date(`${today}T00:00:00Z`).getTime());
 
     let outcome: Delivery;
     if (leadError || scheduleError || installmentError) {
@@ -190,6 +193,7 @@ Deno.serve(async (request) => {
       normalizeGhanaPhone(lead.contact) !== schedule.sms_consent_phone ||
       !installment ||
       !["scheduled", "part_paid"].includes(installment.status) ||
+      installment.reconciliation_hold ||
       !dueDateValid
     ) {
       const { error } = await supabase
@@ -256,22 +260,29 @@ Deno.serve(async (request) => {
             const more = overdue.length > shown.length ? `, and ${overdue.length - shown.length} more` : "";
             message = renderTemplate(
               templates.get("payment_missed_escalated"),
-              `Hello {name}, these monthly payments for your {plotType} at the Royal Palm Enclave are still outstanding: {overdueList}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - Trulander JSF`,
+              `Hello {name}, we hope you are doing well. Our records show the following payments for your {plotType} at the Royal Palm Enclave are still outstanding: {overdueList}. We kindly ask that you settle these at your earliest convenience, as continued non-payment may attract a penalty under your agreement. Please do let us know if any of these have already been paid. - Trulander JSF`,
               { name, plotType: plotLabel, overdueList: `${list}${more}` },
             );
           } else {
             const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
             message = renderTemplate(
               templates.get("payment_missed_first"),
-              `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave was due on {dueDate} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - Trulander JSF`,
+              `Hello {name}, we hope you are doing well. Our records show that your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave, due on {dueDate}, has not yet been received. Kindly settle this at your earliest convenience, or let us know if you have already made this payment. - Trulander JSF`,
               { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
             );
           }
+        } else if (reminderType === "due_today") {
+          const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
+          message = renderTemplate(
+            templates.get("payment_due_today"),
+            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due today, {dueDate}. Kindly arrange payment at your earliest convenience. - Trulander JSF`,
+            { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
+          );
         } else {
           const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
           message = renderTemplate(
             templates.get("payment_due_soon"),
-            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due on {dueDate}. If you have already paid, please ignore this reminder. - Trulander JSF`,
+            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due on {dueDate}. We would appreciate it if you could make arrangements ahead of the due date. Thank you. - Trulander JSF`,
             { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
           );
         }
