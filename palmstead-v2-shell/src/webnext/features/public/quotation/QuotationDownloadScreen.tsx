@@ -25,7 +25,7 @@ export function QuotationDownloadScreen() {
     <div className={styles.page}>
       <div className={styles.hero}>
         <div className={styles.heroTitle}>Your Quotation</div>
-        <div className={styles.heroSub}>Trulander JSF — Palmstead</div>
+        <div className={styles.heroSub}>Trulander JSF — Royal Palm Enclave</div>
       </div>
       <div className={styles.body}>
         {state === 'loading' && (

@@ -231,7 +231,7 @@ function drawReceipt(payment: PaymentRow, lead: LeadRow, config: ReceiptConfig):
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...gray);
-  doc.text("Palmstead Finance · Authorized", left, y + 5);
+  doc.text(`${company} Finance · Authorized`, left, y + 5);
   const thanks = config.receipt_thanks_text || "Thank you. This receipt confirms that the payment above was received and applied to your account.";
   const noteY = Math.max(y + 18, h - 35);
   doc.setFillColor(...navy);
@@ -323,7 +323,7 @@ Deno.serve(async (request: Request) => {
           const clientName = cleanSmsText((lead as LeadRow).name, 45) || "Client";
           message = renderTemplate(
             templateRow?.body_template as string | undefined,
-            `Hi {clientName}, thank you for your payment of {amount}. Receipt {receiptNumber}: {receiptUrl} - PEP Landbank`,
+            `Hi {clientName}, thank you for your payment of {amount}. Receipt {receiptNumber}: {receiptUrl} - ${(config as ReceiptConfig).quote_company_name || "Trulander JSF Limited"}`,
             {
               clientName,
               amount: ghs(Number((payment as PaymentRow).amount)),

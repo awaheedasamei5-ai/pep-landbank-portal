@@ -27,7 +27,7 @@ export function ReceiptDownloadScreen() {
     <div className={styles.page}>
       <div className={styles.hero}>
         <div className={styles.heroTitle}>Payment Receipt</div>
-        <div className={styles.heroSub}>Palmstead — Royal Palm Enclave</div>
+        <div className={styles.heroSub}>Trulander JSF — Royal Palm Enclave</div>
       </div>
       <div className={styles.body}>
         {state === 'loading' && (

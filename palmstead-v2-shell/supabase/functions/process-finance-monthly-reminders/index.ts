@@ -256,14 +256,14 @@ Deno.serve(async (request) => {
             const more = overdue.length > shown.length ? `, and ${overdue.length - shown.length} more` : "";
             message = renderTemplate(
               templates.get("payment_missed_escalated"),
-              `Hello {name}, these monthly payments for your {plotType} at the Royal Palm Enclave are still outstanding: {overdueList}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - PEP Landbank`,
+              `Hello {name}, these monthly payments for your {plotType} at the Royal Palm Enclave are still outstanding: {overdueList}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - Trulander JSF`,
               { name, plotType: plotLabel, overdueList: `${list}${more}` },
             );
           } else {
             const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
             message = renderTemplate(
               templates.get("payment_missed_first"),
-              `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave was due on {dueDate} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`,
+              `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave was due on {dueDate} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - Trulander JSF`,
               { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
             );
           }
@@ -271,7 +271,7 @@ Deno.serve(async (request) => {
           const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
           message = renderTemplate(
             templates.get("payment_due_soon"),
-            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due on {dueDate}. If you have already paid, please ignore this reminder. - PEP Landbank`,
+            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due on {dueDate}. If you have already paid, please ignore this reminder. - Trulander JSF`,
             { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
           );
         }

@@ -26,7 +26,7 @@ export function ContractDownloadScreen() {
     <div className={styles.page}>
       <div className={styles.hero}>
         <div className={styles.heroTitle}>Contract of Sale</div>
-        <div className={styles.heroSub}>Palmstead — Royal Palm Enclave</div>
+        <div className={styles.heroSub}>Trulander JSF — Royal Palm Enclave</div>
       </div>
       <div className={styles.body}>
         {state === 'loading' && (

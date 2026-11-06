@@ -148,3 +148,60 @@ All writes in this follow-up pass that touched real finance/lead tables for veri
 were made inside `begin...rollback` transactions, except the one real, intentional, reversed-back
 UI toggle test above and the real (non-reversible but harmless) backlog-draining calls, which only
 ever insert `pending`/`dismissed` draft rows -- never an actual SMS send.
+
+## 4. Branding fix (2026-11-06) -- "Palmstead" wrongly presented as the company name
+
+The user spotted a real client-facing bug in a pending closing-SMS draft: "we at Palmstead
+understand... Kindly contact Trulander or reach out to Palmstead on 0544330390." Confirmed
+directly by the user: **Palmstead** is this admin system's own name only, never the company;
+**Trulander** (JSF Limited, per `app_config.quote_company_name` -- already correct there) is the
+real company; **Royal Palm (Enclave)** is the land/estate name and was already correct everywhere.
+
+**Traced and fixed, client-facing surfaces only** (internal/staff-facing uses of "Palmstead" --
+the app's own UI chrome, the staff digest's "Palmstead will be sending reminders today" line,
+internal HR/leave/banner/contract-status reports -- were deliberately left alone, since those
+correctly refer to the system itself, not the company):
+
+- `sms_templates` rows: `lead_closing_sms.ai_system_prompt` ("called Palmstead" -> "called
+  Trulander"; "Palmstead wants to help" -> "Trulander wants to help"; "reach out to Palmstead on
+  {companyPhone}" -> "reach out to us on {companyPhone}"), `payment_schedule_change_sms.ai_system_prompt`
+  ("called Palmstead" -> "called Trulander"), and the `- PEP Landbank` sign-off on
+  `payment_due_soon`/`payment_missed_first`/`payment_missed_escalated`/`receipt_issued_thank_you`
+  -> `- Trulander JSF` ("PEP Landbank" had no basis anywhere in `app_config`; it was a leftover,
+  never a real entity name).
+- The 93 real, already-drafted pending closing-SMS rows in `outbound_sms_drafts` were corrected
+  in place (not regenerated) via the same substitution, since the wrong wording was mechanically
+  consistent across every draft -- verified a sample of both the agent-assigned phrasing ("we at
+  Trulander understand...") and the company-lead routing phrasing ("...Kindly contact Trulander or
+  reach out to us on 0544330390") read correctly afterward.
+- Hardcoded fallback strings (used only if an `sms_templates` row is ever missing) in
+  `process-finance-monthly-reminders/index.ts` (3 templates) and `process-finance-receipt-sms/index.ts`
+  (1 template, now reading the real `app_config.quote_company_name` directly instead of a hardcoded
+  string) -- both edge functions redeployed.
+- `process-finance-receipt-sms/index.ts`'s own receipt PDF footer, `"Palmstead Finance ·
+  Authorized"` -> the real `company` variable (`config.quote_company_name`).
+- Four public client-facing share-link pages' header text (`Palmstead — Royal Palm Enclave` /
+  `Trulander JSF — Palmstead`, inconsistent) corrected to `Trulander JSF — Royal Palm Enclave`:
+  `QuotationDownloadScreen.tsx`, `ReceiptDownloadScreen.tsx`, `ContractDownloadScreen.tsx`.
+  `SveReportDownloadScreen.tsx`'s identical-looking header was deliberately left unchanged -- its
+  own code comment confirms that link is sent to **Management**, not a client, so "Palmstead"
+  there is a correct, non-misleading internal reference.
+
+**Deliberately not changed, flagged instead**: every real SMS send in this codebase sets Arkesel's
+`sender` field to the literal string `"Palmstead"` (across 8 edge functions). This is the SMS
+Sender ID shown on the recipient's phone as "From:" -- arguably the most prominent branding
+surface of all -- but Ghana's telecom regulator requires Sender IDs to be pre-registered with the
+SMS gateway before use; changing this blindly to `"Trulander"` risks silently breaking every real
+SMS send in the system if "Trulander" isn't already a registered/approved Sender ID on the real
+Arkesel account. This needs the Arkesel account owner to confirm what Sender ID(s) are actually
+registered before anyone touches this string.
+
+**Real verification**: confirmed all 9 `sms_templates` rows and the 2 AI prompts no longer say
+"Palmstead"/"PEP Landbank" where they mean the company (via SQL and the live Templates tab UI,
+screenshotted); confirmed 0 of the 93 real pending drafts still contain "Palmstead" after the
+correction (down from 93); opened Borkertey's real pending draft live in the Outgoing SMS app
+(Management, "Review & send") and confirmed it now reads "...we at Trulander understand... Kindly
+contact Trulander or reach out to us on 0544330390" -- the dialog was closed without sending.
+`npx tsc -b` clean. No real SMS was sent to any real client during this fix.
+
+Commit: see git log for this file's own commit alongside these changes.
