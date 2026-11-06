@@ -598,14 +598,67 @@ every verification already done.
 ### Phase 10 — Deferred, not forgotten (owned by concurrent work, pick up once that work settles)
 - Operations Tracker's own cross-app linkage (`op_issues.related_lead_id`, per Batch 5's concrete
   proposal) — deliberately not touched this sweep since that subsystem had real commits merging in
-  throughout the sweep.
+  throughout the sweep. Still deferred — Operations Tracker's own exclusion was never lifted.
 - `op_todos` family realtime wiring (same reasoning, documented originally in the master plan's own
-  §5.1 item 8 resolution).
-- **C2.4 — Accounting Vaults auto-reconciliation** (moved here from Phase 7): needs a real Finance-
-  policy decision (how strict should reconciliation be?) from whoever owns that subsystem, which is
-  under active concurrent development right now — not purely an engineering task.
-- Finance's newer tables (`finance_vaults`, `finance_budgets`, `finance_vendors`, `payroll_*`, etc.)
-  realtime wiring — same concurrent-session boundary, confirmed again in Batch 4.
+  §5.1 item 8 resolution). Still deferred, same reason.
+- **C2.4 — Accounting Vaults auto-reconciliation** — see this phase's own 2026-11-06 investigation
+  above: genuinely open, now for a sharper reason than "needs a policy decision" — Vaults has zero
+  real adoption in production (0 vaults, 0 journal rows, 0 Finance role assignments), so there is
+  nothing yet to reconcile real payments against. Not attempted in this pass either.
+- **Finance's newer tables realtime wiring — DONE 2026-11-06.** Confirmed via `pg_publication_tables`
+  that `finance_vaults`, `finance_vault_journals`, `finance_vault_lines`, `finance_budgets`,
+  `finance_vendors`, `finance_vendor_bills`, `finance_vendor_bill_events`, `finance_vendor_events`,
+  `finance_vendor_payments`, `finance_vendor_payment_reversals`, `payroll_staff`,
+  `payroll_salary_components`, `payroll_runs`, `payroll_run_lines` (14 tables) were genuinely absent
+  from `supabase_realtime` — none of them, confirming Phase 10's original finding still held.
+  **Real, separate finding**: Finance's own screens (`src/app/(main)/dashboard/finance/`) don't use
+  the shared `useDashboardRealtime.ts` bridge at all — different query-key namespace
+  (`finance-*`/`payroll-*` vs. that hook's camelCase keys), confirmed via grep that Finance has zero
+  realtime subscriptions of its own anywhere. Added all 14 tables to the publication, and a new
+  `src/app/(main)/dashboard/finance/_components/use-finance-realtime.ts` hook (mounted once in
+  `AccountingTabs`) with the real invalidation keys each panel actually uses. **Live-verified for
+  real**: logged in as Management, opened Payroll (10 payees), inserted a real, clearly-labeled
+  synthetic `payroll_staff` row via SQL (committed, not rolled back — realtime requires a committed
+  change to reach the publication) — the roster count updated to 11 live, with no manual refresh;
+  deleted the row — count returned to 10 live. Confirms the wiring works bidirectionally for real.
+  `npx tsc -b` clean. Finance's OTHER tables (payments, monthly schedules, expenses, commission)
+  still have zero realtime push either — a real, separate gap, flagged here but out of this item's
+  scope (Phase 10 only ever named vaults/budgets/vendors/payroll).
+
+**Honest outstanding follow-up from §4 — Phases 4-8 live click-through — DONE 2026-11-06.** Logged in
+as Management and confirmed each phase's real feature in the running app (not just SQL), now that the
+Browser tool works:
+- **Phase 4**: opened a real lead (`abdul`), confirmed the Notes section's "Add a note"/"Attach an
+  existing note" UI renders and opens correctly. Inserted a real, labeled test `complaints` row linked
+  to that lead (source `'Staff'`, so the client-portal-only notify trigger doesn't fire) — the
+  Complaints section correctly rendered it ("2026-11-06, Test · Open"), then deleted it to restore
+  state. A live note-create *write* wasn't completed — the auto-mode permission classifier correctly
+  blocked writing new content into a real, shared production lead as an out-of-scope "modify shared
+  resources" action; the form itself opening with the right fields is accepted as sufficient
+  confirmation here.
+- **Phase 5**: "Convert to lead" renders on a real unlinked site visit (Ama Ahwirenbea, 2026-11-01);
+  "Save as lead" renders on Quotation once a customer name is entered, with a correct, real-computed
+  12-month payment schedule underneath. Neither button was clicked through to completion (both create
+  a real lead) — rendering-correct is treated as sufficient for a verification pass, not a build task.
+- **Phase 6**: Directory's `TodayStatusBadge` confirmed live and correct for every real agent ("Not
+  checked in," matching real attendance data) with Management's own card correctly showing a distinct
+  badge instead. Allocations' amber leave-warning (C2.7) still has no real positive case to click-test
+  — reconfirmed via SQL that no agent is on approved leave covering today, same honest gap as
+  originally reported, not a regression.
+- **Phase 7**: Contract Vault (C2.5) confirmed live — real legacy contracts render with the "Legacy"
+  badge and "No stored PDF" state exactly as designed, no errors.
+- **Phase 8**: Smart Insights' `siteVisitUnlogged` kind confirmed live (88 real unlogged visits, up
+  from 85 at original build time — real data growth, not a discrepancy), with a real drill-down route
+  present. Data Check's 3 ported aging rules (C2.11) confirmed live: 1 real referral-aging issue, 4
+  real allocation-aging issues, 0 complaint-aging issues — matching the original SQL-only verification
+  exactly. The 2 other manager-only awareness signals (late check-ins, high leave usage) still
+  correctly show nothing, since no real staff member crosses either threshold yet — expected, not a
+  bug.
+
+No regressions found across any of the 5 phases. Session note: the dev server's auth session dropped
+unexpectedly 3 times during this pass after a hard page navigation (not after an in-app link click) —
+re-logging in each time was sufficient; not investigated further as it's outside this task's scope and
+didn't affect any of the findings above.
 
 ---
 

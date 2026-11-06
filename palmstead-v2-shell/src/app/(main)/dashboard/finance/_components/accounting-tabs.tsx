@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { usePortalTab } from "../../_components/portal-navigation";
+import { useFinanceRealtime } from "./use-finance-realtime";
 
 const tabs = [
   "overview",
@@ -23,6 +24,7 @@ const tabs = [
 
 export function AccountingTabs({ children }: { children: ReactNode }) {
   const [value, select] = usePortalTab("tab", tabs, "overview");
+  useFinanceRealtime();
   return (
     <Tabs value={value} onValueChange={select} className="flex min-w-0 flex-col gap-4">
       <div className="max-w-full overflow-x-auto pb-2">
