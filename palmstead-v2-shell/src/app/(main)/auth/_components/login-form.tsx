@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
@@ -24,8 +24,21 @@ const formSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
 });
 
+// A real internal deep link shared via SMS/email (e.g. the missed-payment
+// staff digest's "Log Payment" link) only works end-to-end if it survives a
+// forced sign-in: AuthGate sends an unauthenticated visitor here with
+// `?redirect=<intended path>`, and a successful login must send them on to
+// that path rather than always falling back to /dashboard/default. Only a
+// same-origin relative path is honoured, never an absolute URL, to avoid
+// turning this into an open redirect.
+function safeRedirectTarget(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/dashboard/default";
+  return value;
+}
+
 export function LoginForm() {
   const router = useRouter();
+  const redirectTo = safeRedirectTarget(useSearchParams().get("redirect"));
   const [ready, setReady] = useState(false);
   const [usePhone, setUsePhone] = useState(false);
   const { login, isPending } = useLiveLogin();
@@ -50,7 +63,12 @@ export function LoginForm() {
       toast.error("Couldn't sign in", { description: "Check your email and password and try again." });
       return;
     }
-    router.replace(takeDailyReportReturn(profile.role) ?? "/dashboard/default");
+    const dailyReportReturn = takeDailyReportReturn(profile.role);
+    const target =
+      profile.role !== "manager" && redirectTo.startsWith("/dashboard/pipeline/daily-reports")
+        ? "/dashboard/default"
+        : redirectTo;
+    router.replace(dailyReportReturn ?? target);
   }
 
   let submitLabel = "Login";

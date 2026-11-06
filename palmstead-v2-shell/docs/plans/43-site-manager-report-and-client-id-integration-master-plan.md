@@ -479,24 +479,146 @@ consent-match/date-match path: the first call queued exactly 1 row (`reminder_ty
 all synthetic rows were deleted afterward (schedule, installment, and outbox row all confirmed back
 to 0).
 
-**Real incident to disclose, not bury**: this test was run as a bare multi-statement `execute_sql`
-call, not inside a `begin`/`rollback` transaction like every other phase's safety testing in this
-plan — an oversight. The synthetic outbox row (real due-date-in-the-past, real matching consent
-fields, for a real lead) existed in the live table for roughly the span of one tool round-trip
-before it was deleted, and the real per-minute `finance-monthly-reminder-sms-worker` cron fired at
-least once during a window that could plausibly overlap that row's lifetime. There is no secondary
-log of the actual Arkesel API call to confirm either way. **It is possible, though not confirmed,
-that a real SMS referencing a fabricated GHS 3,500 installment was sent to that real lead's real
-phone number during this test.** The specific lead's identity was recorded separately outside this
-doc (not written here deliberately) so Management/Finance can check with that client directly if an
-unexplained payment SMS shows up, rather than treating this as quietly resolved — ask the
-implementing session for the lead ID if needed. No other phase in this plan had this gap — every
-other live-data test this session used a proper transaction rollback.
+**Real incident to disclose, not bury — still UNRESOLVED, do not treat as closed**: this test was
+run as a bare multi-statement `execute_sql` call, not inside a `begin`/`rollback` transaction like
+every other phase's safety testing in this plan — an oversight. The synthetic outbox row (real
+due-date-in-the-past, real matching consent fields, for a real lead) existed in the live table for
+roughly the span of one tool round-trip before it was deleted, and the real per-minute
+`finance-monthly-reminder-sms-worker` cron fired at least once during a window that could plausibly
+overlap that row's lifetime. There is no secondary log of the actual Arkesel API call to confirm
+either way. **It is possible, though not confirmed, that a real SMS referencing a fabricated
+GHS 3,500 installment was sent to that real lead's real phone number during this test.** The lead's
+identity was given directly to the user in chat, not written here (same deliberate choice as the
+original note). **As of this rewrite, nobody has confirmed with Arkesel's own delivery log or with
+the client whether that SMS actually went out.** The user instructed the team to proceed with the
+SMS-copy rewrite below regardless; that instruction does not resolve this incident — it should stay
+open until someone checks Arkesel's send log for the window the user was given, around 04:45 UTC on
+2026-11-06.
 
-**Phase I — Overpayment recalculation (safer design)** (§5.2, §5.3). The highest-risk, most
-valuable phase. Needs explicit user sign-off on the "one-tap confirm" middle ground (or their
-informed choice to go fully automatic) before any code is written. **Coordinate with the
-concurrent Finance session** — same reason as Phase H.
+---
+
+**Phase H follow-up — SMS copy rewrite + staff safety-net digest (2026-11-06)**, per the user's own
+explicit follow-up message (more specific than §5.1's original design, and the authoritative spec
+for this work): the client-facing SMS needed real plot-type/amount/date specificity, an escalated
+template once a client has missed 2+ payments with a penalty warning, and a staff/management
+safety-net digest that fires before the client send so a payment that hasn't been logged yet can be
+caught first.
+
+**Client-facing SMS, rewritten** (`process-finance-monthly-reminders` v3, deployed). Plot type is
+sourced from the allocated `plots.plot_type` (via Phase E's `plots.lead_id`) when a plot has been
+allocated, falling back to `leads.plot_type` (the quotation-time plan) when it hasn't — both are
+real columns, no new ones needed. Three templates, all including the resolved plot type, the real
+amount, and the real date:
+- **Due-soon** (unchanged logic, now plot-type-aware): "Hello {name}, your monthly payment of
+  GHS {amount} for your {plot type} at the Royal Palm Enclave is due on {date}. If you have already
+  paid, please ignore this reminder. - PEP Landbank"
+- **First miss** (exactly 1 real overdue installment): "Hello {name}, your monthly payment of
+  GHS {amount} for your {plot type} at the Royal Palm Enclave was due on {date} and has not yet been
+  received. Please make payment as soon as possible, or contact us if you have already paid. -
+  PEP Landbank"
+- **Escalated** (2+ real overdue installments on the same schedule, queried fresh from
+  `finance_monthly_payment_installments` at send time — not a stale snapshot): "Hello {name}, these
+  monthly payments for your {plot type} at the Royal Palm Enclave are still outstanding: GHS {amt1}
+  (due {date1}); GHS {amt2} (due {date2})[...]. Continued non-payment may attract a penalty. Please
+  settle as soon as possible, or contact us if any of these have already been paid. - PEP Landbank"
+
+**Staff/management safety-net digest** (new table `finance_missed_payment_digest_log`, new functions
+`compute_finance_missed_payment_digest_clients()` [read-only mirror of
+`queue_finance_missed_payment_reminders()`'s own selection, no insert],
+`list_finance_missed_payment_digest_recipients()` [every active staff member who is `manager` or
+holds the real `payments.manage` permission — confirmed via SQL that this already includes all 7
+active agents today, not just Management, since `role_permissions` already grants `payments.manage`
+to the `agent` role], `claim_finance_missed_payment_digest(date)` [idempotent, once per real Accra
+calendar day], new edge function `send-finance-missed-payment-digest`, new cron
+`finance-missed-payment-staff-digest` at `0 7 * * *` UTC — a real 2h15m buffer before the existing
+missed-payment queue at `15 9 * * *`). The digest SMS: "Palmstead will be sending payment reminders
+today to: {client1} - GHS {amt1} ({plot type}, overdue since {date1}); ... . If any of them have
+already paid and it hasn't been logged yet, please log it now to avoid an incorrect reminder going
+out: {link}". The link is a real internal deep link into the Payments tab's Log Payment dialog: a new
+`?action=log-payment` handler on the Payments tab auto-opens the real dialog (`payments-panel.tsx`),
+and `AuthGate`/`login-form.tsx` now carry a real `redirect` query param end to end — a staff member
+who isn't signed in is sent to the login page with that deep link preserved and lands exactly back on
+it after a successful sign-in, instead of always falling through to the default dashboard page.
+
+**Why this genuinely prevents the false-positive case**: `claim_finance_monthly_payment_reminders`
+already re-validates each installment's live status at claim time, and the worker re-validates again
+immediately before the Arkesel call — neither of those changed. The digest doesn't add a new
+database check; it gives a human a real 2h15m window, with the exact client list and a one-tap link
+to Log Payment, to make that live re-check come back "already paid" before the client-facing send
+ever runs.
+
+**Verification — done entirely safely this time, learning from the incident above**: every write to
+`finance_monthly_payment_schedules`/`_installments` was inside `begin ... rollback` (a synthetic
+2-installment overdue schedule for the same real lead used in the original incident, confirmed
+deleted via `rollback`, confirmed back to 0 rows afterward via a separate `count(*)` query). Used
+this to dry-run and read back the exact escalated-template SQL inputs (2 overdue installments, GHS
+3,500 each, resolved plot type "Full Plot" -> "full plot"). `list_finance_missed_payment_digest_recipients()`
+was called for real (read-only) and correctly returned all 7 active agents plus Management, 4 with a
+real phone, 3 with none (filtered out, not a crash). `compute_finance_missed_payment_digest_clients()`
+was called for real and correctly returned 0 rows (nothing is genuinely overdue in production right
+now, same real state the original Phase H verification found). No SMS was sent as part of this
+follow-up's own verification. `npx tsc -b` clean.
+
+**This does not change the open-incident status above.** The original incident predates this rewrite
+and is unrelated to whether the new templates/digest work correctly — it still needs a human check
+against Arkesel's own send log.
+
+**Phase I — Overpayment recalculation (safer design)** (§5.2, §5.3). **DONE (2026-11-06)** — user
+confirmed "go ahead with Phase I" using the one-tap-confirm design, Finance coordination already
+cleared for Phase H.
+
+**Design decision worth stating plainly**: the REAL money allocation (`apply_finance_monthly_payment`'s
+existing loop, which rolls an overpayment forward into future instalments in due-date order) is
+NOT held pending — it still applies immediately and deterministically, exactly as it already did.
+Holding the real instalment numbers pending would have been actively harmful: it would leave a
+client who genuinely overpaid looking "still overdue" to Phase H's missed-payment SMS system in the
+meantime. The only thing gated behind Management's one tap is the **client-facing SMS announcing
+the change** — exactly the risk the plan flagged.
+
+Built: the trigger now also snapshots the schedule's real unpaid instalments immediately before
+and after applying a payment, and — only when the payment exceeded what the earliest unpaid
+instalment needed (a genuine overpayment) — inserts a row into a new
+`finance_schedule_recalc_proposals` table (`schedule_id, lead_id, payment_id, overpayment_amount,
+old_installments, new_installments, sms_draft, status: pending|confirmed|dismissed`). New
+`ai-insights` kind `payment_schedule_change_sms` (v37) drafts one sentence from the real
+overpayment amount, how many instalments it settled, and whether the plan is now fully paid off —
+never given the client's name/phone, same `redactPII`-era discipline as `follow_up_draft`. A new
+card on Finance's "Monthly instalments" tab (`recalc-proposals-panel.tsx`, Management-only) lists
+pending proposals with the real new next-due instalment, lets Management review/edit the full
+drafted SMS (deterministic client name/plot-type/Royal-Palm-Enclave wrapper around the AI's one
+sentence, reusing Phase H's own `plots.plot_type` → `leads.plot_type` fallback), then either
+**Confirm & send** (applies via `confirm_finance_schedule_recalc_proposal`, which requires a
+non-empty draft, then the real `send-sms` function fires fire-and-forget, matching `ds.sms.send`'s
+established non-blocking discipline elsewhere in this app) or **Dismiss**
+(`dismiss_finance_schedule_recalc_proposal`, no SMS, proposal marked dismissed). Both RPCs are
+manager-only and idempotent against double-action (confirming/dismissing an already-decided
+proposal raises a real error instead of silently no-opping).
+
+**Verification — entirely inside `begin ... rollback`, learning directly from the Phase H
+incident**: production currently has zero real `finance_monthly_payment_schedules` rows (same real
+state Phase H's own verification found), so a fully synthetic lead/schedule/instalments/payment was
+created, used, and rolled back three separate times, each confirmed back to 0 rows via a `count(*)`
+afterward:
+1. **Trigger + detection**: a 3-instalment GHS 1,000/month schedule, one GHS 2,500 payment approved
+   (impersonating Management via `request.jwt.claims`, the same mechanism Phase E used) —
+   instalments 1 and 2 ended `paid`, instalment 3 `part_paid` at GHS 500, and exactly one proposal
+   was inserted with `overpayment_amount = 1500` (2500 − the first instalment's 1000 remaining),
+   `old_installments` showing all 3 at `scheduled`/`0 paid`, `new_installments` showing the correct
+   post-application state — matching hand-computed arithmetic exactly.
+2. **Guard rails**: confirming with no `sms_draft` set correctly raised `'Draft the SMS text before
+   confirming'`; saving a draft then confirming correctly set `status = 'confirmed'` and
+   `confirmed_at`; confirming a second time correctly raised rather than silently succeeding.
+3. **Dismiss path**: a second synthetic scenario confirmed `dismiss_finance_schedule_recalc_proposal`
+   sets `status = 'dismissed'`/`dismissed_at` with no SMS side effect.
+4. **AI draft, real call, zero client data**: the deployed `payment_schedule_change_sms` kind was
+   invoked for real with only synthetic numbers (`overpaymentAmount: 1500, settledCount: 2,
+   fullyPaid: false`) and returned a correct, grounded sentence with no invented figures.
+
+`npx tsc -b` clean. **No real client's data was touched outside a transaction at any point in this
+phase** — a deliberate, explicit correction from how Phase H's own verification was run.
+
+**This does not resolve the still-open Mr Joe incident from Phase H** (§5.1's own note above) —
+that remains a separate, unconfirmed matter for Arkesel's delivery log to settle.
 
 ---
 
