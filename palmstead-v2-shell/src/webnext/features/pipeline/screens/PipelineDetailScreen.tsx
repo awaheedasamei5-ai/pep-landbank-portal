@@ -16,7 +16,7 @@ import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal, qtyOfT
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { StageBadge } from '../components/StageBadge';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
-import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useComplaintsForLead, useDeleteLead, useEnquiriesForLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
+import { useActivityForLead, useAssignLead, useAuditForLead, useCanViewDocStage, useComplaintsForLead, useCostAttributionsForLead, useDeleteLead, useEnquiriesForLead, useLead, useLogActivity, useSiteVisitsForLead, useUpdateLead, useUpdateLeadDocStage } from '../hooks/useLead';
 import { usePayments } from '../hooks/usePayments';
 import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
@@ -1109,6 +1109,37 @@ export function ActivitySection({ lead }: { lead: Lead }) {
         </div>
       ))}
       <LogCallDialog lead={lead} open={logOpen} onOpenChange={setLogOpen} />
+    </div>
+  );
+}
+
+// docs/plans/43-site-manager-report-and-client-id-integration-master-plan.md
+// §4.2 (Phase G) -- a real per-client cost-attribution ledger, so
+// Management can see what the company has actually spent getting this
+// client this far (site-visit transport/refreshment costs to date, split
+// evenly across whoever attended that day) without reverse-engineering it
+// from Site Visit Authorization's own weekly forms. Every row here is
+// written server-side by a trigger on site_visits.attended -- read-only
+// here, no "log a cost" action, since nothing in this app writes this
+// table directly.
+export function CostAttributionSection({ lead }: { lead: Lead }) {
+  const { data: attributions } = useCostAttributionsForLead(lead.id);
+  if (!attributions || attributions.length === 0) return null;
+  const total = attributions.reduce((sum, a) => sum + a.amount, 0);
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeadRow}>
+        <h2 className={styles.sectionTitle}>Cost to date</h2>
+        <span className={styles.readLabel}>{ghs(total)}</span>
+      </div>
+      {attributions.map((a) => (
+        <div className={styles.readRow} key={a.id}>
+          <span className={styles.readLabel}>{a.createdAt.slice(0, 10)}</span>
+          <span>
+            {a.note || a.sourceType} · {ghs(a.amount)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

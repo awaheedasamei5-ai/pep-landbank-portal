@@ -1142,6 +1142,24 @@ export interface ActivityLogEntry {
   leadId: string | null;
 }
 
+// Real table `client_cost_attributions` (docs/plans/43 §4.2, Phase G): a
+// real, queryable per-client cost ledger, so "how much has the company
+// spent on this client" is a direct sum instead of a cross-table
+// reconstruction. Populated server-side by a trigger on
+// site_visits.attended (sync_site_visit_cost_attribution) -- never written
+// to directly from the client. source_type is 'site_visit' only for now;
+// banner-sourced attribution is explicitly out of scope (banners has no
+// cost field today).
+export interface ClientCostAttribution {
+  id: string;
+  leadId: string;
+  sourceType: string;
+  sourceId: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+}
+
 // Real table (confirmed live, 15 columns, 1 real row). CONFIRMED LIVE BUG
 // (2026-08-29, see project-referral-integrity-bug memory): the real UPDATE
 // RLS policy (referrals_upd_staff) has no WITH CHECK clause tying a status

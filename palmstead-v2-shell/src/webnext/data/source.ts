@@ -21,6 +21,7 @@ import type {
   BannerStatusLogEntry,
   ChatConversation,
   ChatMessage,
+  ClientCostAttribution,
   Complaint,
   ComplaintUpdate,
   Config,
@@ -129,6 +130,7 @@ import {
   mapBannerRow,
   mapBannerStatusLogRow,
   mapChatMessageRow,
+  mapClientCostAttributionRow,
   mapComplaintRow,
   mapConfigRow,
   mapContractApprovalRow,
@@ -733,6 +735,13 @@ export interface DataSource {
       follow: string | null;
     }): Promise<ActivityLogEntry>;
     listCompanyWide(): Promise<ActivityLogEntry[]>;
+  };
+  // Real table `client_cost_attributions` (docs/plans/43 §4.2, Phase G).
+  // Read-only from the client -- every row is written server-side by the
+  // sync_site_visit_cost_attribution() trigger on site_visits.attended,
+  // never by a direct insert here.
+  costAttributions: {
+    listForLead(leadId: string): Promise<ClientCostAttribution[]>;
   };
   // Deliberately read-only-plus-create: no "mark cleared"/payout method
   // exists on this interface at all. See the Referral type's comment in
@@ -3016,6 +3025,17 @@ function createLiveDataSource(): DataSource {
           .limit(1000);
         if (error) throw error;
         return (data ?? []).map(mapActivityLogRow);
+      },
+    },
+    costAttributions: {
+      async listForLead(leadId) {
+        const { data, error } = await requireClient()
+          .from("client_cost_attributions")
+          .select("*")
+          .eq("lead_id", leadId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []).map(mapClientCostAttributionRow);
       },
     },
     referrals: {

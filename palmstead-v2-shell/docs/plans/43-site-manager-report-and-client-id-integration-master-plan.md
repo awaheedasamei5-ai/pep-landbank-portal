@@ -427,8 +427,34 @@ confirmed `ContractRequestsScreen.tsx` lists `requests` unfiltered (RLS already 
 viewer) and sorts pending-first by `createdAt` — an auto-inserted row needs no extra UI wiring to
 surface in the real Contract of Sale request queue.
 
-**Phase G — Cost-attribution ledger** (§4.2). New table + the first real population path (site
-visit costs, once Phase C exists to source the per-client figure from).
+**Phase G — Cost-attribution ledger** (§4.2). **DONE.** New table `client_cost_attributions`
+(`lead_id, source_type, source_id, amount, note, created_at`, unique on
+`(lead_id, source_type, source_id)`, select-only RLS for any authenticated staff member — this is
+shared company data about a client, not one agent's private record). Populated server-side, not
+from the client: `sync_site_visit_cost_attribution(visit_date)` recomputes every attributed row for
+a given day by joining `weekly_visit_forms`' real actual-spend total (Phase C's own formula) against
+every `attended = true`, lead-linked `site_visits` row for that date, splitting the day's spend
+evenly and upserting one row per client. A trigger on `site_visits` (`after update of attended,
+lead_id, visit_date`) calls it automatically — no UI/client code ever writes this table directly.
+Minimal read surface added: a new `CostAttributionSection` on the real lead-detail drawer
+(`LeadClientScreen`'s Overview tab, shared by Pipeline/Client Database/Company Leads), showing each
+attribution row and a running total — hidden entirely (renders nothing) for a lead with no
+attributed cost yet, which is today's honest real state for every live lead (see below).
+
+Live verification (all via safe `begin`/`...`/`rollback` SQL transactions — no real data changed):
+confirmed the real 18 Oct 2026 day (GHS 536 actual spend, 2 real site visits) has **no real lead
+currently linked to an attended visit that day** (`site_visits.lead_id` is null for both) — a real,
+accurate finding, not a bug: `lead_id` and `attended` were added in separate earlier phases and no
+real visit has both set yet, so the ledger is correctly empty in production today and will populate
+itself automatically the first time a real attended visit is also lead-linked. To verify the trigger
+logic itself, lead-linked both real 18-Oct visits to two real leads inside a transaction: confirmed
+2 rows inserted at GHS 268 each (matching Phase C's own verified per-attended-client figure exactly),
+confirmed calling the sync function a second time left the count at 2 (not 4 — the upsert dedup
+works), and confirmed toggling one visit's attendance back off correctly deleted that lead's row and
+recomputed the remaining one to the full GHS 536 (not left stale at 268) — then rolled back, leaving
+production at 0 real rows exactly as it was. Opened a real lead's Overview tab live as Management
+(`/dashboard/pipeline/<id>`) and confirmed the new section renders cleanly with no crash in the
+0-rows case. `npx tsc -b` clean.
 
 **Phase H — Missed-payment SMS** (§5.1). **Coordinate with the concurrent Finance session before
 starting** — this touches their active tables/outbox pattern directly.

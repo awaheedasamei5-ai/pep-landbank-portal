@@ -15,6 +15,7 @@ import {
   AuditTrailSection,
   ClientSection,
   ComplaintsSection,
+  CostAttributionSection,
   DangerZoneSection,
   DepositScheduleSection,
   DocumentationSection,
@@ -113,6 +114,7 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
               {config && <PlotPricingSection lead={lead} config={config} />}
               <FollowUpSection lead={lead} />
               <ActivitySection lead={lead} />
+              <CostAttributionSection lead={lead} />
               <ComplaintsSection lead={lead} />
               <EnquiriesSection lead={lead} />
               <NotesSection lead={lead} />

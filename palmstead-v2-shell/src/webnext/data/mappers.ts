@@ -12,6 +12,7 @@ import type {
   Banner,
   BannerStatusLogEntry,
   ChatMessage,
+  ClientCostAttribution,
   Complaint,
   Config,
   Contract,
@@ -435,6 +436,18 @@ export function mapActivityLogRow(r: Record<string, unknown>): ActivityLogEntry 
     outcome: (r.outcome as string) ?? null,
     createdAt: r.created_at as string,
     leadId: (r.lead_id as string) ?? null,
+  };
+}
+
+export function mapClientCostAttributionRow(r: Record<string, unknown>): ClientCostAttribution {
+  return {
+    id: r.id as string,
+    leadId: r.lead_id as string,
+    sourceType: r.source_type as string,
+    sourceId: r.source_id as string,
+    amount: Number(r.amount),
+    note: (r.note as string) ?? null,
+    createdAt: r.created_at as string,
   };
 }
 

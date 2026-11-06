@@ -185,6 +185,18 @@ export function useEnquiriesForLead(leadId: string) {
   return useQuery({ queryKey: ['enquiriesForLead', leadId], enabled: !!leadId, queryFn: () => getDataSource(demoMode).enquiries.listForLead(leadId) });
 }
 
+// docs/plans/43-site-manager-report-and-client-id-integration-master-plan.md
+// §4.2 (Phase G) -- real per-client cost-attribution ledger, same
+// per-lead query-key shape as the hooks above.
+export function useCostAttributionsForLead(leadId: string) {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  return useQuery({
+    queryKey: ['costAttributionsForLead', leadId],
+    enabled: !!leadId,
+    queryFn: () => getDataSource(demoMode).costAttributions.listForLead(leadId),
+  });
+}
+
 // Master Spec Section 4's lifecycle-automation gap: a manual stage
 // change (e.g. FollowUpSection's "Mark as Lost") previously left no
 // trace anywhere -- fire-and-forget, matches useLogDownload's own
