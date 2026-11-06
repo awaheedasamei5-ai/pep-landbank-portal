@@ -41,6 +41,14 @@ function ghs(amount: number): string {
 // AuthGate and still lands here once they do (login-form.tsx's redirectTo).
 const LOG_PAYMENT_LINK = "https://palmstead-v2-shell.vercel.app/dashboard/finance?tab=payments&action=log-payment";
 
+// {token} substitution against a DB-editable body_template (Outgoing SMS
+// app, docs/plans/47); a fallback string is used if the row is missing so a
+// deleted/misconfigured template row never breaks the real staff digest.
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405 });
   const token = request.headers.get("x-internal-secret");
@@ -64,10 +72,12 @@ Deno.serve(async (request) => {
   if (claimError) return Response.json({ error: "Could not claim today's digest" }, { status: 500 });
   if (claimed !== true) return Response.json({ skipped: "Today's digest was already sent." });
 
-  const [{ data: clients, error: clientsError }, { data: recipients, error: recipientsError }] = await Promise.all([
-    supabase.rpc("compute_finance_missed_payment_digest_clients"),
-    supabase.rpc("list_finance_missed_payment_digest_recipients"),
-  ]);
+  const [{ data: clients, error: clientsError }, { data: recipients, error: recipientsError }, { data: templateRow }] =
+    await Promise.all([
+      supabase.rpc("compute_finance_missed_payment_digest_clients"),
+      supabase.rpc("list_finance_missed_payment_digest_recipients"),
+      supabase.from("sms_templates").select("body_template").eq("kind", "payment_staff_digest").maybeSingle(),
+    ]);
   if (clientsError || recipientsError) return Response.json({ error: "Could not compute today's digest" }, { status: 500 });
 
   const clientRows = (clients ?? []) as DigestClient[];
@@ -87,7 +97,11 @@ Deno.serve(async (request) => {
     .map((c) => `${c.name} - ${ghs(c.outstanding)} (${(c.plot_type || "plot").toLowerCase()}, overdue since ${dateLabel(c.due_date)})`)
     .join("; ");
   const more = clientRows.length > shown.length ? ` and ${clientRows.length - shown.length} more` : "";
-  const message = `Palmstead will be sending payment reminders today to: ${list}${more}. If any of them have already paid and it hasn't been logged yet, please log it now to avoid an incorrect reminder going out: ${LOG_PAYMENT_LINK}`;
+  const message = renderTemplate(
+    templateRow?.body_template as string | undefined,
+    `Palmstead will be sending payment reminders today to: {clientList}. If any of them have already paid and it hasn't been logged yet, please log it now to avoid an incorrect reminder going out: {logPaymentLink}`,
+    { clientList: `${list}${more}`, logPaymentLink: LOG_PAYMENT_LINK },
+  );
 
   let accepted = 0;
   let failed = 0;

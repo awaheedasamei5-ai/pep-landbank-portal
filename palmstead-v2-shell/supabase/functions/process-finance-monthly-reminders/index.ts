@@ -58,6 +58,14 @@ function plotTypeLabel(allocatedPlotType: string | null | undefined, quotationPl
   return raw ? raw.toLowerCase() : "plot";
 }
 
+// {token} substitution against a DB-editable body_template (Outgoing SMS
+// app, docs/plans/47); a fallback string is used if the row is missing so a
+// deleted/misconfigured template row never breaks a real reminder send.
+function renderTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
+  const base = template && template.trim() ? template : fallback;
+  return base.replace(/\{(\w+)\}/g, (_match, key: string) => (key in vars ? vars[key] : `{${key}}`));
+}
+
 function classifyProvider(httpStatus: number, body: unknown, recipient: string): Delivery {
   const response = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const rawData = response.data;
@@ -116,6 +124,12 @@ Deno.serve(async (request) => {
     p_token: token,
   });
   if (tokenError || validToken !== true) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: templateRows } = await supabase
+    .from("sms_templates")
+    .select("kind,body_template")
+    .in("kind", ["payment_due_soon", "payment_missed_first", "payment_missed_escalated"]);
+  const templates = new Map((templateRows ?? []).map((row) => [row.kind as string, row.body_template as string | null]));
 
   const apiKey = Deno.env.get("ARKESEL_API_KEY");
   const { data: rows, error: claimError } = await supabase.rpc("claim_finance_monthly_payment_reminders", {
@@ -239,14 +253,26 @@ Deno.serve(async (request) => {
             const shown = overdue.slice(0, 6);
             const list = shown.map((item) => `${ghs(item.amount)} (due ${dateLabel(item.due_date)})`).join("; ");
             const more = overdue.length > shown.length ? `, and ${overdue.length - shown.length} more` : "";
-            message = `Hello ${name}, these monthly payments for your ${plotLabel} at the Royal Palm Enclave are still outstanding: ${list}${more}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - PEP Landbank`;
+            message = renderTemplate(
+              templates.get("payment_missed_escalated"),
+              `Hello {name}, these monthly payments for your {plotType} at the Royal Palm Enclave are still outstanding: {overdueList}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - PEP Landbank`,
+              { name, plotType: plotLabel, overdueList: `${list}${more}` },
+            );
           } else {
             const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
-            message = `Hello ${name}, your monthly payment of ${ghs(outstanding)} for your ${plotLabel} at the Royal Palm Enclave was due on ${dateLabel(installment.due_date)} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`;
+            message = renderTemplate(
+              templates.get("payment_missed_first"),
+              `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave was due on {dueDate} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`,
+              { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
+            );
           }
         } else {
           const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
-          message = `Hello ${name}, your monthly payment of ${ghs(outstanding)} for your ${plotLabel} at the Royal Palm Enclave is due on ${dateLabel(installment.due_date)}. If you have already paid, please ignore this reminder. - PEP Landbank`;
+          message = renderTemplate(
+            templates.get("payment_due_soon"),
+            `Hello {name}, your monthly payment of {amount} for your {plotType} at the Royal Palm Enclave is due on {dueDate}. If you have already paid, please ignore this reminder. - PEP Landbank`,
+            { name, amount: ghs(outstanding), plotType: plotLabel, dueDate: dateLabel(installment.due_date) },
+          );
         }
 
         try {
