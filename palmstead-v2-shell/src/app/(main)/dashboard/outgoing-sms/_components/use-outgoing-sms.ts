@@ -130,3 +130,60 @@ export function useDismissDraft() {
 export function friendlyError(error: unknown): string {
   return error instanceof Error ? error.message : "That could not be completed. Try again.";
 }
+
+// Sample values for every {token} used across the real templates (Phase B
+// item 4, docs/plans/48 Sec 9) -- a preview is read-only and never sent, so
+// using realistic-looking sample data here is safe and lets Management see
+// exactly what an edit will produce before saving it.
+const SAMPLE_VARS: Record<string, string> = {
+  name: "Kofi Mensah",
+  clientName: "Kofi Mensah",
+  firstName: "Kofi",
+  staffName: "Elias Torgbuivi",
+  agentName: "Elias Torgbuivi",
+  amount: "GHS 3,500.00",
+  plotType: "full plot",
+  dueDate: "27 November 2026",
+  overdueList: "GHS 3,500.00 (due 27 September 2026); GHS 3,500.00 (due 27 October 2026)",
+  clientList: "Kofi Mensah - GHS 3,500.00 (full plot, overdue since 27 October 2026)",
+  logPaymentLink: "https://palmstead-v2-shell.vercel.app/dashboard/finance?tab=payments&action=log-payment",
+  paymentPlan: "12 Months",
+  link: "https://palmstead-v2-shell.vercel.app/quotation/sample-token",
+  receiptNumber: "RCT-000123",
+  receiptUrl: "https://palmstead-v2-shell.vercel.app/receipt/sample-token",
+  percent: "72",
+  date: "2026-11-06",
+  kind: "morning plan",
+  days: "3",
+  startDate: "10 November 2026",
+  endDate: "12 November 2026",
+  emergencyWord: "a",
+  site: "Royal Palm Enclave",
+  dateLabel: "Friday 07 November 2026",
+  timeLine: " at 10:00am",
+  pickupLine: ". We'll pick you up at Accra Mall",
+};
+
+export function renderTemplatePreview(template: string): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => (key in SAMPLE_VARS ? SAMPLE_VARS[key] : match));
+}
+
+// AI-drafted kinds need a real call to ai-insights (no send involved) to
+// preview, since their output isn't a simple token substitution -- the
+// same two real kinds and context shapes already proven in Phase I's
+// recalc-proposals-panel and the closing-SMS worker.
+export function usePreviewAiTemplate() {
+  return useMutation({
+    mutationFn: async (kind: string): Promise<string> => {
+      const context =
+        kind === "payment_schedule_change_sms"
+          ? { overpaymentAmount: 1500, settledCount: 2, fullyPaid: false }
+          : { plotType: "full plot", angle: "reassurance", hasAgent: true, agentName: "Elias Torgbuivi", agentPhone: "0531083165", companyPhone: "0544330390" };
+      const { data, error } = await requireSupabase().functions.invoke("ai-insights", { body: { kind, context } });
+      if (error) throw error;
+      const message = String((data as { message?: string } | null)?.message ?? "").trim();
+      if (!message) throw new Error("The AI did not return a draft. Try again.");
+      return message;
+    },
+  });
+}
