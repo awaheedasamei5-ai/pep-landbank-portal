@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { LoginForm } from "../../_components/login-form";
 import { LoginVideoPanel } from "./login-video-panel";
 
@@ -40,7 +42,9 @@ export default function LoginV1() {
             </div>
           </div>
           <div className="space-y-4">
-            <LoginForm />
+            <Suspense fallback={null}>
+              <LoginForm />
+            </Suspense>
           </div>
         </div>
       </div>

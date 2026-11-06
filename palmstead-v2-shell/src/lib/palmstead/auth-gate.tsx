@@ -1,11 +1,21 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { supabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
+
+// Builds the login URL's `redirect` param from wherever the gate caught an
+// unauthenticated visit, so a staff member who opens a deep link (e.g. an
+// SMS pointing straight at Log Payment) lands back there after signing in,
+// instead of always falling through to /dashboard/default.
+function loginWithRedirect(pathname: string, search: string): string {
+  const current = search ? `${pathname}?${search}` : pathname;
+  if (!current || current === "/dashboard/default") return "/auth/v1/login";
+  return `/auth/v1/login?redirect=${encodeURIComponent(current)}`;
+}
 
 // Direct port of web-next's src/auth/LiveSessionGate.tsx + the real-auth
 // half of RequireRole: useAuthStore persists `profile` to localStorage,
@@ -35,7 +45,19 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 // of that already-enforced RLS suspenders -- same class of tradeoff the
 // file's own comment below already accepts for the client-side redirect.
 export function AuthGate({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={<div className="flex h-dvh items-center justify-center text-muted-foreground text-sm">Loading…</div>}
+    >
+      <AuthGateInner>{children}</AuthGateInner>
+    </Suspense>
+  );
+}
+
+function AuthGateInner({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
   const profile = useAuthStore((s) => s.profile);
   const loginLive = useAuthStore((s) => s.loginLive);
   // Starts false on BOTH server and client renders -- zustand's persist
@@ -66,7 +88,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (!session) {
         useAuthStore.setState({ profile: null });
-        router.replace("/auth/v1/login");
+        router.replace(loginWithRedirect(pathname, search));
         return;
       }
       const { data: row } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();

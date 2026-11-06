@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AlertTriangle, Check, Loader2, Plus, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +79,15 @@ function LogPaymentDialog({
 
   const { data: leads, isFetching: searching } = useLeadSearch(search);
   const logPayment = useLogPayment(callerRole);
+
+  // The missed-payment staff digest SMS links straight to
+  // /dashboard/finance?tab=payments&action=log-payment so a staff member can
+  // act on "has this already been paid?" in one tap instead of hunting for
+  // the button themselves.
+  const actionParam = useSearchParams().get("action");
+  useEffect(() => {
+    if (actionParam === "log-payment") setOpen(true);
+  }, [actionParam]);
 
   function reset() {
     setSearch("");

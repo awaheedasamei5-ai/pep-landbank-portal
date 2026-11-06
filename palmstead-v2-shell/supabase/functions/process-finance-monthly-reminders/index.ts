@@ -36,6 +36,28 @@ function accraDate(value: Date): string {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+function dateLabel(isoDate: string): string {
+  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function ghs(amount: number): string {
+  return `GHS ${amount.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// A plot allocated to this lead (Phase E's plots.lead_id) is the authoritative
+// source; a schedule can exist before allocation, so leads.plot_type (set at
+// quotation time) is the fallback. Real values are "Full Plot"/"Half Plot"/
+// "Partial Plot" -- lowercased so it reads naturally mid-sentence.
+function plotTypeLabel(allocatedPlotType: string | null | undefined, quotationPlotType: string | null | undefined): string {
+  const raw = (allocatedPlotType || quotationPlotType || "").trim();
+  return raw ? raw.toLowerCase() : "plot";
+}
+
 function classifyProvider(httpStatus: number, body: unknown, recipient: string): Delivery {
   const response = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const rawData = response.data;
@@ -114,7 +136,7 @@ Deno.serve(async (request) => {
       { data: schedule, error: scheduleError },
       { data: installment, error: installmentError },
     ] = await Promise.all([
-      supabase.from("leads").select("name,contact,deleted_at").eq("id", row.lead_id).maybeSingle(),
+      supabase.from("leads").select("name,contact,deleted_at,plot_type").eq("id", row.lead_id).maybeSingle(),
       supabase
         .from("finance_monthly_payment_schedules")
         .select("status,sms_reminders_enabled,sms_consent_recorded_at,sms_consent_phone")
@@ -185,23 +207,48 @@ Deno.serve(async (request) => {
           providerStatus: null,
         };
       } else {
-        const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
-        const dueLabel = new Date(`${installment.due_date}T12:00:00Z`).toLocaleDateString("en-GB", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-          timeZone: "UTC",
-        });
+        const { data: plotRow } = await supabase
+          .from("plots")
+          .select("plot_type")
+          .eq("lead_id", row.lead_id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const plotLabel = plotTypeLabel(plotRow?.plot_type, lead.plot_type);
+
         const name = String(lead.name || "Client")
           .replace(/[\r\n\t]+/g, " ")
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 60);
-        const amount = `GHS ${outstanding.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const message =
-          reminderType === "missed_payment"
-            ? `Hello ${name}, your monthly Royal Palm Enclave payment of ${amount} was due on ${dueLabel} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`
-            : `Hello ${name}, your monthly Royal Palm Enclave payment of ${amount} is due on ${dueLabel}. If you have already paid, please ignore this reminder. - PEP Landbank`;
+
+        let message: string;
+        if (reminderType === "missed_payment") {
+          const { data: overdueRows } = await supabase
+            .from("finance_monthly_payment_installments")
+            .select("due_date,due_amount,paid_amount")
+            .eq("schedule_id", row.schedule_id)
+            .in("status", ["scheduled", "part_paid"])
+            .lt("due_date", today)
+            .order("due_date", { ascending: true });
+          const overdue = (overdueRows ?? []).map((r) => ({
+            amount: Math.max(0, Number(r.due_amount) - Number(r.paid_amount)),
+            due_date: r.due_date as string,
+          }));
+          if (overdue.length >= 2) {
+            const shown = overdue.slice(0, 6);
+            const list = shown.map((item) => `${ghs(item.amount)} (due ${dateLabel(item.due_date)})`).join("; ");
+            const more = overdue.length > shown.length ? `, and ${overdue.length - shown.length} more` : "";
+            message = `Hello ${name}, these monthly payments for your ${plotLabel} at the Royal Palm Enclave are still outstanding: ${list}${more}. Continued non-payment may attract a penalty. Please settle as soon as possible, or contact us if any of these have already been paid. - PEP Landbank`;
+          } else {
+            const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
+            message = `Hello ${name}, your monthly payment of ${ghs(outstanding)} for your ${plotLabel} at the Royal Palm Enclave was due on ${dateLabel(installment.due_date)} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`;
+          }
+        } else {
+          const outstanding = Math.max(0, Number(installment.due_amount) - Number(installment.paid_amount));
+          message = `Hello ${name}, your monthly payment of ${ghs(outstanding)} for your ${plotLabel} at the Royal Palm Enclave is due on ${dateLabel(installment.due_date)}. If you have already paid, please ignore this reminder. - PEP Landbank`;
+        }
+
         try {
           const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
             method: "POST",
@@ -268,4 +315,3 @@ Deno.serve(async (request) => {
     persistenceErrors,
   });
 });
-
