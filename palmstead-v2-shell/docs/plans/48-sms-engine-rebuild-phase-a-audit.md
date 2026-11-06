@@ -185,21 +185,32 @@ dashboard list:
 
 ## 9. Proposed phased build-out (Phases B–E, for separate follow-up tasks)
 
-**Phase B — Rules, states, and template consolidation (biggest real gap, do first)**:
-1. Bring the remaining ~6 SMS kinds (allocation, leave, operations-adjacent is out of scope,
-   site-visit reminders, sales daily digest) into `sms_templates`, matching the pattern already
-   proven for the other 9.
-2. Add the missing real states from §6: `due_today` (a distinct message, not a due-soon/missed
-   gap), a `reconciliation_hold` flag on `finance_monthly_payment_installments` (and/or
-   `finance_monthly_payment_schedules`) that every queueing function checks and excludes — this is
-   the single highest-value addition given the Mr Joe incident.
-3. Add `authorized_fees`/`approved_credits` columns if/when a real contract actually needs them
-   (not urgent — no real data gap exists today, confirmed in §5).
-4. Add a real "preview with test data" action to the Templates tab (render the template against a
-   real or synthetic lead without sending).
-5. Unify the ~6 scattered per-feature outbox tables' status vocab where practical, or at minimum
-   build one read-only UI view that queries across all of them for a real "send queue" / "failed/
-   held messages" dashboard tab.
+**Phase B — Rules, states, and template consolidation (biggest real gap, do first). DONE 2026-11-06.**
+1. **DONE.** Allocation, leave (4 transition messages), site-visit (both variants), and the sales
+   daily digest now read from `sms_templates`, via a new `render_sms_template()` SQL helper for the
+   2 pure-plpgsql senders (site-visit, leave) and the same `renderTemplate()` pattern already
+   proven for the TS edge functions. `promote_due_planned_leave()`'s 2 auto-submit messages remain
+   hardcoded — a deliberate, documented scope cut, not an oversight. Commit `3ffdca6`.
+2. **DONE.** `payment_due_today` is a real distinct state now (new `queue_finance_due_today_reminders()`,
+   cron `0 8 * * *`, between the staff digest and due-soon/missed). `reconciliation_hold` (+ a
+   required `reconciliation_hold_reason`) is a real column on `finance_monthly_payment_installments`,
+   checked by all 3 queueing functions and `claim_finance_monthly_payment_reminders` (queue-time,
+   claim-time, and send-time exclusion), plus a Management-only toggle on the Finance → Monthly
+   instalments screen. Verified via rolled-back transactions: a pre-existing hold is excluded from
+   queueing, and placing a hold on an already-queued reminder cancels it immediately. Commits
+   `d4b1903`, `683fc24`.
+3. **Deferred, confirmed still not urgent** — no real contract has fees/credits today (unchanged
+   since the audit).
+4. **DONE.** Templates tab has a real "Preview" action — client-side token substitution with
+   realistic sample data for static templates, a real (never-sending) `ai-insights` call for the 2
+   AI-drafted kinds. Verified live for both paths, including the real branding fix showing up in
+   the AI output. Commit `4a8e2cc`.
+5. **DONE**, via the lighter option (no schema unification): a new "Send queue" tab queries all 6
+   real outbox/draft/proposal sources through one manager-gated RPC and shows pending/failed counts
+   side by side. Verified live with real data — correctly showed 93 real pending closing-SMS drafts,
+   and surfaced 2 real, pre-existing allocation-SMS failures from 2026-10-25 that had no visibility
+   anywhere in the system before this tab existed (a genuine value-add, not a bug introduced by this
+   work — confirmed via direct SQL, both predate this session's changes). Commit `8a0399e`.
 
 **Phase C — Provider reliability**:
 1. Add a real Arkesel delivery-webhook receiver edge function + a new `sms_delivery_events` table,
