@@ -482,6 +482,46 @@ Browser pane tool remains unresponsive (see Phase 4/5/6's own notes) — `npx ts
 actively-moving concurrent Finance subsystem (same commits confirmed above) and needs a real Finance-
 policy decision before any code is written regardless. Moved into Phase 10's deferred list.
 
+**C2.4 — investigated 2026-11-06, under the user's "Finance is done, go ahead" authorization.**
+Re-read `finance_vault_ledger.sql` and `VaultsPanel.tsx` in full. **Real finding: this item is
+blocked by more than a policy decision — the Vaults subsystem has zero real adoption in production
+yet.** Confirmed via direct SQL: `finance_vaults` has 0 rows, `finance_vault_journals` has 0 rows,
+and `finance_role_assignments` has 0 active rows of any kind (`finance_head`/`finance_operator`/
+`auditor`) — no one has even been assigned a Finance role, let alone created a vault or posted an
+opening balance. Meanwhile real client payments now total **GHS 415,119.35 across 17 approved
+payments** (up from the GHS 192,196 cited when this item was first found), with real `expenses`/
+`recurring_expenses` tables both at 0 rows too.
+
+The ledger itself is a careful, real double-entry system (balanced-journal constraint, immutable
+postings enforced by trigger, reversal-only corrections, idempotency keys on every posting) — not
+unfinished code, just unconfigured. Building an "auto-reconciliation" feature today would compare
+GHS 415,119 of real collected revenue against an empty GHS 0 ledger, which isn't a reconciliation,
+it's a tautology — there is nothing to reconcile against yet. **Did not build anything** (no
+read-only dashboard, no write-side logic) — a comparison view against zero real vault data would add
+no real information today and risks looking like a false "GHS 415k gap" alarm that isn't actually
+a data-integrity problem, just an unused feature.
+
+**The real open questions, for whoever owns Finance policy, now slightly different from the original
+framing**:
+1. Is Vaults intended to go live at all, or has Finance settled on tracking cash/bank position some
+   other way? (Zero role assignments after this long suggests it may not be the team's current
+   priority — worth confirming rather than assuming.)
+2. If/when it does go live: should a vault's *opening* balance be backdated to absorb all
+   historically collected-but-unbanked revenue in one lump sum (clean slate going forward, no
+   per-payment linkage), or should there be a real per-payment "banked" flag so each of the 17 real
+   payments (and every future one) can be marked as deposited into a specific vault individually
+   (full traceability, more manual work)?
+3. Either way, any automatic posting into this ledger needs to respect its own real invariants
+   (every journal needs a human-entered `evidence_reference`, balanced debit/credit lines, no
+   negative balances) — a payment's "approved" status alone is not the same evidence a bank
+   statement or cash count provides, so even a semi-automatic "pending reconciliation" line (the
+   original fix idea) still needs a human to attach real evidence before it posts, not a silent
+   auto-insert.
+
+**Recommendation**: hold this until Finance actually assigns at least one `finance_head` and creates
+its first real vault — at that point a read-only "collected revenue vs. recorded treasury" summary
+(no auto-posting) becomes genuinely informative and is a safe, policy-neutral addition to build then.
+
 ### Phase 8 — Intelligence-layer expansion — **DONE**
 
 **C2.10**: Added a 7th real `CrossAppInsightKind` (`siteVisitUnlogged`) to Smart Insights, reusing the
