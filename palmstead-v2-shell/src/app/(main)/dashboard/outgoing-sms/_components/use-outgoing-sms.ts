@@ -39,7 +39,7 @@ export type OutboundDraft = {
   sent_at: string | null;
 };
 
-async function requireManager() {
+async function requireManager(): Promise<true> {
   const client = requireSupabase();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("Sign in to use Outgoing SMS.");
@@ -47,6 +47,7 @@ async function requireManager() {
   if (meError || me?.role !== "manager" || me?.active !== true) {
     throw new Error("Only active Management can review outgoing SMS.");
   }
+  return true;
 }
 
 export function useOutgoingSmsGuard() {
