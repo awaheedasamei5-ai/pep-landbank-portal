@@ -8,6 +8,7 @@ type OutboxRow = {
   lead_id: string;
   idempotency_key: string;
   attempt_count: number;
+  reminder_type: "due_soon" | "missed_payment";
 };
 
 type Delivery = {
@@ -107,6 +108,7 @@ Deno.serve(async (request) => {
   let blocked = 0;
   let persistenceErrors = 0;
   for (const row of (rows ?? []) as OutboxRow[]) {
+    const reminderType = row.reminder_type === "missed_payment" ? "missed_payment" : "due_soon";
     const [
       { data: lead, error: leadError },
       { data: schedule, error: scheduleError },
@@ -124,6 +126,14 @@ Deno.serve(async (request) => {
         .eq("id", row.installment_id)
         .maybeSingle(),
     ]);
+
+    const today = accraDate(new Date());
+    const dueDateValid =
+      !!installment &&
+      (reminderType === "due_soon"
+        ? new Date(`${installment.due_date}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime() ===
+          7 * 86_400_000
+        : new Date(`${installment.due_date}T00:00:00Z`).getTime() < new Date(`${today}T00:00:00Z`).getTime());
 
     let outcome: Delivery;
     if (leadError || scheduleError || installmentError) {
@@ -143,9 +153,7 @@ Deno.serve(async (request) => {
       normalizeGhanaPhone(lead.contact) !== schedule.sms_consent_phone ||
       !installment ||
       !["scheduled", "part_paid"].includes(installment.status) ||
-      new Date(`${installment.due_date}T00:00:00Z`).getTime() -
-        new Date(`${accraDate(new Date())}T00:00:00Z`).getTime() !==
-        7 * 86_400_000
+      !dueDateValid
     ) {
       const { error } = await supabase
         .from("finance_monthly_payment_reminder_outbox")
@@ -190,7 +198,10 @@ Deno.serve(async (request) => {
           .trim()
           .slice(0, 60);
         const amount = `GHS ${outstanding.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const message = `Hello ${name}, your monthly Royal Palm Enclave payment of ${amount} is due on ${dueLabel}. If you have already paid, please ignore this reminder. - PEP Landbank`;
+        const message =
+          reminderType === "missed_payment"
+            ? `Hello ${name}, your monthly Royal Palm Enclave payment of ${amount} was due on ${dueLabel} and has not yet been received. Please make payment as soon as possible, or contact us if you have already paid. - PEP Landbank`
+            : `Hello ${name}, your monthly Royal Palm Enclave payment of ${amount} is due on ${dueLabel}. If you have already paid, please ignore this reminder. - PEP Landbank`;
         try {
           const response = await fetch("https://sms.arkesel.com/api/v2/sms/send", {
             method: "POST",

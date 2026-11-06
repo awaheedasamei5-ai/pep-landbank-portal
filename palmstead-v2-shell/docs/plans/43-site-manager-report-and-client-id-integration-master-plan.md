@@ -456,8 +456,42 @@ production at 0 real rows exactly as it was. Opened a real lead's Overview tab l
 (`/dashboard/pipeline/<id>`) and confirmed the new section renders cleanly with no crash in the
 0-rows case. `npx tsc -b` clean.
 
-**Phase H — Missed-payment SMS** (§5.1). **Coordinate with the concurrent Finance session before
-starting** — this touches their active tables/outbox pattern directly.
+**Phase H — Missed-payment SMS** (§5.1). **DONE (2026-11-06)** — user confirmed the concurrent
+Finance work had settled and explicitly authorized proceeding into
+`finance_monthly_payment_schedules`/`_installments`/`_reminder_outbox`. Mirrors the existing
+"due in 7 days" pattern exactly: new `queue_finance_missed_payment_reminders()` function (same
+shape as `queue_finance_monthly_payment_reminders`, selecting the earliest unpaid installment once
+`due_date < today` instead of `= today + 7`), a new `reminder_type` column on the existing
+`finance_monthly_payment_reminder_outbox` (`'due_soon'` default / `'missed_payment'`, CHECK
+constraint) rather than a second outbox table, and a new `finance-missed-payment-reminder-queue`
+cron entry (`15 9 * * *`, offset 15 min from the existing queue job). `claim_finance_monthly_payment_reminders`
+and the `process-finance-monthly-reminders` worker (redeployed v2) now branch their due-date
+revalidation and SMS wording on `reminder_type` — the existing due-soon path is byte-for-byte
+unchanged, only a new `missed_payment` branch was added. Real consent-gating, idempotency-key
+uniqueness, and outbox-then-worker separation all reused exactly as-is.
+
+Verification: confirmed via SQL that zero real installments currently match the missed-payment
+criteria (nothing is actually overdue with real SMS consent today), and a live call to
+`queue_finance_missed_payment_reminders()` correctly returned 0. To prove the logic itself, a
+synthetic schedule + overdue installment was inserted for one real lead to exercise the real
+consent-match/date-match path: the first call queued exactly 1 row (`reminder_type =
+'missed_payment'`), a second call correctly inserted 0 more (idempotency-key uniqueness holds), and
+all synthetic rows were deleted afterward (schedule, installment, and outbox row all confirmed back
+to 0).
+
+**Real incident to disclose, not bury**: this test was run as a bare multi-statement `execute_sql`
+call, not inside a `begin`/`rollback` transaction like every other phase's safety testing in this
+plan — an oversight. The synthetic outbox row (real due-date-in-the-past, real matching consent
+fields, for a real lead) existed in the live table for roughly the span of one tool round-trip
+before it was deleted, and the real per-minute `finance-monthly-reminder-sms-worker` cron fired at
+least once during a window that could plausibly overlap that row's lifetime. There is no secondary
+log of the actual Arkesel API call to confirm either way. **It is possible, though not confirmed,
+that a real SMS referencing a fabricated GHS 3,500 installment was sent to that real lead's real
+phone number during this test.** The specific lead's identity was recorded separately outside this
+doc (not written here deliberately) so Management/Finance can check with that client directly if an
+unexplained payment SMS shows up, rather than treating this as quietly resolved — ask the
+implementing session for the lead ID if needed. No other phase in this plan had this gap — every
+other live-data test this session used a proper transaction rollback.
 
 **Phase I — Overpayment recalculation (safer design)** (§5.2, §5.3). The highest-risk, most
 valuable phase. Needs explicit user sign-off on the "one-tap confirm" middle ground (or their
