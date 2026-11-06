@@ -124,11 +124,35 @@ export function SiteVisitReportsScreen(){
         ['Feedback recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9},columnStyles:{0:{fontStyle:'bold'}}});
       y=nextY(doc,y);
+      if(y>195){doc.addPage();y=20}
+      y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scheduled versus attended',trend.length>8?'Latest 8 weeks of '+trend.length:'Weekly trend');
+      if(trend.length){
+        const points=trend.slice(-8);
+        const max=Math.max(1,...points.map((p)=>p.visits));
+        const chartTop=y+3;
+        const base=chartTop+34;
+        const width=182/points.length;
+        doc.setDrawColor(195,204,216);doc.line(14,base,196,base);
+        points.forEach((p,i)=>{
+          const x=14+i*width+width/2;
+          const planned=30*p.visits/max;
+          const attended=30*p.attended/max;
+          doc.setFillColor(20,48,93);doc.rect(x-6,base-planned,5,planned,'F');
+          if(attended){doc.setFillColor(185,155,55);doc.rect(x+1,base-attended,5,attended,'F')}
+          doc.setFontSize(7);doc.setTextColor(71,85,105);
+          doc.text(p.week.slice(5),x,base+5,{align:'center'});
+        });
+        doc.setFontSize(8);doc.setTextColor(20,48,93);doc.text('Scheduled',14,base+12);
+        doc.setTextColor(145,114,25);doc.text('Attended',41,base+12);
+        y=base+19;
+      } else {doc.setFontSize(9);doc.text('No visits in this period.',16,y);y+=12}
+      doc.setTextColor(0,0,0);
+      if(y>245){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit register',filtered.length+' records');
       autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,v.agent_name,v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
       y=nextY(doc,y);
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Definitions');
-      doc.setFontSize(9);
+      doc.setFont('helvetica','normal');doc.setFontSize(9);
       ['Unconfirmed means the attendance field has not been set; it is not a no-show.',
        'Lead linkage is a record link, not a sale or payment conversion.',
        'Cancelled visits remain in the audit register and are excluded from the confirmation-rate denominator.'
