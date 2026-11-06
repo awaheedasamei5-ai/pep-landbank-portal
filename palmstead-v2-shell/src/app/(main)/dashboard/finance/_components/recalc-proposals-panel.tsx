@@ -114,7 +114,7 @@ export function RecalcProposalsPanel() {
       const lead = Array.isArray(row.leads) ? row.leads[0] : row.leads;
       const name = (lead?.name ?? "Client").split(" ")[0] || "Client";
       const plotType = (lead?.plot_type || "plot").toLowerCase();
-      const full = `Hello ${name}, about your ${plotType} at the Royal Palm Enclave: ${sentence} Your next payment is now ${nextDueLine(row.new_installments)}. - PEP Landbank`;
+      const full = `Hello ${name}, about your ${plotType} at the Royal Palm Enclave: ${sentence} Your next payment is now ${nextDueLine(row.new_installments)}. - Trulander JSF`;
       setDraftText(full);
       setDraftError(null);
     },
