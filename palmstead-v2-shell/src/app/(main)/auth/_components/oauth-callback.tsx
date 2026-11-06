@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { takeDailyReportReturn } from "@/lib/palmstead/auth-return";
 import { loadActiveStaffProfile } from "@/lib/palmstead/use-live-login";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
@@ -22,7 +23,7 @@ export function OAuthCallback() {
       const profile = await loadActiveStaffProfile(data.user.id);
       if (!cancelled) {
         useAuthStore.getState().loginLive(profile);
-        router.replace("/dashboard/default");
+        router.replace(takeDailyReportReturn(profile.role) ?? "/dashboard/default");
       }
     })().catch(async () => {
       await requireSupabase().auth.signOut();

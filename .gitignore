@@ -40,3 +40,4 @@ palmstead-v2-shell/out/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.vercel

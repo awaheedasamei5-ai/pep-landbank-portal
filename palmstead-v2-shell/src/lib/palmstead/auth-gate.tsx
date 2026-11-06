@@ -2,10 +2,12 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase.client";
 import { useAuthStore } from "@/stores/auth/auth-store";
+
+import { rememberDailyReportReturn } from "./auth-return";
 
 // Direct port of web-next's src/auth/LiveSessionGate.tsx + the real-auth
 // half of RequireRole: useAuthStore persists `profile` to localStorage,
@@ -36,6 +38,7 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 // file's own comment below already accepts for the client-side redirect.
 export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const profile = useAuthStore((s) => s.profile);
   const loginLive = useAuthStore((s) => s.loginLive);
   // Starts false on BOTH server and client renders -- zustand's persist
@@ -47,7 +50,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // network round trip) once `profile` is confirmed present client-side.
   const [ready, setReady] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only check -- fires once on the client after hydration, re-reading the freshly-rehydrated profile is the point.
   useEffect(() => {
     if (useAuthStore.getState().profile) setReady(true);
   }, []);
@@ -66,6 +68,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (!session) {
         useAuthStore.setState({ profile: null });
+        rememberDailyReportReturn(pathname);
         router.replace("/auth/v1/login");
         return;
       }
@@ -74,6 +77,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       if (!row || row.active === false) {
         await supabase.auth.signOut();
         useAuthStore.setState({ profile: null });
+        rememberDailyReportReturn(pathname);
         router.replace("/auth/v1/login");
         return;
       }

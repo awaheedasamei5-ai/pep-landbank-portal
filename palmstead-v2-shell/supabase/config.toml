@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.send-auth-sms]
 verify_jwt = false
+
+[functions.process-sales-daily-digest]
+verify_jwt = false
