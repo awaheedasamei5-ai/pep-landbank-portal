@@ -29,6 +29,11 @@ export function bannerAreaColor(area: string, allBanners: Banner[]): string {
   return BANNER_AREA_PALETTE[(idx < 0 ? 0 : idx) % BANNER_AREA_PALETTE.length];
 }
 
+export function validBannerCoordinates(lat: number | null | undefined, lng: number | null | undefined): boolean {
+  return lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
+    && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
 // Exact port of v1's real parseGoogleMapsLatLng() (index.html:18375-
 // 18386) -- pulls lat/lng out of whatever Google Maps URL format someone
 // pastes. Tries the !3d..!4d.. pair first (the actual pinned place on a
@@ -41,13 +46,13 @@ export function bannerAreaColor(area: string, allBanners: Banner[]): string {
 export function parseGoogleMapsLatLng(text: string): { lat: number; lng: number } | null {
   const s = String(text || '');
   let m = s.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  if (m && validBannerCoordinates(Number(m[1]), Number(m[2]))) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
   m = s.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  if (m && validBannerCoordinates(Number(m[1]), Number(m[2]))) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
   m = s.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  if (m && validBannerCoordinates(Number(m[1]), Number(m[2]))) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
   m = s.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  if (m && validBannerCoordinates(Number(m[1]), Number(m[2]))) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
   return null;
 }
 
@@ -62,7 +67,7 @@ export function directionsUrl(lat: number, lng: number): string {
 // route -- replaces the earlier areaDirectionsUrl, which truncated
 // silently instead of covering every matched banner.
 export function bannerRouteLinks(banners: Banner[]): { label: string; url: string }[] {
-  const mapped = banners.filter((b) => b.lat != null && b.lng != null);
+  const mapped = banners.filter((b) => validBannerCoordinates(b.lat, b.lng));
   if (!mapped.length) return [];
   const chunks: Banner[][] = [];
   for (let i = 0; i < mapped.length; i += 10) chunks.push(mapped.slice(i, i + 10));

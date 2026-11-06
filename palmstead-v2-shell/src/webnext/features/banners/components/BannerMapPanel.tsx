@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Compass } from 'lucide-react';
-import { BANNER_STATUS, BANNER_STATUS_ORDER, bannerAreaColor, bannerRouteLinks, directionsUrl, ensureLeafletLoaded, type LeafletMapInstance } from '../lib/bannerLogic';
+import { BANNER_STATUS, BANNER_STATUS_ORDER, bannerAreaColor, bannerRouteLinks, directionsUrl, ensureLeafletLoaded, validBannerCoordinates, type LeafletMapInstance } from '../lib/bannerLogic';
 import type { Banner, BannerStatus } from '../../../types/domain';
 import styles from './BannerMapPanel.module.css';
 
@@ -26,8 +26,9 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
   const [mapError, setMapError] = useState<string | null>(null);
   const [routeLinks, setRouteLinks] = useState<{ label: string; url: string }[]>([]);
 
-  const withCoords = banners.filter((b) => b.lat != null && b.lng != null);
-  const noCoords = banners.length - withCoords.length;
+  const withCoords = banners.filter((b) => validBannerCoordinates(b.lat, b.lng));
+  const noCoords = banners.filter((b) => b.lat == null || b.lng == null).length;
+  const invalidCoords = banners.length - withCoords.length - noCoords;
   const areas = Array.from(new Set(banners.map((b) => b.area).filter(Boolean))).sort();
   const shown = withCoords.filter((b) => (areaFilter === 'All areas' || b.area === areaFilter) && (!statusFilter || b.status === statusFilter));
 
@@ -169,6 +170,11 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
       {noCoords > 0 && (
         <p className={styles.hint} style={{ marginTop: 10 }}>
           {noCoords} {noCoords === 1 ? 'entry has' : 'entries have'} no coordinates yet and won&apos;t show on the map.
+        </p>
+      )}
+      {invalidCoords > 0 && (
+        <p className={styles.errorMsg} role="status">
+          {invalidCoords} {invalidCoords === 1 ? 'entry has' : 'entries have'} invalid coordinates. Correct them in the banner details before using directions.
         </p>
       )}
     </>

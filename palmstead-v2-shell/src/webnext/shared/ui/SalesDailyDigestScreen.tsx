@@ -217,7 +217,7 @@ export function SalesDailyDigestScreen({ runId }: { runId?: string }) {
                 <Link className="underline" href="/dashboard/settings">
                   My settings
                 </Link>{" "}
-                to receive these links.
+                to activate twice-daily SMS reports automatically.
               </p>
             )}
             <div className="grid gap-3 sm:grid-cols-2">

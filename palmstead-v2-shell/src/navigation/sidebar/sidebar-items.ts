@@ -235,7 +235,7 @@ export const sidebarItems: NavGroup[] = [
 			{
 				id: "staff-report",
 				title: "Staff Report",
-				url: NOT_BUILT_YET,
+				url: "/dashboard/staff-report",
 				icon: ClipboardList,
 			},
 		],
