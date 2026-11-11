@@ -1,3 +1,11 @@
+## 2026-11-11 Banner reporting and field-map continuation
+
+V2 `rebuild` production is at `fdc434d122f19f6a64e5b0a6ab9f86167523e8d9` after four verified Banner slices: filtered Banner report and PDF (#75), selected-stop map with ordered Google Maps links (#76), banner-create history retry/validation repair (#77), and foreground nearby mode (#78). Vercel deployment `dpl_FwCFrh2YfW6JsGHwHFKt6KTXytrM` is READY; the production alias was freshly reloaded as Management and showed the nearby control. Staff Adams and Management were checked in the exact previews. At 375px, the map and add form had no horizontal page overflow. A filtered five-row Banner PDF was downloaded, rendered, and visually checked before #75 merged. No test banner was created and no live SMS was sent.
+
+Nearby mode requires the user to press Start and grant browser location. It runs only while the page is open, offers a 50–500 m radius, an in-app nearby list and optional device notifications. On the test computer, geolocation timed out; the timeout, Retry location and Stop states were tested, but a real GPS fix and an actual device alert remain unverified. The selected route line and distances are straight-line estimates; Google Maps handles road navigation, with mobile-safe linked chunks. Do not claim background geofencing, road time, or physical inspection records. The existing `banner_status_log` with optional photos is not a dedicated inspection workflow. The create repair prevents hidden history failure and duplicate banner creation on form retry, but banner row/history writes remain separate database operations. A transactional backend path is still needed for strict atomicity.
+
+Continue from `docs/plans/45-report-center-and-banner-field-operations-2026-11-06.md`. Next Banner slice: research and design explicit inspections with timestamp, inspector, condition, photo evidence, location accuracy and RLS; do not repurpose all status changes as inspections. Test on a real phone before promising nearby alerts in the field. Then resume the broader personal and Management report filters/comparisons, selected-section PDFs, and the outstanding Operations/Finance work. Never touch V1 `main` or its Supabase project.
+
 ## 2026-10-31 System settings and identity continuation
 
 ### 31 October verified update
