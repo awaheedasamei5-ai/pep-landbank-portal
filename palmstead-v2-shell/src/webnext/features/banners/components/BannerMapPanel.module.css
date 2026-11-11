@@ -66,6 +66,12 @@
 .stopActions button { border: 1px solid var(--c-line); border-radius: 8px; background: var(--c-card); color: var(--c-text); padding: 5px 7px; cursor: pointer; }
 .stopActions button:disabled { opacity: .4; cursor: not-allowed; }
 .emptyStops { display: flex; align-items: center; gap: 8px; padding: 16px 0; color: var(--c-muted); font-size: 13px; }
+.nearbyControls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 12px; }
+.nearbyControls .input { width: 110px; }
+.nearbyControls .label { width: 100%; margin-bottom: -4px; }
+.nearbyList { list-style: none; margin: 12px 0 0; padding: 0; border: 1px solid var(--c-line); border-radius: 10px; }
+.nearbyRow { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--c-line); font-size: 12px; }
+.nearbyRow:last-child { border-bottom: 0; }
 @media (width < 640px) { .stopRow { align-items: flex-start; flex-wrap: wrap; } .stopActions { margin-left: 34px; } }
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
