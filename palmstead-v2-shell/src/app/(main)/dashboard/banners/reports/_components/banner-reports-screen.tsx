@@ -228,7 +228,7 @@ export function BannerReportsScreen() {
         14,
         y,
       );
-      y += 9;
+      y += 7;
       y = pdfSectionTitle(doc, y, pageW, "Scope and condition");
       autoTable(doc, {
         startY: y,
@@ -248,10 +248,10 @@ export function BannerReportsScreen() {
           ["Visible linked leads", visibleLeads == null ? "Unavailable" : visibleLeads],
         ].map(([k, v]) => [String(k), String(v)]),
         theme: "striped",
-        styles: { fontSize: 8, cellPadding: 1.7 },
+        styles: { fontSize: 8, cellPadding: 1.1 },
         columnStyles: { 0: { fontStyle: "bold" } },
       });
-      y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 9;
+      y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 7;
       if (y > 240) {
         doc.addPage();
         y = 20;
@@ -267,7 +267,7 @@ export function BannerReportsScreen() {
         doc.rect(62, yy, (90 * row.count) / max, 5, "F");
         doc.text(String(row.count), 157, yy + 4);
       });
-      y += 45;
+      y += 40;
       if (months.length) {
         if (y > 230) {
           doc.addPage();
@@ -280,9 +280,9 @@ export function BannerReportsScreen() {
           head: [["Month", "Banners added", "Status entries"]],
           body: months.map((row) => [row.label, row.added, row.updates]),
           theme: "striped",
-          styles: { fontSize: 7, cellPadding: 1.4 },
+          styles: { fontSize: 7, cellPadding: 1.1 },
         });
-        y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 8;
+        y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 6;
       }
       if (y > 245) {
         doc.addPage();
@@ -302,7 +302,7 @@ export function BannerReportsScreen() {
           report.data!.leadCounts == null ? "Unavailable" : (report.data!.leadCounts[b.id] ?? 0),
         ]),
         theme: "grid",
-        styles: { fontSize: 7, cellPadding: 2 },
+        styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [11, 30, 61] },
       });
       pdfReportFooter(doc, "Palmstead");
