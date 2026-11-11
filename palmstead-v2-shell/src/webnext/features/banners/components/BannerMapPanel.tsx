@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Compass, MapPin, Route } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, Compass, MapPin, Route } from "lucide-react";
 import {
   BANNER_STATUS,
   BANNER_STATUS_ORDER,
@@ -14,7 +14,7 @@ import {
   type LeafletMarker,
   type LeafletPolyline,
 } from "../lib/bannerLogic";
-import { stopLegs, suggestStopOrder } from "../lib/bannerStopPlanner";
+import { stopLegs, straightLineKm, suggestStopOrder } from "../lib/bannerStopPlanner";
 import type { Banner, BannerStatus } from "../../../types/domain";
 import styles from "./BannerMapPanel.module.css";
 
@@ -32,6 +32,14 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
   const [statusFilter, setStatusFilter] = useState<BannerStatus | "">("");
   const [mapError, setMapError] = useState<string | null>(null);
   const [routeLinks, setRouteLinks] = useState<{ label: string; url: string }[]>([]);
+  const [fieldMode, setFieldMode] = useState(false);
+  const [fieldPosition, setFieldPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [radiusMeters, setRadiusMeters] = useState(150);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [deviceAlertMessage, setDeviceAlertMessage] = useState<string | null>(null);
+  const [deviceAlerts, setDeviceAlerts] = useState(false);
+  const [watchRetry, setWatchRetry] = useState(0);
+  const alertedRef = useRef<Set<string>>(new Set());
 
   const withCoords = banners.filter((b) => validBannerCoordinates(b.lat, b.lng));
   const noCoords = banners.filter((b) => b.lat == null || b.lng == null).length;
@@ -45,6 +53,13 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
     .filter((banner): banner is Banner => !!banner);
   const legs = stopLegs(selected);
   const totalKm = legs.reduce((sum, leg) => sum + (leg.distanceKm ?? 0), 0);
+  const distances = fieldPosition
+    ? withCoords.map((banner) => ({
+        banner,
+        meters: Math.round(straightLineKm(fieldPosition, { lat: banner.lat!, lng: banner.lng! }) * 1000),
+      }))
+    : [];
+  const nearby = distances.filter(({ meters }) => meters <= radiusMeters).sort((a, b) => a.meters - b.meters);
 
   function toggleStop(id: string) {
     setRouteLinks([]);
@@ -60,6 +75,74 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
       [next[index], next[index + direction]] = [next[index + direction], next[index]];
       return next;
     });
+  }
+
+  useEffect(() => {
+    if (!fieldMode) return;
+    if (!navigator.geolocation) {
+      setLocationError("This device does not support location tracking.");
+      setFieldMode(false);
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setFieldPosition({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy),
+        });
+        setLocationError(null);
+      },
+      (error) => {
+        setLocationError(error.code === 1 ? "Location permission is off. Allow location to use nearby mode." : `Location unavailable: ${error.message}`);
+        if (error.code === 1) setFieldMode(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [fieldMode, watchRetry]);
+
+  useEffect(() => {
+    if (!fieldMode || !fieldPosition) return;
+    for (const id of alertedRef.current) {
+      const distance = distances.find(({ banner }) => banner.id === id)?.meters;
+      if (distance == null || distance > radiusMeters * 1.5) alertedRef.current.delete(id);
+    }
+    const newlyNearby = nearby.filter(({ banner }) => !alertedRef.current.has(banner.id));
+    for (const { banner } of newlyNearby) alertedRef.current.add(banner.id);
+    if (newlyNearby.length && deviceAlerts && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try {
+        const title = newlyNearby.length === 1 ? `${newlyNearby[0].banner.name} is nearby` : `${newlyNearby.length} banners are nearby`;
+        new Notification(title, { body: `Open Banner Tracking to check locations within ${radiusMeters} m.` });
+      } catch {
+        // The in-app nearby list remains available if device alerts fail.
+      }
+    }
+    // Alert only when a new position, radius, or banner data changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldPosition, radiusMeters, banners, deviceAlerts, fieldMode]);
+
+  function stopFieldMode() {
+    setFieldMode(false);
+    setFieldPosition(null);
+    setLocationError(null);
+    setDeviceAlertMessage(null);
+    alertedRef.current.clear();
+  }
+
+  async function enableDeviceAlerts() {
+    if (typeof Notification === "undefined") {
+      setDeviceAlertMessage("This browser does not support device notifications. Nearby banners will still appear here.");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") alertedRef.current.clear();
+      setDeviceAlerts(permission === "granted");
+      setDeviceAlertMessage(permission === "granted" ? null : "Device alerts are off. Nearby banners will still appear here.");
+    } catch {
+      setDeviceAlertMessage("Device alerts could not be enabled. Nearby banners will still appear here.");
+    }
   }
 
   useEffect(() => {
@@ -170,8 +253,9 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
       <div className={styles.card}>
         <div className={styles.grid2}>
           <div className={styles.field}>
-            <label className={styles.label}>Colour by</label>
+            <label className={styles.label} htmlFor="banner-map-colour">Colour by</label>
             <select
+              id="banner-map-colour"
               className={styles.input}
               value={colorMode === "area" ? "Area" : "Status"}
               onChange={(e) => setColorMode(e.target.value === "Area" ? "area" : "status")}
@@ -181,8 +265,8 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
             </select>
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Area</label>
-            <select className={styles.input} value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}>
+            <label className={styles.label} htmlFor="banner-map-area">Area</label>
+            <select id="banner-map-area" className={styles.input} value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}>
               <option>All areas</option>
               {areas.map((a) => (
                 <option key={a}>{a}</option>
@@ -214,8 +298,9 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
             </select>
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Status filter</label>
+            <label className={styles.label} htmlFor="banner-map-status">Status filter</label>
             <select
+              id="banner-map-status"
               className={styles.input}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as BannerStatus | "")}
@@ -235,6 +320,56 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
         </p>
       </div>
       <div ref={containerRef} className={styles.mapContainer} />
+      <section className={styles.card} aria-label="Nearby banner field mode">
+        <div className={styles.plannerHeader}>
+          <div>
+            <h2 className={styles.plannerTitle}><MapPin className="inline size-4" aria-hidden="true" /> Nearby banners</h2>
+            <p className={styles.hint}>Your device location stays in this page. Nearby checks run only while this page is open and field mode is on.</p>
+          </div>
+          <button type="button" className={styles.routeLink} onClick={fieldMode ? stopFieldMode : () => { setLocationError(null); setFieldMode(true); }}>
+            {fieldMode ? "Stop nearby mode" : "Start nearby mode"}
+          </button>
+        </div>
+        {fieldMode && (
+          <div className={styles.nearbyControls}>
+            <label className={styles.label} htmlFor="banner-nearby-radius">Alert radius</label>
+            <select id="banner-nearby-radius" className={styles.input} value={radiusMeters} onChange={(event) => setRadiusMeters(Number(event.target.value))}>
+              <option value={50}>50 m</option>
+              <option value={150}>150 m</option>
+              <option value={300}>300 m</option>
+              <option value={500}>500 m</option>
+            </select>
+            {deviceAlerts ? (
+              <button type="button" className={styles.routeLink} onClick={() => setDeviceAlerts(false)}>Turn off device alerts</button>
+            ) : (
+              <button type="button" className={styles.routeLink} onClick={enableDeviceAlerts}><Bell className="inline size-4" aria-hidden="true" /> Enable device alerts</button>
+            )}
+          </div>
+        )}
+        {locationError && <p className={styles.errorMsg} role="alert">{locationError}</p>}
+        {deviceAlertMessage && <p className={styles.hint} role="status">{deviceAlertMessage}</p>}
+        {fieldMode && locationError && (
+          <button type="button" className={styles.routeLink} onClick={() => { setLocationError(null); setWatchRetry((count) => count + 1); }}>
+            Retry location
+          </button>
+        )}
+        {fieldMode && !fieldPosition && !locationError && <p className={styles.hint} role="status">Waiting for device location…</p>}
+        {fieldMode && fieldPosition && (
+          <>
+            <p className={styles.hint} role="status">{nearby.length} banner{nearby.length === 1 ? "" : "s"} within {radiusMeters} m · Device accuracy about {fieldPosition.accuracy} m.</p>
+            {nearby.length ? (
+              <ul className={styles.nearbyList}>
+                {nearby.map(({ banner, meters }) => (
+                  <li key={banner.id} className={styles.nearbyRow}>
+                    <span><strong>{banner.name}</strong><br />{banner.area} · about {meters} m away</span>
+                    <a className={styles.routeLink} href={directionsUrl(banner.lat!, banner.lng!)} target="_blank" rel="noopener noreferrer">Directions</a>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className={styles.hint}>No banner is inside this radius. Keep nearby mode on while you travel.</p>}
+          </>
+        )}
+      </section>
       <section className={styles.card} aria-label="Selected banner stops">
         <div className={styles.plannerHeader}>
           <div>
@@ -280,10 +415,10 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
             className={styles.routeLink}
             onClick={() => {
               setRouteLinks([]);
-              setSelectedIds(suggestStopOrder(selected).map((banner) => banner.id));
+              setSelectedIds(suggestStopOrder(selected, fieldPosition ?? undefined).map((banner) => banner.id));
             }}
           >
-            Suggest shorter order
+            Suggest shorter order{fieldPosition ? " from my location" : ""}
           </button>
         )}
         {selected.length ? (
