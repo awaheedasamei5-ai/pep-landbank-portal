@@ -334,7 +334,7 @@ export function BannerReportsScreen() {
           <CardDescription>Choose the inventory and activity to include in the report.</CardDescription>
         </CardHeader>
         <CardContent>
-          <FieldGroup className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Field>
               <FieldLabel htmlFor="banner-date-basis">Date basis</FieldLabel>
               <select
