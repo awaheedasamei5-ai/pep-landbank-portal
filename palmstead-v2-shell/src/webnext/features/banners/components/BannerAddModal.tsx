@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Camera, Images, MapPin, X } from 'lucide-react';
+import { useSessionStore } from '../../../auth/useSessionStore';
+import { getDataSource } from '../../../data/source';
 import { resizeImageToDataUri } from '../../../shared/lib/image';
 import { parseGoogleMapsLatLng, validBannerCoordinates } from '../lib/bannerLogic';
 import { useCreateBanner, useLogBannerStatusUpdate } from '../hooks/useBanners';
@@ -22,12 +24,12 @@ const STATUS_OPTIONS: { value: BannerStatus; label: string }[] = [
 // a Google Maps link that auto-fills lat/lng on paste, a "use my
 // current location" geolocation button, and notes. Saving both inserts
 // the banner row AND logs the very first banner_status_log entry for
-// it ("Initial entry") -- matching v1's own real bnSaveBtn handler
-// exactly, so a banner's history timeline always starts with how it was
-// first logged, not silently earlier than its own audit trail.
+// it ("Initial entry"). If the second write fails, keep the saved banner
+// ID so retrying the initial history cannot create another banner.
 export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; onDone: () => void; onClose: () => void }) {
   const create = useCreateBanner();
   const logUpdate = useLogBannerStatusUpdate();
+  const demoMode = useSessionStore((s) => s.demoMode);
   const [name, setName] = useState('');
   const [area, setArea] = useState('');
   const [status, setStatus] = useState<BannerStatus>('placed');
@@ -39,8 +41,11 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedBannerId, setSavedBannerId] = useState<string | null>(null);
+  const savedBannerIdRef = useRef<string | null>(null);
   const captureRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const saveLabel = savedBannerId ? 'Retry initial history' : 'Add entry';
 
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -98,15 +103,15 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
 
   async function save() {
     setError(null);
-    if (!name.trim()) {
+    if (!savedBannerIdRef.current && !name.trim()) {
       setError('Add a name');
       return;
     }
-    if (!area.trim()) {
+    if (!savedBannerIdRef.current && !area.trim()) {
       setError('Add an area');
       return;
     }
-    if ((lat === '') !== (lng === '') || (lat !== '' && !validBannerCoordinates(Number(lat), Number(lng)))) {
+    if (!savedBannerIdRef.current && ((lat === '') !== (lng === '') || (lat !== '' && !validBannerCoordinates(Number(lat), Number(lng))))) {
       setError('Enter both coordinates in their valid ranges, or leave both blank.');
       return;
     }
@@ -121,17 +126,38 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
       image: imageDataUri,
     };
     try {
-      const rec = await create.mutateAsync(input);
-      await logUpdate.mutateAsync({ bannerId: rec.id, status, note: 'Initial entry', images: imageDataUri ? [imageDataUri] : [] }).catch(() => {});
+      let bannerId = savedBannerIdRef.current;
+      if (!bannerId) {
+        const rec = await create.mutateAsync(input);
+        bannerId = rec.id;
+        savedBannerIdRef.current = bannerId;
+        setSavedBannerId(bannerId);
+      }
+      // A previous attempt may have written the log but lost its response.
+      // Check first so retrying this form cannot create duplicate entries.
+      if (savedBannerId && (await getDataSource(demoMode).banners.statusLog(bannerId)).some((entry) => entry.note === 'Initial entry')) {
+        onDone();
+        return;
+      }
+      try {
+        await logUpdate.mutateAsync({ bannerId, status, note: 'Initial entry', images: imageDataUri ? [imageDataUri] : [] });
+      } catch (logError) {
+        const existing = await getDataSource(demoMode).banners.statusLog(bannerId);
+        if (!existing.some((entry) => entry.note === 'Initial entry')) throw logError;
+      }
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save');
+      if (savedBannerIdRef.current) {
+        setError('Banner saved, but its initial history could not be confirmed. Retry here; this will not add another banner. You can also close and inspect the saved banner.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to save');
+      }
       setSaving(false);
     }
   }
 
   return (
-    <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={styles.overlay}>
       <div className={styles.modal}>
         <div className={styles.head}>
           <div className={styles.title}>Add banner / location</div>
@@ -140,13 +166,14 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
           </button>
         </div>
 
+        <fieldset className={styles.fields} disabled={Boolean(savedBannerId)}>
         <div className={styles.field}>
-          <label className={styles.label}>Name *</label>
-          <input className={styles.input} placeholder="e.g. Spintex Road – near GOIL" value={name} onChange={(e) => setName(e.target.value)} />
+          <label className={styles.label} htmlFor="banner-name">Name *</label>
+          <input id="banner-name" className={styles.input} placeholder="e.g. Spintex Road – near GOIL" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Area *</label>
-          <input className={styles.input} list="bannerAreaList" placeholder="e.g. Spintex" value={area} onChange={(e) => setArea(e.target.value)} />
+          <label className={styles.label} htmlFor="banner-area">Area *</label>
+          <input id="banner-area" className={styles.input} list="bannerAreaList" placeholder="e.g. Spintex" value={area} onChange={(e) => setArea(e.target.value)} />
           <datalist id="bannerAreaList">
             {areas.map((a) => (
               <option key={a} value={a} />
@@ -154,8 +181,8 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
           </datalist>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Status</label>
-          <select className={styles.input} value={status} onChange={(e) => setStatus(e.target.value as BannerStatus)}>
+          <label className={styles.label} htmlFor="banner-status">Status</label>
+          <select id="banner-status" className={styles.input} value={status} onChange={(e) => setStatus(e.target.value as BannerStatus)}>
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -165,7 +192,7 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Banner photo</label>
+          <span className={styles.label}>Banner photo</span>
           <div className={styles.photoRow}>
             <button type="button" className={styles.ghostBtn} onClick={() => captureRef.current?.click()}>
               <Camera className="inline size-4" aria-hidden="true" /> Take photo
@@ -184,8 +211,9 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Paste a Google Maps link</label>
+          <label className={styles.label} htmlFor="banner-maps-link">Paste a Google Maps link</label>
           <input
+            id="banner-maps-link"
             className={styles.input}
             placeholder="https://maps.google.com/…"
             value={mapsLink}
@@ -196,12 +224,12 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
         </div>
         <div className={styles.grid2}>
           <div className={styles.field}>
-            <label className={styles.label}>Latitude</label>
-            <input className={styles.input} type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} />
+            <label className={styles.label} htmlFor="banner-latitude">Latitude</label>
+            <input id="banner-latitude" className={styles.input} type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Longitude</label>
-            <input className={styles.input} type="number" step="any" value={lng} onChange={(e) => setLng(e.target.value)} />
+            <label className={styles.label} htmlFor="banner-longitude">Longitude</label>
+            <input id="banner-longitude" className={styles.input} type="number" step="any" value={lng} onChange={(e) => setLng(e.target.value)} />
           </div>
         </div>
         <button type="button" className={styles.ghostBtnFull} onClick={useCurrentLocation} disabled={locating}>
@@ -209,13 +237,14 @@ export function BannerAddModal({ areas, onDone, onClose }: { areas: string[]; on
         </button>
 
         <div className={styles.field}>
-          <label className={styles.label}>Notes</label>
-          <textarea className={styles.input} value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} />
+          <label className={styles.label} htmlFor="banner-notes">Notes</label>
+          <textarea id="banner-notes" className={styles.input} value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} />
         </div>
+        </fieldset>
 
-        {error && <p className={styles.errorMsg}>{error}</p>}
+        {error && <p className={styles.errorMsg} role="alert">{error}</p>}
         <button type="button" className={styles.saveBtn} disabled={saving} onClick={save}>
-          {saving ? 'Saving…' : 'Add entry'}
+          {saving ? 'Saving…' : saveLabel}
         </button>
       </div>
     </div>
