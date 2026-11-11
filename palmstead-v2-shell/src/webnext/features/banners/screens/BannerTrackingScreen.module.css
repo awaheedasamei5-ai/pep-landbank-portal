@@ -57,6 +57,22 @@
   margin-bottom: 16px;
 }
 .addBtn:disabled { opacity: .6; cursor: default; }
+.reportLegacyBtn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-pill);
+  background: var(--c-card);
+  color: var(--c-text);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.reportLegacyBtn:disabled { opacity: .6; cursor: default; }
 
 .input {
   width: 100%;

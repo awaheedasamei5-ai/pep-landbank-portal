@@ -126,7 +126,7 @@ export function BannerTrackingScreen() {
 
       {tab === 'map' && !isLoading && <BannerMapPanel banners={all} />}
 
-      {tab === 'reports' && !isLoading && <ReportsTab all={all} onDownload={(filtered) => downloadPdf.mutate(filtered)} downloading={downloadPdf.isPending} />}
+      {tab === 'reports' && !isLoading && <ReportsTab all={all} onDownload={(filtered) => downloadPdf.mutate(filtered)} downloading={downloadPdf.isPending} onOpenDetailed={() => navigate('/dashboard/banners/reports')} />}
 
       {showAdd && <BannerAddModal areas={areas} onDone={() => setShowAdd(false)} onClose={() => setShowAdd(false)} />}
     </div>
@@ -371,7 +371,7 @@ function ListTab({
 // This week/This month/Last month/This year/Last year/Custom range)
 // alongside the existing area/status filters, all combinable, driving
 // both the on-screen list and the PDF export.
-function ReportsTab({ all, onDownload, downloading }: { all: Banner[]; onDownload: (filtered: Banner[]) => void; downloading: boolean }) {
+function ReportsTab({ all, onDownload, downloading, onOpenDetailed }: { all: Banner[]; onDownload: (filtered: Banner[]) => void; downloading: boolean; onOpenDetailed: () => void }) {
   const [period, setPeriod] = useState<ReportPeriod>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -435,7 +435,10 @@ function ReportsTab({ all, onDownload, downloading }: { all: Banner[]; onDownloa
           {filtered.length} of {all.length} banner{all.length === 1 ? '' : 's'}
         </span>
       </div>
-      <button type="button" className={styles.addBtn} disabled={downloading} onClick={() => onDownload(filtered)}>
+      <button type="button" className={styles.addBtn} onClick={onOpenDetailed}>
+        Open detailed banner report
+      </button>
+      <button type="button" className={styles.reportLegacyBtn} disabled={downloading} onClick={() => onDownload(filtered)}>
         {downloading ? 'Preparing…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download full report (PDF)</span>)}
       </button>
       {filtered.length === 0 && <p className={styles.emptyMsg}>Nothing matches these filters</p>}
