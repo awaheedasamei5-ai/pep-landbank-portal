@@ -36,7 +36,9 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
   const [fieldPosition, setFieldPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [radiusMeters, setRadiusMeters] = useState(150);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [deviceAlertMessage, setDeviceAlertMessage] = useState<string | null>(null);
   const [deviceAlerts, setDeviceAlerts] = useState(false);
+  const [watchRetry, setWatchRetry] = useState(0);
   const alertedRef = useRef<Set<string>>(new Set());
 
   const withCoords = banners.filter((b) => validBannerCoordinates(b.lat, b.lng));
@@ -98,7 +100,7 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
       { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [fieldMode]);
+  }, [fieldMode, watchRetry]);
 
   useEffect(() => {
     if (!fieldMode || !fieldPosition) return;
@@ -124,21 +126,22 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
     setFieldMode(false);
     setFieldPosition(null);
     setLocationError(null);
+    setDeviceAlertMessage(null);
     alertedRef.current.clear();
   }
 
   async function enableDeviceAlerts() {
     if (typeof Notification === "undefined") {
-      setLocationError("This browser does not support device notifications. Nearby banners will still appear here.");
+      setDeviceAlertMessage("This browser does not support device notifications. Nearby banners will still appear here.");
       return;
     }
     try {
       const permission = await Notification.requestPermission();
       if (permission === "granted") alertedRef.current.clear();
       setDeviceAlerts(permission === "granted");
-      if (permission !== "granted") setLocationError("Device alerts are off. Nearby banners will still appear here.");
+      setDeviceAlertMessage(permission === "granted" ? null : "Device alerts are off. Nearby banners will still appear here.");
     } catch {
-      setLocationError("Device alerts could not be enabled. Nearby banners will still appear here.");
+      setDeviceAlertMessage("Device alerts could not be enabled. Nearby banners will still appear here.");
     }
   }
 
@@ -344,6 +347,12 @@ export function BannerMapPanel({ banners }: { banners: Banner[] }) {
           </div>
         )}
         {locationError && <p className={styles.errorMsg} role="alert">{locationError}</p>}
+        {deviceAlertMessage && <p className={styles.hint} role="status">{deviceAlertMessage}</p>}
+        {fieldMode && locationError && (
+          <button type="button" className={styles.routeLink} onClick={() => { setLocationError(null); setWatchRetry((count) => count + 1); }}>
+            Retry location
+          </button>
+        )}
         {fieldMode && !fieldPosition && !locationError && <p className={styles.hint} role="status">Waiting for device location…</p>}
         {fieldMode && fieldPosition && (
           <>
