@@ -9,6 +9,7 @@ import { useBannerStatusLog, useBanners, useDeleteBanner, useLeadsForBanner, use
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import type { BannerStatus } from '../../../types/domain';
 import styles from './BannerDetailScreen.module.css';
+import { BannerInspectionPanel } from '../components/BannerInspectionPanel';
 
 // Real user ask (2026-09-11): literal port of v1's real viewBannerDetail/
 // bindBannerDetailCtrls/loadBannerTimeline (index.html:18468-18538) --
@@ -114,6 +115,8 @@ export function BannerDetailScreen() {
         )}
         {banner.notes && <p className={styles.notes}>{banner.notes}</p>}
       </div>
+
+      <BannerInspectionPanel bannerId={banner.id} />
 
       <div className={styles.sectitle}>Log a status update</div>
       <div className={styles.card}>
@@ -230,7 +233,7 @@ export function BannerDetailScreen() {
       ) : (
         <div className={styles.card}>
           <p className={styles.hint}>
-            Delete &quot;{banner.name}&quot;? This removes the banner and its whole status history — this can&apos;t be undone.
+            Delete &quot;{banner.name}&quot;? This removes the banner and its status history. Banners with physical inspections are retained and cannot be deleted.
           </p>
           <div className={styles.confirmRow}>
             <button type="button" className={styles.ghostBtn} onClick={() => setConfirmingDelete(false)}>
@@ -260,3 +263,4 @@ export function BannerDetailScreen() {
     </div>
   );
 }
+
