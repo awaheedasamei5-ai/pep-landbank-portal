@@ -76,7 +76,7 @@
   font-family: inherit;
 }
 
-.photoRow { display: flex; gap: 8px; }
+.photoRow { display: flex; gap: 8px; flex-wrap: wrap; }
 .ghostBtn {
   flex: 1;
   padding: 10px;
@@ -135,3 +135,15 @@
 }
 .deleteBtn:disabled { opacity: .6; cursor: default; }
 .confirmRow { display: flex; gap: 8px; margin-top: 10px; }
+
+.inspectionIntro { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 16px; color: var(--c-text); font-size: 13px; line-height: 1.5; }
+.inspectionIntro svg { flex: 0 0 auto; color: var(--c-accent); }
+.inspectionPreview { margin: 12px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.inspectionPreview img { max-width: min(100%, 260px); max-height: 180px; object-fit: cover; border-radius: 10px; }
+.inspectionLocation { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 8px; font-size: 12px; color: var(--c-muted); }
+.inspectionLocation .ghostBtn { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; }
+.inspectionMeta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--c-muted); font-size: 12px; margin-top: 10px; }
+.inspectionPhotoButton { border: 0; background: none; padding: 4px 0; color: var(--c-accent); font: inherit; font-weight: 700; cursor: pointer; }
+.inspectionPhotoButton:disabled { opacity: .6; }
+@media (width <= 480px) { .head { flex-wrap: wrap; } .photoRow > .ghostBtn { min-width: 130px; } .inspectionLocation .ghostBtn { flex: 1 1 100%; } }
+
