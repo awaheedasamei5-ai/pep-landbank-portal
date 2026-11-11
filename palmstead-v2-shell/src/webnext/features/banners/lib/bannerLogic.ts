@@ -60,26 +60,24 @@ export function directionsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
-// Real production fix (comment there: "chunked into multiple Google Maps
-// deep-links past the real 10-stop waypoint cap ... instead of silently
-// dropping banners past #10 the way the old single-route version did").
-// One link per chunk of up to 10 stops, each a real usable Google Maps
-// route -- replaces the earlier areaDirectionsUrl, which truncated
-// silently instead of covering every matched banner.
+// Maps URLs support only three waypoints in mobile browsers. Each part has
+// at most four new stops; later parts begin at the previous destination.
 export function bannerRouteLinks(banners: Banner[]): { label: string; url: string }[] {
   const mapped = banners.filter((b) => validBannerCoordinates(b.lat, b.lng));
   if (!mapped.length) return [];
   const chunks: Banner[][] = [];
-  for (let i = 0; i < mapped.length; i += 10) chunks.push(mapped.slice(i, i + 10));
+  for (let i = 0; i < mapped.length; i += 4) chunks.push(mapped.slice(i, i + 4));
   return chunks.map((chunk, i) => {
     const destination = chunk[chunk.length - 1];
+    const previous = i ? chunks[i - 1][chunks[i - 1].length - 1] : null;
     const waypoints = chunk
       .slice(0, -1)
       .map((b) => `${b.lat},${b.lng}`)
       .join('|');
     let url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}`;
+    if (previous) url += `&origin=${previous.lat},${previous.lng}`;
     if (waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`;
-    const label = chunks.length > 1 ? `Stops ${i * 10 + 1}-${i * 10 + chunk.length} →` : `Open route (${chunk.length} stop${chunk.length === 1 ? '' : 's'}) →`;
+    const label = chunks.length > 1 ? `Stops ${i * 4 + 1}-${i * 4 + chunk.length} →` : `Open route (${chunk.length} stop${chunk.length === 1 ? '' : 's'}) →`;
     return { label, url };
   });
 }
@@ -152,16 +150,23 @@ export interface LeafletGlobal {
   map(el: HTMLElement): LeafletMapInstance;
   tileLayer(url: string, opts: Record<string, unknown>): { addTo(map: LeafletMapInstance): void };
   circleMarker(latlng: [number, number], opts: Record<string, unknown>): LeafletMarker;
+  polyline(points: [number, number][], opts: Record<string, unknown>): LeafletPolyline;
   latLngBounds(points: [number, number][]): unknown;
 }
 export interface LeafletMapInstance {
   setView(center: [number, number], zoom: number): LeafletMapInstance;
   fitBounds(bounds: unknown, opts: Record<string, unknown>): void;
   remove(): void;
+  removeLayer(layer: LeafletPolyline): void;
 }
 export interface LeafletMarker {
   addTo(map: LeafletMapInstance): LeafletMarker;
   bindPopup(html: string): void;
+  on(event: 'click', callback: () => void): LeafletMarker;
+  setStyle(style: Record<string, unknown>): void;
+}
+export interface LeafletPolyline {
+  addTo(map: LeafletMapInstance): LeafletPolyline;
 }
 declare global {
   interface Window {

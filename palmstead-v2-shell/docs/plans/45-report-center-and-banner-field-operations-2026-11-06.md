@@ -2,6 +2,12 @@
 
 Status: active, 6 November 2026. Work on `rebuild` only; never write to V1 `main`. Release verified slices through a feature branch, preview, Management and Staff checks, then V2 production.
 
+## 11 November 2026 release and next field slice
+
+V2 `rebuild` includes the filtered Banner operational report from PR #75, production commit `3461beb38f6753bccdf34c3d72693128f38f68ba`. The exact preview was tested with Management and Adams Staff: 63 banners, 57 good, 5 needing work, 1 scouted, 63 mapped, 93 status entries. The Spintex + maintenance filter returned five banners and ten status entries. Its filtered PDF was downloaded and visually checked after a pagination fix: five register rows fit on one A4 page. A 375px viewport showed no document overflow with the dashboard sidebar collapsed. This completes the report slice, not the field map or physical inspection workflow.
+
+The next field slice is a **selected-stop planner** inside Banner Tracking. Keep map pins and list checkboxes synchronized by banner ID. Order only selected, valid-coordinate banners; never silently use every filtered banner when a selection is present. Compute an in-browser nearest-neighbor suggestion from the user's optional starting position (or first selected banner), and label its leg lengths as straight-line estimates. Preserve a user-defined stop order and offer the existing Google Maps links for turn-by-turn road directions. Do not show a driving time or call an estimate a road route until a supported routing service is provisioned. Do not send banner coordinates to an unapproved public demo routing endpoint. The public OpenStreetMap tile endpoint is best-effort and has usage rules; a commercial or self-hosted tile/routing arrangement is a later infrastructure decision. Add foreground-only proximity after a user starts field mode and grants device location permission. A separate inspection workflow needs its own explicit record, photo evidence, timestamp, and permission test; existing status-log entries are not physical inspections.
+
 ## Product research and limits
 
 - ERPNext's sales analytics separates date, group-by and comparison dimensions; Pipedrive distinguishes activity performance from deal conversion. Keep denominators and source dates explicit rather than calling approved receipts booked sales. Sources: https://docs.frappe.io/erpnext/sales-analytics and https://support.pipedrive.com/en/article/insights-reports-activities-performance
