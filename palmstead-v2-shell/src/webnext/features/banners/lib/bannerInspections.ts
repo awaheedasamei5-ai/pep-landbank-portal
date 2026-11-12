@@ -13,7 +13,12 @@ export interface BannerInspection {
   observed_lng: number | null;
   gps_accuracy_m: number | null;
   recorded_at: string;
-  inspector?: { name: string } | null;
+  inspector?: { name: string } | { name: string }[] | null;
+}
+
+export function bannerInspectorName(row: BannerInspection): string {
+  const person = Array.isArray(row.inspector) ? row.inspector[0] : row.inspector;
+  return person?.name ?? 'Staff';
 }
 
 function client() {

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Images, LocateFixed, ShieldCheck } from 'lucide-react';
 import type { BannerStatus } from '../../../types/domain';
 import { BANNER_STATUS, BANNER_STATUS_ORDER } from '../lib/bannerLogic';
-import { listBannerInspections, submitBannerInspection, viewInspectionPhoto } from '../lib/bannerInspections';
+import { bannerInspectorName, listBannerInspections, submitBannerInspection, viewInspectionPhoto } from '../lib/bannerInspections';
 import styles from '../screens/BannerDetailScreen.module.css';
 
 export function BannerInspectionPanel({ bannerId }: { bannerId: string }) {
@@ -116,7 +116,7 @@ export function BannerInspectionPanel({ bannerId }: { bannerId: string }) {
     {!isLoading && !listError && !inspections?.length && <p className={styles.emptyMsg}>No physical inspections recorded yet.</p>}
     <div className={styles.list}>
       {(inspections ?? []).map((item) => <article key={item.id} className={styles.logRow} style={{ borderLeftColor: BANNER_STATUS[item.observed_condition].color }}>
-        <div className={styles.logTop}><strong className={styles.logStatus}>{BANNER_STATUS[item.observed_condition].label} · {item.inspector?.name || 'Staff'}</strong><time className={styles.logDate} dateTime={item.recorded_at}>{new Date(item.recorded_at).toLocaleString()}</time></div>
+        <div className={styles.logTop}><strong className={styles.logStatus}>{BANNER_STATUS[item.observed_condition].label} · {bannerInspectorName(item)}</strong><time className={styles.logDate} dateTime={item.recorded_at}>{new Date(item.recorded_at).toLocaleString()}</time></div>
         {item.finding && <p className={styles.logNote}>{item.finding}</p>}
         <div className={styles.inspectionMeta}><span>{item.observed_lat == null ? 'No device position' : `Device position · ±${Math.round(item.gps_accuracy_m ?? 0)} m`}</span><button type="button" className={styles.inspectionPhotoButton} onClick={() => openPhoto(item.photo_path)} disabled={viewing === item.photo_path}>{viewing === item.photo_path ? 'Opening…' : viewedPhoto?.path === item.photo_path ? 'Hide photo' : 'View private photo'}</button></div>
         {viewedPhoto?.path === item.photo_path && <div className={styles.inspectionPreview}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={viewedPhoto.url} alt={`Evidence for ${BANNER_STATUS[item.observed_condition].label}`} /></div>}
