@@ -174,6 +174,11 @@ export function SiteVisitReportsScreen(){
     <Button asChild variant="ghost" className="self-start"><Link href="/dashboard/site-visits"><ArrowLeft className="size-4"/>Back to site visits</Link></Button>
     <div><p className="text-sm font-medium text-primary">Site visit insights</p><h1 className="text-3xl font-semibold tracking-tight">Site visits report</h1><p className="mt-1 text-muted-foreground">Visit records, confirmed outcomes and pipeline linkage. Counts use the scheduled visit date.</p></div>
     <Card><CardHeader><CardTitle>Report filters</CardTitle></CardHeader><CardContent className="flex flex-wrap items-end gap-3">
+      <div className="flex w-full flex-wrap gap-2" aria-label="Date range shortcuts">
+        <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,7)+'-01');setTo(today)}}>This month</Button>
+        <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,4)+'-01-01');setTo(today)}}>Year to date</Button>
+        <Button size="sm" variant="outline" onClick={()=>{setFrom('2020-01-01');setTo(today)}}>All visits</Button>
+      </div>
       <label className="grid gap-1 text-sm">From<Input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
       <label className="grid gap-1 text-sm">To<Input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
       {manager&&<label className="grid gap-1 text-sm">Staff<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={staffKey} onChange={(e)=>setStaffKey(e.target.value)}><option value="">All staff</option>{report.data?.staff.map((s)=><option key={s.agent_key} value={s.agent_key}>{s.name}{s.active?'':' (former)'}</option>)}</select></label>}
