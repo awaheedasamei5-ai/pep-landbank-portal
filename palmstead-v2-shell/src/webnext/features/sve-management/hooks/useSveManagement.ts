@@ -12,7 +12,7 @@ import { friendlyFunctionsInvokeError } from '../../../shared/lib/friendlyError'
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { inPeriodRange, type PeriodRange } from '../../../shared/lib/periodFilter';
-import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename } from '../lib/sveReportPdf';
+import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename, type SveReportAttendance } from '../lib/sveReportPdf';
 import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
@@ -23,6 +23,21 @@ import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatc
 function renderSveTemplate(template: string | null | undefined, fallback: string, vars: Record<string, string>): string {
   const base = template && template.trim() ? template : fallback;
   return base.replace(/\{(\w+)\}/g, (_match, key) => (key in vars ? vars[key] : `{${key}}`));
+}
+
+async function loadReportAttendance(report: SveDayReport, demoMode: boolean): Promise<Record<string, SveReportAttendance>> {
+  const ids = report.entries.map((entry) => entry.siteVisitId).filter(Boolean);
+  if (!ids.length) return {};
+  const rows = demoMode
+    ? (await getDataSource(true).siteVisits.listAll()).filter((visit) => ids.includes(visit.id)).map((visit) => ({ id: visit.id, attended: visit.attended, deleted_at: visit.deletedAt }))
+    : await (async () => {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Site visits are unavailable.');
+      const { data, error } = await client.from('site_visits').select('id,attended,deleted_at').in('id', ids);
+      if (error) throw error;
+      return data ?? [];
+    })();
+  return Object.fromEntries(rows.map((row) => [row.id, row.deleted_at ? 'cancelled' : row.attended === true ? 'attended' : row.attended === false ? 'no-show' : 'unconfirmed']));
 }
 
 async function sveFeedbackThankYouTemplate(): Promise<string | null> {
@@ -265,7 +280,8 @@ export function useSendSveDayReport() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const doc = buildSveDayReportPdf(report, logo, profile?.name);
+      const attendance = await loadReportAttendance(report, demoMode);
+      const doc = buildSveDayReportPdf(report, logo, profile?.name, attendance);
       const blob = doc.output('blob');
       const token = await ds.sve.issueDayReportLink(report.id, blob, profile?.key ?? '', profile?.name ?? '');
       const link = `${APP_ORIGIN}/sve-report/${token}`;
@@ -298,6 +314,7 @@ export function useSendSveDayReport() {
 // still-draft report and for re-downloading an already-sent one.
 export function useDownloadSveDayReportPdf() {
   const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (report: SveDayReport) => {
@@ -308,7 +325,8 @@ export function useDownloadSveDayReportPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const doc = buildSveDayReportPdf(report, logo, profile?.name);
+      const attendance = await loadReportAttendance(report, demoMode);
+      const doc = buildSveDayReportPdf(report, logo, profile?.name, attendance);
       const filename = sveDayReportFilename(report.visitDate);
       doc.save(filename);
       logDownload(filename, 'pdf', doc.output('datauristring'));
@@ -460,3 +478,4 @@ export function useConversionAnalytics(range: PeriodRange | null) {
 }
 
 export type { SveDayReportEntry };
+
