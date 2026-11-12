@@ -16,7 +16,7 @@ import { useAuthStore } from '@/stores/auth/auth-store';
 import { pdfBrandedHeader, pdfReportFooter, pdfSectionTitle } from '@/webnext/shared/lib/pdfReport';
 
 type Row = Record<string, unknown>;
-type ReportSection = 'attendance' | 'calls' | 'leads' | 'visits' | 'tasks' | 'banners';
+type ReportSection = 'attendance' | 'calls' | 'leads' | 'visits' | 'tasks' | 'banners' | 'inspections';
 type ReportRows = Record<ReportSection, Row[]>;
 const sections: { id: ReportSection; title: string; url: string; columns: { key: string; title: string }[] }[] = [
   { id: 'attendance', title: 'Attendance', url: '/dashboard/attendance/reports', columns: [{ key: 'work_date', title: 'Day' }, { key: 'sign_in_at', title: 'In' }, { key: 'sign_out_at', title: 'Out' }] },
@@ -24,7 +24,8 @@ const sections: { id: ReportSection; title: string; url: string; columns: { key:
   { id: 'leads', title: 'New leads', url: '/dashboard/pipeline/reports', columns: [{ key: 'date_added', title: 'Added' }, { key: 'name', title: 'Client' }, { key: 'stage', title: 'Stage' }, { key: 'lead_source', title: 'Source' }] },
   { id: 'visits', title: 'Site visits', url: '/dashboard/site-visits/reports', columns: [{ key: 'visit_date', title: 'Visit day' }, { key: 'name', title: 'Client' }, { key: 'site', title: 'Site' }, { key: 'status', title: 'Status' }] },
   { id: 'tasks', title: 'Scheduled work', url: '/dashboard/operations/reports', columns: [{ key: 'item_date', title: 'Day' }, { key: 'title', title: 'Task' }, { key: 'status', title: 'Status' }, { key: 'completed_at', title: 'Completed' }] },
-  { id: 'banners', title: 'Banners I logged', url: '/dashboard/banners', columns: [{ key: 'created_at', title: 'Logged' }, { key: 'name', title: 'Banner' }, { key: 'area', title: 'Area' }, { key: 'status', title: 'Status' }] },
+  { id: 'banners', title: 'Banners I logged', url: '/dashboard/banners/reports', columns: [{ key: 'created_at', title: 'Logged' }, { key: 'name', title: 'Banner' }, { key: 'area', title: 'Area' }, { key: 'status', title: 'Status' }] },
+  { id: 'inspections', title: 'Banner inspections I completed', url: '/dashboard/banners/reports', columns: [{ key: 'recorded_at', title: 'Recorded' }, { key: 'banner_name', title: 'Banner' }, { key: 'banner_area', title: 'Area' }, { key: 'observed_condition', title: 'Condition' }, { key: 'finding', title: 'Finding' }] },
 ];
 
 async function pageRows<T extends Row>(make: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
@@ -39,15 +40,22 @@ async function pageRows<T extends Row>(make: (from: number, to: number) => Promi
 
 async function loadReport(key: string, from: string, to: string): Promise<ReportRows> {
   const db = requireSupabase();
-  const [attendance, calls, leads, visits, tasks, banners] = await Promise.all([
+  const { data: auth, error: authError } = await db.auth.getUser();
+  if (authError || !auth.user) throw new Error('Sign in again to load your personal report.');
+  const [attendance, calls, leads, visits, tasks, banners, inspectionRows] = await Promise.all([
     pageRows((a,b) => db.from('attendance_log').select('work_date,sign_in_at,sign_out_at').eq('staff_key',key).gte('work_date',from).lte('work_date',to).order('work_date',{ascending:false}).range(a,b)),
     pageRows((a,b) => db.from('activity_log').select('created_at,client,action,outcome,method').eq('agent_key',key).gte('created_at',`${from}T00:00:00+00:00`).lt('created_at',`${nextDay(to)}T00:00:00+00:00`).order('created_at',{ascending:false}).range(a,b)),
     pageRows((a,b) => db.from('leads').select('date_added,name,stage,lead_source').eq('agent_key',key).is('deleted_at',null).gte('date_added',from).lte('date_added',to).order('date_added',{ascending:false}).range(a,b)),
     pageRows((a,b) => db.from('site_visits').select('visit_date,name,site,status').eq('agent_key',key).is('deleted_at',null).gte('visit_date',from).lte('visit_date',to).order('visit_date',{ascending:false}).range(a,b)),
     pageRows((a,b) => db.from('op_todos').select('item_date,title,status,completed_at').eq('assigned_to',key).gte('item_date',from).lte('item_date',to).order('item_date',{ascending:false}).range(a,b)),
     pageRows((a,b) => db.from('banners').select('created_at,name,area,status').eq('created_by',key).gte('created_at',`${from}T00:00:00+00:00`).lt('created_at',`${nextDay(to)}T00:00:00+00:00`).order('created_at',{ascending:false}).range(a,b)),
+    pageRows((a,b) => db.from('banner_inspections').select('recorded_at,observed_condition,finding,banner:banners!banner_id(name,area)').eq('inspector_id',auth.user.id).gte('recorded_at',`${from}T00:00:00+00:00`).lt('recorded_at',`${nextDay(to)}T00:00:00+00:00`).order('recorded_at',{ascending:false}).range(a,b)),
   ]);
-  return { attendance, calls, leads, visits, tasks, banners };
+  const inspections = inspectionRows.map((row) => {
+    const banner = Array.isArray(row.banner) ? row.banner[0] : row.banner;
+    return { recorded_at: row.recorded_at, banner_name: banner?.name ?? 'Unknown banner', banner_area: banner?.area ?? '—', observed_condition: row.observed_condition, finding: row.finding };
+  });
+  return { attendance, calls, leads, visits, tasks, banners, inspections };
 }
 
 function nextDay(day: string): string {
@@ -121,3 +129,4 @@ export function StaffReportScreen() {
     {report.data && <div className="grid gap-4">{counts.filter((s)=>selected.includes(s.id)).map((section)=><Card key={section.id} className="min-w-0"><CardHeader><CardTitle className="text-lg">{section.title}</CardTitle></CardHeader><CardContent>{section.count===0 ? <p className="text-sm text-muted-foreground">No records for this period.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b">{section.columns.map((c)=><th key={c.key} className="py-2 pr-3 font-medium">{c.title}</th>)}</tr></thead><tbody>{report.data![section.id].slice(0,20).map((row,i)=><tr key={i} className="border-b last:border-0">{section.columns.map((c)=><td key={c.key} className="max-w-64 truncate py-2 pr-3" title={display(row[c.key])}>{display(row[c.key])}</td>)}</tr>)}</tbody></table>{section.count>20 && <p className="pt-3 text-sm text-muted-foreground">Showing 20 here; the PDF contains all {section.count} records.</p>}</div>}</CardContent></Card>)}</div>}
   </main>;
 }
+
