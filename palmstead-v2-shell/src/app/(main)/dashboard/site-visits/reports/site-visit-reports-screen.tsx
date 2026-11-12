@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ArrowLeft, Download } from 'lucide-react';
@@ -70,6 +70,7 @@ function nextY(doc:jsPDF,y:number){
 
 export function SiteVisitReportsScreen(){
   const profile=useAuthStore((s)=>s.profile);
+  const queryClient=useQueryClient();
   const manager=profile?.role==='manager';
   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Accra'});
   const [from,setFrom]=useState(today.slice(0,7)+'-01');
@@ -82,20 +83,32 @@ export function SiteVisitReportsScreen(){
   const [pdfError,setPdfError]=useState('');
   const valid=!!from&&!!to&&from<=to;
   const report=useQuery({queryKey:['site-visit-report',profile?.key,manager,from,to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,from,to,staffKey),enabled:!!profile&&valid,staleTime:60000});
+  useEffect(()=>{
+    if(!profile?.key)return;
+    const db=requireSupabase();
+    const channel=db.channel(`site-visit-report-${profile.key}`)
+      .on('postgres_changes',{event:'*',schema:'public',table:'site_visits'},()=>{
+        void queryClient.invalidateQueries({queryKey:['site-visit-report']});
+      }).subscribe();
+    return ()=>{void db.removeChannel(channel)};
+  },[profile?.key,queryClient]);
   const visits=report.data?.visits??[];
   const sites=useMemo(()=>[...new Set(visits.map((v)=>v.site?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const sources=useMemo(()=>[...new Set(visits.map((v)=>v.source?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const filtered=useMemo(()=>visits.filter((v)=>(!site||v.site?.trim()===site)&&(!source||v.source?.trim()===source)&&(status==='all'||outcome(v)===status)),[visits,site,source,status]);
   const counts=useMemo(()=>({
-    scheduled:filtered.length,
+    records:filtered.length,
     attended:filtered.filter((v)=>outcome(v)==='attended').length,
     noShow:filtered.filter((v)=>outcome(v)==='not-attended').length,
     cancelled:filtered.filter((v)=>outcome(v)==='cancelled').length,
     unconfirmed:filtered.filter((v)=>outcome(v)==='pending').length,
+    pastUnconfirmed:filtered.filter((v)=>outcome(v)==='pending'&&v.visit_date<today).length,
     withFeedback:filtered.filter((v)=>!!v.feedback_after?.trim()).length,
     linked:filtered.filter((v)=>!!v.lead_id).length,
     rescheduled:filtered.filter((v)=>!!v.rescheduled_at).length,
-  }),[filtered]);
+  }),[filtered,today]);
+  const activeBookings=counts.records-counts.cancelled;
+  const recordedOutcomes=counts.attended+counts.noShow;
   const trend=useMemo(()=>{
     const byWeek=new Map<string,{week:string,visits:number,attended:number}>();
     for(const visit of filtered){
@@ -116,17 +129,19 @@ export function SiteVisitReportsScreen(){
       let y=pdfBrandedHeader(doc,'Site visits report',from+' to '+to,[staffLabel,'Generated '+new Date().toLocaleString('en-GB',{timeZone:'Africa/Accra'})],null);
       doc.setFontSize(9);
       doc.text('Date basis: scheduled visit date. Attendance is counted only when explicitly marked.',14,y);y+=6;
-      doc.text('Unconfirmed is not a no-show. A linked lead is not a sale.',14,y);y+=13;
+      doc.text('Unconfirmed is not a no-show. Staff follow-up text is not a client survey.',14,y);y+=6;
+      doc.text('A linked lead is not a sale. Rates exclude cancelled records.',14,y);y+=13;
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scope and outcomes');
       autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
         ['Site',site||'All sites'],['Source',source||'All sources'],['Outcome',status==='all'?'All outcomes':outcomeLabel(status)],
-        ['Visits in scope',counts.scheduled],['Attended',counts.attended],['Explicitly not attended',counts.noShow],
-        ['Cancelled',counts.cancelled],['Unconfirmed',counts.unconfirmed],['Attendance confirmation rate',percent(counts.attended,counts.scheduled-counts.cancelled)],
-        ['Feedback recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Rescheduled',counts.rescheduled],
+        ['Visit records in scope',counts.records],['Attended',counts.attended],['Explicitly not attended',counts.noShow],
+        ['Cancelled',counts.cancelled],['Attendance not recorded',counts.unconfirmed],['Past visits with unknown attendance',counts.pastUnconfirmed],
+        ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
+        ['Staff follow-up text recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Unlinked to pipeline lead',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
       y=nextY(doc,y);
       if(y>195){doc.addPage();y=20}
-      y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scheduled versus attended',trend.length>8?'Latest 8 weeks of '+trend.length:'Weekly trend');
+      y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit records versus attended',trend.length>8?'Latest 8 weeks of '+trend.length:'Weekly trend');
       if(trend.length){
         const points=trend.slice(-8);
         const max=Math.max(1,...points.map((p)=>p.visits));
@@ -143,7 +158,7 @@ export function SiteVisitReportsScreen(){
           doc.setFontSize(7);doc.setTextColor(71,85,105);
           doc.text(p.week.slice(5),x,base+5,{align:'center'});
         });
-        doc.setFontSize(8);doc.setTextColor(20,48,93);doc.text('Scheduled',14,base+12);
+        doc.setFontSize(8);doc.setTextColor(20,48,93);doc.text('Visit records',14,base+12);
         doc.setTextColor(145,114,25);doc.text('Attended',41,base+12);
         y=base+15;
       } else {doc.setFontSize(9);doc.text('No visits in this period.',16,y);y+=12}
@@ -157,7 +172,7 @@ export function SiteVisitReportsScreen(){
   }
   return <main className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-5 p-4 pb-12 md:p-8">
     <Button asChild variant="ghost" className="self-start"><Link href="/dashboard/site-visits"><ArrowLeft className="size-4"/>Back to site visits</Link></Button>
-    <div><p className="text-sm font-medium text-primary">Site visit insights</p><h1 className="text-3xl font-semibold tracking-tight">Site visits report</h1><p className="mt-1 text-muted-foreground">Scheduled visits, confirmed outcomes and pipeline linkage. Counts use the scheduled visit date.</p></div>
+    <div><p className="text-sm font-medium text-primary">Site visit insights</p><h1 className="text-3xl font-semibold tracking-tight">Site visits report</h1><p className="mt-1 text-muted-foreground">Visit records, confirmed outcomes and pipeline linkage. Counts use the scheduled visit date.</p></div>
     <Card><CardHeader><CardTitle>Report filters</CardTitle></CardHeader><CardContent className="flex flex-wrap items-end gap-3">
       <label className="grid gap-1 text-sm">From<Input type="date" value={from} onChange={(e)=>setFrom(e.target.value)}/></label>
       <label className="grid gap-1 text-sm">To<Input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
@@ -173,13 +188,15 @@ export function SiteVisitReportsScreen(){
     {pdfError&&<p role="alert" className="text-destructive">{pdfError}</p>}
     {report.data&&<>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
-        ['Visits in scope',counts.scheduled],['Attended',counts.attended],['Unconfirmed',counts.unconfirmed],
-        ['Did not attend',counts.noShow],['Cancelled',counts.cancelled],['Confirmation rate',percent(counts.attended,counts.scheduled-counts.cancelled)],
-        ['Feedback recorded',counts.withFeedback],['Linked leads',counts.linked],['Rescheduled',counts.rescheduled],
+        ['Visit records',counts.records],['Attended',counts.attended],['Attendance unknown',counts.unconfirmed],
+        ['Past visits still unconfirmed',counts.pastUnconfirmed],['Did not attend',counts.noShow],['Cancelled',counts.cancelled],
+        ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
+        ['Staff follow-up text',counts.withFeedback],['Linked leads',counts.linked],['Unlinked visits',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=><Card key={label}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></CardContent></Card>)}</div>
-      <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visits" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
+      <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
       <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{v.agent_name}</td><td className="py-2 pr-3">{v.name}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
-      <p className="text-xs text-muted-foreground">Unconfirmed visits are not classified as no-shows. A linked lead does not establish a sale.</p>
+      <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. A linked lead does not establish a sale.</p>
     </>}
   </main>;
 }
+
