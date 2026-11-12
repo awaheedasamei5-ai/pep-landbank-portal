@@ -160,7 +160,7 @@ export function SiteVisitReportsScreen(){
         });
         doc.setFontSize(8);doc.setTextColor(20,48,93);doc.text('Visit records',14,base+12);
         doc.setTextColor(145,114,25);doc.text('Attended',41,base+12);
-        y=base+15;
+        y=base+25;
       } else {doc.setFontSize(9);doc.text('No visits in this period.',16,y);y+=12}
       doc.setTextColor(0,0,0);
       if(y>245){doc.addPage();y=20}
