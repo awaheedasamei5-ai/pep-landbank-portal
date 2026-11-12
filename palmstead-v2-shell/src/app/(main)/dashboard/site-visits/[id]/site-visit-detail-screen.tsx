@@ -39,7 +39,9 @@ export function SiteVisitDetailScreen() {
     enabled: !!id && !!profile?.key,
     queryFn: async () => {
       if (demoMode) return (await getDataSource(true).siteVisits.listAll()).find((item) => item.id === id) ?? null;
-      const { data, error } = await requireSupabase().from('site_visits').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+      let request = requireSupabase().from('site_visits').select('*').eq('id', id).is('deleted_at', null);
+      if (profile?.role !== 'manager') request = request.eq('agent_key', profile!.key);
+      const { data, error } = await request.maybeSingle();
       if (error) throw error;
       return data ? mapSiteVisitRow(data) : null;
     },
