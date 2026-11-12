@@ -370,25 +370,27 @@ export function BannerReportsScreen() {
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: [11, 30, 61] },
       });
-      y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 8;
-      if (y > 230) { doc.addPage(); y = 20; }
-      y = pdfSectionTitle(doc, y, pageW, "Physical inspection register", `${periodInspections.length} records in selected scope`);
-      autoTable(doc, {
-        startY: y,
-        margin: { left: 14, right: 14, bottom: 18 },
-        head: [["Recorded", "Banner", "Inspector", "Observed condition", "Finding", "Device accuracy"]],
-        body: periodInspections.length ? periodInspections.map((visit) => [
-          visit.recorded_at.slice(0, 16).replace("T", " "),
-          bannerById.get(visit.banner_id)?.name || "Unknown",
-          inspectorName(visit),
-          label(visit.observed_condition),
-          visit.finding || "—",
-          visit.gps_accuracy_m == null ? "Not captured" : `±${Math.round(visit.gps_accuracy_m)} m`,
-        ]) : [["No physical inspections in this scope", "", "", "", "", ""]],
-        theme: "grid",
-        styles: { fontSize: 6.7, cellPadding: 1.3, overflow: "linebreak" },
-        headStyles: { fillColor: [11, 30, 61] },
-      });
+      if (periodInspections.length) {
+        y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 8;
+        if (y > 230) { doc.addPage(); y = 20; }
+        y = pdfSectionTitle(doc, y, pageW, "Physical inspection register", `${periodInspections.length} records in selected scope`);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: 14, right: 14, bottom: 18 },
+          head: [["Recorded", "Banner", "Inspector", "Observed condition", "Finding", "Device accuracy"]],
+          body: periodInspections.map((visit) => [
+            visit.recorded_at.slice(0, 16).replace("T", " "),
+            bannerById.get(visit.banner_id)?.name || "Unknown",
+            inspectorName(visit),
+            label(visit.observed_condition),
+            visit.finding || "—",
+            visit.gps_accuracy_m == null ? "Not captured" : `±${Math.round(visit.gps_accuracy_m)} m`,
+          ]),
+          theme: "grid",
+          styles: { fontSize: 6.7, cellPadding: 1.3, overflow: "linebreak" },
+          headStyles: { fillColor: [11, 30, 61] },
+        });
+      }
       pdfReportFooter(doc, "Palmstead");
       doc.save(`Palmstead-banner-report-${today}.pdf`);
     } catch (cause) {
