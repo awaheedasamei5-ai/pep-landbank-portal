@@ -49,14 +49,14 @@ export function SiteVisitDetailScreen() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!profile?.key) return;
+    if (!profile?.key || demoMode) return;
     const db = requireSupabase();
     const channel = db.channel(`site-visit-detail-${profile.key}-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits', filter: `id=eq.${id}` }, () => {
         void queryClient.invalidateQueries({ queryKey: ['site-visit-detail', id] });
       }).subscribe();
     return () => { void db.removeChannel(channel); };
-  }, [id, profile?.key, queryClient]);
+  }, [id, profile?.key, demoMode, queryClient]);
 
   return <main className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-5 p-4 pb-12 md:p-8">
     <Button asChild variant="ghost" className="self-start"><Link href="/dashboard/site-visits"><ArrowLeft className="size-4" /> Back to site visits</Link></Button>
