@@ -30,8 +30,18 @@ type BannerRow = {
 };
 type UpdateRow = { id: string; banner_id: string; status: string; changed_by_name: string | null; created_at: string };
 type LeadRow = { banner_id: string | null };
-type Data = { banners: BannerRow[]; updates: UpdateRow[]; leadCounts: Record<string, number> | null };
-type DateBasis = "added" | "last-update";
+type InspectionRow = {
+  id: string;
+  banner_id: string;
+  inspector_id: string;
+  observed_condition: string;
+  finding: string;
+  gps_accuracy_m: number | null;
+  recorded_at: string;
+  inspector: { name: string } | { name: string }[] | null;
+};
+type Data = { banners: BannerRow[]; updates: UpdateRow[]; inspections: InspectionRow[]; leadCounts: Record<string, number> | null };
+type DateBasis = "added" | "last-update" | "last-inspection";
 const statusNames: Record<string, string> = {
   placed: "Good condition",
   needs_maintenance: "Needs maintenance",
@@ -41,6 +51,10 @@ const statusNames: Record<string, string> = {
 const statusOrder = ["placed", "needs_maintenance", "being_replaced", "location_only"];
 function label(status: string) {
   return statusNames[status] ?? status.replace(/_/g, " ");
+}
+function inspectorName(row: InspectionRow) {
+  const person = Array.isArray(row.inspector) ? row.inspector[0] : row.inspector;
+  return person?.name ?? "Staff";
 }
 function validPoint(b: BannerRow) {
   return (
@@ -78,7 +92,7 @@ async function pages<T>(
 }
 async function loadData(): Promise<Data> {
   const db = requireSupabase();
-  const [banners, updates, leads] = await Promise.all([
+  const [banners, updates, inspections, leads] = await Promise.all([
     pages<BannerRow>((a, b) =>
       db
         .from("banners")
@@ -93,6 +107,12 @@ async function loadData(): Promise<Data> {
         .order("created_at", { ascending: false })
         .range(a, b),
     ),
+    pages<InspectionRow>((a, b) =>
+      db.from("banner_inspections")
+        .select("id,banner_id,inspector_id,observed_condition,finding,gps_accuracy_m,recorded_at,inspector:profiles!inspector_id(name)")
+        .order("recorded_at", { ascending: false })
+        .range(a, b),
+    ),
     pages<LeadRow>((a, b) =>
       db.from("leads").select("banner_id").not("banner_id", "is", null).is("deleted_at", null).range(a, b),
     ).catch(() => null),
@@ -100,7 +120,7 @@ async function loadData(): Promise<Data> {
   const leadCounts: Record<string, number> = {};
   if (leads)
     for (const lead of leads) if (lead.banner_id) leadCounts[lead.banner_id] = (leadCounts[lead.banner_id] ?? 0) + 1;
-  return { banners, updates, leadCounts: leads ? leadCounts : null };
+  return { banners, updates, inspections, leadCounts: leads ? leadCounts : null };
 }
 
 export function BannerReportsScreen() {
@@ -112,6 +132,9 @@ export function BannerReportsScreen() {
   const [status, setStatus] = useState("");
   const [owner, setOwner] = useState("");
   const [quality, setQuality] = useState("all");
+  const [inspectionFilter, setInspectionFilter] = useState("all");
+  const [inspector, setInspector] = useState("");
+  const [inspectionAgeDays, setInspectionAgeDays] = useState(30);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const valid = !(from && to && from > to);
@@ -122,12 +145,23 @@ export function BannerReportsScreen() {
     staleTime: 60000,
   });
   const banners = report.data?.banners ?? [];
+  const bannerById = useMemo(() => new Map(banners.map((banner) => [banner.id, banner])), [banners]);
   const updates = report.data?.updates ?? [];
+  const inspections = report.data?.inspections ?? [];
   const latest = useMemo(() => {
     const byId = new Map<string, UpdateRow>();
     for (const row of updates) if (!byId.has(row.banner_id)) byId.set(row.banner_id, row);
     return byId;
   }, [updates]);
+  const latestInspection = useMemo(() => {
+    const byId = new Map<string, InspectionRow>();
+    for (const row of inspections) if (!byId.has(row.banner_id)) byId.set(row.banner_id, row);
+    return byId;
+  }, [inspections]);
+  const inspectors = useMemo(
+    () => [...new Map(inspections.map((row) => [row.inspector_id, inspectorName(row)]))].sort((a, b) => a[1].localeCompare(b[1])),
+    [inspections],
+  );
   const areas = useMemo(
     () =>
       [...new Map(banners.filter((b) => areaKey(b.area)).map((b) => [areaKey(b.area), b.area!.trim()])).entries()].sort(
@@ -146,6 +180,7 @@ export function BannerReportsScreen() {
   );
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Accra" });
   const staleCutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+  const inspectionCutoff = new Date(Date.now() - inspectionAgeDays * 86400000).toISOString();
   const filtered = useMemo(
     () =>
       banners.filter((b) => {
@@ -156,12 +191,18 @@ export function BannerReportsScreen() {
         if (quality === "unmapped" && validPoint(b)) return false;
         if (quality === "stale" && latest.get(b.id)?.created_at && latest.get(b.id)!.created_at >= staleCutoff)
           return false;
-        const date = (dateBasis === "added" ? b.created_at : (latest.get(b.id)?.created_at ?? "")).slice(0, 10);
+        const visit = latestInspection.get(b.id);
+        if (inspectionFilter === "never" && visit) return false;
+        if (inspectionFilter === "recent" && (!visit || visit.recorded_at < inspectionCutoff)) return false;
+        if (inspectionFilter === "needs-check" && visit && visit.recorded_at >= inspectionCutoff) return false;
+        if (inspectionFilter === "finding" && (!visit || !["needs_maintenance", "being_replaced"].includes(visit.observed_condition))) return false;
+        if (inspector && visit?.inspector_id !== inspector) return false;
+        const date = (dateBasis === "added" ? b.created_at : dateBasis === "last-update" ? (latest.get(b.id)?.created_at ?? "") : (visit?.recorded_at ?? "")).slice(0, 10);
         if (from && date < from) return false;
         if (to && date > to) return false;
         return true;
       }),
-    [banners, area, status, owner, quality, latest, staleCutoff, dateBasis, from, to],
+    [banners, area, status, owner, quality, latest, staleCutoff, latestInspection, inspectionFilter, inspector, inspectionCutoff, dateBasis, from, to],
   );
   const ids = useMemo(() => new Set(filtered.map((b) => b.id)), [filtered]);
   const periodUpdates = useMemo(
@@ -174,6 +215,16 @@ export function BannerReportsScreen() {
       ),
     [updates, ids, from, to],
   );
+  const periodInspections = useMemo(
+    () => inspections.filter((row) => ids.has(row.banner_id) && (!from || row.recorded_at.slice(0, 10) >= from) && (!to || row.recorded_at.slice(0, 10) <= to)),
+    [inspections, ids, from, to],
+  );
+  const recentlyInspected = filtered.filter((b) => {
+    const visit = latestInspection.get(b.id);
+    return visit && visit.recorded_at >= inspectionCutoff;
+  }).length;
+  const neverInspected = filtered.filter((b) => !latestInspection.has(b.id)).length;
+  const needsInspection = filtered.length - recentlyInspected;
   const mapped = filtered.filter(validPoint).length;
   const stale = filtered.filter((b) => !latest.get(b.id) || latest.get(b.id)!.created_at < staleCutoff).length;
   const good = filtered.filter((b) => b.status === "placed").length;
@@ -187,24 +238,30 @@ export function BannerReportsScreen() {
     count: filtered.filter((b) => b.status === key).length,
   }));
   const months = useMemo(() => {
-    const byMonth = new Map<string, { month: string; added: number; updates: number }>();
+    const byMonth = new Map<string, { month: string; added: number; updates: number; inspections: number }>();
     for (const b of filtered) {
       const key = monthKey(b.created_at);
-      const item = byMonth.get(key) ?? { month: key, added: 0, updates: 0 };
+      const item = byMonth.get(key) ?? { month: key, added: 0, updates: 0, inspections: 0 };
       item.added++;
       byMonth.set(key, item);
     }
     for (const u of periodUpdates) {
       const key = monthKey(u.created_at);
-      const item = byMonth.get(key) ?? { month: key, added: 0, updates: 0 };
+      const item = byMonth.get(key) ?? { month: key, added: 0, updates: 0, inspections: 0 };
       item.updates++;
+      byMonth.set(key, item);
+    }
+    for (const visit of periodInspections) {
+      const key = monthKey(visit.recorded_at);
+      const item = byMonth.get(key) ?? { month: key, added: 0, updates: 0, inspections: 0 };
+      item.inspections++;
       byMonth.set(key, item);
     }
     return [...byMonth.values()]
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-12)
       .map((r) => ({ ...r, label: monthName(r.month) }));
-  }, [filtered, periodUpdates]);
+  }, [filtered, periodUpdates, periodInspections]);
   async function download() {
     if (!report.data || !profile || !valid) return;
     setPdfBusy(true);
@@ -223,7 +280,7 @@ export function BannerReportsScreen() {
       doc.setFontSize(8.5);
       doc.text(
         "Inventory shows current condition. Dates filter " +
-          (dateBasis === "added" ? "banner creation" : "latest logged status update") +
+          (dateBasis === "added" ? "banner creation" : dateBasis === "last-update" ? "latest logged status update" : "latest physical inspection") +
           ".",
         14,
         y,
@@ -238,6 +295,8 @@ export function BannerReportsScreen() {
           ["Status", status ? label(status) : "All statuses"],
           ["Logged by", owners.find(([key]) => key === owner)?.[1] || "All staff"],
           ["Map quality", quality],
+          ["Inspection coverage filter", inspectionFilter === "all" ? "All banners" : inspectionFilter.replace(/-/g, " ")],
+          ["Inspection lookback", `${inspectionAgeDays} days`],
           ["Banners", filtered.length],
           ["Good condition", good],
           ["Needs work", needsWork],
@@ -245,7 +304,12 @@ export function BannerReportsScreen() {
           ["Mapped coordinates", mapped],
           ["No logged update in 30 days", stale],
           ["Status entries in period", periodUpdates.length],
-          ["Visible linked leads", visibleLeads == null ? "Unavailable" : visibleLeads],
+          [`Inspected in last ${inspectionAgeDays} days`, recentlyInspected],
+          ["Never physically inspected", neverInspected],
+          [`No inspection in ${inspectionAgeDays} days`, needsInspection],
+          ["Physical inspections in period", periodInspections.length],
+          ["Latest inspector", inspectors.find(([id]) => id === inspector)?.[1] ?? "All staff"],
+          ["Visible linked leads", visibleLeads ?? "Unavailable"],
         ].map(([k, v]) => [String(k), String(v)]),
         theme: "striped",
         styles: { fontSize: 8, cellPadding: 1.1 },
@@ -277,8 +341,8 @@ export function BannerReportsScreen() {
         autoTable(doc, {
           startY: y,
           margin: { left: 14, right: 14 },
-          head: [["Month", "Banners added", "Status entries"]],
-          body: months.map((row) => [row.label, row.added, row.updates]),
+          head: [["Month", "Banners added", "Status entries", "Physical inspections"]],
+          body: months.map((row) => [row.label, row.added, row.updates, row.inspections]),
           theme: "striped",
           styles: { fontSize: 7, cellPadding: 1.1 },
         });
@@ -292,17 +356,37 @@ export function BannerReportsScreen() {
       autoTable(doc, {
         startY: y,
         margin: { left: 14, right: 14, bottom: 18 },
-        head: [["Banner", "Area", "Condition", "Last status entry", "Map", "Visible leads"]],
+        head: [["Banner", "Area", "Condition", "Last inspection", "Inspector", "Map", "Visible leads"]],
         body: filtered.map((b) => [
           b.name,
           b.area || "—",
           label(b.status),
-          latest.get(b.id)?.created_at.slice(0, 10) || "Never",
+          latestInspection.get(b.id)?.recorded_at.slice(0, 10) || "Never",
+          latestInspection.get(b.id) ? inspectorName(latestInspection.get(b.id)!) : "—",
           validPoint(b) ? "Mapped" : "Check coordinates",
           report.data!.leadCounts == null ? "Unavailable" : (report.data!.leadCounts[b.id] ?? 0),
         ]),
         theme: "grid",
         styles: { fontSize: 7, cellPadding: 1.5 },
+        headStyles: { fillColor: [11, 30, 61] },
+      });
+      y = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 8;
+      if (y > 230) { doc.addPage(); y = 20; }
+      y = pdfSectionTitle(doc, y, pageW, "Physical inspection register", `${periodInspections.length} records in selected scope`);
+      autoTable(doc, {
+        startY: y,
+        margin: { left: 14, right: 14, bottom: 18 },
+        head: [["Recorded", "Banner", "Inspector", "Observed condition", "Finding", "Device accuracy"]],
+        body: periodInspections.length ? periodInspections.map((visit) => [
+          visit.recorded_at.slice(0, 16).replace("T", " "),
+          bannerById.get(visit.banner_id)?.name || "Unknown",
+          inspectorName(visit),
+          label(visit.observed_condition),
+          visit.finding || "—",
+          visit.gps_accuracy_m == null ? "Not captured" : `±${Math.round(visit.gps_accuracy_m)} m`,
+        ]) : [["No physical inspections in this scope", "", "", "", "", ""]],
+        theme: "grid",
+        styles: { fontSize: 6.7, cellPadding: 1.3, overflow: "linebreak" },
         headStyles: { fillColor: [11, 30, 61] },
       });
       pdfReportFooter(doc, "Palmstead");
@@ -325,7 +409,7 @@ export function BannerReportsScreen() {
         <p className="text-sm font-medium text-primary">Field operations</p>
         <h1 className="text-3xl font-semibold tracking-tight">Banner report</h1>
         <p className="mt-1 text-muted-foreground">
-          Current banner condition, location quality and recorded status activity.
+          Current condition, inspection coverage, location quality and recorded field activity.
         </p>
       </div>
       <Card>
@@ -345,6 +429,7 @@ export function BannerReportsScreen() {
               >
                 <option value="added">Date added</option>
                 <option value="last-update">Latest status entry</option>
+                <option value="last-inspection">Latest physical inspection</option>
               </select>
             </Field>
             <Field>
@@ -417,6 +502,29 @@ export function BannerReportsScreen() {
                 <option value="stale">No update in 30 days</option>
               </select>
             </Field>
+            <Field>
+              <FieldLabel htmlFor="banner-inspection">Inspection coverage</FieldLabel>
+              <select id="banner-inspection" className="h-9 w-full rounded-md border bg-background px-3" value={inspectionFilter} onChange={(e) => setInspectionFilter(e.target.value)}>
+                <option value="all">All banners</option>
+                <option value="never">Never physically inspected</option>
+                <option value="needs-check">No recent inspection</option>
+                <option value="recent">Recently inspected</option>
+                <option value="finding">Latest inspection needs work</option>
+              </select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="banner-inspection-age">Recent means within</FieldLabel>
+              <select id="banner-inspection-age" className="h-9 w-full rounded-md border bg-background px-3" value={inspectionAgeDays} onChange={(e) => setInspectionAgeDays(Number(e.target.value))}>
+                <option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option>
+              </select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="banner-inspector">Last inspected by</FieldLabel>
+              <select id="banner-inspector" className="h-9 w-full rounded-md border bg-background px-3" value={inspector} onChange={(e) => setInspector(e.target.value)}>
+                <option value="">All staff</option>
+                {inspectors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </Field>
             <Button className="self-end" onClick={download} disabled={!report.data || pdfBusy || !valid}>
               <Download data-icon="inline-start" />
               {pdfBusy ? "Preparing…" : "Download filtered PDF"}
@@ -451,6 +559,10 @@ export function BannerReportsScreen() {
               ["Mapped", mapped],
               ["No update in 30 days", stale],
               ["Status entries in period", periodUpdates.length],
+              [`Inspected within ${inspectionAgeDays} days`, recentlyInspected],
+              ["Never physically inspected", neverInspected],
+              [`No inspection in ${inspectionAgeDays} days`, needsInspection],
+              ["Physical inspections in period", periodInspections.length],
               ["Visible linked leads", visibleLeads ?? "Unavailable"],
             ].map(([k, v]) => (
               <Card key={k}>
@@ -482,7 +594,7 @@ export function BannerReportsScreen() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Placements and status entries</CardTitle>
+                <CardTitle>Placements, updates and inspections</CardTitle>
               </CardHeader>
               <CardContent>
                 {months.length ? (
@@ -495,6 +607,7 @@ export function BannerReportsScreen() {
                         <Tooltip />
                         <Bar dataKey="added" fill="var(--chart-2)" name="Added" />
                         <Bar dataKey="updates" fill="var(--chart-4)" name="Status entries" />
+                        <Bar dataKey="inspections" fill="var(--chart-3)" name="Physical inspections" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -513,7 +626,7 @@ export function BannerReportsScreen() {
                 <table className="w-full min-w-[700px] text-left text-sm">
                   <thead>
                     <tr className="border-b">
-                      {["Banner", "Area", "Condition", "Last status entry", "Location", "Leads"].map((h) => (
+                      {["Banner", "Area", "Condition", "Last inspection", "Inspector", "Location", "Leads"].map((h) => (
                         <th key={h} className="py-2 pr-3">
                           {h}
                         </th>
@@ -533,7 +646,8 @@ export function BannerReportsScreen() {
                         </td>
                         <td className="py-2 pr-3">{b.area || "—"}</td>
                         <td className="py-2 pr-3">{label(b.status)}</td>
-                        <td className="py-2 pr-3">{latest.get(b.id)?.created_at.slice(0, 10) || "Never"}</td>
+                        <td className="py-2 pr-3">{latestInspection.get(b.id)?.recorded_at.slice(0, 10) || "Never"}</td>
+                        <td className="py-2 pr-3">{latestInspection.get(b.id) ? inspectorName(latestInspection.get(b.id)!) : "—"}</td>
                         <td className="py-2 pr-3">
                           {validPoint(b) ? (
                             <span className="inline-flex items-center gap-1">
@@ -557,12 +671,34 @@ export function BannerReportsScreen() {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Physical inspection register</CardTitle>
+              <CardDescription>{periodInspections.length} inspection records for the selected banners and dates. Photos remain private in each banner detail.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead><tr className="border-b">{["Recorded", "Banner", "Inspector", "Observed condition", "Finding", "Device accuracy"].map((heading) => <th key={heading} className="py-2 pr-3">{heading}</th>)}</tr></thead>
+                  <tbody>{periodInspections.map((visit) => <tr key={visit.id} className="border-b last:border-0">
+                    <td className="py-2 pr-3 whitespace-nowrap">{new Date(visit.recorded_at).toLocaleString("en-GB", { timeZone: "Africa/Accra" })}</td>
+                    <td className="py-2 pr-3"><Link className="font-medium text-primary hover:underline" href={`/dashboard/banners/${visit.banner_id}`}>{bannerById.get(visit.banner_id)?.name || "Banner"}</Link></td>
+                    <td className="py-2 pr-3">{inspectorName(visit)}</td>
+                    <td className="py-2 pr-3">{label(visit.observed_condition)}</td>
+                    <td className="py-2 pr-3 max-w-72 break-words">{visit.finding || "—"}</td>
+                    <td className="py-2 pr-3">{visit.gps_accuracy_m == null ? "Not captured" : `±${Math.round(visit.gps_accuracy_m)} m`}</td>
+                  </tr>)}</tbody>
+                </table>
+                {!periodInspections.length && <p className="py-4 text-sm text-muted-foreground">No physical inspections in this scope yet.</p>}
+              </div>
+            </CardContent>
+          </Card>
           <p className="text-xs text-muted-foreground">
-            A status entry records a system update, not a verified physical inspection. Lead totals include only records
-            your role can see.
+            Status entries and physical inspections are separate records. Device coordinates are optional evidence, not proof of a visit. Lead totals include only records your role can see.
           </p>
         </>
       )}
     </main>
   );
 }
+
