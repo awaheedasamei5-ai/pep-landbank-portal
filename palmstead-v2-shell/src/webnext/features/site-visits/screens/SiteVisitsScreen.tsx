@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Download } from 'lucide-react';
+import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
@@ -48,6 +50,8 @@ const DETAIL_FIELDS: { key: keyof SiteVisit; label: string }[] = [
 export function SiteVisitsScreen() {
   const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
   const isManager = profile?.role === 'manager';
   // Real user ask (2026-09-11): "give all staff full access to the site
   // visit experience app" -- was manager + elias/emmanuel/elizabeth only,
@@ -63,6 +67,8 @@ export function SiteVisitsScreen() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [staffFilter, setStaffFilter] = useState('');
   const [query, setQuery] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState('all');
+  const [linkFilter, setLinkFilter] = useState('all');
   const period = usePeriodFilter();
   // Real user ask: "site visit... apps, we would be able to delete
   // logged data from our apps and it effects at the other ends of the
@@ -71,6 +77,16 @@ export function SiteVisitsScreen() {
   // button anywhere in the app until now.
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+
+  useEffect(() => {
+    if (!profile?.key || demoMode) return;
+    const db = requireSupabase();
+    const channel = db.channel(`site-visits-list-${profile.key}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      }).subscribe();
+    return () => { void db.removeChannel(channel); };
+  }, [profile?.key, demoMode, queryClient]);
 
   function toggle(id: string) {
     setExpanded((prev) => {
@@ -90,7 +106,11 @@ export function SiteVisitsScreen() {
   // A text search is assumed to mean "find this specific record" --
   // widens automatically past the period filter rather than making
   // someone switch to "All time" first just to find an old visit by name.
-  const filtered = q ? searched : searched.filter((v) => inPeriodRange(v.visitDate, period.range));
+  const periodMatches = q ? searched : searched.filter((v) => inPeriodRange(v.visitDate, period.range));
+  const filtered = periodMatches.filter((v) => {
+    const outcome = v.deletedAt ? 'cancelled' : v.attended === true ? 'attended' : v.attended === false ? 'no-show' : 'unconfirmed';
+    return (outcomeFilter === 'all' || outcomeFilter === outcome) && (linkFilter === 'all' || (linkFilter === 'linked' ? !!v.leadId : !v.leadId));
+  });
 
   const thisMonthKey = new Date().toISOString().slice(0, 7);
   const kpis = useMemo(() => {
@@ -98,8 +118,8 @@ export function SiteVisitsScreen() {
     return {
       total: list.length,
       thisMonth: list.filter((v) => v.visitDate.slice(0, 7) === thisMonthKey).length,
-      withFeedback: list.filter((v) => v.feedbackAfter).length,
-      awaitingFeedback: list.filter((v) => !v.feedbackAfter && v.visitDate <= new Date().toISOString().slice(0, 10)).length,
+      attended: list.filter((v) => !v.deletedAt && v.attended === true).length,
+      unconfirmed: list.filter((v) => !v.deletedAt && v.attended === null && v.visitDate < new Date().toISOString().slice(0, 10)).length,
     };
   }, [byStaff, thisMonthKey]);
 
@@ -129,27 +149,29 @@ export function SiteVisitsScreen() {
         <>
           <div className={styles.kpiWrap}>
             <PipePillStrip>
-              <PipePill tone="blue" value={kpis.total} label="Total visits" />
+              <PipePill tone="blue" value={kpis.total} label="Visit records" />
               <PipePill tone="green" value={kpis.thisMonth} label="This month" />
-              <PipePill tone="gold" value={kpis.withFeedback} label="Feedback logged" />
-              <PipePill tone="orange" value={kpis.awaitingFeedback} label="Awaiting feedback" />
+              <PipePill tone="gold" value={kpis.attended} label="Attended" />
+              <PipePill tone="orange" value={kpis.unconfirmed} label="Past attendance unconfirmed" />
             </PipePillStrip>
-          </div>
-          <div className={styles.filterRow}>
-            <input className={styles.search} placeholder="Search by client name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <select className={styles.staffSelect} value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
-              <option value="">All staff</option>
-              {(staff ?? [])
-                .filter((s) => s.role === 'agent')
-                .map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.name}
-                  </option>
-                ))}
-            </select>
           </div>
         </>
       )}
+
+      <div className={styles.filterRow}>
+        <input className={styles.search} aria-label="Search visits" placeholder="Search client name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {isManager && <select className={styles.staffSelect} aria-label="Filter staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+          <option value="">All staff</option>
+          {(staff ?? []).filter((s) => s.role === 'agent').map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+        </select>}
+        <select className={styles.staffSelect} aria-label="Filter visit outcome" value={outcomeFilter} onChange={(e) => setOutcomeFilter(e.target.value)}>
+          <option value="all">All outcomes</option><option value="attended">Attended</option><option value="no-show">Did not attend</option><option value="unconfirmed">Unconfirmed</option><option value="cancelled">Cancelled</option>
+        </select>
+        <select className={styles.staffSelect} aria-label="Filter lead link" value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)}>
+          <option value="all">All lead links</option><option value="linked">Linked lead</option><option value="unlinked">Unlinked visit</option>
+        </select>
+        {(query || staffFilter || outcomeFilter !== 'all' || linkFilter !== 'all') && <button type="button" className={styles.clearBtn} onClick={() => { setQuery(''); setStaffFilter(''); setOutcomeFilter('all'); setLinkFilter('all'); }}>Clear filters</button>}
+      </div>
 
       <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={byStaff.length} />
 
@@ -173,7 +195,7 @@ export function SiteVisitsScreen() {
                 <div className={styles.date}>{v.visitDate}</div>
                 {v.visitTime && <div className={styles.time}>{v.visitTime}</div>}
                 <div className={styles.statusWrap}>
-                  <span className={styles.status}>{v.status}</span>
+                  <span className={styles.status}>{v.deletedAt ? 'Cancelled' : v.attended === true ? 'Attended' : v.attended === false ? 'Did not attend' : 'Unconfirmed'}</span>
                 </div>
               </div>
               <span className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ''}`}>
@@ -182,6 +204,7 @@ export function SiteVisitsScreen() {
             </button>
             {isOpen && (
               <div className={styles.detail}>
+                <button type="button" className={styles.pdfRowBtn} onClick={() => navigate(`/dashboard/site-visits/${v.id}`)}>Open full visit record →</button>
                 {details.map((f) => (
                   <div className={styles.detailRow} key={f.key}>
                     <span className={styles.detailLabel}>{f.label}</span>
@@ -282,3 +305,4 @@ export function SiteVisitsScreen() {
     </div>
   );
 }
+

@@ -134,7 +134,7 @@
 
 .kpiWrap { margin-bottom: 14px; }
 
-.filterRow { display: flex; gap: 10px; margin-bottom: 16px; }
+.filterRow { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .search {
   flex: 1 1 100%;
   box-sizing: border-box;
@@ -146,7 +146,7 @@
   font-size: 13.5px;
 }
 .staffSelect {
-  flex: 0 0 auto;
+  flex: 1 1 150px;
   min-width: 150px;
   padding: 11px 12px;
   border-radius: 12px;
@@ -156,3 +156,15 @@
   font-size: 13px;
   font-family: inherit;
 }
+.clearBtn { border: 0; background: transparent; color: var(--c-accent); font-size: 13px; font-weight: 700; cursor: pointer; padding: 10px; }
+@media (width < 640px) {
+  .head { flex-wrap: wrap; }
+  .filterRow > * { min-width: 0; }
+  .search { flex-basis: 100%; }
+  .row { flex-wrap: wrap; }
+  .right { flex-basis: 100%; text-align: left; padding-left: 48px; }
+  .meta { white-space: normal; overflow-wrap: anywhere; }
+  .detailRow { flex-wrap: wrap; }
+  .detailLabel { min-width: 0; flex-basis: 100%; }
+}
+
