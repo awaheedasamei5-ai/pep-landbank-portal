@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '@/webnext/auth/useSessionStore';
-import { useAllSiteVisits, useSiteVisits } from '@/webnext/features/site-visits/hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '@/webnext/features/site-visits/hooks/useSiteVisitFormPdf';
+import { getDataSource } from '@/webnext/data/source';
+import { mapSiteVisitRow } from '@/webnext/data/mappers';
 import type { SiteVisit } from '@/webnext/types/domain';
 
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -32,11 +33,18 @@ function outcome(visit: SiteVisit) {
 export function SiteVisitDetailScreen() {
   const id = String(useParams<{ id: string }>().id ?? '');
   const profile = useSessionStore((s) => s.profile);
-  const manager = profile?.role === 'manager';
-  const mine = useSiteVisits();
-  const all = useAllSiteVisits();
-  const query = manager ? all : mine;
-  const visit = query.data?.find((item) => item.id === id);
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const query = useQuery({
+    queryKey: ['site-visit-detail', id, profile?.key, demoMode],
+    enabled: !!id && !!profile?.key,
+    queryFn: async () => {
+      if (demoMode) return (await getDataSource(true).siteVisits.listAll()).find((item) => item.id === id) ?? null;
+      const { data, error } = await requireSupabase().from('site_visits').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+      if (error) throw error;
+      return data ? mapSiteVisitRow(data) : null;
+    },
+  });
+  const visit = query.data;
   const formPdf = useDownloadSiteVisitFormPdf();
   const queryClient = useQueryClient();
 
@@ -45,7 +53,7 @@ export function SiteVisitDetailScreen() {
     const db = requireSupabase();
     const channel = db.channel(`site-visit-detail-${profile.key}-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits', filter: `id=eq.${id}` }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+        void queryClient.invalidateQueries({ queryKey: ['site-visit-detail', id] });
       }).subscribe();
     return () => { void db.removeChannel(channel); };
   }, [id, profile?.key, queryClient]);
