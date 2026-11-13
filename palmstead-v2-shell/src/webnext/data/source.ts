@@ -261,6 +261,8 @@ export interface DataSource {
     listAll(): Promise<Lead[]>;
     create(agentKey: string, input: NewLead): Promise<Lead>;
     get(agentKey: string, id: string): Promise<Lead | undefined>;
+    // A single RLS-scoped lookup for company-wide viewers opening a detail page.
+    getVisible(id: string): Promise<Lead | undefined>;
     // Real RLS carve-out `leads_upd_company` (confirmed live): manager or
     // elias/emmanuel/elizabeth can UPDATE a lead ONLY when its agent_key is
     // literally 'company' -- clients who came to the company directly, not
@@ -1866,6 +1868,16 @@ function createLiveDataSource(): DataSource {
           .select("*")
           .eq("agent_key", agentKey)
           .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        return data ? mapLeadRow(data) : undefined;
+      },
+      async getVisible(id) {
+        const { data, error } = await requireClient()
+          .from("leads")
+          .select("*")
+          .eq("id", id)
+          .is("deleted_at", null)
           .maybeSingle();
         if (error) throw error;
         return data ? mapLeadRow(data) : undefined;
