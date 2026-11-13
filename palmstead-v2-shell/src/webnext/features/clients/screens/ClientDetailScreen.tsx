@@ -17,6 +17,9 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useClients } from '../hooks/useClients';
 import { useClientRelatedData } from '../hooks/useClientRelatedData';
 import { clientKey } from '../lib/groupClients';
+import { buildClientDossierPdf, type DossierConversation } from '../lib/clientDossierPdf';
+import { useConfig } from '../../manager/hooks/useConfigSettings';
+import { downloadBlob } from '../../../shared/lib/download';
 import type { ContractGeneration, SiteVisit } from '../../../types/domain';
 import styles from './ClientDetailScreen.module.css';
 
@@ -150,10 +153,13 @@ export function ClientDetailScreen() {
   const allLeads = useAllLeads();
   const { data: leads } = profile?.role === 'manager' ? allLeads : ownLeads;
   const { data: related, isLoading: relatedLoading, error: relatedError } = useClientRelatedData(client?.leadIds ?? []);
+  const { data: config } = useConfig();
   const downloadReceipt = useDownloadReceipt();
   const issueReceiptLink = useIssueReceiptLink();
   const [copiedReceiptId, setCopiedReceiptId] = useState<string | null>(null);
   const [receiptLinks, setReceiptLinks] = useState<Record<string, string>>({});
+  const [dossierBusy, setDossierBusy] = useState(false);
+  const [dossierError, setDossierError] = useState<string | null>(null);
   const clientLeads = useMemo(() => (leads ?? []).filter((l) => client?.leadIds.includes(l.id)), [leads, client]);
   const leadIdSet = useMemo(() => new Set(client?.leadIds ?? []), [client]);
 
@@ -232,6 +238,62 @@ export function ClientDetailScreen() {
     }
   }
 
+  async function downloadDossier() {
+    if (!client || !related || !config || !profile || clientLeads.length !== client.leadIds.length) return;
+    setDossierBusy(true);
+    setDossierError(null);
+    try {
+      const db = requireSupabase();
+      const conversations: DossierConversation[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await db.from('lead_conversations')
+          .select('id,lead_id,author_key,channel,body,next_action,next_action_date,created_at')
+          .in('lead_id', client.leadIds).order('created_at').order('id').range(offset, offset + 499);
+        if (error) throw error;
+        conversations.push(...((data ?? []) as DossierConversation[]));
+        if (!data || data.length < 500) break;
+      }
+      const { data: people, error: peopleError } = await db.from('profiles').select('agent_key,name');
+      if (peopleError) throw peopleError;
+      const contractPdfs: Array<{ label: string; bytes: ArrayBuffer }> = [];
+      const missingContractPdfs: string[] = metadataOnlyContracts.map((contract) => `Contract ${contract.id}: record exists, stored PDF unavailable`);
+      for (const generation of contractGenerations) {
+        if (!generation.pdfStoragePath) {
+          missingContractPdfs.push(`Contract ${generation.id}: stored PDF unavailable`);
+          continue;
+        }
+        try {
+          const { data, error } = await db.storage.from('contract-pdfs').createSignedUrl(generation.pdfStoragePath, 300);
+          if (error || !data?.signedUrl) throw error ?? new Error('Secure link unavailable');
+          const response = await fetch(data.signedUrl);
+          if (!response.ok) throw new Error('Stored PDF unavailable');
+          contractPdfs.push({ label: `Contract ${generation.versionNumberSnapshot ?? generation.id}`, bytes: await response.arrayBuffer() });
+        } catch {
+          missingContractPdfs.push(`Contract ${generation.id}: stored PDF could not be retrieved`);
+        }
+      }
+      const exactVisits = siteVisits.filter((visit) => visit.leadId && leadIdSet.has(visit.leadId));
+      const exactComplaints = complaints.filter((item) => item.leadId && leadIdSet.has(item.leadId));
+      const bytes = await buildClientDossierPdf({
+        client, leads: clientLeads, payments, visits: exactVisits,
+        unlinkedVisitCount: siteVisits.length - exactVisits.length,
+        unlinkedCaseCount: complaints.length - exactComplaints.length,
+        allocations, contractRequests, contractGenerations, complaints: exactComplaints,
+        activity: related.activity.filter((item) => item.leadId && leadIdSet.has(item.leadId)),
+        conversations,
+        authorNames: new Map((people ?? []).map((person) => [person.agent_key as string, person.name as string])),
+        contractPdfs, missingContractPdfs, config,
+        generatedBy: profile.name,
+      });
+      downloadBlob(new Blob([Uint8Array.from(bytes).buffer as ArrayBuffer], { type: 'application/pdf' }),
+        `Client_Record_${client.name.replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}.pdf`);
+    } catch (cause) {
+      setDossierError(cause instanceof Error ? cause.message : 'The client PDF could not be prepared.');
+    } finally {
+      setDossierBusy(false);
+    }
+  }
+
   return (
     <div className={styles.drawerBackdrop}>
       <div className={styles.drawerPanel}>
@@ -253,6 +315,13 @@ export function ClientDetailScreen() {
                 <div className={styles.meta}>{client.contact}</div>
               </div>
             </div>
+            <button type="button" className={styles.dossierBtn} onClick={() => void downloadDossier()}
+              disabled={dossierBusy || relatedLoading || !!relatedError || !related || !config || clientLeads.length !== client.leadIds.length}>
+              <Download size={16} aria-hidden="true" />
+              {dossierBusy ? 'Preparing client record…' : 'Download complete client record (PDF)'}
+            </button>
+            <p className={styles.dossierHint}>Includes linked records and available source PDFs. Missing evidence is listed in the document.</p>
+            {dossierError && <p className={styles.receiptError} role="alert">{dossierError}</p>}
 
             <div className={styles.statsRow}>
               <div className={styles.statCard}>
@@ -572,3 +641,4 @@ function PaymentStatusChip({ status }: { status?: string }) {
   const tone = status === 'approved' ? 'ok' : status === 'needs_correction' ? 'dgr' : 'warn';
   return <StatusChip tone={tone}>{status ?? 'pending'}</StatusChip>;
 }
+
