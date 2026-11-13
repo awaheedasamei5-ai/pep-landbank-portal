@@ -22,6 +22,7 @@ import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { LogCallDialog } from '../../company-leads/components/LogCallDialog';
 import { useNotes, useNotesForLead, useSaveNote, type Note } from '@/app/(main)/dashboard/notes/_components/use-notes';
+import { LeadConversationTimeline } from '../components/LeadConversationTimeline';
 import styles from './PipelineDetailScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -161,6 +162,7 @@ export function PipelineDetailScreen() {
       <ActivitySection lead={lead} />
       <ComplaintsSection lead={lead} />
       <EnquiriesSection lead={lead} />
+      <LeadConversationTimeline leads={[{ id: lead.id, label: lead.plotType || lead.name }]} />
       <NotesSection lead={lead} />
       <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
 
