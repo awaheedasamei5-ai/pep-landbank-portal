@@ -160,7 +160,7 @@ export function SiteVisitReportsScreen(){
         ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
         ['Staff follow-up text recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Unlinked to pipeline lead',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
-      y=nextY(doc,y);
+      if(compare||pdfSections.trend||pdfSections.register)y=nextY(doc,y);
       if(compare&&priorPeriod){
         if(y>218){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Previous equal-length period',`${priorPeriod.from} to ${priorPeriod.to}`);
@@ -170,7 +170,7 @@ export function SiteVisitReportsScreen(){
           ['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed,changeLabel(counts.unconfirmed,priorCounts.unconfirmed)],
           ['Linked leads',counts.linked,priorCounts.linked,changeLabel(counts.linked,priorCounts.linked)],
         ].map((row)=>row.map(String)),theme:'grid',styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
-        y=nextY(doc,y);
+        if(pdfSections.trend||pdfSections.register)y=nextY(doc,y);
       }
       }
       if(pdfSections.trend){
