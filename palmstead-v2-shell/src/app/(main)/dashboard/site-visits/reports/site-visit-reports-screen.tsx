@@ -62,6 +62,18 @@ function weekOf(day:string){
   d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);
   return d.toISOString().slice(0,10);
 }
+function previousPeriod(from:string,to:string):{from:string;to:string}{
+  const start=new Date(`${from}T00:00:00Z`);
+  const end=new Date(`${to}T00:00:00Z`);
+  const days=Math.round((end.getTime()-start.getTime())/86400000)+1;
+  const priorEnd=new Date(start.getTime()-86400000);
+  const priorStart=new Date(priorEnd.getTime()-(days-1)*86400000);
+  return {from:priorStart.toISOString().slice(0,10),to:priorEnd.toISOString().slice(0,10)};
+}
+function changeLabel(current:number,previous:number):string{
+  const difference=current-previous;
+  return `${difference>0?'+':''}${difference} vs previous period`;
+}
 function nextY(doc:jsPDF,y:number){
   const bottom=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable?.finalY??y;
   if(bottom>245){doc.addPage();return 20}
@@ -79,10 +91,14 @@ export function SiteVisitReportsScreen(){
   const [site,setSite]=useState('');
   const [source,setSource]=useState('');
   const [status,setStatus]=useState<Outcome>('all');
+  const [compare,setCompare]=useState(false);
+  const [pdfSections,setPdfSections]=useState({summary:true,trend:true,register:true});
   const [pdfBusy,setPdfBusy]=useState(false);
   const [pdfError,setPdfError]=useState('');
   const valid=!!from&&!!to&&from<=to;
   const report=useQuery({queryKey:['site-visit-report',profile?.key,manager,from,to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,from,to,staffKey),enabled:!!profile&&valid,staleTime:60000});
+  const priorPeriod=useMemo(()=>valid?previousPeriod(from,to):null,[from,to,valid]);
+  const priorReport=useQuery({queryKey:['site-visit-report',profile?.key,manager,priorPeriod?.from,priorPeriod?.to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,priorPeriod!.from,priorPeriod!.to,staffKey),enabled:!!profile&&!!priorPeriod&&compare,staleTime:60000});
   useEffect(()=>{
     if(!profile?.key)return;
     const db=requireSupabase();
@@ -96,6 +112,8 @@ export function SiteVisitReportsScreen(){
   const sites=useMemo(()=>[...new Set(visits.map((v)=>v.site?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const sources=useMemo(()=>[...new Set(visits.map((v)=>v.source?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const filtered=useMemo(()=>visits.filter((v)=>(!site||v.site?.trim()===site)&&(!source||v.source?.trim()===source)&&(status==='all'||outcome(v)===status)),[visits,site,source,status]);
+  const priorFiltered=useMemo(()=>(priorReport.data?.visits??[]).filter((v)=>(!site||v.site?.trim()===site)&&(!source||v.source?.trim()===source)&&(status==='all'||outcome(v)===status)),[priorReport.data,site,source,status]);
+  const priorCounts=useMemo(()=>({records:priorFiltered.length,attended:priorFiltered.filter((v)=>outcome(v)==='attended').length,unconfirmed:priorFiltered.filter((v)=>outcome(v)==='pending').length,linked:priorFiltered.filter((v)=>!!v.lead_id).length}),[priorFiltered]);
   const counts=useMemo(()=>({
     records:filtered.length,
     attended:filtered.filter((v)=>outcome(v)==='attended').length,
@@ -122,6 +140,8 @@ export function SiteVisitReportsScreen(){
   },[filtered]);
   async function download(){
     if(!report.data||!profile)return;
+    if(!Object.values(pdfSections).some(Boolean)){setPdfError('Select at least one PDF section.');return;}
+    if(compare&&!priorReport.data){setPdfError('Wait for the comparison period to load.');return;}
     setPdfBusy(true);setPdfError('');
     try{
       const doc=new jsPDF();
@@ -131,6 +151,7 @@ export function SiteVisitReportsScreen(){
       doc.text('Date basis: scheduled visit date. Attendance is counted only when explicitly marked.',14,y);y+=6;
       doc.text('Unconfirmed is not a no-show. Staff follow-up text is not a client survey.',14,y);y+=6;
       doc.text('A linked lead is not a sale. Rates exclude cancelled records.',14,y);y+=13;
+      if(pdfSections.summary){
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scope and outcomes');
       autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
         ['Site',site||'All sites'],['Source',source||'All sources'],['Outcome',status==='all'?'All outcomes':outcomeLabel(status)],
@@ -140,6 +161,19 @@ export function SiteVisitReportsScreen(){
         ['Staff follow-up text recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Unlinked to pipeline lead',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
       y=nextY(doc,y);
+      if(compare&&priorPeriod){
+        if(y>218){doc.addPage();y=20}
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Previous equal-length period',`${priorPeriod.from} to ${priorPeriod.to}`);
+        autoTable(doc,{startY:y,margin:{left:14,right:14},head:[['Measure','Current','Previous','Change']],body:[
+          ['Visit records',counts.records,priorCounts.records,changeLabel(counts.records,priorCounts.records)],
+          ['Attended',counts.attended,priorCounts.attended,changeLabel(counts.attended,priorCounts.attended)],
+          ['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed,changeLabel(counts.unconfirmed,priorCounts.unconfirmed)],
+          ['Linked leads',counts.linked,priorCounts.linked,changeLabel(counts.linked,priorCounts.linked)],
+        ].map((row)=>row.map(String)),theme:'grid',styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+        y=nextY(doc,y);
+      }
+      }
+      if(pdfSections.trend){
       if(y>195){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit records versus attended',trend.length>8?'Latest 8 weeks of '+trend.length:'Weekly trend');
       if(trend.length){
@@ -163,9 +197,12 @@ export function SiteVisitReportsScreen(){
         y=base+25;
       } else {doc.setFontSize(9);doc.text('No visits in this period.',16,y);y+=12}
       doc.setTextColor(0,0,0);
+      }
+      if(pdfSections.register){
       if(y>245){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit register',filtered.length+' records');
       autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,v.agent_name,v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+      }
       pdfReportFooter(doc,'Palmstead');
       doc.save('Palmstead-site-visits-'+from+'-to-'+to+'.pdf');
     }catch(cause){setPdfError(cause instanceof Error?cause.message:'Could not create the PDF.')}finally{setPdfBusy(false)}
@@ -185,11 +222,15 @@ export function SiteVisitReportsScreen(){
       <label className="grid gap-1 text-sm">Site<select className="h-9 min-w-36 max-w-56 rounded-md border bg-background px-3" value={site} onChange={(e)=>setSite(e.target.value)}><option value="">All sites</option>{sites.map((v)=><option key={v}>{v}</option>)}</select></label>
       <label className="grid gap-1 text-sm">Source<select className="h-9 min-w-36 max-w-56 rounded-md border bg-background px-3" value={source} onChange={(e)=>setSource(e.target.value)}><option value="">All sources</option>{sources.map((v)=><option key={v}>{v}</option>)}</select></label>
       <label className="grid gap-1 text-sm">Outcome<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={status} onChange={(e)=>setStatus(e.target.value as Outcome)}><option value="all">All outcomes</option><option value="attended">Attended</option><option value="not-attended">Did not attend</option><option value="pending">Unconfirmed</option><option value="cancelled">Cancelled</option></select></label>
-      <Button onClick={download} disabled={!report.data||pdfBusy}><Download className="size-4"/>{pdfBusy?'Preparing…':'Download filtered PDF'}</Button>
+      <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={compare} onChange={(e)=>setCompare(e.target.checked)}/>Compare previous equal-length period</label>
+      <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['register','Visit register']] as const).map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
+      <Button onClick={download} disabled={!report.data||pdfBusy||(compare&&!priorReport.data)}><Download className="size-4"/>{pdfBusy?'Preparing…':'Download selected PDF sections'}</Button>
     </CardContent></Card>
     {!valid&&<p role="alert" className="text-destructive">Choose a valid date range.</p>}
     {report.isLoading&&<p>Loading site visits…</p>}
     {report.error&&<p role="alert" className="text-destructive">Could not load visits: {String(report.error)}</p>}
+    {compare&&priorReport.isLoading&&<p>Loading comparison period…</p>}
+    {compare&&priorReport.error&&<p role="alert" className="text-destructive">Could not load comparison: {String(priorReport.error)}</p>}
     {pdfError&&<p role="alert" className="text-destructive">{pdfError}</p>}
     {report.data&&<>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
@@ -198,10 +239,10 @@ export function SiteVisitReportsScreen(){
         ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
         ['Staff follow-up text',counts.withFeedback],['Linked leads',counts.linked],['Unlinked visits',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=><Card key={label}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></CardContent></Card>)}</div>
+      {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
       <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{v.agent_name}</td><td className="py-2 pr-3">{v.name}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
       <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. A linked lead does not establish a sale.</p>
     </>}
   </main>;
 }
-
