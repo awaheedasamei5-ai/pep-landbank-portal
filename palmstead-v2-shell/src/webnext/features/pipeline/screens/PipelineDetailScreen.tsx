@@ -22,6 +22,7 @@ import { useFollowUpDraft } from '../hooks/useFollowUpDraft';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import { LogCallDialog } from '../../company-leads/components/LogCallDialog';
 import { useNotes, useNotesForLead, useSaveNote, type Note } from '@/app/(main)/dashboard/notes/_components/use-notes';
+import { LeadConversationTimeline } from '../components/LeadConversationTimeline';
 import styles from './PipelineDetailScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -161,6 +162,7 @@ export function PipelineDetailScreen() {
       <ActivitySection lead={lead} />
       <ComplaintsSection lead={lead} />
       <EnquiriesSection lead={lead} />
+      <LeadConversationTimeline leads={[{ id: lead.id, label: lead.plotType || lead.name }]} />
       <NotesSection lead={lead} />
       <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
 
@@ -1234,18 +1236,18 @@ export function NotesSection({ lead }: { lead: Lead }) {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeadRow}>
-        <h2 className={styles.sectionTitle}>Notes</h2>
+        <h2 className={styles.sectionTitle}>Personal notes</h2>
         {!composing && (
           <button type="button" className={styles.editLink} onClick={() => setComposing(true)}>
             Add a note
           </button>
         )}
       </div>
-      {(!notes || notes.length === 0) && !composing && <p className={styles.emptyMsg}>No notes linked to this lead yet.</p>}
+      {(!notes || notes.length === 0) && !composing && <p className={styles.emptyMsg}>No personal notes linked to this lead yet.</p>}
       {notes?.map((n) => (
         <div className={styles.readRow} key={n.id}>
           <span className={styles.readLabel}>{n.updatedAt.slice(0, 10)}</span>
-          <span>{n.title || 'Untitled note'}</span>
+          <span><strong>{n.title || 'Untitled note'}</strong>{n.body && <span className="mt-1 block whitespace-pre-wrap break-words text-sm">{n.body}</span>}</span>
         </div>
       ))}
       {composing && (
