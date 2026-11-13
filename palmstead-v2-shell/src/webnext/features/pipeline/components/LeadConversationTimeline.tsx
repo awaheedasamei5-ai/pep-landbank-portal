@@ -28,8 +28,8 @@ function ghanaTime(value: string) {
 
 export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
   const queryClient = useQueryClient();
-  const ids = useMemo(() => [...new Set(leads.map((lead) => lead.id))].sort(), [leads]);
-  const idsKey = ids.join(',');
+  const idsKey = [...new Set(leads.map((lead) => lead.id))].sort().join(',');
+  const ids = useMemo(() => idsKey ? idsKey.split(',') : [], [idsKey]);
   const [selectedLead, setSelectedLead] = useState('');
   const [channel, setChannel] = useState<Conversation['channel']>('call');
   const [body, setBody] = useState('');
