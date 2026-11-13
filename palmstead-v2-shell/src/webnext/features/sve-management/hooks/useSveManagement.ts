@@ -318,6 +318,9 @@ export function useDownloadSveDayReportPdf() {
   const logDownload = useLogDownload();
   return useMutation({
     mutationFn: async (report: SveDayReport) => {
+      // List rows omit the joined authorization form. Reload the saved day
+      // report so a sent-report re-download includes the current cost facts.
+      const saved = await getDataSource(demoMode).sve.getOrCreateDayReport(report.visitDate);
       let logo: string | null = null;
       try {
         // Internal document -- see useSendSveDayReport's own comment.
@@ -325,9 +328,9 @@ export function useDownloadSveDayReportPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const attendance = await loadReportAttendance(report, demoMode);
-      const doc = buildSveDayReportPdf(report, logo, profile?.name, attendance);
-      const filename = sveDayReportFilename(report.visitDate);
+      const attendance = await loadReportAttendance(saved, demoMode);
+      const doc = buildSveDayReportPdf(saved, logo, profile?.name, attendance);
+      const filename = sveDayReportFilename(saved.visitDate);
       doc.save(filename);
       logDownload(filename, 'pdf', doc.output('datauristring'));
     },
