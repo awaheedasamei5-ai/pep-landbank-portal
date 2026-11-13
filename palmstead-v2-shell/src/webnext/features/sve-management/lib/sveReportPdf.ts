@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { sitePdfFields, sitePdfHeader, sitePdfSectionBar, SITE_MUTED, SITE_NAVY } from '../../site-visits/lib/sitePdfPrimitives';
+import { sitePdfFields, sitePdfHeader, sitePdfSectionBar, svaGridRow, SITE_MUTED, SITE_NAVY } from '../../site-visits/lib/sitePdfPrimitives';
 import { pdfGeneratedStamp, pdfReportFooter } from '../../../shared/lib/pdfReport';
 import { sanitizePdfText } from '../../../shared/lib/pdfText';
 import { reviewDigest } from './sveReviewDigest';
@@ -23,9 +23,48 @@ function fmtLongDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null): jsPDF {
+export type SveReportAttendance = 'attended' | 'no-show' | 'unconfirmed' | 'cancelled';
+
+function amount(value: number): string {
+  return `GHS ${value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function reportFields(doc: jsPDF, initialY: number, fields: [string, string | number | null | undefined][], nextPage: () => number): number {
+  let y = initialY;
+  const pageW = doc.internal.pageSize.getWidth();
+  for (const [label, value] of fields) {
+    const lines = doc.splitTextToSize(sanitizePdfText(String(value == null || value === '' ? '—' : value)), pageW - 24) as string[];
+    if (y + 9 + Math.min(lines.length, 3) * 5 > 275) y = nextPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...SITE_MUTED);
+    doc.setFontSize(8.5);
+    doc.text(sanitizePdfText(label.toUpperCase()), 12, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(20, 20, 20);
+    doc.setFontSize(10.5);
+    for (const line of lines) {
+      if (y + 5 > 275) y = nextPage();
+      doc.text(line, 12, y);
+      y += 5;
+    }
+    y += 4;
+  }
+  return y;
+}
+
+export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null, attendanceByVisitId: Record<string, SveReportAttendance> = {}): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
+  const nextPage = () => {
+    doc.addPage();
+    const top = sitePdfHeader(doc, 'EXPERIENCE REPORT · CONTINUED', logoDataUri);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...SITE_MUTED);
+    doc.text(sanitizePdfText(`${report.site} · ${fmtLongDate(report.visitDate)}`), 12, top + 4);
+    return top + 12;
+  };
   let y = sitePdfHeader(doc, 'SITE VISIT EXPERIENCE REPORT', logoDataUri);
   y += 6;
 
@@ -36,26 +75,75 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...SITE_MUTED);
-  doc.text(sanitizePdfText(`${report.entries.length} client${report.entries.length === 1 ? '' : 's'} visited · prepared by ${report.preparedByName || '-'}`), 12, y + 6);
+  doc.text(sanitizePdfText(`${report.entries.length} scheduled client${report.entries.length === 1 ? '' : 's'} · prepared by ${report.preparedByName || '-'}`), 12, y + 6);
   y += 13;
+
+  const attendance = report.entries.map((entry) => attendanceByVisitId[entry.siteVisitId] ?? 'unconfirmed');
+  const attendedCount = attendance.filter((value) => value === 'attended').length;
+  const noShowCount = attendance.filter((value) => value === 'no-show').length;
+  const unconfirmedCount = attendance.filter((value) => value === 'unconfirmed').length;
+  const cancelledCount = attendance.filter((value) => value === 'cancelled').length;
+  const submissions = report.entries.filter((entry) => !!entry.submissionId).length;
+  y = sitePdfSectionBar(doc, y, pageW, 'VISIT OUTCOMES & EVIDENCE');
+  y = reportFields(doc, y, [
+    ['Attendance', `${attendedCount} attended · ${noShowCount} did not attend · ${unconfirmedCount} unconfirmed${cancelledCount ? ` · ${cancelledCount} cancelled` : ''}`],
+    ['Client feedback surveys', `${submissions} submitted of ${report.entries.length} scheduled clients`],
+  ], nextPage);
+  y += 3;
+
+  const budget = report.weeklyVisitForm;
+  if (y > 205) y = nextPage();
+  y = sitePdfSectionBar(doc, y, pageW, 'AUTHORIZATION & LOGISTICS COST');
+  if (budget) {
+    const items = [
+      ['Vehicle rental', budget.vehicleRentalEst, budget.vehicleRentalAct],
+      ["Driver's tip", budget.driversTipEst, budget.driversTipAct],
+      ['Fuel', budget.fuelEst, budget.fuelAct],
+      ['Refreshment', budget.refreshmentEst, budget.refreshmentAct],
+      ['T&T', budget.tntEst, budget.tntAct],
+    ] as const;
+    const estimated = items.reduce((sum, item) => sum + item[1], 0);
+    const actual = items.reduce((sum, item) => sum + item[2], 0);
+    const columns = [64, 40, 40, 42];
+    y += svaGridRow(doc, 12, y, columns, [{ text: 'Cost category', bold: true }, { text: 'Estimate', bold: true, align: 'right' }, { text: 'Actual', bold: true, align: 'right' }, { text: 'Variance', bold: true, align: 'right' }], 7);
+    for (const [label, estimate, spent] of items) {
+      y += svaGridRow(doc, 12, y, columns, [{ text: label }, { text: amount(estimate), align: 'right' }, { text: amount(spent), align: 'right' }, { text: amount(spent - estimate), align: 'right' }], 7);
+    }
+    y += svaGridRow(doc, 12, y, columns, [{ text: 'Total', bold: true }, { text: amount(estimated), bold: true, align: 'right' }, { text: amount(actual), bold: true, align: 'right' }, { text: amount(actual - estimated), bold: true, align: 'right' }], 7);
+    y += 5;
+    y = reportFields(doc, y, [
+      ['Authorization record', `${budget.id} · ${budget.status}${budget.approvedByName ? ` · approved by ${budget.approvedByName}` : ''}`],
+      ['Cost basis', `Variance is actual less estimate; a positive amount is over budget.${budget.status !== 'Finalized' ? ' This form is still Open, so recorded actuals are provisional.' : ''}`],
+      [budget.status === 'Finalized' ? 'Actual cost per confirmed attendee' : 'Provisional cost per confirmed attendee', attendedCount > 0 && actual > 0 ? amount(actual / attendedCount) : 'Not calculated: confirm attendance and recorded actual costs first.'],
+    ], nextPage);
+  } else {
+    y = reportFields(doc, y, [['Cost status', 'No linked Site Visit Authorization form. Cost and cost-per-client are unavailable.']], nextPage);
+  }
+  y += 3;
 
   const daySummary = report.siteSummaryAi || report.siteSummary;
   if (daySummary) {
+    if (y > 245) y = nextPage();
     y = sitePdfSectionBar(doc, y, pageW, "SITE MANAGER'S SUMMARY OF THE DAY");
-    y = sitePdfFields(doc, y, [[report.preparedByName ? `As reported by ${report.preparedByName}` : 'Site manager summary', daySummary]]);
+    y = reportFields(doc, y, [
+      ['Site manager original notes', report.siteSummary],
+      ...(report.siteSummaryAi ? [['AI-polished manager summary', report.siteSummaryAi] as [string, string]] : []),
+    ], nextPage);
     y += 3;
   }
 
+  if (y > 200) y = nextPage();
   y = sitePdfSectionBar(doc, y, pageW, `CLIENT-BY-CLIENT FEEDBACK (${report.entries.length})`);
   if (report.entries.length === 0) {
-    y = sitePdfFields(doc, y, [['Clients', 'No site visits were logged for this day.']]);
+    y = reportFields(doc, y, [['Clients', 'No site visits were logged for this day.']], nextPage);
   }
   report.entries.forEach((entry, i) => {
+    let continued = false;
     if (y > 245) {
-      doc.addPage();
-      y = 16;
+      y = sitePdfSectionBar(doc, nextPage(), pageW, 'CLIENT FEEDBACK · CONTINUED');
+      continued = true;
     }
-    if (i > 0) {
+    if (i > 0 && !continued) {
       doc.setDrawColor(226, 231, 237);
       doc.setLineWidth(0.3);
       doc.line(12, y - 3, pageW - 12, y - 3);
@@ -71,13 +159,17 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
     y += 6;
 
     const fields: [string, string | null][] = [
-      ['Client feedback', entry.aiFeedbackSummary || (entry.submissionId ? 'Feedback submitted but not yet analyzed.' : 'No feedback survey submitted for this client.')],
-      ["Site manager's debrief", entry.managerNotesAi || reviewDigest(entry.managerReview) || null],
+      ['Attendance', ({ attended: 'Attended', 'no-show': 'Did not attend', unconfirmed: 'Unconfirmed', cancelled: 'Cancelled' })[attendanceByVisitId[entry.siteVisitId] ?? 'unconfirmed']],
+      ['Client survey', entry.submissionId ? 'Submitted; raw answers are in the individual feedback record.' : 'No client feedback survey submitted.'],
+      ['AI summary of client feedback', entry.aiFeedbackSummary],
+      ["Site manager's original debrief", reviewDigest(entry.managerReview) || null],
+      ['AI-polished manager debrief', entry.managerNotesAi],
     ];
-    y = sitePdfFields(
+    y = reportFields(
       doc,
       y,
-      fields.filter(([, v]) => v)
+      fields.filter(([, v]) => v),
+      nextPage
     );
     y += 2;
   });
@@ -152,3 +244,4 @@ export function sveSubmissionFilename(clientName: string, visitDate: string): st
   const safeName = clientName.trim().replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'Client';
   return `SVE_Feedback_${safeName}_${visitDate}.pdf`;
 }
+

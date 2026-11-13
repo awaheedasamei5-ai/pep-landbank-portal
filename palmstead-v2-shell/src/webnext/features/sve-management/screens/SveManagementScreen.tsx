@@ -377,7 +377,7 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
               <div className={styles.rowMain}>
                 <div className={styles.name}>{fmtLongDate(date)}</div>
                 <div className={styles.meta}>
-                  {count} client{count === 1 ? '' : 's'} visited
+                  {count} client{count === 1 ? '' : 's'} scheduled
                 </div>
                 {existing && (
                   <span className={`${styles.status} ${existing.status === 'sent' ? styles.statusDone : styles.statusPending}`}>
@@ -407,7 +407,7 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
             <div className={styles.rowMain}>
               <div className={styles.name}>{fmtLongDate(r.visitDate)}</div>
               <div className={styles.meta}>
-                {r.entries.length} client{r.entries.length === 1 ? '' : 's'} · sent {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
+                {r.entries.length} scheduled client{r.entries.length === 1 ? '' : 's'} · sent {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
               </div>
             </div>
             <div className={styles.right}>
@@ -439,6 +439,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   const { data: visits } = useSveVisits();
   const saveDayReport = useSaveSveDayReport();
   const sendReport = useSendSveDayReport();
+  const downloadSaved = useDownloadSveDayReportPdf();
   const genFeedback = useGenerateClientFeedback();
   const polish = usePolishManagerNarrative();
   const deleteEntry = useDeleteSveEntry();
@@ -790,6 +791,9 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
           <p className={styles.reportHint}>Mark attendance, review every client below, and fill in the day summary before this report can be submitted.</p>
         )}
         <div className={styles.reportActions} style={{ marginTop: 18 }}>
+          <button type="button" className={styles.reportCancelBtn} disabled={downloadSaved.isPending} onClick={() => downloadSaved.mutate(report)}>
+            {downloadSaved.isPending ? 'Preparing PDF…' : 'Download saved report PDF'}
+          </button>
           <button type="button" className={styles.reportCancelBtn} disabled={busy} onClick={saveDraft}>
             {saveDayReport.isPending ? 'Saving…' : 'Save draft'}
           </button>
@@ -797,8 +801,10 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
             {sendReport.isPending ? 'Sending…' : report.status === 'sent' ? 'Re-send report' : 'Submit report'}
           </button>
         </div>
+        {downloadSaved.error && <p role="alert" className={styles.reportError}>Could not download the saved report PDF. Please try again.</p>}
         {report.status === 'sent' && <p className={styles.reportSentNote}>Sent to Management — in-app and by SMS.</p>}
       </div>
     </div>
   );
 }
+
