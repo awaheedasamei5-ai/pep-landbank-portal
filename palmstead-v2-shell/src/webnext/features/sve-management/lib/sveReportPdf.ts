@@ -80,7 +80,8 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
     y += 5;
     y = sitePdfFields(doc, y, [
       ['Authorization record', `${budget.id} · ${budget.status}${budget.approvedByName ? ` · approved by ${budget.approvedByName}` : ''}`],
-      ['Actual cost per confirmed attendee', attendedCount > 0 && actual > 0 ? amount(actual / attendedCount) : 'Not calculated: confirm attendance and recorded actual costs first.'],
+      ['Cost basis', `Variance is actual less estimate; a positive amount is over budget.${budget.status !== 'Finalized' ? ' This form is still Open, so recorded actuals are provisional.' : ''}`],
+      [budget.status === 'Finalized' ? 'Actual cost per confirmed attendee' : 'Provisional cost per confirmed attendee', attendedCount > 0 && actual > 0 ? amount(actual / attendedCount) : 'Not calculated: confirm attendance and recorded actual costs first.'],
     ]);
   } else {
     y = sitePdfFields(doc, y, [['Cost status', 'No linked Site Visit Authorization form. Cost and cost-per-client are unavailable.']]);
