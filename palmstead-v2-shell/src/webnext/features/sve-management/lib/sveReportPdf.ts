@@ -29,9 +29,42 @@ function amount(value: number): string {
   return `GHS ${value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function reportFields(doc: jsPDF, initialY: number, fields: [string, string | number | null | undefined][], nextPage: () => number): number {
+  let y = initialY;
+  const pageW = doc.internal.pageSize.getWidth();
+  for (const [label, value] of fields) {
+    const lines = doc.splitTextToSize(sanitizePdfText(String(value == null || value === '' ? '—' : value)), pageW - 24) as string[];
+    if (y + 9 + Math.min(lines.length, 3) * 5 > 275) y = nextPage();
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...SITE_MUTED);
+    doc.setFontSize(8.5);
+    doc.text(sanitizePdfText(label.toUpperCase()), 12, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(20, 20, 20);
+    doc.setFontSize(10.5);
+    for (const line of lines) {
+      if (y + 5 > 275) y = nextPage();
+      doc.text(line, 12, y);
+      y += 5;
+    }
+    y += 4;
+  }
+  return y;
+}
+
 export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null, attendanceByVisitId: Record<string, SveReportAttendance> = {}): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
+  const nextPage = () => {
+    doc.addPage();
+    const top = sitePdfHeader(doc, 'EXPERIENCE REPORT · CONTINUED', logoDataUri);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...SITE_MUTED);
+    doc.text(sanitizePdfText(`${report.site} · ${fmtLongDate(report.visitDate)}`), 12, top + 4);
+    return top + 12;
+  };
   let y = sitePdfHeader(doc, 'SITE VISIT EXPERIENCE REPORT', logoDataUri);
   y += 6;
 
@@ -52,14 +85,14 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
   const cancelledCount = attendance.filter((value) => value === 'cancelled').length;
   const submissions = report.entries.filter((entry) => !!entry.submissionId).length;
   y = sitePdfSectionBar(doc, y, pageW, 'VISIT OUTCOMES & EVIDENCE');
-  y = sitePdfFields(doc, y, [
+  y = reportFields(doc, y, [
     ['Attendance', `${attendedCount} attended · ${noShowCount} did not attend · ${unconfirmedCount} unconfirmed${cancelledCount ? ` · ${cancelledCount} cancelled` : ''}`],
     ['Client feedback surveys', `${submissions} submitted of ${report.entries.length} scheduled clients`],
-  ]);
+  ], nextPage);
   y += 3;
 
   const budget = report.weeklyVisitForm;
-  if (y > 205) { doc.addPage(); y = 16; }
+  if (y > 205) y = nextPage();
   y = sitePdfSectionBar(doc, y, pageW, 'AUTHORIZATION & LOGISTICS COST');
   if (budget) {
     const items = [
@@ -78,38 +111,39 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
     }
     y += svaGridRow(doc, 12, y, columns, [{ text: 'Total', bold: true }, { text: amount(estimated), bold: true, align: 'right' }, { text: amount(actual), bold: true, align: 'right' }, { text: amount(actual - estimated), bold: true, align: 'right' }], 7);
     y += 5;
-    y = sitePdfFields(doc, y, [
+    y = reportFields(doc, y, [
       ['Authorization record', `${budget.id} · ${budget.status}${budget.approvedByName ? ` · approved by ${budget.approvedByName}` : ''}`],
       ['Cost basis', `Variance is actual less estimate; a positive amount is over budget.${budget.status !== 'Finalized' ? ' This form is still Open, so recorded actuals are provisional.' : ''}`],
       [budget.status === 'Finalized' ? 'Actual cost per confirmed attendee' : 'Provisional cost per confirmed attendee', attendedCount > 0 && actual > 0 ? amount(actual / attendedCount) : 'Not calculated: confirm attendance and recorded actual costs first.'],
-    ]);
+    ], nextPage);
   } else {
-    y = sitePdfFields(doc, y, [['Cost status', 'No linked Site Visit Authorization form. Cost and cost-per-client are unavailable.']]);
+    y = reportFields(doc, y, [['Cost status', 'No linked Site Visit Authorization form. Cost and cost-per-client are unavailable.']], nextPage);
   }
   y += 3;
 
   const daySummary = report.siteSummaryAi || report.siteSummary;
   if (daySummary) {
-    if (y > 245) { doc.addPage(); y = 16; }
+    if (y > 245) y = nextPage();
     y = sitePdfSectionBar(doc, y, pageW, "SITE MANAGER'S SUMMARY OF THE DAY");
-    y = sitePdfFields(doc, y, [
+    y = reportFields(doc, y, [
       ['Site manager original notes', report.siteSummary],
       ...(report.siteSummaryAi ? [['AI-polished manager summary', report.siteSummaryAi] as [string, string]] : []),
-    ]);
+    ], nextPage);
     y += 3;
   }
 
-  if (y > 245) { doc.addPage(); y = 16; }
+  if (y > 200) y = nextPage();
   y = sitePdfSectionBar(doc, y, pageW, `CLIENT-BY-CLIENT FEEDBACK (${report.entries.length})`);
   if (report.entries.length === 0) {
-    y = sitePdfFields(doc, y, [['Clients', 'No site visits were logged for this day.']]);
+    y = reportFields(doc, y, [['Clients', 'No site visits were logged for this day.']], nextPage);
   }
   report.entries.forEach((entry, i) => {
+    let continued = false;
     if (y > 245) {
-      doc.addPage();
-      y = 16;
+      y = sitePdfSectionBar(doc, nextPage(), pageW, 'CLIENT FEEDBACK · CONTINUED');
+      continued = true;
     }
-    if (i > 0) {
+    if (i > 0 && !continued) {
       doc.setDrawColor(226, 231, 237);
       doc.setLineWidth(0.3);
       doc.line(12, y - 3, pageW - 12, y - 3);
@@ -131,10 +165,11 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
       ["Site manager's original debrief", reviewDigest(entry.managerReview) || null],
       ['AI-polished manager debrief', entry.managerNotesAi],
     ];
-    y = sitePdfFields(
+    y = reportFields(
       doc,
       y,
-      fields.filter(([, v]) => v)
+      fields.filter(([, v]) => v),
+      nextPage
     );
     y += 2;
   });
