@@ -10,6 +10,7 @@ import { Icon, type IconName } from '../../../shared/ui/Icon';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
 import { StageBadge } from '../../pipeline/components/StageBadge';
+import { LeadConversationTimeline } from '../../pipeline/components/LeadConversationTimeline';
 import { qtyOfType } from '../../pipeline/lib/pipelineLogic';
 import { useLeads } from '../../pipeline/hooks/useLeads';
 import { useSessionStore } from '../../../auth/useSessionStore';
@@ -316,6 +317,8 @@ export function ClientDetailScreen() {
                 </button>
               ))}
             </Section>
+
+            <LeadConversationTimeline leads={clientLeads.map((lead) => ({ id: lead.id, label: lead.plotType || lead.name }))} />
 
             <Section title="Payments" count={payments.length} icon="wallet">
               {payments.length === 0 && <EmptyRow text="No payments logged yet." />}
