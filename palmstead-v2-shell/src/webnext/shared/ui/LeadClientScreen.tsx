@@ -9,6 +9,7 @@ import { useConfig } from "../../features/manager/hooks/useConfigSettings";
 import { useLead } from "../../features/pipeline/hooks/useLead";
 import { usePayments } from "../../features/pipeline/hooks/usePayments";
 import { StageBadge } from "../../features/pipeline/components/StageBadge";
+import { LeadConversationTimeline } from "../../features/pipeline/components/LeadConversationTimeline";
 import {
   ActivitySection,
   AllocationEligibilitySection,
@@ -117,6 +118,7 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
               <CostAttributionSection lead={lead} />
               <ComplaintsSection lead={lead} />
               <EnquiriesSection lead={lead} />
+              <LeadConversationTimeline leads={[{ id: lead.id, label: lead.plotType || lead.name }]} />
               <NotesSection lead={lead} />
               <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
               <DocumentationSection lead={lead} />
