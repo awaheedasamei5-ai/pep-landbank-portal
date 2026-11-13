@@ -74,6 +74,12 @@
 .name { font-size: 19px; font-weight: 800; margin: 2px 0 0; }
 .meta { color: var(--c-muted); font-size: 12.5px; margin: 2px 0 0; }
 
+.dossierBtn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--c-ink); border-radius: var(--r-md); background: var(--c-ink); color: var(--c-card); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; text-align: center; }
+.dossierBtn:hover:not(:disabled) { opacity: .88; }
+.dossierBtn:disabled { opacity: .55; cursor: wait; }
+.dossierBtn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.dossierHint { margin: 6px 0 18px; color: var(--c-muted); font-size: 10.5px; line-height: 1.45; }
+
 .statsRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
 .statCard {
   background: var(--c-card);
@@ -271,3 +277,4 @@
 }
 
 .backBtn { background: none; border: none; color: var(--c-muted); font-weight: 700; cursor: pointer; padding: 8px 0; font-size: 13px; margin-top: 4px; }
+
