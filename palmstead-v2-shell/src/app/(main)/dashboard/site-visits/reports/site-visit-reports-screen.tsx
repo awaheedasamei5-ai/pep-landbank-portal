@@ -138,7 +138,7 @@ function evidence(visits:Visit[],data:VisitData|undefined){
     const invites=inviteByVisit.get(visit.id)??[];
     if(invites.some((invite)=>!!invite.sent_at)) invited++;
     const responses=invites.map((invite)=>submissions.get(invite.id)).filter((row):row is Survey=>!!row);
-    if(responses.length){responded++;surveyRows.push(responses.sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]);}
+    if(responses.length){responded++;surveyRows.push(...responses);}
     if(outcome(visit)!=='attended'||!visit.lead_id)continue;
     linkedAttended++;
     const later=(paymentByLead.get(visit.lead_id)??[]).filter((payment)=>payment.payment_date>=visit.visit_date);
@@ -152,7 +152,7 @@ function evidence(visits:Visit[],data:VisitData|undefined){
   const scores=surveyRows.filter((row)=>row.nps_score!==null).map((row)=>Number(row.nps_score)).filter((value)=>Number.isFinite(value)&&value>=0&&value<=10);
   const intentCounts=[...surveyRows.reduce((items,row)=>{const label=row.purchase_intent?.trim()||'Not answered';items.set(label,(items.get(label)??0)+1);return items;},new Map<string,number>()).entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   const nps=scores.length?Math.round((scores.filter((v)=>v>=9).length-scores.filter((v)=>v<=6).length)*100/scores.length):null;
-  return {invited,responded,ratings:ratings.length,averageRating:ratings.length?ratings.reduce((sum,value)=>sum+value,0)/ratings.length:null,nps,npsResponses:scores.length,intentCounts,linkedAttended,linkedAttendedPaid,linkedAttendedWithoutCost,approvedCash:[...paidPayments.values()].reduce((sum,row)=>sum+Number(row.amount||0),0),attributedCost:[...attributedCosts.values()].reduce((sum,row)=>sum+Number(row.amount||0),0)};
+  return {invited,responded,surveyResponses:surveyRows.length,ratings:ratings.length,averageRating:ratings.length?ratings.reduce((sum,value)=>sum+value,0)/ratings.length:null,nps,npsResponses:scores.length,intentCounts,linkedAttended,linkedAttendedPaid,linkedAttendedWithoutCost,approvedCash:[...paidPayments.values()].reduce((sum,row)=>sum+Number(row.amount||0),0),attributedCost:[...attributedCosts.values()].reduce((sum,row)=>sum+Number(row.amount||0),0)};
 }
 
 export function SiteVisitReportsScreen(){
@@ -303,7 +303,7 @@ export function SiteVisitReportsScreen(){
         if(y>190){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Client response, payments and cost','Exact visit/lead links only');
         autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
-          ['Survey invitations sent',cross.invited],['Survey responses linked to visits',cross.responded],
+          ['Visits with invitation sent',cross.invited],['Visits with client response',cross.responded],['Submitted feedback forms',cross.surveyResponses],
           ['Response rate among invited visits',percent(cross.responded,cross.invited)],
           ['Average overall rating',cross.averageRating===null?'—':cross.averageRating.toFixed(1)+' ('+cross.ratings+' responses)'],
           ['NPS',cross.nps===null?'—':cross.nps+' ('+cross.npsResponses+' responses)'],
@@ -329,7 +329,7 @@ export function SiteVisitReportsScreen(){
       if(pdfSections.cohorts&&manager){
         if(y>225){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Staff comparison','Filtered visit cohorts');
-        autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Visits','Attended','Unknown','Linked','Surveys','Later paid']],body:staffRows.map((row)=>[row.name,row.visits,row.attended,row.unknown,row.linked,row.responded,row.linkedAttendedPaid]),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+        autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Visits','Attended','Unknown','Linked','Feedback visits','Later paid']],body:staffRows.map((row)=>[row.name,row.visits,row.attended,row.unknown,row.linked,row.responded,row.linkedAttendedPaid]),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
         y=nextY(doc,y);
       }
       if(pdfSections.register){
@@ -378,7 +378,7 @@ export function SiteVisitReportsScreen(){
       <Card><CardHeader><CardTitle>Client response and commercial follow-through</CardTitle></CardHeader><CardContent>
         <p className="mb-4 text-sm text-muted-foreground">Surveys join by visit invitation. Payments and reviewed costs join through an exact pipeline lead and a confirmed attended visit.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([
-          ['Invitations sent',cross.invited],['Client survey responses',cross.responded],['Response rate',percent(cross.responded,cross.invited)],
+          ['Visits with invitation sent',cross.invited],['Visits with client response',cross.responded],['Submitted feedback forms',cross.surveyResponses],['Response rate by visit',percent(cross.responded,cross.invited)],
           ['Average overall rating',cross.averageRating===null?'—':cross.averageRating.toFixed(1)+' / 5'],
           ['NPS',cross.nps===null?'—':cross.nps+' ('+cross.npsResponses+' scored)'],
           ['Attended and lead-linked',cross.linkedAttended],['With later approved payment',cross.linkedAttendedPaid],
@@ -391,7 +391,7 @@ export function SiteVisitReportsScreen(){
         <p className="mt-4 text-xs text-muted-foreground">A later approved payment is not proof that the visit caused the sale. Cash and cost rows are counted once. Missing cost attribution means unknown cost, not free service.</p>
       </CardContent></Card>
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
-      {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Survey responses','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
+      {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
       <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{v.agent_name}</td><td className="py-2 pr-3">{v.name}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
       <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. A linked lead does not establish a sale.</p>
