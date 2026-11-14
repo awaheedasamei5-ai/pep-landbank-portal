@@ -23,6 +23,13 @@ function fmtLongDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function ghanaTimestamp(value: string | null): string {
+  if (!value) return 'Not sent';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Timestamp unavailable';
+  return `${date.toLocaleString('en-GB', { timeZone: 'Africa/Accra', dateStyle: 'medium', timeStyle: 'short' })} GMT`;
+}
+
 export type SveReportAttendance = 'attended' | 'no-show' | 'unconfirmed' | 'cancelled';
 
 function amount(value: number): string {
@@ -77,6 +84,13 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
   doc.setTextColor(...SITE_MUTED);
   doc.text(sanitizePdfText(`${report.entries.length} scheduled client${report.entries.length === 1 ? '' : 's'} · prepared by ${report.preparedByName || '-'}`), 12, y + 6);
   y += 13;
+
+  y = reportFields(doc, y, [
+    ['Report record', report.id],
+    ['Prepared', ghanaTimestamp(report.createdAt)],
+    ['Sent to Management', ghanaTimestamp(report.sentAt)],
+  ], nextPage);
+  y += 3;
 
   const attendance = report.entries.map((entry) => attendanceByVisitId[entry.siteVisitId] ?? 'unconfirmed');
   const attendedCount = attendance.filter((value) => value === 'attended').length;
@@ -159,8 +173,9 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
     y += 6;
 
     const fields: [string, string | null][] = [
+      ['Site visit record', entry.siteVisitId],
       ['Attendance', ({ attended: 'Attended', 'no-show': 'Did not attend', unconfirmed: 'Unconfirmed', cancelled: 'Cancelled' })[attendanceByVisitId[entry.siteVisitId] ?? 'unconfirmed']],
-      ['Client survey', entry.submissionId ? 'Submitted; raw answers are in the individual feedback record.' : 'No client feedback survey submitted.'],
+      ['Client survey', entry.submissionId ? `Submitted (${entry.submissionId}); raw answers are in the individual feedback record.` : 'No client feedback survey submitted.'],
       ['AI summary of client feedback', entry.aiFeedbackSummary],
       ["Site manager's original debrief", reviewDigest(entry.managerReview) || null],
       ['AI-polished manager debrief', entry.managerNotesAi],
@@ -208,6 +223,13 @@ export function buildSveSubmissionPdf(siteVisit: SiteVisit, submission: SveSubmi
   const metaBits = [siteVisit.site, siteVisit.plot, siteVisit.visitDate, submission.phone].filter(Boolean);
   doc.text(sanitizePdfText(metaBits.join(' · ')), 12, y + 6);
   y += 13;
+
+  y = sitePdfFields(doc, y, [
+    ['Feedback submitted', ghanaTimestamp(submission.createdAt)],
+    ['Feedback record', submission.id],
+    ['Site visit record', siteVisit.id],
+  ]);
+  y += 2;
 
   y = sitePdfSectionBar(doc, y, pageW, 'RATINGS');
   const ratingFields: [string, string | number | null][] = [
