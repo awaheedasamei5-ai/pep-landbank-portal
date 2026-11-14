@@ -190,6 +190,11 @@ export function SiteVisitReportsScreen(){
     return ()=>{void db.removeChannel(channel)};
   },[profile?.key,queryClient]);
   const visits=report.data?.visits??[];
+  // Older imported visits can retain a former free-text agent_name. The account
+  // key is the ownership source of truth; show the current directory name.
+  const agentName=(v:Visit)=>manager
+    ? report.data?.staff.find((person)=>person.agent_key===v.agent_key)?.name??v.agent_name
+    : profile?.name??v.agent_name;
   const sites=useMemo(()=>[...new Set(visits.map((v)=>v.site?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const sources=useMemo(()=>[...new Set(visits.map((v)=>v.source?.trim()).filter((v):v is string=>!!v))].sort(),[visits]);
   const matches=(v:Visit,data:VisitData|undefined)=>{
@@ -222,7 +227,7 @@ export function SiteVisitReportsScreen(){
     return keys.map((key)=>{
       const rows=filtered.filter((v)=>v.agent_key===key);
       const summary=evidence(rows,report.data);
-      return {key,name:rows[0]?.agent_name??key,visits:rows.length,attended:rows.filter((v)=>outcome(v)==='attended').length,unknown:rows.filter((v)=>outcome(v)==='pending').length,linked:rows.filter((v)=>!!v.lead_id).length,...summary};
+      return {key,name:rows[0]?agentName(rows[0]):key,visits:rows.length,attended:rows.filter((v)=>outcome(v)==='attended').length,unknown:rows.filter((v)=>outcome(v)==='pending').length,linked:rows.filter((v)=>!!v.lead_id).length,...summary};
     }).sort((a,b)=>b.visits-a.visits||a.name.localeCompare(b.name));
   },[filtered,report.data]);
   const trend=useMemo(()=>{
@@ -335,7 +340,7 @@ export function SiteVisitReportsScreen(){
       if(pdfSections.register){
       if(y>245){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit register',filtered.length+' records');
-      autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,v.agent_name,v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+      autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,agentName(v),v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
       }
       pdfReportFooter(doc,'Palmstead');
       doc.save('Palmstead-site-visits-'+from+'-to-'+to+'.pdf');
@@ -393,7 +398,7 @@ export function SiteVisitReportsScreen(){
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
-      <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{v.agent_name}</td><td className="py-2 pr-3">{v.name}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
+      <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{agentName(v)}</td><td className="py-2 pr-3">{v.name}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
       <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. A linked lead does not establish a sale.</p>
     </>}
   </main>;
