@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from 'react';
-import { Calendar, Download, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft, Calendar, Download, X } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
 import { accompaniedText, allowedDayIsos, COST_ROWS, costTotal, currentWeekStartIso, fmtLongDate, weekRangeLabel } from '../lib/siteVisitAuthLogic';
@@ -28,13 +29,39 @@ export function SiteVisitAuthScreen() {
   const profile = useSessionStore((s) => s.profile);
   const [weekStart, setWeekStart] = useState(currentWeekStartIso());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [urlReady, setUrlReady] = useState(false);
+  const [backVisitId, setBackVisitId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const date = params.get('date');
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) &&
+      new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date) {
+      const monday = new Date(`${date}T00:00:00Z`);
+      monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+      setWeekStart(monday.toISOString().slice(0, 10));
+      setSelectedDay(date);
+    }
+    const visitId = params.get('visit');
+    if (visitId && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(visitId)) setBackVisitId(visitId);
+    setUrlReady(true);
+  }, []);
 
   const days = allowedDayIsos(weekStart);
   const { data: weekVisits } = useWeekSiteVisits(weekStart);
   const activeDay = selectedDay && days.includes(selectedDay) ? selectedDay : days.find((d) => (weekVisits ?? []).some((v) => v.visitDate === d)) ?? days[0] ?? weekStart;
 
-  const { data: form, isLoading: formLoading } = useWeeklyVisitForm(weekStart, activeDay);
+  const { data: form, isLoading: formLoading } = useWeeklyVisitForm(weekStart, activeDay, urlReady && canView);
   const visits = (weekVisits ?? []).filter((v) => v.visitDate === activeDay);
+
+  useEffect(() => {
+    if (!urlReady) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('date') === activeDay) return;
+    url.searchParams.set('date', activeDay);
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [activeDay, urlReady]);
 
   if (!canView) {
     return (
@@ -54,6 +81,7 @@ export function SiteVisitAuthScreen() {
 
   return (
     <div className={styles.wrap}>
+      {backVisitId && <Link href={`/dashboard/site-visits/${backVisitId}`} className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"><ArrowLeft className="size-4" aria-hidden="true" /> Back to visit record</Link>}
       <h1 className={styles.title}>Site Visit Authorization</h1>
       <p className={styles.sub}>Pick a day, estimate and reconcile that day&apos;s site-visit costs, then get Management&apos;s approval.</p>
 
@@ -378,3 +406,4 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
     </div>
   );
 }
+
