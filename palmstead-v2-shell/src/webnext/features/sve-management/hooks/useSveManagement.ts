@@ -371,7 +371,17 @@ export function useSetSiteVisitAttendance() {
   return useMutation({
     mutationFn: ({ siteVisitId, attended }: { siteVisitId: string; attended: boolean }) =>
       getDataSource(demoMode).sve.setVisitAttendance(siteVisitId, attended),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sveVisits'] }),
+    onSuccess: () => {
+      // Attendance is stored on site_visits, so every visit view must
+      // refresh immediately after the Experience decision is saved.
+      void queryClient.invalidateQueries({ queryKey: ['sveVisits'] });
+      void queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      void queryClient.invalidateQueries({ queryKey: ['siteVisitsAll'] });
+      void queryClient.invalidateQueries({ queryKey: ['site-visit-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['site-visit-report'] });
+      void queryClient.invalidateQueries({ queryKey: ['weekSiteVisits'] });
+      void queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead'] });
+    },
   });
 }
 
