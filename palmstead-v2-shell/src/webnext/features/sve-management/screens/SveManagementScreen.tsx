@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Download, Sparkles, Star } from 'lucide-react';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import {
@@ -50,6 +50,12 @@ function fmtGHS(n: number): string {
   return `GHS ${n.toLocaleString('en-GH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
+function validVisitDate(value: string | null): value is string {
+  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
+    new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+}
+
 // Staff-side companion to the public SveFeedbackScreen -- see the
 // SveInviteRecord/SveVisitStatus comments in types/domain.ts. Gated the
 // same way real RLS gates the underlying tables: manager + the
@@ -87,9 +93,37 @@ export function SveManagementScreen() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'feedback' | 'reports' | 'conversion'>('feedback');
+  const [selectedReportDate, setSelectedReportDate] = useState<string | null>(null);
   const [smsFailedId, setSmsFailedId] = useState<string | null>(null);
   const feedbackPeriod = usePeriodFilter();
   const filteredVisits = (visits ?? []).filter((v) => inPeriodRange(v.siteVisit.visitDate, feedbackPeriod.range));
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get('tab');
+    if (requestedTab === 'feedback' || requestedTab === 'reports' || requestedTab === 'conversion') setTab(requestedTab);
+    const requestedDate = params.get('date');
+    if (requestedTab === 'reports' && validVisitDate(requestedDate)) setSelectedReportDate(requestedDate);
+  }, []);
+
+  function updateLocation(nextTab: 'feedback' | 'reports' | 'conversion', date: string | null) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', nextTab);
+    if (nextTab === 'reports' && date) url.searchParams.set('date', date);
+    else url.searchParams.delete('date');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function selectTab(nextTab: 'feedback' | 'reports' | 'conversion') {
+    setTab(nextTab);
+    if (nextTab !== 'reports') setSelectedReportDate(null);
+    updateLocation(nextTab, nextTab === 'reports' ? selectedReportDate : null);
+  }
+
+  function selectReportDate(date: string | null) {
+    setSelectedReportDate(date);
+    updateLocation('reports', date);
+  }
 
   async function sendInviteFor(siteVisitId: string, clientName: string, clientContact: string) {
     setSmsFailedId((cur) => (cur === siteVisitId ? null : cur));
@@ -123,13 +157,13 @@ export function SveManagementScreen() {
       <p className={styles.sub}>Send a feedback link after a visit, review what clients said, and build the day's report</p>
 
       <div className={styles.tabRow}>
-        <button type="button" className={`${styles.tabBtn} ${tab === 'feedback' ? styles.tabBtnOn : ''}`} onClick={() => setTab('feedback')}>
+        <button type="button" className={`${styles.tabBtn} ${tab === 'feedback' ? styles.tabBtnOn : ''}`} onClick={() => selectTab('feedback')}>
           Client feedback
         </button>
-        <button type="button" className={`${styles.tabBtn} ${tab === 'reports' ? styles.tabBtnOn : ''}`} onClick={() => setTab('reports')}>
+        <button type="button" className={`${styles.tabBtn} ${tab === 'reports' ? styles.tabBtnOn : ''}`} onClick={() => selectTab('reports')}>
           Day reports
         </button>
-        <button type="button" className={`${styles.tabBtn} ${tab === 'conversion' ? styles.tabBtnOn : ''}`} onClick={() => setTab('conversion')}>
+        <button type="button" className={`${styles.tabBtn} ${tab === 'conversion' ? styles.tabBtnOn : ''}`} onClick={() => selectTab('conversion')}>
           Conversion
         </button>
       </div>
@@ -276,7 +310,7 @@ export function SveManagementScreen() {
         </>
       )}
 
-      {tab === 'reports' && <DayReportsTab visits={visits ?? []} />}
+      {tab === 'reports' && <DayReportsTab visits={visits ?? []} visitsLoading={isLoading} selectedDate={selectedReportDate} onSelectDate={selectReportDate} />}
       {tab === 'conversion' && <ConversionTab />}
     </div>
   );
@@ -343,9 +377,13 @@ function ConversionTab() {
   );
 }
 
-function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSveVisits>['data']> }) {
+function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
+  visits: NonNullable<ReturnType<typeof useSveVisits>['data']>;
+  visitsLoading: boolean;
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
+}) {
   const { data: dayReports } = useSveDayReportsList();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const download = useDownloadSveDayReportPdf();
   const daysPeriod = usePeriodFilter();
   const sentPeriod = usePeriodFilter();
@@ -363,7 +401,11 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
   const allSentReports = useMemo(() => (dayReports ?? []).filter((r) => r.status === 'sent'), [dayReports]);
   const sentReports = useMemo(() => allSentReports.filter((r) => inPeriodRange(r.visitDate, sentPeriod.range)), [allSentReports, sentPeriod.range]);
 
-  if (selectedDate) return <DayReportEditor visitDate={selectedDate} onClose={() => setSelectedDate(null)} />;
+  if (selectedDate && visitsLoading) return <p className={styles.emptyMsg}>Loading visits for this day…</p>;
+  if (selectedDate && !visits.some((visit) => !visit.siteVisit.deletedAt && visit.siteVisit.visitDate === selectedDate)) {
+    return <div><button type="button" className={styles.copyBtn} onClick={() => onSelectDate(null)}><ArrowLeft className="size-4" aria-hidden="true" /> Back to day reports</button><p className={styles.emptyMsg}>No accessible visit is scheduled for this date.</p></div>;
+  }
+  if (selectedDate) return <DayReportEditor visitDate={selectedDate} onClose={() => onSelectDate(null)} />;
 
   return (
     <>
@@ -386,7 +428,7 @@ function DayReportsTab({ visits }: { visits: NonNullable<ReturnType<typeof useSv
                 )}
               </div>
               <div className={styles.right}>
-                <button type="button" className={styles.viewBtn} onClick={() => setSelectedDate(date)}>
+                <button type="button" className={styles.viewBtn} onClick={() => onSelectDate(date)}>
                   {existing ? 'Open' : 'Build report'}
                 </button>
               </div>
