@@ -18,11 +18,12 @@ export function useCanViewSiteVisitAuth(): boolean {
   return !!profile;
 }
 
-export function useWeeklyVisitForm(weekStart: string, visitDate: string) {
+export function useWeeklyVisitForm(weekStart: string, visitDate: string, enabled = true) {
   const demoMode = useSessionStore((s) => s.demoMode);
   return useQuery({
     queryKey: ['weeklyVisitForm', weekStart, visitDate],
     queryFn: () => getDataSource(demoMode).weeklyVisitForms.getOrCreate(weekStart, visitDate),
+    enabled,
   });
 }
 
@@ -63,3 +64,4 @@ export function useFinalizeWeeklyVisitForm() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['weeklyVisitForm'] }),
   });
 }
+
