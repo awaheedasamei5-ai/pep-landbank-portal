@@ -104,6 +104,12 @@ export function SveManagementScreen() {
     if (requestedTab === 'feedback' || requestedTab === 'reports' || requestedTab === 'conversion') setTab(requestedTab);
     const requestedDate = params.get('date');
     if (requestedTab === 'reports' && validVisitDate(requestedDate)) setSelectedReportDate(requestedDate);
+    if (requestedTab === 'feedback' && validVisitDate(requestedDate)) {
+      feedbackPeriod.setMode('day');
+      feedbackPeriod.setDayKey(requestedDate);
+      const requestedVisit = params.get('visit');
+      if (requestedVisit && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(requestedVisit)) setExpanded(requestedVisit);
+    }
   }, []);
 
   function updateLocation(nextTab: 'feedback' | 'reports' | 'conversion', date: string | null) {
@@ -111,6 +117,7 @@ export function SveManagementScreen() {
     url.searchParams.set('tab', nextTab);
     if (nextTab === 'reports' && date) url.searchParams.set('date', date);
     else url.searchParams.delete('date');
+    url.searchParams.delete('visit');
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }
 
