@@ -162,6 +162,7 @@ export function SiteVisitReportsScreen(){
   const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Accra'});
   const [from,setFrom]=useState(today.slice(0,7)+'-01');
   const [to,setTo]=useState(today);
+  const [rangeReady,setRangeReady]=useState(false);
   const [staffKey,setStaffKey]=useState('');
   const [site,setSite]=useState('');
   const [source,setSource]=useState('');
@@ -174,10 +175,27 @@ export function SiteVisitReportsScreen(){
   const [pdfSections,setPdfSections]=useState({summary:true,trend:true,evidence:true,cohorts:false,register:true});
   const [pdfBusy,setPdfBusy]=useState(false);
   const [pdfError,setPdfError]=useState('');
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const urlFrom=params.get('from');
+    const urlTo=params.get('to');
+    const isDate=(value:string|null)=>!!value&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&
+      !Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
+    if(isDate(urlFrom)&&isDate(urlTo)&&urlFrom!<=urlTo!){setFrom(urlFrom!);setTo(urlTo!);}
+    setRangeReady(true);
+  },[]);
+  useEffect(()=>{
+    if(!rangeReady)return;
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('from')===from&&params.get('to')===to)return;
+    params.set('from',from);
+    params.set('to',to);
+    window.history.replaceState(window.history.state,'',`${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  },[from,to,rangeReady]);
   const valid=!!from&&!!to&&from<=to;
-  const report=useQuery({queryKey:['site-visit-report',profile?.key,manager,from,to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,from,to,staffKey),enabled:!!profile&&valid,staleTime:60000});
+  const report=useQuery({queryKey:['site-visit-report',profile?.key,manager,from,to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,from,to,staffKey),enabled:!!profile&&valid&&rangeReady,staleTime:60000});
   const priorPeriod=useMemo(()=>valid?previousPeriod(from,to):null,[from,to,valid]);
-  const priorReport=useQuery({queryKey:['site-visit-report',profile?.key,manager,priorPeriod?.from,priorPeriod?.to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,priorPeriod!.from,priorPeriod!.to,staffKey),enabled:!!profile&&!!priorPeriod&&compare,staleTime:60000});
+  const priorReport=useQuery({queryKey:['site-visit-report',profile?.key,manager,priorPeriod?.from,priorPeriod?.to,staffKey],queryFn:()=>loadVisits(profile!.key,manager,priorPeriod!.from,priorPeriod!.to,staffKey),enabled:!!profile&&!!priorPeriod&&compare&&rangeReady,staleTime:60000});
   useEffect(()=>{
     if(!profile?.key)return;
     const db=requireSupabase();
