@@ -27,11 +27,16 @@ type Survey = {id:string;invite_id:string;created_at:string;overall_rating:numbe
 type ApprovedPayment = {id:string;lead_id:string;amount:number;payment_date:string};
 type Cost = {id:string;lead_id:string;source_id:string;amount:number};
 type CostDay = {id:string;visit_date:string};
-type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[]};
+type DayForm = {
+  id:string;visit_date:string|null;status:string;approved_by:string|null;finalized_at:string|null;
+  vehicle_rental_est:number|null;drivers_tip_est:number|null;fuel_est:number|null;refreshment_est:number|null;tnt_est:number|null;
+  vehicle_rental_act:number|null;drivers_tip_act:number|null;fuel_act:number|null;refreshment_act:number|null;tnt_act:number|null;
+};
+type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];forms:DayForm[]};
 type Outcome = 'all'|'attended'|'not-attended'|'cancelled'|'pending';
 
-async function allPages(make:(from:number,to:number)=>PromiseLike<{data:Visit[]|null;error:{message:string}|null}>):Promise<Visit[]> {
-  const rows:Visit[]=[];
+async function allPages<T>(make:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>):Promise<T[]> {
+  const rows:T[]=[];
   for(let offset=0;;offset+=1000){
     const {data,error}=await make(offset,offset+999);
     if(error) throw new Error(error.message);
@@ -42,13 +47,14 @@ async function allPages(make:(from:number,to:number)=>PromiseLike<{data:Visit[]|
 async function loadVisits(key:string,manager:boolean,from:string,to:string,staffKey:string):Promise<VisitData>{
   const db=requireSupabase();
   const scope=manager?staffKey:key;
-  const [visits,staff]=await Promise.all([
-    allPages((a,b)=>{
+  const [visits,staff,forms]=await Promise.all([
+    allPages<Visit>((a,b)=>{
       let q=db.from('site_visits').select('id,agent_key,agent_name,name,site,visit_date,visit_time,status,source,attended,deleted_at,feedback_after,lead_id,rescheduled_at,created_at').gte('visit_date',from).lte('visit_date',to).order('visit_date',{ascending:false});
       if(scope) q=q.eq('agent_key',scope);
       return q.range(a,b);
     }),
     manager?db.from('profiles').select('agent_key,name,active').neq('role','manager').order('name').then(({data,error})=>{if(error)throw new Error(error.message);return(data??[]) as Staff[]}):Promise.resolve([] as Staff[]),
+    manager?allPages<DayForm>((a,b)=>db.from('weekly_visit_forms').select('id,visit_date,status,approved_by,finalized_at,vehicle_rental_est,drivers_tip_est,fuel_est,refreshment_est,tnt_est,vehicle_rental_act,drivers_tip_act,fuel_act,refreshment_act,tnt_act').gte('visit_date',from).lte('visit_date',to).order('visit_date',{ascending:false}).order('id').range(a,b)):Promise.resolve([] as DayForm[]),
   ]);
   const inviteRows:Invite[]=[];
   const paymentRows:ApprovedPayment[]=[];
@@ -86,7 +92,7 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
     if(error)throw new Error(error.message);
     costDays.push(...((data??[]) as CostDay[]));
   }
-  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays};
+  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,forms};
 }
 function outcome(v:Visit):Exclude<Outcome,'all'>{
   if(v.deleted_at) return 'cancelled';
@@ -98,6 +104,7 @@ function outcomeLabel(value:Exclude<Outcome,'all'>):string{
   return {'attended':'Attended','not-attended':'Did not attend',cancelled:'Cancelled',pending:'Unconfirmed'}[value];
 }
 function percent(part:number,total:number){return total?((part/total)*100).toFixed(1)+'%':'—';}
+function ghs(amount:number){return `GHS ${amount.toLocaleString('en-GH',{minimumFractionDigits:2,maximumFractionDigits:2})}`;}
 function weekOf(day:string){
   const d=new Date(day+'T00:00:00Z');
   d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);
@@ -114,6 +121,33 @@ function previousPeriod(from:string,to:string):{from:string;to:string}{
 function changeLabel(current:number,previous:number):string{
   const difference=current-previous;
   return `${difference>0?'+':''}${difference} vs previous period`;
+}
+const COST_CATEGORIES=[
+  ['Vehicle rental','vehicle_rental_est','vehicle_rental_act'],
+  ["Driver's tip",'drivers_tip_est','drivers_tip_act'],
+  ['Fuel','fuel_est','fuel_act'],
+  ['Refreshment','refreshment_est','refreshment_act'],
+  ['Staff travel and transport','tnt_est','tnt_act'],
+] as const;
+function logisticsFor(visits:Visit[],forms:DayForm[]){
+  const activeDays=new Set(visits.filter((visit)=>!visit.deleted_at).map((visit)=>visit.visit_date));
+  const matching=forms.filter((form)=>form.visit_date&&activeDays.has(form.visit_date));
+  const coveredDays=new Set(matching.map((form)=>form.visit_date));
+  const approvedDays=new Set(matching.filter((form)=>form.status==='Finalized'&&!!form.approved_by).map((form)=>form.visit_date));
+  const categories=COST_CATEGORIES.map(([label,estimatedKey,actualKey])=>({
+    label,
+    estimated:matching.reduce((sum,form)=>sum+Number(form[estimatedKey]??0),0),
+    enteredActual:matching.reduce((sum,form)=>sum+Number(form[actualKey]??0),0),
+    approvedActual:matching.filter((form)=>form.status==='Finalized'&&!!form.approved_by).reduce((sum,form)=>sum+Number(form[actualKey]??0),0),
+  }));
+  return {
+    activeDays:activeDays.size,coveredDays:coveredDays.size,missingDays:activeDays.size-coveredDays.size,
+    approvedDays:approvedDays.size,awaitingApprovalDays:coveredDays.size-approvedDays.size,
+    categories,
+    estimated:categories.reduce((sum,row)=>sum+row.estimated,0),
+    enteredActual:categories.reduce((sum,row)=>sum+row.enteredActual,0),
+    approvedActual:categories.reduce((sum,row)=>sum+row.approvedActual,0),
+  };
 }
 function nextY(doc:jsPDF,y:number){
   const bottom=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable?.finalY??y;
@@ -172,7 +206,7 @@ export function SiteVisitReportsScreen(){
   const [intentSearch,setIntentSearch]=useState('');
   const [paymentFilter,setPaymentFilter]=useState<'all'|'later'|'none'|'unassessable'>('all');
   const [compare,setCompare]=useState(false);
-  const [pdfSections,setPdfSections]=useState({summary:true,trend:true,evidence:true,cohorts:false,register:true});
+  const [pdfSections,setPdfSections]=useState({summary:true,trend:true,evidence:true,logistics:true,cohorts:false,register:true});
   const [pdfBusy,setPdfBusy]=useState(false);
   const [pdfError,setPdfError]=useState('');
   useEffect(()=>{
@@ -206,6 +240,7 @@ export function SiteVisitReportsScreen(){
       .on('postgres_changes',{event:'*',schema:'public',table:'site_visit_experience_submissions'},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'payments'},refresh)
       .on('postgres_changes',{event:'*',schema:'public',table:'client_cost_attributions'},refresh)
+      .on('postgres_changes',{event:'*',schema:'public',table:'weekly_visit_forms'},refresh)
       .subscribe();
     return ()=>{void db.removeChannel(channel)};
   },[profile?.key,queryClient]);
@@ -233,6 +268,7 @@ export function SiteVisitReportsScreen(){
   const priorFiltered=(priorReport.data?.visits??[]).filter((v)=>matches(v,priorReport.data));
   const cross=evidence(filtered,report.data);
   const priorCross=evidence(priorFiltered,priorReport.data);
+  const logistics=logisticsFor(filtered,report.data?.forms??[]);
   const priorCounts=useMemo(()=>({records:priorFiltered.length,attended:priorFiltered.filter((v)=>outcome(v)==='attended').length,unconfirmed:priorFiltered.filter((v)=>outcome(v)==='pending').length,linked:priorFiltered.filter((v)=>!!v.lead_id).length}),[priorFiltered]);
   const counts=useMemo(()=>({
     records:filtered.length,
@@ -268,7 +304,7 @@ export function SiteVisitReportsScreen(){
   },[filtered]);
   async function download(){
     if(!report.data||!profile)return;
-    if(!Object.values(pdfSections).some(Boolean)){setPdfError('Select at least one PDF section.');return;}
+    if(!Object.entries(pdfSections).some(([section,selected])=>selected&&(manager||(section!=='cohorts'&&section!=='logistics')))){setPdfError('Select at least one PDF section.');return;}
     if(compare&&!priorReport.data){setPdfError('Wait for the comparison period to load.');return;}
     setPdfBusy(true);setPdfError('');
     try{
@@ -295,7 +331,7 @@ export function SiteVisitReportsScreen(){
         ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
         ['Staff follow-up text recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Unlinked to pipeline lead',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
-      if(compare||pdfSections.trend||pdfSections.evidence||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
+      if(compare||pdfSections.trend||pdfSections.evidence||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
       if(compare&&priorPeriod){
         if(y>218){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Previous equal-length period',`${priorPeriod.from} to ${priorPeriod.to}`);
@@ -307,7 +343,7 @@ export function SiteVisitReportsScreen(){
           ['Survey responses',cross.responded,priorCross.responded,changeLabel(cross.responded,priorCross.responded)],
           ['Attended linked visits with later approved payment',cross.linkedAttendedPaid,priorCross.linkedAttendedPaid,changeLabel(cross.linkedAttendedPaid,priorCross.linkedAttendedPaid)],
         ].map((row)=>row.map(String)),theme:'grid',styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
-        if(pdfSections.trend||pdfSections.evidence||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
+        if(pdfSections.trend||pdfSections.evidence||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
       }
       }
       if(pdfSections.trend){
@@ -363,6 +399,28 @@ export function SiteVisitReportsScreen(){
         doc.text('NPS uses scored client responses only; no score is inferred from staff notes.',14,y);y+=5;
         doc.text('No visible later payment does not prove the client is unpaid.',14,y);y+=12;
       }
+      if(pdfSections.logistics&&manager){
+        if(y>180){doc.addPage();y=20}
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Authorization and logistics','Shared day forms on dates represented by the filtered visits');
+        autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
+          ['Scheduled days with active visits',logistics.activeDays],['Days with an authorization form',logistics.coveredDays],
+          ['Days without a dated form',logistics.missingDays],['Days with finalized approval',logistics.approvedDays],
+          ['Form days awaiting approval',logistics.awaitingApprovalDays],
+          ['Estimated day costs','GHS '+logistics.estimated.toLocaleString('en-GH')],
+          ['Actual amounts entered','GHS '+logistics.enteredActual.toLocaleString('en-GH')],
+          ['Entered actuals on approved forms','GHS '+logistics.approvedActual.toLocaleString('en-GH')],
+        ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:8,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
+        y=nextY(doc,y);
+        if(y>215){doc.addPage();y=20}
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Cost categories','Estimates versus actual amounts entered');
+        autoTable(doc,{startY:y,margin:{left:14,right:14},head:[['Category','Estimate (GHS)','Actual entered (GHS)','Approved form actual (GHS)']],body:logistics.categories.map((row)=>[row.label,row.estimated.toLocaleString('en-GH'),row.enteredActual.toLocaleString('en-GH'),row.approvedActual.toLocaleString('en-GH')]),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+        y=nextY(doc,y);
+        if(y>250){doc.addPage();y=20}
+        doc.setFontSize(8);
+        const note='These are whole-day form amounts, even when a staff or site filter is selected. They are not per-client costs or proof of payment. Older forms without a visit date cannot be matched.';
+        const lines=doc.splitTextToSize(note,180) as string[];
+        doc.text(lines,14,y);y+=lines.length*5+8;
+      }
       if(pdfSections.cohorts&&manager){
         if(y>225){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Staff comparison','Filtered visit cohorts');
@@ -399,7 +457,7 @@ export function SiteVisitReportsScreen(){
       <label className="grid gap-1 text-sm">Payment follow-through<select className="h-9 min-w-44 max-w-64 rounded-md border bg-background px-3" value={paymentFilter} onChange={(e)=>setPaymentFilter(e.target.value as typeof paymentFilter)}><option value="all">All visits</option><option value="later">Later approved payment</option><option value="none">No visible later approved payment</option><option value="unassessable">Attendance or lead link missing</option></select></label>
       <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={compare} onChange={(e)=>setCompare(e.target.checked)}/>Compare previous equal-length period</label>
       <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,7)+'-01');setTo(today);setStaffKey('');setSite('');setSource('');setStatus('all');setLinkFilter('all');setSurveyFilter('all');setIntentSearch('');setPaymentFilter('all');setCompare(false)}}>Reset filters</Button>
-      <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['evidence','Survey, payment and cost'],['cohorts','Staff comparison'],['register','Visit register']] as const).filter(([key])=>manager||key!=='cohorts').map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
+      <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['evidence','Survey, payment and cost'],['logistics','Authorization and logistics'],['cohorts','Staff comparison'],['register','Visit register']] as const).filter(([key])=>manager||(key!=='cohorts'&&key!=='logistics')).map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
       <Button onClick={download} disabled={!report.data||pdfBusy||(compare&&!priorReport.data)}><Download className="size-4"/>{pdfBusy?'Preparing…':'Download selected PDF sections'}</Button>
     </CardContent></Card>
     {!valid&&<p role="alert" className="text-destructive">Choose a valid date range.</p>}
@@ -430,6 +488,17 @@ export function SiteVisitReportsScreen(){
         {!!cross.intentCounts.length&&<div className="mt-5"><h3 className="text-sm font-semibold">Purchase intent from client answers</h3><div className="mt-2 grid gap-2">{cross.intentCounts.map(([label,count])=><div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="min-w-0 break-words">{label}</span><strong>{count}</strong></div>)}</div></div>}
         <p className="mt-4 text-xs text-muted-foreground">A later approved payment is not proof that the visit caused the sale. Cash and cost rows are counted once. Missing cost attribution means unknown cost, not free service.</p>
       </CardContent></Card>
+      {manager&&<Card><CardHeader><CardTitle>Authorization and logistics</CardTitle></CardHeader><CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">Day-level authorization forms for dates represented by these filtered visits. A day budget may cover other staff and sites too.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([
+          ['Scheduled days with active visits',logistics.activeDays],['Days with a dated authorization form',logistics.coveredDays],
+          ['Days missing a dated form',logistics.missingDays],['Days with finalized approval',logistics.approvedDays],
+          ['Form days awaiting approval',logistics.awaitingApprovalDays],['Estimated day costs',ghs(logistics.estimated)],
+          ['Actual amounts entered',ghs(logistics.enteredActual)],['Entered actuals on approved forms',ghs(logistics.approvedActual)],
+        ] as const).map(([label,value])=><div key={label} className="min-w-0 rounded-lg border bg-background p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 break-words text-xl font-semibold">{value}</p></div>)}</div>
+        <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead><tr className="border-b"><th className="py-2 pr-3">Cost category</th><th>Estimate</th><th>Actual entered</th><th>Actual on approved forms</th></tr></thead><tbody>{logistics.categories.map((row)=><tr key={row.label} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.label}</td><td>{ghs(row.estimated)}</td><td>{ghs(row.enteredActual)}</td><td>{ghs(row.approvedActual)}</td></tr>)}</tbody></table></div>
+        <p className="mt-4 text-xs text-muted-foreground">Entered actuals are form entries, not proof of payment. These whole-day amounts are not attributed to an individual staff member or client. Older forms without a visit date cannot be matched here; missing actuals are not evidence of zero spend.</p>
+      </CardContent></Card>}
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
