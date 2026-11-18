@@ -9,6 +9,8 @@ import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '@/webnext/auth/useSessionStore';
 import { useDownloadSiteVisitFormPdf } from '@/webnext/features/site-visits/hooks/useSiteVisitFormPdf';
@@ -104,14 +106,18 @@ export function SiteVisitDetailScreen() {
         <Card><CardHeader><CardTitle>Outcome and follow-up</CardTitle></CardHeader><CardContent><dl>
           <Field label="Attendance" value={outcome(visit)} /><Field label="Staff follow-up text" value={visit.feedbackAfter} /><Field label="Next steps" value={visit.keyNextSteps} /><Field label="Internal notes" value={visit.notes} />{visit.deletedAt && <Field label="Cancellation reason" value={visit.cancellationReason} />}
         </dl><p className="mt-3 text-xs text-muted-foreground">Staff follow-up text is separate from the client feedback survey. An unconfirmed visit is not counted as a no-show.</p>
-        {canRecordAttendance && <div className="mt-5 border-t border-border pt-4">
+        {canRecordAttendance && <div className="mt-5">
+          <Separator className="mb-4" />
           <h2 className="text-sm font-semibold">Record attendance</h2>
           <p className="mt-1 text-xs text-muted-foreground">Choose what actually happened at the site. This updates the visit, Experience report, and related analytics. You can correct a previous decision.</p>
           {visitDayReached ? <>
-            <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Visit attendance decision">
-              <Button type="button" variant={attendanceChoice === true ? 'default' : 'outline'} aria-pressed={attendanceChoice === true} disabled={saveAttendance.isPending} onClick={() => { setAttendanceChoice(true); setAttendanceError(''); }}>Client attended</Button>
-              <Button type="button" variant={attendanceChoice === false ? 'default' : 'outline'} aria-pressed={attendanceChoice === false} disabled={saveAttendance.isPending} onClick={() => { setAttendanceChoice(false); setAttendanceError(''); }}>Client did not attend</Button>
-            </div>
+            <ToggleGroup type="single" variant="outline" className="mt-3 flex-wrap" aria-label="Visit attendance decision"
+              value={attendanceChoice === null ? '' : attendanceChoice ? 'attended' : 'did-not-attend'}
+              disabled={saveAttendance.isPending}
+              onValueChange={(value) => { setAttendanceChoice(value ? value === 'attended' : null); setAttendanceError(''); }}>
+              <ToggleGroupItem value="attended">Client attended</ToggleGroupItem>
+              <ToggleGroupItem value="did-not-attend">Client did not attend</ToggleGroupItem>
+            </ToggleGroup>
             <Button type="button" className="mt-3" disabled={attendanceChoice === null || saveAttendance.isPending} onClick={() => void recordAttendance()}>{saveAttendance.isPending ? 'Saving attendance…' : 'Save attendance'}</Button>
             {attendanceError && <p role="alert" className="mt-2 text-sm text-destructive">{attendanceError}</p>}
           </> : <p className="mt-2 text-xs text-muted-foreground">Attendance can be recorded on or after the scheduled date.</p>}
