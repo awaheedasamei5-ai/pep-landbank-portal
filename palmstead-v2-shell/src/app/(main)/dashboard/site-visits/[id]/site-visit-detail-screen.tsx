@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '@/webnext/auth/useSessionStore';
 import { useDownloadSiteVisitFormPdf } from '@/webnext/features/site-visits/hooks/useSiteVisitFormPdf';
+import { useSetSiteVisitAttendance } from '@/webnext/features/sve-management/hooks/useSveManagement';
 import { getDataSource } from '@/webnext/data/source';
 import { mapSiteVisitRow } from '@/webnext/data/mappers';
 import type { SiteVisit } from '@/webnext/types/domain';
@@ -48,7 +49,24 @@ export function SiteVisitDetailScreen() {
   });
   const visit = query.data;
   const formPdf = useDownloadSiteVisitFormPdf();
+  const saveAttendance = useSetSiteVisitAttendance();
+  const [attendanceChoice, setAttendanceChoice] = useState<boolean | null>(null);
+  const [attendanceError, setAttendanceError] = useState('');
   const queryClient = useQueryClient();
+  const canRecordAttendance = !!visit && !visit.deletedAt &&
+    (profile?.role === 'manager' || visit.agentKey === profile?.key);
+  const visitDayReached = !!visit && visit.visitDate <= new Date().toISOString().slice(0, 10);
+
+  async function recordAttendance() {
+    if (!visit || attendanceChoice === null || !canRecordAttendance || !visitDayReached) return;
+    setAttendanceError('');
+    try {
+      await saveAttendance.mutateAsync({ siteVisitId: visit.id, attended: attendanceChoice });
+      setAttendanceChoice(null);
+    } catch {
+      setAttendanceError('Could not save attendance. Check your connection and try again.');
+    }
+  }
 
   useEffect(() => {
     if (!profile?.key || demoMode) return;
@@ -85,7 +103,20 @@ export function SiteVisitDetailScreen() {
         </dl></CardContent></Card>
         <Card><CardHeader><CardTitle>Outcome and follow-up</CardTitle></CardHeader><CardContent><dl>
           <Field label="Attendance" value={outcome(visit)} /><Field label="Staff follow-up text" value={visit.feedbackAfter} /><Field label="Next steps" value={visit.keyNextSteps} /><Field label="Internal notes" value={visit.notes} />{visit.deletedAt && <Field label="Cancellation reason" value={visit.cancellationReason} />}
-        </dl><p className="mt-3 text-xs text-muted-foreground">Staff follow-up text is separate from the client feedback survey. An unconfirmed visit is not counted as a no-show.</p></CardContent></Card>
+        </dl><p className="mt-3 text-xs text-muted-foreground">Staff follow-up text is separate from the client feedback survey. An unconfirmed visit is not counted as a no-show.</p>
+        {canRecordAttendance && <div className="mt-5 border-t border-border pt-4">
+          <h2 className="text-sm font-semibold">Record attendance</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Choose what actually happened at the site. This updates the visit, Experience report, and related analytics. You can correct a previous decision.</p>
+          {visitDayReached ? <>
+            <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Visit attendance decision">
+              <Button type="button" variant={attendanceChoice === true ? 'default' : 'outline'} aria-pressed={attendanceChoice === true} disabled={saveAttendance.isPending} onClick={() => { setAttendanceChoice(true); setAttendanceError(''); }}>Client attended</Button>
+              <Button type="button" variant={attendanceChoice === false ? 'default' : 'outline'} aria-pressed={attendanceChoice === false} disabled={saveAttendance.isPending} onClick={() => { setAttendanceChoice(false); setAttendanceError(''); }}>Client did not attend</Button>
+            </div>
+            <Button type="button" className="mt-3" disabled={attendanceChoice === null || saveAttendance.isPending} onClick={() => void recordAttendance()}>{saveAttendance.isPending ? 'Saving attendance…' : 'Save attendance'}</Button>
+            {attendanceError && <p role="alert" className="mt-2 text-sm text-destructive">{attendanceError}</p>}
+          </> : <p className="mt-2 text-xs text-muted-foreground">Attendance can be recorded on or after the scheduled date.</p>}
+        </div>}
+        </CardContent></Card>
         <Card><CardHeader><CardTitle>Connected records</CardTitle></CardHeader><CardContent className="space-y-4 text-sm">
           <div><p className="font-medium">Pipeline lead</p>{visit.leadId ? <Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/pipeline/${visit.leadId}`}><ExternalLink className="size-4" /> Open linked lead</Link></Button> : <p className="mt-1 text-muted-foreground">No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.</p>}</div>
           <div><p className="font-medium">Client feedback and site manager review</p><Button asChild variant="outline" className="mt-2"><Link href="/dashboard/site-visits/experience"><ExternalLink className="size-4" /> Open Experience</Link></Button><p className="mt-2 text-muted-foreground">Review the separate client response and the site manager day report there.</p></div>
