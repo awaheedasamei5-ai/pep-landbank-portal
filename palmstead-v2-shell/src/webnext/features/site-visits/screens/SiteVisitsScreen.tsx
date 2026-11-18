@@ -69,6 +69,8 @@ export function SiteVisitsScreen() {
   const [query, setQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('all');
   const [linkFilter, setLinkFilter] = useState('all');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [queueFilter, setQueueFilter] = useState<'all' | 'upcoming' | 'attendance' | 'rescheduled'>('all');
   const period = usePeriodFilter();
   // Real user ask: "site visit... apps, we would be able to delete
   // logged data from our apps and it effects at the other ends of the
@@ -98,6 +100,14 @@ export function SiteVisitsScreen() {
   }
 
   const byStaff = useMemo(() => (visits ?? []).filter((v) => !isManager || !staffFilter || v.agentKey === staffFilter), [visits, isManager, staffFilter]);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const queueCounts = {
+    upcoming: byStaff.filter((v) => !v.deletedAt && v.attended === null && v.visitDate >= today).length,
+    attendance: byStaff.filter((v) => !v.deletedAt && v.attended === null && v.visitDate < today).length,
+    rescheduled: byStaff.filter((v) => !v.deletedAt && !!v.rescheduledAt).length,
+  };
+  const sites = [...new Set(byStaff.map((v) => v.site.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const q = query.trim().toLowerCase();
   const searched = q ? byStaff.filter((v) => v.name.toLowerCase().includes(q) || v.contact.includes(q)) : byStaff;
   // Real user ask: "the tile list format of the data is not sustainable
@@ -106,10 +116,17 @@ export function SiteVisitsScreen() {
   // A text search is assumed to mean "find this specific record" --
   // widens automatically past the period filter rather than making
   // someone switch to "All time" first just to find an old visit by name.
-  const periodMatches = q ? searched : searched.filter((v) => inPeriodRange(v.visitDate, period.range));
+  const periodMatches = q || queueFilter !== 'all' ? searched : searched.filter((v) => inPeriodRange(v.visitDate, period.range));
   const filtered = periodMatches.filter((v) => {
     const outcome = v.deletedAt ? 'cancelled' : v.attended === true ? 'attended' : v.attended === false ? 'no-show' : 'unconfirmed';
-    return (outcomeFilter === 'all' || outcomeFilter === outcome) && (linkFilter === 'all' || (linkFilter === 'linked' ? !!v.leadId : !v.leadId));
+    const matchesQueue = queueFilter === 'all' || (
+      queueFilter === 'upcoming' ? !v.deletedAt && v.attended === null && v.visitDate >= today :
+      queueFilter === 'attendance' ? !v.deletedAt && v.attended === null && v.visitDate < today :
+      !v.deletedAt && !!v.rescheduledAt
+    );
+    return matchesQueue && (outcomeFilter === 'all' || outcomeFilter === outcome) &&
+      (linkFilter === 'all' || (linkFilter === 'linked' ? !!v.leadId : !v.leadId)) &&
+      (!siteFilter || v.site === siteFilter);
   });
 
   const thisMonthKey = new Date().toISOString().slice(0, 7);
@@ -158,6 +175,23 @@ export function SiteVisitsScreen() {
         </>
       )}
 
+      <section className={styles.queueSection} aria-label="Visit work queues">
+        <div className={styles.queueHeading}>Work queues <span>Across all dates</span></div>
+        <div className={styles.queueGrid}>
+          {([
+            ['all', 'All visits', byStaff.length],
+            ['upcoming', 'Upcoming', queueCounts.upcoming],
+            ['attendance', 'Confirm attendance', queueCounts.attendance],
+            ['rescheduled', 'Rescheduled', queueCounts.rescheduled],
+          ] as const).map(([key, label, count]) => (
+            <button type="button" key={key} className={`${styles.queueButton} ${queueFilter === key ? styles.queueButtonActive : ''}`}
+              aria-pressed={queueFilter === key} onClick={() => setQueueFilter(key)}>
+              <span>{label}</span><strong>{count}</strong>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <div className={styles.filterRow}>
         <input className={styles.search} aria-label="Search visits" placeholder="Search client name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
         {isManager && <select className={styles.staffSelect} aria-label="Filter staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
@@ -170,10 +204,14 @@ export function SiteVisitsScreen() {
         <select className={styles.staffSelect} aria-label="Filter lead link" value={linkFilter} onChange={(e) => setLinkFilter(e.target.value)}>
           <option value="all">All lead links</option><option value="linked">Linked lead</option><option value="unlinked">Unlinked visit</option>
         </select>
-        {(query || staffFilter || outcomeFilter !== 'all' || linkFilter !== 'all') && <button type="button" className={styles.clearBtn} onClick={() => { setQuery(''); setStaffFilter(''); setOutcomeFilter('all'); setLinkFilter('all'); }}>Clear filters</button>}
+        <select className={styles.staffSelect} aria-label="Filter site" value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}>
+          <option value="">All sites</option>{sites.map((site) => <option key={site} value={site}>{site}</option>)}
+        </select>
+        {(query || staffFilter || outcomeFilter !== 'all' || linkFilter !== 'all' || siteFilter || queueFilter !== 'all') && <button type="button" className={styles.clearBtn} onClick={() => { setQuery(''); setStaffFilter(''); setOutcomeFilter('all'); setLinkFilter('all'); setSiteFilter(''); setQueueFilter('all'); }}>Clear filters</button>}
       </div>
 
-      <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={byStaff.length} />
+      {queueFilter === 'all' ? <PeriodFilterBar state={period} resultCount={filtered.length} totalCount={byStaff.length} /> :
+        <p className={styles.queueContext}>Showing {queueFilter === 'attendance' ? 'visits needing attendance confirmation' : queueFilter === 'upcoming' ? 'upcoming visits' : 'rescheduled visits'} across all dates. Choose All visits to return to period filtering.</p>}
 
       {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
       {filtered.map((v) => {
@@ -299,7 +337,7 @@ export function SiteVisitsScreen() {
       })}
       {!isLoading && filtered.length === 0 && (
         <p className={styles.emptyMsg}>
-          {byStaff.length === 0 ? 'No site visits logged yet.' : q ? `No visits match "${query}".` : `No visits logged for ${period.label}. Widen the filter above to see older ones.`}
+          {byStaff.length === 0 ? 'No site visits logged yet.' : queueFilter !== 'all' ? 'No visits match this work queue and the selected filters.' : q ? `No visits match "${query}".` : `No visits match the selected filters for ${period.label}. Widen or clear the filters above.`}
         </p>
       )}
     </div>
