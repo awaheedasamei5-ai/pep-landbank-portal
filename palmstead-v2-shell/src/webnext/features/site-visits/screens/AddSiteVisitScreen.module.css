@@ -34,6 +34,7 @@
 }
 .textarea { resize: vertical; min-height: 60px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (width < 480px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
 .err { color: var(--c-danger); font-size: 11.5px; margin-top: 4px; }
 .actions { display: flex; gap: 10px; margin-top: 18px; }
 
@@ -150,3 +151,4 @@
 
   .cancel, .save { flex: 0 0 auto; min-width: 160px; }
 }
+
