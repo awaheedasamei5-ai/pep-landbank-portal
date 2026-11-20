@@ -33,6 +33,73 @@ function outcome(visit: SiteVisit) {
   return 'Attendance unconfirmed';
 }
 
+type DayAuthorization = {
+  id: string; status: string; approved_by: string | null; approved_by_name: string | null; finalized_at: string | null;
+  vehicle_rental_est: number | null; drivers_tip_est: number | null; fuel_est: number | null; refreshment_est: number | null; tnt_est: number | null;
+  vehicle_rental_act: number | null; drivers_tip_act: number | null; fuel_act: number | null; refreshment_act: number | null; tnt_act: number | null;
+};
+
+function amount(form: DayAuthorization, suffix: 'est' | 'act') {
+  return ['vehicle_rental', 'drivers_tip', 'fuel', 'refreshment', 'tnt'].reduce((sum, category) =>
+    sum + Number(form[`${category}_${suffix}` as keyof DayAuthorization] ?? 0), 0);
+}
+
+function money(value: number) {
+  return `GHS ${value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function CostEvidence({ visit, profileKey, demoMode }: { visit: SiteVisit; profileKey: string; demoMode: boolean }) {
+  const queryClient = useQueryClient();
+  const evidence = useQuery({
+    queryKey: ['site-visit-cost-evidence', visit.id, visit.visitDate, visit.leadId, profileKey, demoMode],
+    enabled: !!profileKey && !demoMode,
+    queryFn: async () => {
+      const db = requireSupabase();
+      const forms = await db.from('weekly_visit_forms')
+        .select('id,status,approved_by,approved_by_name,finalized_at,vehicle_rental_est,drivers_tip_est,fuel_est,refreshment_est,tnt_est,vehicle_rental_act,drivers_tip_act,fuel_act,refreshment_act,tnt_act')
+        .eq('visit_date', visit.visitDate).limit(2);
+      if (forms.error) throw forms.error;
+      if ((forms.data ?? []).length !== 1) return { form: null, allocation: null, ambiguous: (forms.data ?? []).length > 1 };
+      const form = forms.data![0] as DayAuthorization;
+      if (!visit.leadId) return { form, allocation: null, ambiguous: false };
+      const allocation = await db.from('client_cost_attributions').select('amount,created_at')
+        .eq('source_type', 'site_visit').eq('source_id', form.id).eq('lead_id', visit.leadId).maybeSingle();
+      if (allocation.error) throw allocation.error;
+      return { form, allocation: allocation.data as { amount: number; created_at: string } | null, ambiguous: false };
+    },
+  });
+
+  useEffect(() => {
+    if (!profileKey || demoMode) return;
+    const db = requireSupabase();
+    const channel = db.channel(`site-visit-cost-${profileKey}-${visit.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_visit_forms' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['site-visit-cost-evidence', visit.id] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'client_cost_attributions' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['site-visit-cost-evidence', visit.id] });
+      }).subscribe();
+    return () => { void db.removeChannel(channel); };
+  }, [profileKey, demoMode, queryClient, visit.id]);
+
+  const form = evidence.data?.form;
+  return <div>
+    <p className="font-medium">Visit authorization and cost</p>
+    {demoMode && <p className="mt-1 text-muted-foreground">Live authorization evidence is unavailable in demo mode.</p>}
+    {evidence.isLoading && <p className="mt-1 text-muted-foreground">Checking authorization…</p>}
+    {evidence.error && <p role="alert" className="mt-1 text-destructive">Could not load authorization evidence. Try reloading this visit.</p>}
+    {evidence.data?.ambiguous && <p className="mt-1 text-muted-foreground">More than one form has this date. Review the authorization workspace before using a cost figure.</p>}
+    {evidence.data && !form && !evidence.data.ambiguous && <p className="mt-1 text-muted-foreground">No dated authorization form is recorded for this visit. Its cost is unknown.</p>}
+    {form && <div className="mt-2 rounded-lg border p-3">
+      <p className="font-medium">Day form: {form.status === 'Finalized' && form.approved_by ? 'Finalized and approved' : 'Awaiting approval'}</p>
+      {form.approved_by_name && <p className="mt-1 text-xs text-muted-foreground">Approved by {form.approved_by_name}{form.finalized_at ? ` · ${new Date(form.finalized_at).toLocaleString('en-GB', { timeZone: 'Africa/Accra' })}` : ''}</p>}
+      <dl className="mt-2"><Field label="Shared day estimate" value={money(amount(form, 'est'))} /><Field label="Actual amounts entered for the day" value={money(amount(form, 'act'))} /><Field label="Cost allocated to this client" value={evidence.data?.allocation ? money(Number(evidence.data.allocation.amount)) : 'Not recorded'} />{evidence.data?.allocation && <Field label="Allocation recorded" value={new Date(evidence.data.allocation.created_at).toLocaleString('en-GB', { timeZone: 'Africa/Accra' })} />}</dl>
+      <p className="mt-2 text-xs text-muted-foreground">The day form covers all clients on this date. Entered actuals are not proof of payment. A client allocation requires a confirmed attended visit and an exact pipeline lead link; missing allocation is not zero cost.</p>
+      <Button asChild variant="outline" className="mt-3 h-auto max-w-full whitespace-normal text-left"><Link href={`/dashboard/site-visit-authorization?date=${visit.visitDate}&visit=${visit.id}`}><ExternalLink className="size-4 shrink-0" /> Open this day’s authorization</Link></Button>
+    </div>}
+  </div>;
+}
+
 export function SiteVisitDetailScreen() {
   const id = String(useParams<{ id: string }>().id ?? '');
   const profile = useSessionStore((s) => s.profile);
@@ -127,7 +194,7 @@ export function SiteVisitDetailScreen() {
           <div><p className="font-medium">Visit report</p><Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/site-visits/reports?from=${visit.visitDate}&to=${visit.visitDate}`}><ExternalLink className="size-4" /> View this visit date in reports</Link></Button><p className="mt-2 text-muted-foreground">The report includes every visit scheduled for this date and uses recorded attendance outcomes.</p></div>
           <div><p className="font-medium">Pipeline lead</p>{visit.leadId ? <Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/pipeline/${visit.leadId}`}><ExternalLink className="size-4" /> Open linked lead</Link></Button> : <p className="mt-1 text-muted-foreground">No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.</p>}</div>
           <div><p className="font-medium">Client feedback and site manager review</p><div className="mt-2 flex flex-wrap gap-2"><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=feedback&date=${visit.visitDate}&visit=${visit.id}`}><ExternalLink className="size-4" /> Open this client’s feedback</Link></Button><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=reports&date=${visit.visitDate}`}><ExternalLink className="size-4" /> Open this day’s report</Link></Button></div><p className="mt-2 text-muted-foreground">Review the separate client response and the site manager day report there.</p></div>
-          <div><p className="font-medium">Visit authorization and cost</p><Button asChild variant="outline" className="mt-2"><Link href="/dashboard/site-visit-authorization"><ExternalLink className="size-4" /> Open authorization</Link></Button><p className="mt-2 text-muted-foreground">Cost is recorded by the authorization workflow; this view does not infer an amount from the visit request.</p></div>
+          <CostEvidence visit={visit} profileKey={profile?.key ?? ''} demoMode={demoMode} />
         </CardContent></Card>
       </div>
     </>}
