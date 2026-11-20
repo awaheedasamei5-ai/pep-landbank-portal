@@ -7,6 +7,7 @@ import { ghs } from "../lib/format";
 import { qtyOfType } from "../../features/pipeline/lib/pipelineLogic";
 import { useConfig } from "../../features/manager/hooks/useConfigSettings";
 import { useLead } from "../../features/pipeline/hooks/useLead";
+import { useCanManageCompanyLeads } from "../../features/company-leads/hooks/useCompanyLeads";
 import { usePayments } from "../../features/pipeline/hooks/usePayments";
 import { StageBadge } from "../../features/pipeline/components/StageBadge";
 import { LeadConversationTimeline } from "../../features/pipeline/components/LeadConversationTimeline";
@@ -50,6 +51,7 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
   const { data: lead, isLoading } = useLead(id ?? "");
   const { data: payments } = usePayments(id ?? "");
   const { data: config } = useConfig();
+  const canManageCompanyLeads = useCanManageCompanyLeads();
 
   if (isLoading) return <div className={pipelineStyles.wrap}>Loading…</div>;
   if (!lead) return <div className={pipelineStyles.wrap}>Lead not found.</div>;
@@ -58,6 +60,7 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
   const initials = initialsOf(lead.name);
   const balance = Math.max(lead.grandTotal - lead.amtPaid, 0);
   const pctCollected = lead.grandTotal > 0 ? Math.min(100, Math.round((lead.amtPaid / lead.grandTotal) * 100)) : 0;
+  const sharedReadOnly = lead.agent === "company" && !canManageCompanyLeads;
 
   return (
     <div className={pipelineStyles.drawerBackdrop}>
@@ -111,18 +114,31 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
             </TabsList>
 
             <TabsContent value="overview" className={styles.tabPanel}>
-              <ClientSection lead={lead} />
-              <LeadDetailsSection lead={lead} />
-              {config && <PlotPricingSection lead={lead} config={config} />}
-              <FollowUpSection lead={lead} />
+              {sharedReadOnly ? (
+                <div className={pipelineStyles.section}>
+                  <h2 className={pipelineStyles.sectionTitle}>Shared company lead</h2>
+                  <p className={pipelineStyles.emptyMsg}>You can review this lead, log calls, and book site visits. Management controls changes to its shared record.</p>
+                  <div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Contact</span><span>{lead.contact || "—"}</span></div>
+                  <div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Source</span><span>{lead.leadSource || "—"}</span></div>
+                  <div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Plot</span><span>{lead.plotType} ×{lead.noPlots}</span></div>
+                  <div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Next step</span><span>{lead.nextAction || "—"}</span></div>
+                </div>
+              ) : (
+                <>
+                  <ClientSection lead={lead} />
+                  <LeadDetailsSection lead={lead} />
+                  {config && <PlotPricingSection lead={lead} config={config} />}
+                  <FollowUpSection lead={lead} />
+                </>
+              )}
               <ActivitySection lead={lead} />
               <CostAttributionSection lead={lead} />
-              <ComplaintsSection lead={lead} />
-              <EnquiriesSection lead={lead} />
-              <NotesSection lead={lead} />
+              {!sharedReadOnly && <ComplaintsSection lead={lead} />}
+              {!sharedReadOnly && <EnquiriesSection lead={lead} />}
+              {!sharedReadOnly && <NotesSection lead={lead} />}
               <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
-              <DocumentationSection lead={lead} />
-              <DangerZoneSection lead={lead} onDeleted={() => navigate(backHref)} />
+              {!sharedReadOnly && <DocumentationSection lead={lead} />}
+              {!sharedReadOnly && <DangerZoneSection lead={lead} onDeleted={() => navigate(backHref)} />}
             </TabsContent>
 
             <TabsContent value="conversations" className={styles.tabPanel}>
@@ -130,17 +146,18 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
             </TabsContent>
 
             <TabsContent value="payments" className={styles.tabPanel}>
-              {config && <DepositScheduleSection lead={lead} config={config} payments={leadPayments} />}
-              <PaymentHistorySection lead={lead} payments={leadPayments} />
+              {!sharedReadOnly && config && <DepositScheduleSection lead={lead} config={config} payments={leadPayments} />}
+              {!sharedReadOnly && <PaymentHistorySection lead={lead} payments={leadPayments} />}
+              {sharedReadOnly && <div className={pipelineStyles.section}><h2 className={pipelineStyles.sectionTitle}>Payment summary</h2><div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Collected</span><span>{ghs(lead.amtPaid)}</span></div><div className={pipelineStyles.readRow}><span className={pipelineStyles.readLabel}>Balance remaining</span><span>{ghs(balance)}</span></div></div>}
             </TabsContent>
 
             <TabsContent value="visits" className={styles.tabPanel}>
               <SiteVisitsSection lead={lead} />
-              {config && <AllocationEligibilitySection lead={lead} config={config} payments={leadPayments} />}
+              {!sharedReadOnly && config && <AllocationEligibilitySection lead={lead} config={config} payments={leadPayments} />}
             </TabsContent>
 
             <TabsContent value="contract" className={styles.tabPanel}>
-              <ContractStatusSection lead={lead} />
+              {sharedReadOnly ? <div className={pipelineStyles.section}><h2 className={pipelineStyles.sectionTitle}>Contract of Sale</h2><p className={pipelineStyles.emptyMsg}>Management handles contract changes for shared company leads.</p></div> : <ContractStatusSection lead={lead} />}
             </TabsContent>
           </Tabs>
         </div>
