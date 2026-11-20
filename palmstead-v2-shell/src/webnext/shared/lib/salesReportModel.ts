@@ -292,7 +292,8 @@ export function buildSalesReport(
     newLeadToPaidRate: rate(newLeadsPaid, newLeads.length),
     visitRequestWithoutLead: data.visits.filter((visit) => {
       if (visit.leadId || !within(visit.createdAt, filters)) return false;
-      if (scope === "master") return isManager;
+      if (filters.clientId || filters.source || filters.stage || filters.paymentPlan || filters.site) return false;
+      if (scope === "master") return isManager && filters.pool !== "company" && (!filters.staffKey || visit.agentKey === filters.staffKey);
       if (scope === "mine") return visit.agentKey === viewerKey;
       return false;
     }).length,
