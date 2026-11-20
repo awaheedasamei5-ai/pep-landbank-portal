@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { loadImageAsDataUri } from "./image";
+import { sanitizePdfText } from "./pdfText";
 import {
   PDF_GOLD,
   PDF_INK,
@@ -21,6 +22,9 @@ function money(value: number): string {
 function percent(value: number | null): string {
   return value === null ? "N/A" : `${value.toFixed(1)}%`;
 }
+
+const safe = (value: unknown) => sanitizePdfText(String(value ?? "").trim() || "Not recorded");
+const when = (value: string) => new Date(value).toLocaleString("en-GB", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" });
 
 function table(
   doc: jsPDF,
@@ -80,6 +84,7 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
     `Data loaded: ${new Date(report.loadedAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} Ghana time`,
     `Filters: staff ${report.filters.staffKey || "all"}; source ${report.filters.source || "all"}; stage ${report.filters.stage || "all"};`,
     `action ${report.filters.action || "all"}; outcome ${report.filters.outcome || "all"}; site ${report.filters.site || "all"}; plan ${report.filters.paymentPlan || "all"}.`,
+    `Pool: ${report.filters.pool || "all"}; client: ${report.filters.clientId || "all"}.`,
     "Activity and lead cohorts use their event dates; payment cash uses payment date and approved status.",
     "Current stage and paid-in-full conversion are snapshots, not historical stage transitions.",
   ];
@@ -100,6 +105,15 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
       accent: PDF_LEAF,
     },
     { label: "Lead to visit", value: percent(report.newLeadToVisitRate), accent: PDF_GOLD },
+  ]);
+  y = newSection(doc, "Value and activity scorecard", "Current deal snapshots and dated engagement evidence");
+  y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
+    { label: "Clients", value: report.clients.length },
+    { label: "Paying clients", value: report.payingClients },
+    { label: "Pipeline value", value: money(report.pipelineValue) },
+    { label: "Outstanding", value: money(report.outstanding) },
+    { label: "Recorded visit cost", value: money(report.attributedVisitCost) },
+    { label: "Conversations", value: report.conversations.length },
   ]);
   y += 3;
   y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Monthly activity trend");
@@ -125,21 +139,33 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
   );
 
   if (report.canCompareStaff) {
-    y = continuingSection(doc, y, "Staff comparison", "Activity actor and payment recorder attribution");
+    y = continuingSection(doc, y, "Deal owner activity", "Company-owned leads remain in the Company pool; activity is linked to clients, not merely the recorder");
     y = table(
       doc,
       y,
-      ["Staff", "Leads", "Calls", "Reached", "Rate", "Visits requested", "Approved cash"],
+      ["Owner", "Clients", "New", "Calls", "Reached", "Talks", "Visits", "Attended", "Paying"],
       report.staff.map((row) => [
         row.name,
+        row.clients,
         row.newLeads,
         row.calls,
-        row.reached,
         percent(row.reachedRate),
+        row.conversations,
         row.visitRequests,
-        money(row.approvedCash),
+        row.attendedVisits,
+        row.payingClients,
       ]),
     );
+    y = continuingSection(doc, y, "Deal owner financial comparison", "Approved receipts use the selected payment dates; value, outstanding and known visit costs are current snapshots", 40);
+    y = table(doc, y, ["Owner", "Pipeline value", "Approved receipts", "Outstanding", "Visit cost", "Visit to paying", "Known cost / payer"], report.staff.map((row) => [
+        row.name,
+        money(row.pipelineValue),
+        money(row.approvedCash),
+        money(row.outstanding),
+        money(row.attributedVisitCost),
+        percent(row.visitToPayingRate),
+        row.knownCostPerPayingClient === null ? "N/A" : money(row.knownCostPerPayingClient),
+      ]));
   }
   y = continuingSection(doc, y, "Conversion and mix");
   y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
@@ -182,6 +208,8 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
       ["Lead cohort denominator", `${report.newLeads.length} leads created within selection`],
       ["Sales definition", "Approved payment entries are client receipts, not booked sales or bank reconciliation."],
       ["Visit definition", "Scheduled visits do not prove attendance; historical completion is unavailable."],
+      ["Cost coverage", "Only attended, linked visits with a matched actual-cost form have a cost attribution. Missing attribution does not mean zero spend."],
+      ["Financial comparison", "Receipts are approved client payments; visit cost is an attributed cost snapshot. Their difference is not company profit."],
     ],
   );
   y = newSection(doc, "Call register", `${report.calls.length} genuine calls in the selected period`);
@@ -229,6 +257,51 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
     ]),
   );
 
+  for (const client of report.clients) {
+    y = newSection(doc, `Client | ${safe(client.lead.name)}`, `${client.ownerName} | ${client.lead.agent === "company" ? "Company Leads" : "Staff pipeline"} | Added ${client.lead.date}`);
+    y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
+      { label: "Deal value", value: money(client.lead.grandTotal) },
+      { label: "Paid in period", value: money(client.paidInPeriod) },
+      { label: "Paid to date", value: money(client.paidToDate) },
+      { label: "Outstanding", value: money(client.outstanding) },
+      { label: "Visit cost", value: money(client.attributedVisitCost) },
+      { label: "Calls / talks", value: `${client.calls.length} / ${client.conversations.length}` },
+    ]);
+    y = continuingSection(doc, y, "Deal and next step", undefined, 28);
+    y = table(doc, y, ["Field", "Recorded value"], [
+      ["Stage / plan", `${client.lead.stage} / ${client.lead.paymentPlan}`],
+      ["Plot / quantity", `${client.lead.plotType} / ${client.lead.noPlots}`],
+      ["Source / handler", `${client.lead.leadSource || "Not recorded"} / ${client.lead.assignedAgentKey || "Not assigned"}`],
+      ["Next action", `${safe(client.lead.nextAction)}${client.lead.nextActionDate ? ` (due ${client.lead.nextActionDate})` : ""}`],
+      ["Earlier lead notes", client.lead.notes ? `${safe(client.lead.notes)} (individual timestamps unavailable)` : "Not recorded"],
+    ]);
+    y = continuingSection(doc, y, "Timestamped discussions", "Each entry keeps its recorded author, channel, words and agreed next action", 38);
+    y = table(doc, y, ["Recorded (Ghana)", "By / channel", "Discussion and next action"], client.conversations.map((entry) => [
+      when(entry.createdAt), `${entry.authorKey} / ${entry.channel}`,
+      `${safe(entry.body)}${entry.nextAction ? `\nNext: ${safe(entry.nextAction)}${entry.nextActionDate ? ` (due ${entry.nextActionDate})` : ""}` : ""}`,
+    ]), { 0: 35, 1: 32 });
+    y = continuingSection(doc, y, "Calls and activity", "Selected-date entries linked to this deal", 38);
+    y = table(doc, y, ["Recorded (Ghana)", "By / action", "Outcome, notes and follow-up"], client.activities.map((entry) => [
+      when(entry.createdAt), `${entry.agentName || entry.agentKey} / ${entry.action}`,
+      [entry.outcome, entry.detail, entry.note, entry.follow ? `Follow-up: ${entry.follow}` : null].filter(Boolean).map(safe).join("\n") || "Not recorded",
+    ]), { 0: 35, 1: 35 });
+    y = continuingSection(doc, y, "Site visits", "Selected scheduled dates; attendance shown only when actually recorded", 38);
+    y = table(doc, y, ["Date / site", "Status", "Visit discussion and next steps"], client.visits.map((visit) => [
+      `${visit.visitDate} / ${safe(visit.site)}`,
+      `${visit.status}; ${visit.attended === true ? "attended" : visit.attended === false ? "did not attend" : "attendance unconfirmed"}`,
+      [visit.discussionSoFar, visit.feedbackAfter, visit.keyNextSteps].filter(Boolean).map(safe).join("\n") || "Not recorded",
+    ]), { 0: 40, 1: 33 });
+    y = continuingSection(doc, y, "Approved payments", "Only receipts dated within the selection; paid-to-date also appears in the scorecard", 38);
+    y = table(doc, y, ["Date", "Amount", "Method / receipt / note"], client.approvedPayments.map((payment) => [
+      payment.date, money(payment.amount), [payment.paymentMethod, payment.receiptNumber, payment.note].filter(Boolean).map(safe).join(" / ") || "Not recorded",
+    ]), { 0: 27, 1: 35 });
+    y = continuingSection(doc, y, "Attributed site visit costs", "Current ledger snapshot; entries may have been posted after the visit date", 38);
+    table(doc, y, ["Recorded (Ghana)", "Amount", "Basis"], client.costs.map((cost) => [
+      when(cost.createdAt), money(cost.amount), safe(cost.note),
+    ]), { 0: 35, 1: 35 });
+  }
+
   pdfReportFooter(doc, "PEP Landbank | Sales performance");
   return doc;
 }
+
