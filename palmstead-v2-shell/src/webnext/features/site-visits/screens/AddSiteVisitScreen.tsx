@@ -112,9 +112,12 @@ export function AddSiteVisitScreen() {
     queryFn: async () => {
       const client = getSupabaseClient();
       if (!client) return false;
-      const { data, error } = await client.rpc('has_permission', { p_key: 'company_leads.create' });
-      if (error) throw error;
-      return data === true;
+      const [view, create] = await Promise.all([
+        client.rpc('has_permission', { p_key: 'company_leads.view' }),
+        client.rpc('has_permission', { p_key: 'company_leads.create' }),
+      ]);
+      if (view.error || create.error) throw view.error ?? create.error;
+      return view.data === true && create.data === true;
     },
   });
   const canCreateCompanyLead = demoMode || profile?.role === 'manager' || companyCreateAccess.data === true;

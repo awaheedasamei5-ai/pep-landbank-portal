@@ -7,14 +7,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireSupabase } from "@/lib/supabase.client";
 
 const AREAS = [
-  { label: "Operations to-dos", view: "operations.todos.view", manage: "operations.todos.manage" },
-  { label: "Operations projects", view: "operations.projects.view", manage: "operations.projects.manage" },
-  { label: "Operations meetings", view: "operations.meetings.view", manage: "operations.meetings.manage" },
-  { label: "Personal notes", view: "notes.view", manage: "notes.manage" },
-  { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage" },
+  { label: "Operations to-dos", view: "operations.todos.view", manage: "operations.todos.manage", elevated: "Full" },
+  { label: "Operations projects", view: "operations.projects.view", manage: "operations.projects.manage", elevated: "Full" },
+  { label: "Operations meetings", view: "operations.meetings.view", manage: "operations.meetings.manage", elevated: "Full" },
+  { label: "Personal notes", view: "notes.view", manage: "notes.manage", elevated: "Full" },
+  { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage", elevated: "Full" },
+  { label: "Company Leads", view: "company_leads.view", manage: "company_leads.create", elevated: "View + create" },
+  { label: "Announcements", view: "announcements.view", manage: "announcements.comment", elevated: "View + comment" },
 ] as const;
 
-type AccessLevel = "Full" | "View only" | "No access";
+type AccessLevel = "Full" | "View only" | "No access" | "View + create" | "View + comment";
 
 export function MyAccess() {
   const [levels, setLevels] = useState<AccessLevel[] | null>(null);
@@ -31,7 +33,7 @@ export function MyAccess() {
         ]);
         if (view.error || manage.error) throw new Error("Access could not be loaded.");
         if (!view.data) return "No access";
-        return manage.data ? "Full" : "View only";
+        return manage.data ? area.elevated : "View only";
       }),
     )
       .then((result) => {
@@ -81,3 +83,4 @@ export function MyAccess() {
     </Card>
   );
 }
+

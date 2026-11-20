@@ -25,6 +25,10 @@ const SUPPORTED_KEYS = [
   "notes.manage",
   "memorandum.view",
   "memorandum.manage",
+  "company_leads.view",
+  "company_leads.create",
+  "announcements.view",
+  "announcements.comment",
 ];
 
 export function AccessSettings() {
@@ -116,9 +120,8 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then set their access to Operations, personal Notes and Memorandum. View-only access
-          keeps records readable while preventing changes. Project access also covers work items, comments, and project
-          reports.
+          Choose a staff member, then set their access to Operations, Notes, Memorandum, Company Leads and Announcements.
+          Denying view also blocks actions within that area. Project access covers work items, comments and reports.
         </p>
       </div>
       {loading && (
@@ -177,7 +180,9 @@ export function AccessSettings() {
                 );
                 let setting: Setting = "default";
                 if (override) setting = override.granted ? "allow" : "deny";
-                const viewKey = permission.key.replace(/\.manage$/, ".view");
+                const viewKey = permission.key.endsWith(".create") || permission.key.endsWith(".comment")
+                  ? permission.key.replace(/\.(create|comment)$/, ".view")
+                  : permission.key.replace(/\.manage$/, ".view");
                 const viewOverride = overrides.find(
                   (entry) => entry.staff_key === person.agent_key && entry.permission_key === viewKey,
                 );
@@ -186,7 +191,8 @@ export function AccessSettings() {
                 );
                 const viewAllowed = viewOverride ? viewOverride.granted : viewRoleAllows;
                 const effective =
-                  (override ? override.granted : roleAllows) && (!permission.key.endsWith(".manage") || viewAllowed);
+                  (override ? override.granted : roleAllows) &&
+                  (!/\.(manage|create|comment)$/.test(permission.key) || viewAllowed);
                 return (
                   <Card key={permission.key} className="min-w-0">
                     <CardHeader className="gap-2">
@@ -234,3 +240,4 @@ export function AccessSettings() {
     </div>
   );
 }
+
