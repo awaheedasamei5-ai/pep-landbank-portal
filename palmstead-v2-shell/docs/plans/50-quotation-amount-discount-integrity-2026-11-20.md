@@ -6,6 +6,8 @@ Standard Quotation is a live calculator with a downloadable PDF and an optional 
 
 The fixed deposit input already exists in the Standard calculator, but its calculation silently caps an amount above the grand total, money is displayed with zero decimal places, and Save as lead omits both the selected deposit and the calculated discount. The Add Lead screen then applies its defaults again. Technical Quotation still has only the default deposit percentage. The PDFs infer a deposit percentage even when a fixed amount was agreed.
 
+Preview testing exposed a further routing defect: the parent Pipeline layout reads the shim's one-shot navigation state before Add Lead mounts. The quote-to-lead handoff therefore uses a five-minute, same-tab draft that Add Lead consumes on mount, then removes. It is never persisted as a lead until the user explicitly saves the form.
+
 ## Contract for the repair
 
 1. On installment plans, a valid fixed deposit is taken as entered to the pesewa. The rest of the final price is divided across the chosen months; the final installment absorbs rounding. Blank, negative, non-finite, over-total, and over-precision values are rejected visibly rather than silently changed. Full Payment has no deposit schedule.
