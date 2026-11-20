@@ -12,7 +12,7 @@ import type { LeadUpdate } from '../../../types/domain';
 // they actually clicked in, since the lookup was always keyed to the
 // viewer's own agentKey, not the lead's real owner. Same fix pattern
 // already used for useAllLeadsForLinking/useAllLeads: staff with
-// company-wide visibility fetch by ID under RLS, without loading all leads.
+// company-wide visibility fetch via listAll() and find by id instead.
 export function useLead(id: string) {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -31,9 +31,15 @@ export function useLead(id: string) {
       // needs a real null, not undefined, to satisfy that contract.
       const ds = getDataSource(demoMode);
       if (viewAll) {
-        return (await ds.leads.getVisible(id)) ?? null;
+        const all = await ds.leads.listAll();
+        return all.find((l) => l.id === id) ?? null;
       }
-      return (await ds.leads.get(agentKey, id)) ?? null;
+      const own = await ds.leads.get(agentKey, id);
+      if (own) return own;
+      // A staff member may have Company Leads view access without the
+      // privileged listAll grant. The shared lead is still not their own
+      // agent_key, so the personal lookup above cannot find it.
+      return (await ds.leads.listCompany()).find((lead) => lead.id === id) ?? null;
     },
   });
 }
@@ -230,3 +236,4 @@ export function useAuditForLead(leadId: string, paymentIds: string[]) {
     },
   });
 }
+

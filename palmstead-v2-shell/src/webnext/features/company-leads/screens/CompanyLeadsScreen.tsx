@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { AlertTriangle, BarChart3, Download, FileText, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
+import { AlertTriangle, BarChart3, Download, Eye, FileText, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
@@ -24,7 +24,7 @@ import {
   isLeadOverdue,
   type PipelineFilters,
 } from '../../pipeline/lib/pipelineListLogic';
-import { useAgentRoster, useAssignCompanyLead, useAssignCompanyLeadHandler, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
+import { useAgentRoster, useAssignCompanyLead, useAssignCompanyLeadHandler, useCanManageCompanyLeads, useCompanyLeads, useSetLeadSource } from '../hooks/useCompanyLeads';
 import { LogCallDialog } from '../components/LogCallDialog';
 import { CompanyLeadsDashboardPanel } from '../components/CompanyLeadsDashboardPanel';
 import type { Lead } from '../../../types/domain';
@@ -89,6 +89,7 @@ export function CompanyLeadsScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useSessionStore((s) => s.profile);
+  const canManage = useCanManageCompanyLeads();
   // Same nested-route split-view trick as My/Master Pipeline and Client
   // Database (see PipelineListScreen's own comment) -- the list stays
   // mounted (and, on desktop, visible) behind a lead's own detail drawer
@@ -202,9 +203,9 @@ export function CompanyLeadsScreen() {
           <button type="button" className={styles.iconBtn} title="Export Company Leads (.xlsx)" disabled={downloadCompanyLeads.isPending} onClick={() => downloadCompanyLeads.mutate()}>
             <Download className="size-4" aria-hidden="true" />
           </button>
-          <button type="button" className={styles.iconBtn} title="Import Company Leads (.xlsx)" onClick={() => setShowImport((v) => !v)}>
+          {canManage && <button type="button" className={styles.iconBtn} title="Import Company Leads (.xlsx)" onClick={() => setShowImport((v) => !v)}>
             <Upload className="size-4" aria-hidden="true" />
-          </button>
+          </button>}
           <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/pipeline/new', { state: { returnTo: '/dashboard/company-leads', agentKeyOverride: 'company' } })}>
             + Add lead
           </button>
@@ -212,7 +213,7 @@ export function CompanyLeadsScreen() {
       </div>
 
       {downloadCompanyLeads.isError && <p className={styles.emptyMsg}>{friendlyError(downloadCompanyLeads.error, 'Could not build the export.')}</p>}
-      {showImport && <StaffPipelineImportCard companyOnly />}
+      {canManage && showImport && <StaffPipelineImportCard companyOnly />}
 
       <CompanyLeadsDashboardPanel />
 
@@ -322,7 +323,7 @@ export function CompanyLeadsScreen() {
         </div>
       )}
 
-      {selected.size > 0 && (
+      {canManage && selected.size > 0 && (
         <div className={styles.bulkBar}>
           {!bulkMode ? (
             <>
@@ -407,7 +408,7 @@ export function CompanyLeadsScreen() {
                   <Fragment key={l.id}>
                     <tr className={styles.tr}>
                       <td className={styles.td}>
-                        <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />
+                        {canManage && <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />}
                       </td>
                       <td className={`${styles.td} ${styles.tdName}`} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)}>
                         {l.name}
@@ -442,10 +443,10 @@ export function CompanyLeadsScreen() {
                         >
                           <Receipt className="size-3.5" aria-hidden="true" />
                         </button>
-                        <button type="button" className={styles.editIconBtn} title="Edit" aria-label={`Edit ${l.name}`} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)}>
-                          <Pencil className="size-3.5" aria-hidden="true" />
+                        <button type="button" className={styles.editIconBtn} title={canManage ? 'Edit' : 'View'} aria-label={`${canManage ? 'Edit' : 'View'} ${l.name}`} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)}>
+                          {canManage ? <Pencil className="size-3.5" aria-hidden="true" /> : <Eye className="size-3.5" aria-hidden="true" />}
                         </button>
-                        <button
+                        {canManage && <button
                           type="button"
                           className={styles.editIconBtn}
                           title="Assign to agent"
@@ -453,10 +454,10 @@ export function CompanyLeadsScreen() {
                           onClick={() => setExpandedId((cur) => (cur === l.id ? null : l.id))}
                         >
                           <UserPlus className="size-3.5" aria-hidden="true" />
-                        </button>
+                        </button>}
                       </td>
                     </tr>
-                    {expandedId === l.id && (
+                    {canManage && expandedId === l.id && (
                       <tr>
                         <td className={`${styles.td} ${styles.expandedTd}`} colSpan={11}>
                           <LeadAssignPanel lead={l} onDone={() => setExpandedId(null)} />
@@ -477,7 +478,7 @@ export function CompanyLeadsScreen() {
           return (
             <div className={styles.row} key={l.id}>
               <div className={styles.rowTop}>
-                <input type="checkbox" className={styles.rowCheck} checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />
+                {canManage && <input type="checkbox" className={styles.rowCheck} checked={selected.has(l.id)} onChange={() => toggleSelect(l.id)} />}
                 <div className={styles.rowBody} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)} role="button" tabIndex={0}>
                   <span className={styles.avatar}>{initials(l.name)}</span>
                   <div className={styles.rowMain}>
@@ -508,7 +509,7 @@ export function CompanyLeadsScreen() {
                 >
                   <Receipt className="size-4" aria-hidden="true" />
                 </button>
-                <button
+                {canManage && <button
                   type="button"
                   className={styles.editIconBtnMobile}
                   title="Assign to agent"
@@ -516,10 +517,10 @@ export function CompanyLeadsScreen() {
                   onClick={() => setExpandedId((cur) => (cur === l.id ? null : l.id))}
                 >
                   <UserPlus className="size-4" aria-hidden="true" />
-                </button>
+                </button>}
               </div>
               {l.leadSource && <span className={styles.sourceTag}>{l.leadSource}</span>}
-              {expandedId === l.id && <LeadAssignPanel lead={l} onDone={() => setExpandedId(null)} />}
+              {canManage && expandedId === l.id && <LeadAssignPanel lead={l} onDone={() => setExpandedId(null)} />}
             </div>
           );
         })}
@@ -633,3 +634,4 @@ function LeadAssignPanel({ lead, onDone }: { lead: Lead; onDone: () => void }) {
     </div>
   );
 }
+

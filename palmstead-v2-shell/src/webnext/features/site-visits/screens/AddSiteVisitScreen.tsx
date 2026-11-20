@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { ArrowLeft, Check, Download } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -10,11 +11,12 @@ import { useCreateSiteVisit, useSiteVisits, findDuplicateVisit } from '../hooks/
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
 import { DayLockedCalendar } from '../components/DayLockedCalendar';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { getSupabaseClient } from '../../../data/client';
 import { friendlyError } from '../../../shared/lib/friendlyError';
-import { useClients } from '../../clients/hooks/useClients';
 import { clientKey } from '../../clients/lib/groupClients';
 import { DAY_DEFAULT_TIME, dayTimeLabel, fmtLongDate, upcomingDatesForDay } from '../../site-visit-auth/lib/siteVisitAuthLogic';
-import { useCreateLead, useLeads } from '../../pipeline/hooks/useLeads';
+import { useLeads } from '../../pipeline/hooks/useLeads';
+import { useCompanyLeads } from '../../company-leads/hooks/useCompanyLeads';
 import { useAllLeads } from '../../payments/hooks/useLogPayment';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { previewGrandTotal } from '../../pipeline/lib/pipelineLogic';
@@ -47,7 +49,7 @@ function plotValue(preset: string, custom: string): string {
 function inferPlotTypeAndCount(preset: string, custom: string): { plotType: PlotType; noPlots: number } {
   if (preset === PLOT_MORE) {
     const n = Number(custom);
-    return { plotType: 'Full Plot', noPlots: n > 0 ? n : 1 };
+    return { plotType: n === 0.5 ? 'Half Plot' : 'Full Plot', noPlots: n > 0 ? n : 1 };
   }
   if (preset.startsWith('0.5')) return { plotType: 'Half Plot', noPlots: 0.5 };
   const match = preset.match(/^(\d+(\.\d+)?)/);
@@ -91,6 +93,7 @@ export function AddSiteVisitScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const profile = useSessionStore((s) => s.profile);
+  const demoMode = useSessionStore((s) => s.demoMode);
   // Optional prefill from Pipeline Detail's "Log a visit" link -- links
   // this visit to a real lead via the new site_visits.lead_id FK instead
   // of leaving it to a name/contact guess later (Master Spec Section 4).
@@ -98,21 +101,34 @@ export function AddSiteVisitScreen() {
   const prefillName = searchParams.get('name') ?? '';
   const prefillContact = searchParams.get('contact') ?? '';
   const createSiteVisit = useCreateSiteVisit();
-  const createLead = useCreateLead();
   const { data: config } = useConfig();
   const downloadPdf = useDownloadSiteVisitFormPdf();
   const { data: myVisits } = useSiteVisits();
-  const { data: clients, isLoading: clientsLoading } = useClients();
   const ownPipelineLeads = useLeads();
   const allPipelineLeads = useAllLeads();
-  const visibleLeadsQuery = profile?.role === 'manager' ? allPipelineLeads : ownPipelineLeads;
-  const { data: visiblePipelineLeads } = visibleLeadsQuery;
-  const isVisibleLeadsLoading = visibleLeadsQuery.isLoading;
+  const companyLeads = useCompanyLeads();
+  const companyCreateAccess = useQuery({
+    queryKey: ['siteVisitCompanyLeadCreate', profile?.key], enabled: !!profile && !demoMode,
+    queryFn: async () => {
+      const client = getSupabaseClient();
+      if (!client) return false;
+      const { data, error } = await client.rpc('has_permission', { p_key: 'company_leads.create' });
+      if (error) throw error;
+      return data === true;
+    },
+  });
+  const canCreateCompanyLead = demoMode || profile?.role === 'manager' || companyCreateAccess.data === true;
+  const visiblePipelineLeads = useMemo(() => profile?.role === 'manager'
+    ? (allPipelineLeads.data ?? [])
+    : [...(ownPipelineLeads.data ?? []), ...(companyLeads.data ?? [])],
+    [profile?.role, allPipelineLeads.data, ownPipelineLeads.data, companyLeads.data]);
+  const isVisibleLeadsLoading = profile?.role === 'manager' ? allPipelineLeads.isLoading : ownPipelineLeads.isLoading || companyLeads.isLoading;
   const [confirmedVisit, setConfirmedVisit] = useState<SiteVisit | null>(null);
   const [confirmedLeadId, setConfirmedLeadId] = useState<string | undefined>(undefined);
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
   const [interestCustom, setInterestCustom] = useState('');
   const [addToPipeline, setAddToPipeline] = useState(false);
+  const [newLeadPool, setNewLeadPool] = useState<'personal' | 'company'>('personal');
   const [selectedLeadId, setSelectedLeadId] = useState(leadId ?? '');
 
   const today = new Date();
@@ -150,18 +166,22 @@ export function AddSiteVisitScreen() {
   // way it got there (chip or the calendar itself), matching Master Spec
   // 9.1's fixed per-day schedule.
   const selectedDow = watchedDate ? new Date(`${watchedDate}T00:00:00`).getDay() : today.getDay();
-  const matchingClient = useMemo(() => {
-    if (!watchedName.trim() || !watchedContact.trim()) return null;
-    const key = clientKey(watchedName, watchedContact);
-    return (clients ?? []).find((item) => clientKey(item.name, item.contact) === key) ?? null;
-  }, [clients, watchedName, watchedContact]);
   const matchingLeads = useMemo(
-    () => (visiblePipelineLeads ?? []).filter((lead) => matchingClient?.leadIds.includes(lead.id)),
-    [visiblePipelineLeads, matchingClient]
+    () => watchedName.trim() && watchedContact.trim()
+      ? visiblePipelineLeads.filter((lead) => clientKey(lead.name, lead.contact) === clientKey(watchedName, watchedContact))
+      : [],
+    [visiblePipelineLeads, watchedName, watchedContact]
   );
-  const selectedExistingLeadId = leadId ??
+  const linkedLead = leadId ? visiblePipelineLeads.find((lead) => lead.id === leadId) : undefined;
+  const selectedExistingLeadId = (leadId ? linkedLead?.id : undefined) ??
     matchingLeads.find((lead) => lead.id === selectedLeadId)?.id ??
     (matchingLeads.length === 1 ? matchingLeads[0].id : undefined);
+  const selectedExistingLead = visiblePipelineLeads.find((lead) => lead.id === selectedExistingLeadId);
+  const newLeadPricing = useMemo(() => {
+    if (!config) return null;
+    const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
+    return previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
+  }, [config, interestPreset, interestCustom]);
 
   function pickDay(dow: number) {
     const [nextDate] = upcomingDatesForDay(dow, 1);
@@ -191,18 +211,21 @@ export function AddSiteVisitScreen() {
   const isKnownClient = useMemo(() => {
     if (!watchedName.trim() || !watchedContact.trim()) return true;
     if (leadId) return true;
-    const key = clientKey(watchedName, watchedContact);
-    return (clients ?? []).some((c) => clientKey(c.name, c.contact) === key);
-  }, [clients, watchedName, watchedContact, leadId]);
+    return matchingLeads.length > 0;
+  }, [matchingLeads.length, watchedName, watchedContact, leadId]);
 
   async function onSubmit(values: FormValues) {
     setSaveError(null);
-    if (matchingClient && (clientsLoading || isVisibleLeadsLoading)) {
+    if (isVisibleLeadsLoading) {
       setSaveError('Checking this client’s existing pipeline records. Wait a moment, then try again.');
       return;
     }
-    if (matchingClient && matchingLeads.length === 0) {
-      setSaveError('We could not load a visible pipeline record for this client. Reload the page before saving so the visit is linked correctly.');
+    if (leadId && (!linkedLead || clientKey(linkedLead.name, linkedLead.contact) !== clientKey(values.name, values.contact))) {
+      setSaveError('This visit no longer matches the selected pipeline record. Return to that client and start the booking again.');
+      return;
+    }
+    if (addToPipeline && newLeadPool === 'company' && !canCreateCompanyLead) {
+      setSaveError('Company Leads creation access is required. Choose a personal lead or ask Management to grant access.');
       return;
     }
     if (addToPipeline && !leadId && !isKnownClient && !config) {
@@ -211,44 +234,34 @@ export function AddSiteVisitScreen() {
     }
     if (duplicate && !(isManager && duplicateOverride)) return;
     try {
-      // Real client request: booking a visit for a genuinely new client can
-      // also open a real pipeline lead in the same step. Created first (not
-      // fire-and-forget after) so the visit itself can carry the real
-      // leadId FK, same as a visit logged from Pipeline Detail's own "Log a
-      // visit" link -- one real, linked record instead of two separate,
-      // unconnected ones.
-      if (matchingClient && matchingLeads.length > 1 && !selectedExistingLeadId) {
+      // The server commits a new lead and visit in one transaction, using
+      // the selected pool. Existing clients must choose the exact deal.
+      if (matchingLeads.length > 1 && !selectedExistingLeadId) {
         setSaveError('This client has more than one pipeline record. Choose the correct record before saving the visit.');
         return;
       }
-      let effectiveLeadId = selectedExistingLeadId;
+      let newLead;
       if (addToPipeline && !leadId && !isKnownClient && config) {
         const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
         const pricing = previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
-        const { lead } = await createLead.mutateAsync({
-          name: values.name.trim(),
-          contact: values.contact.trim(),
-          plotType,
-          noPlots,
-          unitPrice: pricing.listPrice,
-          paymentPlan: 'Full Payment',
-          amtPaid: 0,
-        });
-        effectiveLeadId = lead.id;
+        newLead = { pool: newLeadPool, plotType, noPlots, unitPrice: pricing.listPrice,
+          discount: pricing.disc, netTotal: pricing.net, grandTotal: pricing.grand };
       }
       const rec = await createSiteVisit.mutateAsync({
         ...values,
         plot: plotValue(interestPreset, interestCustom),
         people: values.people ? Number(values.people) : undefined,
-        leadId: effectiveLeadId,
+        leadId: selectedExistingLeadId,
+        newLead,
+        allowDuplicate: isManager && duplicateOverride,
       });
       // Master Spec 9.3: "Show confirmation with date, time, client and
       // logistics" -- stays on this screen with a summary rather than
       // immediately navigating away, so the confirmation is actually seen.
-      setConfirmedLeadId(effectiveLeadId);
+      setConfirmedLeadId(rec.leadId ?? undefined);
       setConfirmedVisit(rec);
     } catch (e) {
-      setSaveError(friendlyError(e, addToPipeline ? 'Failed to save this visit or create the pipeline lead' : 'Failed to save this visit'));
+      setSaveError(friendlyError(e, addToPipeline ? 'The visit and new lead were not saved. Please check the details and try again.' : 'Failed to save this visit'));
     }
   }
 
@@ -265,7 +278,7 @@ export function AddSiteVisitScreen() {
             Management has been notified, and {confirmedVisit.name.split(' ')[0]} has been texted the pick-up details. You can download the request form, log another visit, or head back to your visits list.
           </p>
           {addToPipeline && confirmedLeadId && confirmedLeadId !== leadId && (
-            <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was also added to your pipeline as a new lead.</p>
+            <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was added to {newLeadPool === 'company' ? 'Company Leads' : 'your personal pipeline'} and linked to this visit.</p>
           )}
           {confirmedLeadId && !addToPipeline && (
             <p className={styles.confirmNote}>This visit is linked to the existing pipeline record and will appear in the client’s Client 360 history.</p>
@@ -277,7 +290,7 @@ export function AddSiteVisitScreen() {
             <button type="button" className={styles.cancel} onClick={() => setConfirmedVisit(null)}>
               Log another
             </button>
-            <button type="button" className={styles.save} onClick={() => navigate(confirmedLeadId ? `/dashboard/pipeline/${confirmedLeadId}` : '/dashboard/site-visits')}>
+            <button type="button" className={styles.save} onClick={() => navigate(confirmedLeadId ? `/dashboard/${addToPipeline ? (newLeadPool === 'company' ? 'company-leads' : 'pipeline') : (selectedExistingLead?.agent === 'company' ? 'company-leads' : 'pipeline')}/${confirmedLeadId}` : '/dashboard/site-visits')}>
               Done
             </button>
           </div>
@@ -286,7 +299,7 @@ export function AddSiteVisitScreen() {
     );
   }
 
-  const backTo = leadId ? `/dashboard/pipeline/${leadId}` : '/dashboard/site-visits';
+  const backTo = leadId ? `/dashboard/${linkedLead?.agent === 'company' ? 'company-leads' : 'pipeline'}/${leadId}` : '/dashboard/site-visits';
 
   return (
     <div className={styles.wrap}>
@@ -314,12 +327,12 @@ export function AddSiteVisitScreen() {
               <input className={styles.input} placeholder="e.g. 0244 000 000" {...register('contact')} />
               {errors.contact && <div className={styles.err}>{errors.contact.message}</div>}
             </div>
-            {matchingClient && matchingLeads.length === 1 && !leadId && (
+            {matchingLeads.length === 1 && !leadId && (
               <div className={styles.newClientNote} role="status">
                 This visit will be linked to {matchingLeads[0].plotType} · {matchingLeads[0].stage} in the existing client record.
               </div>
             )}
-            {matchingClient && matchingLeads.length > 1 && !leadId && (
+            {matchingLeads.length > 1 && !leadId && (
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="site-visit-lead-link">Choose the pipeline record for this visit *</label>
                 <select
@@ -332,7 +345,7 @@ export function AddSiteVisitScreen() {
                   <option value="">Select a record</option>
                   {matchingLeads.map((lead) => (
                     <option key={lead.id} value={lead.id}>
-                      {lead.plotType} · {lead.stage} · {lead.date}
+                      {lead.agent === 'company' ? 'Company Leads' : 'Personal pipeline'} · {lead.plotType} · {lead.stage} · {lead.date}
                     </option>
                   ))}
                 </select>
@@ -344,8 +357,13 @@ export function AddSiteVisitScreen() {
                 <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
                 <label className={styles.dupOverrideRow}>
                   <input type="checkbox" checked={addToPipeline} onChange={(e) => setAddToPipeline(e.target.checked)} />
-                  Also add {watchedName.trim().split(' ')[0] || 'this client'} to my pipeline as a new lead
+                  Add {watchedName.trim().split(' ')[0] || 'this client'} to a pipeline and link the visit
                 </label>
+                {addToPipeline && <div className={styles.field} role="group" aria-label="Choose pipeline for new client">
+                  <label className={styles.dupOverrideRow}><input type="radio" name="newLeadPool" checked={newLeadPool === 'personal'} onChange={() => setNewLeadPool('personal')} /> My personal pipeline</label>
+                  <label className={styles.dupOverrideRow}><input type="radio" name="newLeadPool" checked={newLeadPool === 'company'} disabled={!canCreateCompanyLead} onChange={() => setNewLeadPool('company')} /> Company Leads {canCreateCompanyLead ? '(shared)' : '(access required)'}</label>
+                  <p className={styles.sub}>{newLeadPricing ? `Opening quote: GHS ${newLeadPricing.grand.toLocaleString('en-GH', { minimumFractionDigits: 2 })} after GHS ${newLeadPricing.disc.toLocaleString('en-GH', { minimumFractionDigits: 2 })} standard discount. No payment is recorded.` : 'Loading the current plot price.'}</p>
+                </div>}
               </>
             )}
             <div className={styles.field}>
@@ -505,3 +523,4 @@ export function AddSiteVisitScreen() {
     </div>
   );
 }
+
