@@ -1,12 +1,12 @@
 "use client";
 
 import { jsPDF } from 'jspdf';
-import { ghs, today } from '../../../shared/lib/format';
+import { today } from '../../../shared/lib/format';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import { greenBar, greenTable, kv, quoteBg, themeFromConfig, DEFAULT_QUOTE_THEME, type QuoteTheme, QRED, type QuotationClientInfo } from './quotationPdf';
 import type { Config } from '../../../types/domain';
-import type { TechnicalQuotationTotals } from './quotationLogic';
+import { quoteMoney, type TechnicalQuotationTotals } from './quotationLogic';
 
 // Faithful port of index.html's buildTechnicalQuotationPDF() (index.html:
 // 16952-17047+) -- "same header/branding/payment-plan-schedule/notes/
@@ -119,16 +119,15 @@ export function buildTechnicalQuotationPdf(
   // screen (net alone, or net+interest) -- reading it against net alone
   // regardless would show something other than 30% whenever interest was
   // included, looking like a miscalculation.
-  const depositBase = q.depositIncludesInterest ? q.grand : q.net;
-  const depositPct = q.planMonths && depositBase > 0 ? Math.round(((q.deposit || 0) / depositBase) * 100) : null;
+  const depositBasis = q.depositMode === 'amount' ? 'Fixed agreed amount' : `${q.depositPercent ?? 0}% of ${q.depositIncludesInterest ? 'net + interest' : 'net'}`;
   const leftRows: [string, string][] = [
     ['Customer Name', client.name],
     ['Address', client.address || '—'],
     ['Contact / Phone', client.contact || '—'],
     ['Email', client.email || '—'],
     ['Payment Plan', q.planMonths ? `${q.planMonths} Months` : 'Outright'],
-    ['Deposit Amount', q.planMonths ? ghs(q.deposit) : '—'],
-    ['Deposit %', depositPct != null ? `${depositPct}% (${q.depositIncludesInterest ? 'of net + interest' : 'of net'})` : '—'],
+    ['Deposit Amount', q.planMonths ? quoteMoney(q.deposit) : '—'],
+    ['Deposit basis', q.planMonths ? depositBasis : '—'],
   ];
   // Real user ask: "the credit period month: should be outright payemnt
   // since the person isnt making installemnts... fix this for both
@@ -138,8 +137,11 @@ export function buildTechnicalQuotationPdf(
     q.planMonths ? ['Credit Period months', String(q.planMonths), QRED] : ['Payment Type', 'Outright payment', QRED],
     ['Combined Total Area', sqft(q.totalArea), null],
     ['Dynamic Rate', ghsPerSqft(q.rate), null],
-    ['Interest', ghs(q.interestTotal || 0), null],
-    ['Total', ghs(q.grand), null],
+    ['Area price', quoteMoney(q.gross), null],
+    ...(q.discountTotal ? ([['Quotation discount', quoteMoney(q.discountTotal), null]] as [string, string, [number, number, number] | null][]) : []),
+    ['Net price', quoteMoney(q.net), null],
+    ['Interest', quoteMoney(q.interestTotal || 0), null],
+    ['Total', quoteMoney(q.grand), null],
   ];
   let ly = y;
   leftRows.forEach((r) => {
@@ -171,7 +173,7 @@ export function buildTechnicalQuotationPdf(
   doc.setFontSize(8.5);
   doc.setTextColor(20, 20, 20);
   doc.text('Dynamic Rate: ' + ghsPerSqft(q.rate), 14, y);
-  doc.text('Final Total Amount: ' + ghs(q.net), pageW - 12, y, { align: 'right' });
+  doc.text('Net after discount: ' + quoteMoney(q.net), pageW - 12, y, { align: 'right' });
   y += 8;
 
   if (q.planMonths) {
@@ -180,16 +182,16 @@ export function buildTechnicalQuotationPdf(
       y,
       pageW,
       [
-        { label: 'Total Value', value: ghs(q.grand) },
-        { label: 'Deposit', value: ghs(q.deposit), color: QRED },
-        { label: 'Balance', value: ghs(q.balance) },
-        { label: 'Monthly Due', value: ghs(q.monthlyDue) },
+        { label: 'Total Value', value: quoteMoney(q.grand) },
+        { label: 'Deposit', value: quoteMoney(q.deposit), color: QRED },
+        { label: 'Balance', value: quoteMoney(q.balance) },
+        { label: 'Monthly Due', value: quoteMoney(q.monthlyDue) },
       ],
       theme
     );
     y = greenTable(doc, y, pageW, q.schedule, theme);
   } else {
-    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }], theme);
+    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: quoteMoney(q.grand) }], theme);
   }
   y += 4;
 
@@ -222,9 +224,9 @@ export function buildTechnicalQuotationPdf(
   doc.setFontSize(8.5);
   doc.setTextColor(20, 20, 20);
   const totalsRows: [string, string][] = [
-    ['Total Monthly Payments', ghs(q.balance)],
-    ['Advance Payment', ghs(q.deposit)],
-    ['Total Invoice Amount', ghs(q.grand)],
+    ['Total Monthly Payments', quoteMoney(q.balance)],
+    ['Advance Payment', quoteMoney(q.deposit)],
+    ['Total Invoice Amount', quoteMoney(q.grand)],
   ];
   totalsRows.forEach((r, i) => {
     doc.text(r[0], totalsX, ty + i * 7);
@@ -289,3 +291,4 @@ export function buildTechnicalQuotationPdf(
 export function technicalQuotationFilename(clientName: string): string {
   return `TechnicalQuotation_${clientName.replace(/\s+/g, '_')}_${today()}.pdf`;
 }
+
