@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requireSupabase } from '@/lib/supabase.client';
+import { sanitizePdfText } from '@/webnext/shared/lib/pdfText';
 
 type Conversation = {
   id: string;
@@ -24,6 +25,10 @@ function ghanaTime(value: string) {
   return new Date(value).toLocaleString('en-GB', {
     timeZone: 'Africa/Accra', dateStyle: 'medium', timeStyle: 'short',
   });
+}
+
+function readableNotes(value: string) {
+  return value.replace(/\\r\\n|\\n|\\r/g, '\n').replace(/\r\n/g, '\n');
 }
 
 export function LeadConversationTimeline({ leads, legacyNotes }: { leads: LeadOption[]; legacyNotes?: string | null }) {
@@ -58,14 +63,14 @@ export function LeadConversationTimeline({ leads, legacyNotes }: { leads: LeadOp
       doc.text('Client conversation history', 14, 18);
       doc.setTextColor(40, 55, 70);
       doc.setFontSize(9);
-      doc.text(labels.get(activeLead) ?? 'Client', 14, 39);
+      doc.text(sanitizePdfText(labels.get(activeLead) ?? 'Client'), 14, 39);
       doc.setFont('helvetica', 'normal');
       doc.text(`Generated ${ghanaTime(new Date().toISOString())} GMT`, 14, 45);
       const rows = (history.data.entries ?? []).filter((entry) => entry.lead_id === activeLead).map((entry) => [
         ghanaTime(entry.created_at) + ' GMT',
-        history.data.names.get(entry.author_key) ?? entry.author_key,
+        sanitizePdfText(history.data.names.get(entry.author_key) ?? entry.author_key),
         channels.find(([value]) => value === entry.channel)?.[1] ?? entry.channel,
-        [entry.body, entry.next_action ? `Next step: ${entry.next_action}${entry.next_action_date ? ` (due ${entry.next_action_date})` : ''}` : ''].filter(Boolean).join('\n'),
+        sanitizePdfText([entry.body, entry.next_action ? `Next step: ${entry.next_action}${entry.next_action_date ? ` (due ${entry.next_action_date})` : ''}` : ''].filter(Boolean).join('\n')),
       ]);
       autoTable(doc, {
         startY: 53,
@@ -77,18 +82,19 @@ export function LeadConversationTimeline({ leads, legacyNotes }: { leads: LeadOp
         margin: { left: 14, right: 14, bottom: 18 },
       });
       if (legacyNotes?.trim()) {
-        doc.addPage();
+        let y = Math.max(62, ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 53) + 13);
+        if (y > 258) { doc.addPage(); y = 20; }
         doc.setTextColor(11, 30, 61);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
-        doc.text('Earlier lead notes', 14, 20);
+        doc.text('Earlier lead notes', 14, y);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.text('These notes predate the timestamped conversation history; their individual dates are not recorded.', 14, 27);
-        let y = 38;
-        for (const line of doc.splitTextToSize(legacyNotes, 180) as string[]) {
+        doc.text('These notes predate the timestamped history; their individual dates are not recorded.', 14, y + 7);
+        y += 17;
+        for (const line of doc.splitTextToSize(sanitizePdfText(readableNotes(legacyNotes)), 180) as string[]) {
           if (y > 276) { doc.addPage(); y = 20; }
-          doc.text(line, 14, y);
+          doc.text(line || ' ', 14, y);
           y += 5;
         }
       }
@@ -182,8 +188,8 @@ export function LeadConversationTimeline({ leads, legacyNotes }: { leads: LeadOp
     {history.isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading conversations…</p>}
     {history.error && <p role="alert" className="mt-4 text-sm text-destructive">Conversation history could not be loaded.</p>}
     {exportError && <p role="alert" className="mt-4 text-sm text-destructive">The PDF could not be prepared. Please try again.</p>}
-    {history.data?.entries.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No conversations recorded yet. Existing personal notes are kept separately.</p>}
-    {legacyNotes?.trim() && <details className="mt-4 rounded-xl border bg-background p-3"><summary className="cursor-pointer text-sm font-medium">Earlier lead notes (date not recorded)</summary><p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{legacyNotes}</p></details>}
+    {history.data?.entries.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No timestamped conversations recorded yet. Earlier lead notes appear below when available.</p>}
+    {legacyNotes?.trim() && <details className="mt-4 rounded-xl border bg-background p-3"><summary className="cursor-pointer text-sm font-medium">Earlier lead notes (date not recorded)</summary><p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{readableNotes(legacyNotes)}</p></details>}
     <ol className="mt-4 space-y-3">{history.data?.entries.map((entry) => <li key={entry.id} className="min-w-0 rounded-xl border bg-background p-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"><span className="font-medium text-foreground">{history.data.names.get(entry.author_key) ?? entry.author_key}</span><span>·</span><time dateTime={entry.created_at}>{ghanaTime(entry.created_at)} GMT</time><span>·</span><span>{channels.find(([value]) => value === entry.channel)?.[1] ?? entry.channel}</span>{leads.length > 1 && <><span>·</span><span>{labels.get(entry.lead_id) ?? 'Lead'}</span></>}</div>
       <p className="mt-2 whitespace-pre-wrap break-words text-sm">{entry.body}</p>
