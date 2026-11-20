@@ -104,6 +104,9 @@ export function AddLeadScreen() {
     plotType?: FormInput['plotType'];
     noPlots?: number;
     paymentPlan?: FormInput['paymentPlan'];
+    unitPrice?: number;
+    discount?: number;
+    depositTarget?: number;
     address?: string;
     leadSource?: string;
   } | null;
@@ -151,7 +154,7 @@ export function AddLeadScreen() {
   // automatically the unit price"); the moment they type a real
   // override, auto-fill stops so it never clobbers a deliberate custom
   // price.
-  const [unitPriceManuallyEdited, setUnitPriceManuallyEdited] = useState(false);
+  const [unitPriceManuallyEdited, setUnitPriceManuallyEdited] = useState(prefill?.unitPrice != null);
   // Same pattern as unitPriceManuallyEdited above -- No. of plots is a
   // full-plot-equivalent count (0.5 IS one standard Half Plot, not "half
   // of a half plot"; see previewGrandTotal's own comment in
@@ -160,12 +163,12 @@ export function AddLeadScreen() {
   // (0.5 for Half, 1 for Full) unless the staff member has typed their
   // own number -- e.g. via the partial-plot calculator below, or a real
   // multi-plot deal.
-  const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(false);
+  const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(prefill?.noPlots != null);
   // Same pattern again -- an active Promotional pricing window (Settings)
   // auto-fills unit price (mode 'increase') or the discount field (mode
   // 'discount') for a matching new lead, but only while the staff member
   // hasn't typed their own override.
-  const [discountManuallyEdited, setDiscountManuallyEdited] = useState(false);
+  const [discountManuallyEdited, setDiscountManuallyEdited] = useState(prefill?.discount != null);
   const {
     register,
     handleSubmit,
@@ -178,6 +181,9 @@ export function AddLeadScreen() {
       plotType: prefill?.plotType ?? 'Full Plot',
       noPlots: prefill?.noPlots ?? 1,
       paymentPlan: prefill?.paymentPlan ?? 'Full Payment',
+      unitPrice: prefill?.unitPrice,
+      discount: prefill?.discount != null ? String(prefill.discount) : undefined,
+      depositTarget: prefill?.depositTarget != null ? String(prefill.depositTarget) : undefined,
       amtPaid: 0,
       date: today(),
       siteVisit: 'No',
@@ -235,7 +241,7 @@ export function AddLeadScreen() {
   const grandTotal = preview.grand;
   const balanceAfter = Math.max(grandTotal - Number(amtPaid), 0);
   const depositTargetRaw = watch('depositTarget');
-  const depositTargetPreview = depositTargetRaw?.trim() ? Number(depositTargetRaw) : Math.round(preview.net * 0.3);
+  const depositTargetPreview = depositTargetRaw?.trim() ? Number(depositTargetRaw) : Math.round(preview.net * ((config?.defaultDepositPct ?? 30) / 100) * 100) / 100;
 
   // Real fix for the user's own explicit ask, live: "when I select either
   // half or full plot I expect the system to know this basic principle
@@ -474,7 +480,7 @@ export function AddLeadScreen() {
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Deposit target (GHS)</label>
-                <input className={styles.input} type="number" placeholder={`auto = 30% (${ghs(depositTargetPreview)})`} {...register('depositTarget')} />
+                <input className={styles.input} type="number" min={0} step="0.01" placeholder={`auto = ${config?.defaultDepositPct ?? 30}% (${ghs(depositTargetPreview)})`} {...register('depositTarget')} />
                 <p className={styles.hint}>Only matters on an installment plan — the monthly schedule begins once this is fully paid.</p>
               </div>
             </div>
@@ -645,3 +651,4 @@ export function AddLeadScreen() {
     </div>
   );
 }
+
