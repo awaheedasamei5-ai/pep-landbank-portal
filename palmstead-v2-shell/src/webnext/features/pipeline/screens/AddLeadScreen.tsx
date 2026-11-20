@@ -17,6 +17,7 @@ import { useBanners } from '../../banners/hooks/useBanners';
 import { useCreateReferral, useLinkReferralLead } from '../../referrals/hooks/useReferrals';
 import { useLinkSiteVisitToLead } from '../../site-visits/hooks/useSiteVisits';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
+import { clearQuotationLeadDraft, readQuotationLeadDraft } from '../../quotation/lib/quotationLeadDraft';
 import styles from './AddLeadScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -81,6 +82,7 @@ type FormOutput = z.output<typeof schema>;
 export function AddLeadScreen() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [quotationDraft] = useState(readQuotationLeadDraft);
   const profile = useSessionStore((s) => s.profile);
   // Company Leads' own "+ Add lead" passes agentKeyOverride:'company' so
   // this creates into that real pool instead of the signed-in staff
@@ -95,7 +97,7 @@ export function AddLeadScreen() {
   // (C2.6) "Save as lead" on the Quotation calculator -- carries over the
   // real figures already computed there instead of making staff retype
   // them, same reduce-manual-re-entry goal as `siteVisitIdToLink` above.
-  const prefill = location.state as {
+  const prefill = (location.state ?? quotationDraft) as {
     name?: string;
     contact?: string;
     returnTo?: string;
@@ -110,6 +112,9 @@ export function AddLeadScreen() {
     address?: string;
     leadSource?: string;
   } | null;
+  useEffect(() => {
+    if (quotationDraft) clearQuotationLeadDraft();
+  }, [quotationDraft]);
   const createLead = useCreateLead(prefill?.agentKeyOverride);
   const linkSiteVisitToLead = useLinkSiteVisitToLead();
   const { data: leads } = useLeads();
