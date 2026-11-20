@@ -14,9 +14,13 @@ const AREAS = [
   { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage", elevated: "Full" },
   { label: "Company Leads", view: "company_leads.view", manage: "company_leads.create", elevated: "View + create" },
   { label: "Announcements", view: "announcements.view", manage: "announcements.comment", elevated: "View + comment" },
+  { label: "Manage plot allocations", manage: "allocations.manage", elevated: "Allowed" },
+  { label: "Generate contracts", manage: "contracts.generate", elevated: "Allowed" },
+  { label: "Manage payment records", manage: "payments.manage", elevated: "Allowed" },
+  { label: "Create polls", manage: "polls.create", elevated: "Allowed" },
 ] as const;
 
-type AccessLevel = "Full" | "View only" | "No access" | "View + create" | "View + comment";
+type AccessLevel = "Full" | "View only" | "No access" | "View + create" | "View + comment" | "Allowed" | "Restricted";
 
 export function MyAccess() {
   const [levels, setLevels] = useState<AccessLevel[] | null>(null);
@@ -27,6 +31,11 @@ export function MyAccess() {
     const client = requireSupabase();
     void Promise.all(
       AREAS.map(async (area): Promise<AccessLevel> => {
+        if (!("view" in area)) {
+          const permission = await client.rpc("has_permission", { p_key: area.manage });
+          if (permission.error) throw new Error("Access could not be loaded.");
+          return permission.data ? "Allowed" : "Restricted";
+        }
         const [view, manage] = await Promise.all([
           client.rpc("has_permission", { p_key: area.view }),
           client.rpc("has_permission", { p_key: area.manage }),
@@ -70,11 +79,11 @@ export function MyAccess() {
           <ul className="flex flex-col gap-3">
             {AREAS.map((area, index) => (
               <li
-                key={area.view}
+                key={area.label}
                 className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-3 last:border-0 last:pb-0"
               >
                 <span className="min-w-0 font-medium text-sm">{area.label}</span>
-                <Badge variant={levels[index] === "No access" ? "outline" : "secondary"}>{levels[index]}</Badge>
+                <Badge variant={levels[index] === "No access" || levels[index] === "Restricted" ? "outline" : "secondary"}>{levels[index]}</Badge>
               </li>
             ))}
           </ul>
