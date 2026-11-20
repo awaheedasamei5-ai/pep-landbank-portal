@@ -76,6 +76,8 @@ test("client evidence stays in its pool and receipts follow deal owner, not paym
   assert.equal(master.staff.find((row) => row.key === "company")?.clients, 1);
   assert.equal(master.staff.find((row) => row.key === "adams")?.clients, 1);
   assert.deepEqual(buildSalesReport(data, "master", "manager", true, { ...filters, pool: "company" }).clients.map((client) => client.lead.id), ["c"]);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, clientId: "a" }).visitRequestWithoutLead, 0);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, pool: "company" }).visitRequestWithoutLead, 0);
   assert.deepEqual(buildSalesReport(data, "mine", "adams", false, { ...filters, clientId: "c", pool: "company" }).clients, []);
 });
 
