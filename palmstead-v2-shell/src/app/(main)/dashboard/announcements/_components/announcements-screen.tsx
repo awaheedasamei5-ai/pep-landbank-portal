@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { Megaphone, MessageCircle, Plus, Users, X } from "lucide-react";
+import { CalendarClock, Megaphone, MessageCircle, Plus, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 import {
   ANNOUNCEMENT_CATEGORIES,
   type Announcement,
+  type AnnouncementAudience,
   type AnnouncementCategory,
   useAnnouncementComments,
   useAnnouncements,
@@ -64,6 +65,7 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
   const markRead = useMarkAnnouncementRead(useAuthStore((s) => s.profile?.key));
   const retract = useRetractAnnouncement();
   const [showComments, setShowComments] = useState(false);
+  const scheduled = new Date(announcement.publishAt).getTime() > Date.now();
 
   return (
     <Card className={!announcement.isRead ? "border-primary/40" : undefined}>
@@ -72,10 +74,14 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
           <div>
             <div className="flex items-center gap-2">
               {!announcement.isRead && <span className="size-2 rounded-full bg-primary" />}
-              <CardTitle className="text-base">{announcement.title}</CardTitle>
+              <CardTitle className="min-w-0 text-base break-words">{announcement.title}</CardTitle>
               <Badge variant="outline">{CATEGORY_LABEL[announcement.category] ?? announcement.category}</Badge>
+              {scheduled && <Badge variant="secondary">Scheduled</Badge>}
             </div>
-            <CardDescription>{formatDistanceToNow(new Date(announcement.createdAt), { addSuffix: true })}</CardDescription>
+            <CardDescription>
+              {scheduled ? "Publishes " : "Published "}{formatDistanceToNow(new Date(announcement.publishAt), { addSuffix: true })}
+              {announcement.audience === "management" ? " · Management only" : " · All staff"}
+            </CardDescription>
           </div>
           {isManager && (
             <Button variant="ghost" size="icon-sm" onClick={() => retract.mutate(announcement.id)} title="Retract">
@@ -93,17 +99,17 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
               {announcement.readCount} seen
             </span>
           )}
-          <button type="button" className="flex items-center gap-1 hover:underline" onClick={() => setShowComments((v) => !v)}>
+          {!scheduled && <button type="button" className="flex items-center gap-1 hover:underline" onClick={() => setShowComments((v) => !v)}>
             <MessageCircle className="size-3" />
             {announcement.commentCount} comment{announcement.commentCount === 1 ? "" : "s"}
-          </button>
-          {!announcement.isRead && (
+          </button>}
+          {!scheduled && !announcement.isRead && (
             <Button size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => markRead.mutate(announcement.id)}>
               Mark as read
             </Button>
           )}
         </div>
-        {showComments && <CommentThread announcementId={announcement.id} />}
+        {!scheduled && showComments && <CommentThread announcementId={announcement.id} />}
       </CardContent>
     </Card>
   );
@@ -115,14 +121,25 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<AnnouncementCategory>("general");
+  const [audience, setAudience] = useState<AnnouncementAudience>("staff");
+  const [publishAt, setPublishAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  const [error, setError] = useState("");
 
   async function submit() {
-    if (!title.trim() || !body.trim()) return;
-    await createAnnouncement.mutateAsync({ title: title.trim(), body: body.trim(), category, expiresAt: expiresAt || null });
+    if (!title.trim() || !body.trim()) { setError("Enter a title and message."); return; }
+    const publishTime = publishAt ? new Date(publishAt) : new Date();
+    const expiryTime = expiresAt ? new Date(expiresAt) : null;
+    if (expiryTime && expiryTime <= publishTime) { setError("Expiry must be after the publication time."); return; }
+    setError("");
+    try {
+      await createAnnouncement.mutateAsync({ title: title.trim(), body: body.trim(), category, audience, publishAt: publishTime.toISOString(), expiresAt: expiryTime?.toISOString() ?? null });
+    } catch { setError("Could not publish this update. Check your connection and try again."); return; }
     setTitle("");
     setBody("");
     setCategory("general");
+    setAudience("staff");
+    setPublishAt("");
     setExpiresAt("");
     onDone();
   }
@@ -130,8 +147,8 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
   return (
     <Card className="mb-4">
       <CardContent className="grid gap-3 pt-6">
-        <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Textarea placeholder="What's the announcement?" value={body} onChange={(e) => setBody(e.target.value)} rows={4} />
+        <div><label htmlFor="announcement-title" className="mb-1 block text-sm font-medium">Headline</label><Input id="announcement-title" placeholder="What should everyone know?" maxLength={160} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+        <div><label htmlFor="announcement-body" className="mb-1 block text-sm font-medium">Message</label><Textarea id="announcement-body" placeholder="Share the details and any next step." maxLength={10000} value={body} onChange={(e) => setBody(e.target.value)} rows={5} /></div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={category} onValueChange={(v) => setCategory(v as AnnouncementCategory)}>
             <SelectTrigger className="w-48">
@@ -145,9 +162,22 @@ function ComposeForm({ onDone }: { onDone: () => void }) {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="w-40" title="Optional expiry" />
+          <Select value={audience} onValueChange={(v) => setAudience(v as AnnouncementAudience)}>
+            <SelectTrigger className="w-48" aria-label="Audience"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="staff">All staff</SelectItem>
+              <SelectItem value="management">Management only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label htmlFor="announcement-publish" className="mb-1 block text-sm font-medium">Publish at</label><Input id="announcement-publish" type="datetime-local" value={publishAt} onChange={(e) => setPublishAt(e.target.value)} /><p className="mt-1 text-xs text-muted-foreground">Leave blank to publish now.</p></div>
+          <div><label htmlFor="announcement-expiry" className="mb-1 block text-sm font-medium">Expires at</label><Input id="announcement-expiry" type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} /><p className="mt-1 text-xs text-muted-foreground">Optional; the post stays available until then.</p></div>
+        </div>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <div className="flex justify-end">
           <SubmitButton type="button" loading={createAnnouncement.isPending} onClick={submit} className="ml-auto">
-            Publish
+            {publishAt && new Date(publishAt).getTime() > Date.now() ? "Schedule update" : "Publish update"}
           </SubmitButton>
         </div>
       </CardContent>
@@ -161,14 +191,16 @@ export function AnnouncementsScreen() {
   const { data, isLoading } = useAnnouncements(profile?.key);
   const [showCompose, setShowCompose] = useState(false);
 
-  const unread = (data ?? []).filter((a) => !a.isRead);
-  const read = (data ?? []).filter((a) => a.isRead);
+  const scheduled = (data ?? []).filter((a) => new Date(a.publishAt).getTime() > Date.now());
+  const published = (data ?? []).filter((a) => new Date(a.publishAt).getTime() <= Date.now());
+  const unread = published.filter((a) => !a.isRead);
+  const read = published.filter((a) => a.isRead);
 
   return (
     <div>
       <PageHeader
         title="Announcements"
-        description="Company news and announcements."
+        description="Company news, notices and updates in one place."
         action={
           isManager && (
             <Button onClick={() => setShowCompose((v) => !v)}>
@@ -215,6 +247,13 @@ export function AnnouncementsScreen() {
           ))}
         </div>
       )}
+      {isManager && scheduled.length > 0 && (
+        <div className="mt-6 grid gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarClock className="size-4" /> Scheduled</h2>
+          {scheduled.map((a) => <AnnouncementCard key={a.id} announcement={a} isManager />)}
+        </div>
+      )}
     </div>
   );
 }
+
