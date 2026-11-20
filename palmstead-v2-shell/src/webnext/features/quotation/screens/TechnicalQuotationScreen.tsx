@@ -3,11 +3,10 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { Link } from 'react-router';
-import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadTechnicalQuotationPdf } from '../hooks/useTechnicalQuotationPdf';
-import { computeTechnicalQuotationTotals, techCustomLotArea, type PaymentPlanKey, type TechLot, type TechLotShape } from '../lib/quotationLogic';
+import { computeTechnicalQuotationTotals, defaultDepositPctFraction, quoteMoney, techCustomLotArea, type DepositOverride, type QuoteDiscountOverride, type PaymentPlanKey, type TechLot, type TechLotShape } from '../lib/quotationLogic';
 import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
 import { TemplateSettingsTab } from './TemplateSettingsTab';
 import { PricingQuotationSettingsTab } from './PricingQuotationSettingsTab';
@@ -52,9 +51,32 @@ export function TechnicalQuotationScreen() {
   // the chosen months. Technical Quotation only -- computeInstallmentPlan
   // defaults to the old net-only behavior everywhere else it's called.
   const [depositIncludesInterest, setDepositIncludesInterest] = useState(false);
+  const [depositMode, setDepositMode] = useState<'standard' | 'percent' | 'amount'>('standard');
+  const [depositPercentInput, setDepositPercentInput] = useState('');
+  const [depositAmountInput, setDepositAmountInput] = useState('');
+  const [discountMode, setDiscountMode] = useState<'none' | 'percent' | 'amount'>('none');
+  const [discountInput, setDiscountInput] = useState('');
   const downloadPdf = useDownloadTechnicalQuotationPdf();
 
-  const totals = config ? computeTechnicalQuotationTotals(config, fullCount, halfCount, lots, plan, null, depositIncludesInterest) : null;
+  const baseTotals = config ? computeTechnicalQuotationTotals(config, fullCount, halfCount, lots, plan, null, depositIncludesInterest) : null;
+  const discountValue = Number(discountInput);
+  const discountError = discountMode === 'none' ? '' :
+    !discountInput.trim() ? 'Enter the quotation discount.' :
+    discountMode === 'amount' && !/^\d+(?:\.\d{1,2})?$/.test(discountInput) ? 'Enter a valid amount with at most two decimal places.' :
+    !Number.isFinite(discountValue) || discountValue < 0 || (discountMode === 'percent' ? discountValue > 100 : discountValue > (baseTotals?.gross ?? 0))
+      ? discountMode === 'percent' ? 'Discount percent must be between 0 and 100.' : `Discount cannot exceed ${quoteMoney(baseTotals?.gross ?? 0)}.` : '';
+  const discountOverride: QuoteDiscountOverride = discountMode === 'none' || discountError ? null : { mode: discountMode, value: discountValue };
+  const pricedTotals = config && !discountError ? computeTechnicalQuotationTotals(config, fullCount, halfCount, lots, plan, null, depositIncludesInterest, null, discountOverride) : null;
+  const depositInput = depositMode === 'amount' ? depositAmountInput : depositPercentInput;
+  const depositValue = Number(depositInput);
+  const depositError = plan === 'Full Payment' || depositMode === 'standard' ? '' :
+    !depositInput.trim() ? 'Enter the deposit before generating this quotation.' :
+    depositMode === 'amount' && !/^\d+(?:\.\d{1,2})?$/.test(depositInput) ? 'Enter a valid deposit with at most two decimal places.' :
+    !Number.isFinite(depositValue) || depositValue < 0 || (depositMode === 'amount' ? depositValue > (pricedTotals?.grand ?? 0) : depositValue > 100)
+      ? depositMode === 'amount' ? `Deposit cannot exceed the quotation total of ${quoteMoney(pricedTotals?.grand ?? 0)}.` : 'Deposit percent must be between 0 and 100.' : '';
+  const depositOverride: DepositOverride = plan === 'Full Payment' || depositMode === 'standard' || depositError ? null : { mode: depositMode, value: depositValue };
+  const totals = config && !discountError && !depositError ? computeTechnicalQuotationTotals(config, fullCount, halfCount, lots, plan, null, depositIncludesInterest, depositOverride, discountOverride) : null;
+  const standardPct = config ? Math.round(defaultDepositPctFraction(config) * 1000) / 10 : 30;
   const hasAnyPlot = fullCount > 0 || halfCount > 0 || lots.length > 0;
 
   function updateLot(i: number, patch: Partial<TechLot>) {
@@ -138,16 +160,46 @@ export function TechnicalQuotationScreen() {
           </select>
         </div>
         <div className={styles.field}>
+          <label className={styles.label} htmlFor="tech-discount-mode">Quotation discount</label>
+          <select id="tech-discount-mode" className={styles.select} value={discountMode} onChange={(e) => setDiscountMode(e.target.value as typeof discountMode)}>
+            <option value="none">No discount</option>
+            <option value="amount">Discount amount (GHS)</option>
+            <option value="percent">Discount percent (%)</option>
+          </select>
+          <p className={styles.fieldHint}>Applied to the area price before plan interest. This quotation only.</p>
+        </div>
+        {discountMode !== 'none' && <div className={styles.field}>
+          <label className={styles.label} htmlFor="tech-discount-value">{discountMode === 'amount' ? 'Discount amount (GHS)' : 'Discount percent (%)'}</label>
+          <input id="tech-discount-value" className={styles.input} type="number" min={0} max={discountMode === 'percent' ? 100 : baseTotals?.gross} step={discountMode === 'amount' ? '0.01' : 'any'} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} aria-invalid={!!discountError} aria-describedby={discountError ? 'tech-discount-error' : undefined} />
+          {discountError && <p id="tech-discount-error" className={styles.fieldError} role="alert">{discountError}</p>}
+        </div>}
+        {plan !== 'Full Payment' && <>
+        <div className={styles.field}>
           <label className={styles.label}>Deposit calculation</label>
           <select
             className={styles.select}
             value={depositIncludesInterest ? 'with' : 'without'}
             onChange={(e) => setDepositIncludesInterest(e.target.value === 'with')}
+            disabled={depositMode === 'amount'}
           >
-            <option value="without">Before interest &mdash; 30% of the net price only</option>
-            <option value="with">After interest &mdash; 30% of net + interest combined</option>
+            <option value="without">Before interest &mdash; percent of the net price only</option>
+            <option value="with">After interest &mdash; percent of net + interest combined</option>
           </select>
         </div>
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor="tech-deposit-mode">Deposit choice</label>
+          <select id="tech-deposit-mode" className={styles.select} value={depositMode} onChange={(e) => setDepositMode(e.target.value as typeof depositMode)}>
+            <option value="standard">Standard &mdash; {standardPct}% (Quotation Settings)</option>
+            <option value="percent">Custom percent</option>
+            <option value="amount">Fixed amount agreed with client</option>
+          </select>
+        </div>
+        {depositMode !== 'standard' && <div className={styles.field}>
+          <label className={styles.label} htmlFor="tech-deposit-value">{depositMode === 'amount' ? 'Deposit amount (GHS)' : 'Deposit percent (%)'}</label>
+          <input id="tech-deposit-value" className={styles.input} type="number" min={0} max={depositMode === 'amount' ? pricedTotals?.grand : 100} step={depositMode === 'amount' ? '0.01' : 'any'} value={depositMode === 'amount' ? depositAmountInput : depositPercentInput} onChange={(e) => depositMode === 'amount' ? setDepositAmountInput(e.target.value) : setDepositPercentInput(e.target.value)} aria-invalid={!!depositError} aria-describedby={depositError ? 'tech-deposit-error' : undefined} />
+          {depositError && <p id="tech-deposit-error" className={styles.fieldError} role="alert">{depositError}</p>}
+        </div>}
+        </>}
       </div>
 
       {totals && (
@@ -158,16 +210,19 @@ export function TechnicalQuotationScreen() {
             {totals.customArea > 0 && <SummaryRow label={`Custom plots (${totals.customLots.length})`} value={sqft(totals.customArea)} />}
             <SummaryRow label="Combined total area" value={sqft(totals.totalArea)} />
             <SummaryRow label="Dynamic rate" value={ghsPerSqft(totals.rate)} />
-            {totals.interestTotal > 0 && <SummaryRow label={`Interest (${plan})`} value={ghs(totals.interestTotal)} />}
-            <SummaryRow label="Total" value={ghs(totals.grand)} strong />
+            <SummaryRow label="Area price" value={quoteMoney(totals.gross)} />
+            {totals.discountTotal > 0 && <SummaryRow label="Quotation discount" value={`-${quoteMoney(totals.discountTotal)}`} />}
+            <SummaryRow label="Net price before interest" value={quoteMoney(totals.net)} />
+            {totals.interestTotal > 0 && <SummaryRow label={`Interest (${plan})`} value={quoteMoney(totals.interestTotal)} />}
+            <SummaryRow label="Total" value={quoteMoney(totals.grand)} strong />
           </div>
 
           {totals.planMonths > 0 ? (
             <>
               <div className={styles.card}>
-                <SummaryRow label={`Deposit (30% of ${depositIncludesInterest ? 'net + interest' : 'net'})`} value={ghs(totals.deposit)} />
-                <SummaryRow label="Balance after deposit" value={ghs(totals.balance)} />
-                <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={ghs(totals.monthlyDue)} strong />
+                <SummaryRow label={depositMode === 'amount' ? 'Deposit (fixed amount)' : `Deposit (${totals.depositPercent}% of ${depositIncludesInterest ? 'net + interest' : 'net'})`} value={quoteMoney(totals.deposit)} />
+                <SummaryRow label="Balance after deposit" value={quoteMoney(totals.balance)} />
+                <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={quoteMoney(totals.monthlyDue)} strong />
               </div>
 
               <div className={styles.sectitle}>Payment schedule</div>
@@ -185,9 +240,9 @@ export function TechnicalQuotationScreen() {
                     {totals.schedule.map((row) => (
                       <tr key={row.month}>
                         <td>{row.month}</td>
-                        <td>{ghs(row.opening)}</td>
-                        <td>{ghs(row.payment)}</td>
-                        <td>{ghs(row.closing)}</td>
+                        <td>{quoteMoney(row.opening)}</td>
+                        <td>{quoteMoney(row.payment)}</td>
+                        <td>{quoteMoney(row.closing)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -281,3 +336,4 @@ function LotCard({ index, lot, onChange, onRemove }: { index: number; lot: TechL
     </div>
   );
 }
+
