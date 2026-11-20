@@ -28,6 +28,7 @@ export const ANNOUNCEMENT_CATEGORIES = [
 ] as const;
 
 export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATEGORIES)[number]["value"];
+export type AnnouncementAudience = "staff" | "all" | "management";
 
 export interface Announcement {
   id: string;
@@ -38,6 +39,8 @@ export interface Announcement {
   active: boolean;
   createdBy: string;
   createdAt: string;
+  publishAt: string;
+  audience: AnnouncementAudience;
   expiresAt: string | null;
   isRead: boolean;
   readCount: number;
@@ -56,7 +59,7 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
   const sb = requireSupabase();
   const todayIso = isoDateOnly(new Date());
   const [annRes, readsRes, commentsRes] = await Promise.all([
-    sb.from("announcements").select("id,title,body,category,image_b64,active,created_by,created_at,expires_at").eq("active", true).order("created_at", { ascending: false }),
+    sb.from("announcements").select("id,title,body,category,image_b64,active,created_by,created_at,publish_at,audience,expires_at").eq("active", true).order("publish_at", { ascending: false }),
     sb.from("announcement_reads").select("announcement_id,staff_key"),
     sb.from("announcement_comments").select("announcement_id"),
   ]);
@@ -84,10 +87,12 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
     active: boolean;
     created_by: string;
     created_at: string;
+    publish_at: string;
+    audience: AnnouncementAudience;
     expires_at: string | null;
   };
   return ((annRes.data ?? []) as Raw[])
-    .filter((a) => !a.expires_at || a.expires_at.slice(0, 10) >= todayIso)
+    .filter((a) => a.publish_at.slice(0, 10) > todayIso || !a.expires_at || a.expires_at.slice(0, 10) >= todayIso)
     .map((a) => ({
       id: a.id,
       title: a.title,
@@ -97,6 +102,8 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
       active: a.active,
       createdBy: a.created_by,
       createdAt: a.created_at,
+      publishAt: a.publish_at,
+      audience: a.audience,
       expiresAt: a.expires_at,
       isRead: myReads.has(a.id),
       readCount: readCountByAnn.get(a.id) ?? 0,
@@ -124,12 +131,14 @@ export function useMarkAnnouncementRead(staffKey: string | undefined) {
 export function useCreateAnnouncement(staffKey: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { title: string; body: string; category: AnnouncementCategory; expiresAt: string | null }) => {
+    mutationFn: async (data: { title: string; body: string; category: AnnouncementCategory; audience: AnnouncementAudience; publishAt: string; expiresAt: string | null }) => {
       const sb = requireSupabase();
       const { error } = await sb.from("announcements").insert({
         title: data.title,
         body: data.body,
         category: data.category,
+        audience: data.audience,
+        publish_at: data.publishAt,
         expires_at: data.expiresAt,
         active: true,
         created_by: staffKey,
@@ -174,3 +183,4 @@ export function usePostComment(announcementId: string | null) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["announcementComments", announcementId] }),
   });
 }
+
