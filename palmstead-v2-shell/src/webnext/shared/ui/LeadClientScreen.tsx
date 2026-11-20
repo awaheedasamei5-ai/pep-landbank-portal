@@ -104,6 +104,7 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
           <Tabs defaultValue="overview" className={styles.tabs}>
             <TabsList className={styles.tabsList}>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="conversations">Conversations</TabsTrigger>
               <TabsTrigger value="payments">Payment History</TabsTrigger>
               <TabsTrigger value="visits">Site Visits &amp; Allocation</TabsTrigger>
               <TabsTrigger value="contract">Contract of Sale</TabsTrigger>
@@ -118,11 +119,14 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
               <CostAttributionSection lead={lead} />
               <ComplaintsSection lead={lead} />
               <EnquiriesSection lead={lead} />
-              <LeadConversationTimeline leads={[{ id: lead.id, label: lead.plotType || lead.name }]} />
               <NotesSection lead={lead} />
               <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
               <DocumentationSection lead={lead} />
               <DangerZoneSection lead={lead} onDeleted={() => navigate(backHref)} />
+            </TabsContent>
+
+            <TabsContent value="conversations" className={styles.tabPanel}>
+              <LeadConversationTimeline leads={[{ id: lead.id, label: lead.name }]} legacyNotes={lead.notes} />
             </TabsContent>
 
             <TabsContent value="payments" className={styles.tabPanel}>
@@ -144,3 +148,4 @@ export function LeadClientScreen({ backHref, eyebrow = "Client" }: { backHref: s
     </div>
   );
 }
+

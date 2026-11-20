@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requireSupabase } from '@/lib/supabase.client';
+import { sanitizePdfText } from '@/webnext/shared/lib/pdfText';
 
 type Conversation = {
   id: string;
@@ -26,7 +27,11 @@ function ghanaTime(value: string) {
   });
 }
 
-export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
+function readableNotes(value: string) {
+  return value.replace(/\\r\\n|\\n|\\r/g, '\n').replace(/\r\n/g, '\n');
+}
+
+export function LeadConversationTimeline({ leads, legacyNotes }: { leads: LeadOption[]; legacyNotes?: string | null }) {
   const queryClient = useQueryClient();
   const idsKey = [...new Set(leads.map((lead) => lead.id))].sort().join(',');
   const ids = useMemo(() => idsKey ? idsKey.split(',') : [], [idsKey]);
@@ -36,22 +41,96 @@ export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
   const [nextAction, setNextAction] = useState('');
   const [nextDate, setNextDate] = useState('');
   const [composing, setComposing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
   const activeLead = ids.includes(selectedLead) ? selectedLead : ids[0];
   const labels = useMemo(() => new Map(leads.map((lead) => [lead.id, lead.label])), [leads]);
+
+  async function downloadHistory() {
+    if (!history.data) return;
+    setExporting(true);
+    setExportError(false);
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'), import('jspdf-autotable'),
+      ]);
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+      doc.setFillColor(11, 30, 61);
+      doc.rect(0, 0, 210, 29, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text('Client conversation history', 14, 18);
+      doc.setTextColor(40, 55, 70);
+      doc.setFontSize(9);
+      doc.text(sanitizePdfText(labels.get(activeLead) ?? 'Client'), 14, 39);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated ${ghanaTime(new Date().toISOString())} GMT`, 14, 45);
+      const rows = (history.data.entries ?? []).filter((entry) => entry.lead_id === activeLead).map((entry) => [
+        ghanaTime(entry.created_at) + ' GMT',
+        sanitizePdfText(history.data.names.get(entry.author_key) ?? entry.author_key),
+        channels.find(([value]) => value === entry.channel)?.[1] ?? entry.channel,
+        sanitizePdfText([entry.body, entry.next_action ? `Next step: ${entry.next_action}${entry.next_action_date ? ` (due ${entry.next_action_date})` : ''}` : ''].filter(Boolean).join('\n')),
+      ]);
+      autoTable(doc, {
+        startY: 53,
+        head: [['Recorded', 'Staff', 'Type', 'Discussion and agreed next step']],
+        body: rows.length ? rows : [['-', '-', '-', 'No timestamped conversations recorded.']],
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', valign: 'top' },
+        headStyles: { fillColor: [11, 30, 61] },
+        columnStyles: { 0: { cellWidth: 36 }, 1: { cellWidth: 30 }, 2: { cellWidth: 24 } },
+        margin: { left: 14, right: 14, bottom: 18 },
+      });
+      if (legacyNotes?.trim()) {
+        let y = Math.max(62, ((doc as typeof doc & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 53) + 13);
+        if (y > 258) { doc.addPage(); y = 20; }
+        doc.setTextColor(11, 30, 61);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('Earlier lead notes', 14, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text('These notes predate the timestamped history; their individual dates are not recorded.', 14, y + 7);
+        y += 17;
+        for (const line of doc.splitTextToSize(sanitizePdfText(readableNotes(legacyNotes)), 180) as string[]) {
+          if (y > 276) { doc.addPage(); y = 20; }
+          doc.text(line || ' ', 14, y);
+          y += 5;
+        }
+      }
+      const pages = doc.getNumberOfPages();
+      for (let page = 1; page <= pages; page++) {
+        doc.setPage(page);
+        doc.setDrawColor(210, 220, 226);
+        doc.line(14, 284, 196, 284);
+        doc.setFontSize(7);
+        doc.setTextColor(90, 105, 120);
+        doc.text('PEP LANDBANK LTD  |  Confidential client record', 14, 289);
+        doc.text(`${page} / ${pages}`, 196, 289, { align: 'right' });
+      }
+      doc.save(`client-conversations-${activeLead}.pdf`);
+    } catch { setExportError(true); }
+    finally { setExporting(false); }
+  }
 
   const history = useQuery({
     queryKey: ['lead-conversations', idsKey], enabled: ids.length > 0, staleTime: 15000,
     queryFn: async () => {
       const db = requireSupabase();
-      const [entries, people] = await Promise.all([
-        db.from('lead_conversations').select('id,lead_id,author_key,channel,body,next_action,next_action_date,created_at')
-          .in('lead_id', ids).order('created_at', { ascending: false }).limit(1000),
-        db.from('profiles').select('agent_key,name'),
-      ]);
-      if (entries.error) throw entries.error;
+      const people = await db.from('profiles').select('agent_key,name');
       if (people.error) throw people.error;
+      const entries: Conversation[] = [];
+      for (let start = 0; ; start += 500) {
+        const page = await db.from('lead_conversations')
+          .select('id,lead_id,author_key,channel,body,next_action,next_action_date,created_at')
+          .in('lead_id', ids).order('created_at', { ascending: false }).order('id', { ascending: false })
+          .range(start, start + 499);
+        if (page.error) throw page.error;
+        entries.push(...((page.data ?? []) as Conversation[]));
+        if ((page.data?.length ?? 0) < 500) break;
+      }
       return {
-        entries: (entries.data ?? []) as Conversation[],
+        entries,
         names: new Map((people.data ?? []).map((person) => [person.agent_key as string, person.name as string])),
       };
     },
@@ -87,8 +166,11 @@ export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
   if (!ids.length) return null;
   return <section className="min-w-0 rounded-2xl border border-border bg-card p-4 text-card-foreground sm:p-5" aria-label="Client conversations">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="text-base font-semibold">Client conversations</h2><p className="mt-1 text-sm text-muted-foreground">Calls, meetings and agreed next steps, shared with staff who can access this lead. Entries keep their original timestamp.</p></div>
-      {!composing && <button type="button" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent" onClick={() => setComposing(true)}>Add conversation</button>}
+      <div><h2 className="text-base font-semibold">Conversation history</h2><p className="mt-1 text-sm text-muted-foreground">Record every discussion separately. The system stamps the time and author when you save it.</p></div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50" disabled={!history.data || exporting} onClick={() => void downloadHistory()}>{exporting ? 'Preparing PDF…' : 'Download history PDF'}</button>
+        {!composing && <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" onClick={() => setComposing(true)}>Record discussion</button>}
+      </div>
     </div>
     {composing && <form className="mt-4 grid gap-3 rounded-xl border bg-background p-3" onSubmit={(event) => { event.preventDefault(); if (body.trim() && activeLead) add.mutate(); }}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -105,7 +187,9 @@ export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
     </form>}
     {history.isLoading && <p className="mt-4 text-sm text-muted-foreground">Loading conversations…</p>}
     {history.error && <p role="alert" className="mt-4 text-sm text-destructive">Conversation history could not be loaded.</p>}
-    {history.data?.entries.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No conversations recorded yet. Existing personal notes are kept separately.</p>}
+    {exportError && <p role="alert" className="mt-4 text-sm text-destructive">The PDF could not be prepared. Please try again.</p>}
+    {history.data?.entries.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No timestamped conversations recorded yet. Earlier lead notes appear below when available.</p>}
+    {legacyNotes?.trim() && <details className="mt-4 rounded-xl border bg-background p-3"><summary className="cursor-pointer text-sm font-medium">Earlier lead notes (date not recorded)</summary><p className="mt-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">{readableNotes(legacyNotes)}</p></details>}
     <ol className="mt-4 space-y-3">{history.data?.entries.map((entry) => <li key={entry.id} className="min-w-0 rounded-xl border bg-background p-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"><span className="font-medium text-foreground">{history.data.names.get(entry.author_key) ?? entry.author_key}</span><span>·</span><time dateTime={entry.created_at}>{ghanaTime(entry.created_at)} GMT</time><span>·</span><span>{channels.find(([value]) => value === entry.channel)?.[1] ?? entry.channel}</span>{leads.length > 1 && <><span>·</span><span>{labels.get(entry.lead_id) ?? 'Lead'}</span></>}</div>
       <p className="mt-2 whitespace-pre-wrap break-words text-sm">{entry.body}</p>
@@ -113,3 +197,4 @@ export function LeadConversationTimeline({ leads }: { leads: LeadOption[] }) {
     </li>)}</ol>
   </section>;
 }
+
