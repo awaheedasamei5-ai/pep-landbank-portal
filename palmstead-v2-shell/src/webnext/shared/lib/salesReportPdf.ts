@@ -213,7 +213,7 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
     ],
   );
   if (report.calls.length) {
-    y = newSection(doc, "Call register", `${report.calls.length} genuine calls in the selected period`);
+    y = continuingSection(doc, y, "Call register", `${report.calls.length} genuine calls in the selected period`, 38);
     y = table(
     doc,
     y,
@@ -228,10 +228,11 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
     );
   }
   if (report.requestedVisits.length) {
-    y = newSection(
+    y = continuingSection(
     doc,
+    y,
     "Visit request register",
-    `${report.requestedVisits.length} requests created in the selected period`,
+    `${report.requestedVisits.length} requests created in the selected period`, 38,
     );
     y = table(
     doc,
@@ -248,8 +249,8 @@ export async function buildSalesReportPdf(report: SalesReport, generatedBy: stri
     );
   }
   if (report.approvedPayments.length) {
-    y = newSection(doc, "Approved receipt register", `${report.approvedPayments.length} approved payment entries`);
-    table(
+    y = continuingSection(doc, y, "Approved receipt register", `${report.approvedPayments.length} approved payment entries`, 38);
+    y = table(
     doc,
     y,
     ["Payment date", "Staff", "Client", "Amount", "Receipt"],
