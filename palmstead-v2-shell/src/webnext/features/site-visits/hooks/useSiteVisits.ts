@@ -2,10 +2,25 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
+import { getSupabaseClient } from '../../../data/client';
+import { mapSiteVisitRow } from '../../../data/mappers';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { fmtLongDate } from '../../site-visit-auth/lib/siteVisitAuthLogic';
-import type { NewSiteVisit } from '../../../types/domain';
+import { isoPlusDays, today } from '../../../shared/lib/format';
+import type { NewSiteVisit, PlotType } from '../../../types/domain';
+
+export type NewVisitLead = {
+  pool: 'personal' | 'company';
+  plotType: PlotType;
+  noPlots: number;
+  unitPrice: number;
+  discount: number;
+  netTotal: number;
+  grandTotal: number;
+};
+
+export type SiteVisitBooking = NewSiteVisit & { newLead?: NewVisitLead; allowDuplicate?: boolean };
 
 export function useSiteVisits() {
   const profile = useSessionStore((s) => s.profile);
@@ -62,9 +77,36 @@ export function useCreateSiteVisit() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: NewSiteVisit) => {
+    mutationFn: async (input: SiteVisitBooking) => {
       const ds = getDataSource(demoMode);
-      const rec = await ds.siteVisits.create(agentKey, agentName, input);
+      let rec;
+      if (input.newLead && !demoMode) {
+        const client = getSupabaseClient();
+        if (!client) throw new Error('Site Visit booking is not connected. Try again later.');
+        const { data, error } = await client.rpc('create_site_visit_with_lead', {
+          p_visit: input,
+          p_lead: input.newLead,
+        });
+        if (error) throw error;
+        rec = mapSiteVisitRow(data as Record<string, unknown>);
+      } else if (input.newLead) {
+        const lead = await ds.leads.create(input.newLead.pool === 'company' ? 'company' : agentKey, {
+          name: input.name,
+          contact: input.contact,
+          plotType: input.newLead.plotType,
+          noPlots: input.newLead.noPlots,
+          unitPrice: input.newLead.unitPrice,
+          discount: input.newLead.discount,
+          netTotal: input.newLead.netTotal,
+          grandTotal: input.newLead.grandTotal,
+          paymentPlan: 'Full Payment',
+          amtPaid: 0,
+          leadSource: 'Site visit',
+        });
+        rec = await ds.siteVisits.create(agentKey, agentName, { ...input, leadId: lead.id });
+      } else {
+        rec = await ds.siteVisits.create(agentKey, agentName, input);
+      }
       if (input.contact) {
         const whenPart = `${fmtLongDate(rec.visitDate)}${rec.visitTime ? ' (' + rec.visitTime + ')' : ''}`;
         const pickupPart = rec.pickup ? ` We'll pick you up at ${rec.pickup}.` : '';
@@ -91,9 +133,20 @@ export function useCreateSiteVisit() {
       }
       return rec;
     },
-    onSuccess: (rec) => {
+    onSuccess: (rec, input) => {
       queryClient.invalidateQueries({ queryKey: ['siteVisits', agentKey] });
+      queryClient.invalidateQueries({ queryKey: ['siteVisitsAll'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['leadsAll'] });
+      queryClient.invalidateQueries({ queryKey: ['companyLeads'] });
       if (rec.leadId) queryClient.invalidateQueries({ queryKey: ['siteVisitsForLead', rec.leadId] });
+      if (input.newLead?.pool === 'personal') {
+        getDataSource(demoMode).scheduleItems.createTask(agentKey, agentName, {
+          title: `Follow up with ${rec.name}`, category: 'Follow-up', priority: 'Medium',
+          assignedTo: agentKey, assignedToName: agentName, dueDate: isoPlusDays(today(), 3),
+        }).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ['tasks', agentKey] });
+      }
     },
   });
 }
@@ -195,3 +248,4 @@ export function useLinkSiteVisitToLead() {
     },
   });
 }
+
