@@ -162,7 +162,7 @@ export function PipelineDetailScreen() {
       <ActivitySection lead={lead} />
       <ComplaintsSection lead={lead} />
       <EnquiriesSection lead={lead} />
-      <LeadConversationTimeline leads={[{ id: lead.id, label: lead.plotType || lead.name }]} />
+      <LeadConversationTimeline leads={[{ id: lead.id, label: lead.name }]} legacyNotes={lead.notes} />
       <NotesSection lead={lead} />
       <AuditTrailSection leadId={lead.id} paymentIds={leadPayments.map((p) => p.id)} />
 
@@ -1461,3 +1461,4 @@ export function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: 
     </div>
   );
 }
+
