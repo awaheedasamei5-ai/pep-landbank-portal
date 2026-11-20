@@ -22,11 +22,16 @@ const data = {
     { id: "unlinked", leadId: null, agentKey: "elias", agentName: "Elias", createdAt: "2026-11-01T08:00:00Z", visitDate: "2026-11-11", site: "North", status: "scheduled" },
   ],
   payments: [
-    { id: "paid-a", leadId: "a", agentKey: "adams", status: "approved", date: "2026-11-04", amount: 100 },
+    { id: "paid-a", leadId: "a", agentKey: "elias", status: "approved", date: "2026-11-04", amount: 100 },
     { id: "pending-b", leadId: "b", agentKey: "elias", status: "pending", date: "2026-11-04", amount: 200 },
   ],
+  conversations: [
+    { id: "talk-a", leadId: "a", authorKey: "adams", channel: "call", body: "Will visit", nextAction: "Confirm time", nextActionDate: "2026-11-08", createdAt: "2026-11-03T10:00:00Z" },
+    { id: "talk-c", leadId: "c", authorKey: "adams", channel: "message", body: "Company prospect", nextAction: null, nextActionDate: null, createdAt: "2026-11-03T12:00:00Z" },
+  ],
+  costs: [{ id: "cost-a", leadId: "a", sourceType: "site_visit", amount: 25, note: "Shared visit cost", createdAt: "2026-11-11T12:00:00Z" }],
 } as unknown as SalesReportData;
-const filters = { from: "2026-11-01", to: "2026-11-30", staffKey: "", source: "", stage: "", action: "", outcome: "", site: "", paymentPlan: "" };
+const filters = { from: "2026-11-01", to: "2026-11-30", staffKey: "", source: "", stage: "", action: "", outcome: "", site: "", paymentPlan: "", pool: "", clientId: "" };
 
 test("Ghana dates use the local day at a UTC boundary", () => {
   assert.equal(ghanaDate("2026-11-01T23:30:00Z"), "2026-11-01");
@@ -60,3 +65,19 @@ test("date and staff filters retain explicit denominators", () => {
   assert.equal(report.reachedRate, 0);
   assert.equal(report.approvedPayments.length, 0);
 });
+
+test("client evidence stays in its pool and receipts follow deal owner, not payment recorder", () => {
+  const personal = buildSalesReport(data, "mine", "adams", false, filters);
+  assert.deepEqual(personal.clients.map((client) => client.lead.id), ["a"]);
+  assert.deepEqual(personal.conversations.map((entry) => entry.id), ["talk-a"]);
+  assert.equal(personal.clients[0].attributedVisitCost, 25);
+  assert.equal(personal.staff.find((row) => row.key === "adams")?.approvedCash, 100);
+  const master = buildSalesReport(data, "master", "manager", true, filters);
+  assert.equal(master.staff.find((row) => row.key === "company")?.clients, 1);
+  assert.equal(master.staff.find((row) => row.key === "adams")?.clients, 1);
+  assert.deepEqual(buildSalesReport(data, "master", "manager", true, { ...filters, pool: "company" }).clients.map((client) => client.lead.id), ["c"]);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, clientId: "a" }).visitRequestWithoutLead, 0);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, pool: "company" }).visitRequestWithoutLead, 0);
+  assert.deepEqual(buildSalesReport(data, "mine", "adams", false, { ...filters, clientId: "c", pool: "company" }).clients, []);
+});
+

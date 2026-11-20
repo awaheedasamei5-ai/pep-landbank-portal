@@ -44,6 +44,8 @@ function initialFilters(): SalesReportFilters {
     outcome: "",
     site: "",
     paymentPlan: "",
+    pool: "",
+    clientId: "",
   };
 }
 
@@ -121,8 +123,11 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
       outcome: unique(data?.activity.map((entry) => entry.outcome) ?? []),
       site: unique(data?.visits.map((visit) => visit.site) ?? []),
       plan: unique(data?.leads.map((lead) => lead.paymentPlan) ?? []),
+      clients: (data?.leads ?? []).filter((lead) =>
+        scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
+      ).sort((a, b) => a.name.localeCompare(b.name)),
     };
-  }, [dataQuery.data]);
+  }, [dataQuery.data, scope, isManager, profile?.key]);
   const title = { company: "Company Leads Report", master: "Master Pipeline Report", mine: "My Pipeline Report" }[
     scope
   ];
@@ -203,6 +208,14 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               onChange={(value) => update("staffKey", value)}
             />
           )}
+          {scope === "master" && (
+            <FilterSelect label="Lead pool" value={filters.pool} options={["personal", "company"]}
+              labels={{ personal: "Staff pipelines", company: "Company Leads" }} onChange={(value) => update("pool", value)} />
+          )}
+          <FilterSelect label="Client" value={filters.clientId}
+            options={choices.clients.map((lead) => lead.id)}
+            labels={Object.fromEntries(choices.clients.map((lead) => [lead.id, `${lead.name} · ${lead.date} · ${lead.agent === "company" ? "Company" : "Staff"}`]))}
+            onChange={(value) => update("clientId", value)} />
           <FilterSelect
             label="Source"
             value={filters.source}
@@ -280,6 +293,10 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                 ghs(report.approvedPayments.reduce((sum, payment) => sum + payment.amount, 0)),
                 `${report.approvedPayments.length} approved entries`,
               ],
+              ["Client records", report.clients.length.toLocaleString(), `${report.payingClients} with approved payments to date`],
+              ["Pipeline value", ghs(report.pipelineValue), "Current quoted deal totals"],
+              ["Outstanding", ghs(report.outstanding), "Current deal balance snapshot"],
+              ["Attributed visit cost", ghs(report.attributedVisitCost), "Recorded attended-visit cost only"],
               [
                 "Data gaps",
                 (report.callsWithoutOutcome + report.visitRequestWithoutLead).toLocaleString(),
@@ -345,8 +362,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               <CardHeader>
                 <CardTitle>Staff comparison</CardTitle>
                 <CardDescription>
-                  Calls and visits belong to the staff who recorded them; payment totals belong to the recorded payment
-                  staff key.
+                  Deals and approved receipts are grouped by lead owner. Company-owned leads stay in the Company pool even when a staff handler is assigned. Calls and visits are linked to those clients.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -360,6 +376,12 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                       <TableHead>Reached rate</TableHead>
                       <TableHead>Visit requests</TableHead>
                       <TableHead>Approved receipts</TableHead>
+                      <TableHead>Clients</TableHead>
+                      <TableHead>Conversations</TableHead>
+                      <TableHead>Outstanding</TableHead>
+                      <TableHead>Visit cost</TableHead>
+                      <TableHead>Visit to paying</TableHead>
+                      <TableHead>Known cost / payer</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -372,6 +394,12 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                         <TableCell>{pct(row.reachedRate)}</TableCell>
                         <TableCell>{row.visitRequests}</TableCell>
                         <TableCell>{ghs(row.approvedCash)}</TableCell>
+                        <TableCell>{row.clients}</TableCell>
+                        <TableCell>{row.conversations}</TableCell>
+                        <TableCell>{ghs(row.outstanding)}</TableCell>
+                        <TableCell>{ghs(row.attributedVisitCost)}</TableCell>
+                        <TableCell>{pct(row.visitToPayingRate)}</TableCell>
+                        <TableCell>{row.knownCostPerPayingClient === null ? "N/A" : ghs(row.knownCostPerPayingClient)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -445,6 +473,38 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               </Table>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Client records</CardTitle>
+              <CardDescription>One deal at a time. Conversations, calls, visits and receipts use the selected dates; value, balance and recorded visit cost are current snapshots.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {report.clients.length === 0 && <p className="text-muted-foreground text-sm">No clients match these filters.</p>}
+              {report.clients.map((client) => (
+                <div key={client.lead.id} className="min-w-0 rounded-xl border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <Link className="font-semibold text-primary hover:underline" href={`${client.lead.agent === "company" ? "/dashboard/company-leads" : "/dashboard/pipeline"}/${client.lead.id}`}>{client.lead.name}</Link>
+                      <p className="text-muted-foreground text-xs">{client.ownerName} · Added {client.lead.date} · Stage {client.lead.stage} · {client.lead.paymentPlan}</p>
+                    </div>
+                    <span className="text-sm font-medium">{ghs(client.lead.grandTotal)}</span>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                    <p>Approved in period: <strong>{ghs(client.paidInPeriod)}</strong></p>
+                    <p>Paid to date: <strong>{ghs(client.paidToDate)}</strong></p>
+                    <p>Outstanding: <strong>{ghs(client.outstanding)}</strong></p>
+                    <p>Attributed visit cost: <strong>{ghs(client.attributedVisitCost)}</strong></p>
+                  </div>
+                  <p className="mt-2 text-xs">{client.calls.length} calls · {client.conversations.length} conversations · {client.visits.length} scheduled visits · {client.approvedPayments.length} approved receipts in period</p>
+                  <p className="mt-2 text-sm">Next action: {client.lead.nextAction || "Not recorded"}{client.lead.nextActionDate ? ` · Due ${client.lead.nextActionDate}` : ""}</p>
+                  {client.conversations.slice(0, 3).map((entry) => (
+                    <p key={entry.id} className="mt-2 break-words border-t pt-2 text-sm"><span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} · {entry.channel} · {names[entry.authorKey] ?? entry.authorKey}</span><br />{entry.body}{entry.nextAction ? ` · Next: ${entry.nextAction}` : ""}</p>
+                  ))}
+                  {client.conversations.length > 3 && <p className="text-muted-foreground mt-2 text-xs">All {client.conversations.length} conversations are included in the PDF.</p>}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
           <p className="text-muted-foreground text-xs">
             Payments are approved client receipts, not booked sales or verified bank cash. A scheduled visit is not
             proof of attendance. Historical owner and stage transitions cannot be reconstructed from current records.
@@ -454,3 +514,4 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     </div>
   );
 }
+
