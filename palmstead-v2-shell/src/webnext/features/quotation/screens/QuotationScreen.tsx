@@ -7,6 +7,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
 import { computeQuotationTotals, defaultDepositPctFraction, pricingFor, quoteMoney, type DepositOverride, type QuoteDiscountOverride, type PaymentPlanKey } from '../lib/quotationLogic';
+import { saveQuotationLeadDraft } from '../lib/quotationLeadDraft';
 import type { PlotType } from '../../../types/domain';
 import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
 import { TemplateSettingsTab } from './TemplateSettingsTab';
@@ -332,23 +333,24 @@ export function QuotationScreen() {
               type="button"
               className={styles.btn}
               disabled={!clientName.trim()}
-              onClick={() =>
-                navigate('/dashboard/pipeline/new', {
-                  state: {
+              onClick={() => {
+                if (!config) return;
+                const draft = {
                     name: clientName.trim(),
                     contact: clientContact.trim(),
                     address: clientAddress.trim(),
                     plotType,
                     noPlots,
                     paymentPlan: plan,
-                    unitPrice: config ? pricingFor(config, plotType).list : undefined,
+                    unitPrice: pricingFor(config, plotType).list,
                     discount: totals.discountTotal,
                     depositTarget: totals.planMonths ? totals.deposit : undefined,
                     leadSource: 'Quotation',
                     returnTo: '/dashboard/quotation',
-                  },
-                })
-              }
+                  } as const;
+                saveQuotationLeadDraft(draft);
+                navigate('/dashboard/pipeline/new', { state: draft });
+              }}
             >
               <span className="inline-flex items-center gap-1"><UserPlus className="size-4" aria-hidden="true" /> Save as lead</span>
             </button>
