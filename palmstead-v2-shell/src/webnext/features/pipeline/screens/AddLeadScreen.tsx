@@ -18,6 +18,7 @@ import { useCreateReferral, useLinkReferralLead } from '../../referrals/hooks/us
 import { useLinkSiteVisitToLead } from '../../site-visits/hooks/useSiteVisits';
 import { PartialPlotAdder } from '../components/PartialPlotAdder';
 import { clearQuotationLeadDraft, readQuotationLeadDraft } from '../../quotation/lib/quotationLeadDraft';
+import { quoteMoney } from '../../quotation/lib/quotationLogic';
 import styles from './AddLeadScreen.module.css';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -576,29 +577,29 @@ export function AddLeadScreen() {
                   target) field-for-field. */}
               <div className={styles.calcRow}>
                 <span className={styles.calcLabel}>Net total</span>
-                <span className={styles.calcVal}>{ghs(preview.net)}</span>
+                <span className={styles.calcVal}>{quoteMoney(preview.net)}</span>
               </div>
               {preview.interest > 0 && (
                 <div className={styles.calcRow}>
                   <span className={styles.calcLabel}>+ Interest ({paymentPlan})</span>
-                  <span className={styles.calcVal}>{ghs(preview.interest)}</span>
+                  <span className={styles.calcVal}>{quoteMoney(preview.interest)}</span>
                 </div>
               )}
               <div className={styles.totalLabel}>Grand total</div>
-              <div className={styles.totalValue}>{ghs(grandTotal)}</div>
+              <div className={styles.totalValue}>{quoteMoney(grandTotal)}</div>
               <div className={styles.totalFootRow}>
                 <div>
-                  <div className={styles.totalFootVal}>{ghs(depositTargetPreview)}</div>
+                  <div className={styles.totalFootVal}>{quoteMoney(depositTargetPreview)}</div>
                   <div className={styles.totalFootLbl}>Deposit target</div>
                 </div>
                 {canLogDeposit && Number(amtPaid) > 0 && (
                   <>
                     <div>
-                      <div className={styles.totalFootVal}>{ghs(Number(amtPaid))}</div>
+                      <div className={styles.totalFootVal}>{quoteMoney(Number(amtPaid))}</div>
                       <div className={styles.totalFootLbl}>Paid now</div>
                     </div>
                     <div>
-                      <div className={styles.totalFootVal}>{ghs(balanceAfter)}</div>
+                      <div className={styles.totalFootVal}>{quoteMoney(balanceAfter)}</div>
                       <div className={styles.totalFootLbl}>Balance</div>
                     </div>
                   </>
