@@ -24,7 +24,7 @@ export function WorkspaceHome() {
   const announcements = useAnnouncements(profile?.key);
   const overview = useManagerOverview();
   const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 4);
-  const published = (announcements.data ?? []).filter((item) => new Date(item.publishAt).getTime() <= Date.now());
+  const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
   const news = published.slice(0, 3);
   const unread = published.filter((item) => !item.isRead).length;
   const firstName = profile?.name?.trim().split(/\s+/)[0] || "there";

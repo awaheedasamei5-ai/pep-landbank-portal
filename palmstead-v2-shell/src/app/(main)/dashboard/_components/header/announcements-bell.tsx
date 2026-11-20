@@ -13,7 +13,7 @@ import { useAnnouncements } from "@/app/(main)/dashboard/announcements/_componen
 export function AnnouncementsBell() {
   const profile = useAuthStore((s) => s.profile);
   const { data } = useAnnouncements(profile?.key);
-  const unreadCount = (data ?? []).filter((a) => !a.isRead).length;
+  const unreadCount = (data ?? []).filter((a) => !a.isRead && a.active && new Date(a.publishAt).getTime() <= Date.now() && (!a.expiresAt || new Date(a.expiresAt).getTime() > Date.now())).length;
 
   return (
     <Button asChild variant="ghost" size="icon" className="relative">
@@ -28,3 +28,4 @@ export function AnnouncementsBell() {
     </Button>
   );
 }
+

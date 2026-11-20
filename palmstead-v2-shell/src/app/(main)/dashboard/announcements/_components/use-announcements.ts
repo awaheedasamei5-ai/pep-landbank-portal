@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { isoDateOnly } from "@/lib/palmstead/format";
 import { requireSupabase } from "@/lib/supabase.client";
 
 // Real Announcements (OSS item 2, B.2). V1 logic is the primary spec here
@@ -57,9 +56,8 @@ export interface AnnouncementComment {
 
 async function fetchAnnouncements(staffKey: string | undefined): Promise<Announcement[]> {
   const sb = requireSupabase();
-  const todayIso = isoDateOnly(new Date());
   const [annRes, readsRes, commentsRes] = await Promise.all([
-    sb.from("announcements").select("id,title,body,category,image_b64,active,created_by,created_at,publish_at,audience,expires_at").eq("active", true).order("publish_at", { ascending: false }),
+    sb.from("announcements").select("id,title,body,category,image_b64,active,created_by,created_at,publish_at,audience,expires_at").order("publish_at", { ascending: false }),
     sb.from("announcement_reads").select("announcement_id,staff_key"),
     sb.from("announcement_comments").select("announcement_id"),
   ]);
@@ -91,9 +89,7 @@ async function fetchAnnouncements(staffKey: string | undefined): Promise<Announc
     audience: AnnouncementAudience;
     expires_at: string | null;
   };
-  return ((annRes.data ?? []) as Raw[])
-    .filter((a) => a.publish_at.slice(0, 10) > todayIso || !a.expires_at || a.expires_at.slice(0, 10) >= todayIso)
-    .map((a) => ({
+  return ((annRes.data ?? []) as Raw[]).map((a) => ({
       id: a.id,
       title: a.title,
       body: a.body,

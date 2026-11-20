@@ -65,7 +65,8 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
   const markRead = useMarkAnnouncementRead(useAuthStore((s) => s.profile?.key));
   const retract = useRetractAnnouncement();
   const [showComments, setShowComments] = useState(false);
-  const scheduled = new Date(announcement.publishAt).getTime() > Date.now();
+  const scheduled = announcement.active && new Date(announcement.publishAt).getTime() > Date.now();
+  const past = !announcement.active || (!!announcement.expiresAt && new Date(announcement.expiresAt).getTime() <= Date.now());
 
   return (
     <Card className={!announcement.isRead ? "border-primary/40" : undefined}>
@@ -77,13 +78,14 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
               <CardTitle className="min-w-0 text-base break-words">{announcement.title}</CardTitle>
               <Badge variant="outline">{CATEGORY_LABEL[announcement.category] ?? announcement.category}</Badge>
               {scheduled && <Badge variant="secondary">Scheduled</Badge>}
+              {past && <Badge variant="outline">{announcement.active ? "Expired" : "Retracted"}</Badge>}
             </div>
             <CardDescription>
               {scheduled ? "Publishes " : "Published "}{formatDistanceToNow(new Date(announcement.publishAt), { addSuffix: true })}
               {announcement.audience === "management" ? " · Management only" : " · All staff"}
             </CardDescription>
           </div>
-          {isManager && (
+          {isManager && announcement.active && (
             <Button variant="ghost" size="icon-sm" onClick={() => retract.mutate(announcement.id)} title="Retract">
               <X className="size-4" />
             </Button>
@@ -99,17 +101,17 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
               {announcement.readCount} seen
             </span>
           )}
-          {!scheduled && <button type="button" className="flex items-center gap-1 hover:underline" onClick={() => setShowComments((v) => !v)}>
+          {!scheduled && !past && <button type="button" className="flex items-center gap-1 hover:underline" onClick={() => setShowComments((v) => !v)}>
             <MessageCircle className="size-3" />
             {announcement.commentCount} comment{announcement.commentCount === 1 ? "" : "s"}
           </button>}
-          {!scheduled && !announcement.isRead && (
+          {!scheduled && !past && !announcement.isRead && (
             <Button size="sm" variant="outline" className="ml-auto h-6 text-xs" onClick={() => markRead.mutate(announcement.id)}>
               Mark as read
             </Button>
           )}
         </div>
-        {!scheduled && showComments && <CommentThread announcementId={announcement.id} />}
+        {!scheduled && !past && showComments && <CommentThread announcementId={announcement.id} />}
       </CardContent>
     </Card>
   );
@@ -191,8 +193,9 @@ export function AnnouncementsScreen() {
   const { data, isLoading } = useAnnouncements(profile?.key);
   const [showCompose, setShowCompose] = useState(false);
 
-  const scheduled = (data ?? []).filter((a) => new Date(a.publishAt).getTime() > Date.now());
-  const published = (data ?? []).filter((a) => new Date(a.publishAt).getTime() <= Date.now());
+  const scheduled = (data ?? []).filter((a) => a.active && new Date(a.publishAt).getTime() > Date.now());
+  const past = (data ?? []).filter((a) => !a.active || (!!a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()));
+  const published = (data ?? []).filter((a) => a.active && new Date(a.publishAt).getTime() <= Date.now() && (!a.expiresAt || new Date(a.expiresAt).getTime() > Date.now()));
   const unread = published.filter((a) => !a.isRead);
   const read = published.filter((a) => a.isRead);
 
@@ -251,6 +254,12 @@ export function AnnouncementsScreen() {
         <div className="mt-6 grid gap-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><CalendarClock className="size-4" /> Scheduled</h2>
           {scheduled.map((a) => <AnnouncementCard key={a.id} announcement={a} isManager />)}
+        </div>
+      )}
+      {isManager && past.length > 0 && (
+        <div className="mt-6 grid gap-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">Past updates</h2>
+          {past.map((a) => <AnnouncementCard key={a.id} announcement={a} isManager />)}
         </div>
       )}
     </div>
