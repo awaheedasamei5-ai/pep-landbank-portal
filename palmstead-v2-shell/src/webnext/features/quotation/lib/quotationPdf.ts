@@ -1,11 +1,11 @@
 "use client";
 
 import { jsPDF } from 'jspdf';
-import { ghs, today } from '../../../shared/lib/format';
+import { today } from '../../../shared/lib/format';
 import { pdfGeneratedStamp } from '../../../shared/lib/pdfReport';
 import { pdfStampSignature } from '../../../shared/lib/pdfSignature';
 import type { Config } from '../../../types/domain';
-import type { QuotationTotals } from './quotationLogic';
+import { quoteMoney, type QuotationTotals } from './quotationLogic';
 
 // Port of index.html's buildQuotationPDF()/pdfQuoteBg()/pdfKV()/
 // pdfGreenBar()/pdfGreenTable() (index.html:15811-16951) -- same green/
@@ -146,9 +146,9 @@ export function greenTable(doc: jsPDF, y: number, pageW: number, rows: { month: 
     }
     doc.setTextColor(20, 20, 20);
     doc.text(String(r.month), colX[0] + 3, y + 3.9);
-    doc.text(ghs(r.opening), colX[1], y + 3.9);
-    doc.text(ghs(r.payment), colX[2], y + 3.9);
-    doc.text(ghs(r.closing), colX[3], y + 3.9);
+    doc.text(quoteMoney(r.opening), colX[1], y + 3.9);
+    doc.text(quoteMoney(r.payment), colX[2], y + 3.9);
+    doc.text(quoteMoney(r.closing), colX[3], y + 3.9);
     y += rowH;
   });
   return y + 5;
@@ -215,16 +215,15 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   // net+interest) -- same reasoning as technicalQuotationPdf.ts's own
   // depositBase, otherwise this reads as some other percentage than 30%
   // whenever interest was included.
-  const depositBase = q.depositIncludesInterest ? q.grand : q.net;
-  const depositPct = q.planMonths && depositBase > 0 ? Math.round(((q.deposit || 0) / depositBase) * 100) : null;
+  const depositBasis = q.depositMode === 'amount' ? 'Fixed agreed amount' : `${q.depositPercent ?? 0}% of ${q.depositIncludesInterest ? 'net + interest' : 'net'}`;
   const leftRows: [string, string][] = [
     ['Customer Name', client.name],
     ['Address', client.address || '—'],
     ['Contact / Phone', client.contact || '—'],
     ['Email', client.email || '—'],
     ['Payment Plan', q.planMonths ? `${q.planMonths} Months` : 'Outright'],
-    ['Deposit Amount', q.planMonths ? ghs(q.deposit) : '—'],
-    ['Deposit %', depositPct != null ? `${depositPct}% (${q.depositIncludesInterest ? 'of net + interest' : 'of net'})` : '—'],
+    ['Deposit Amount', q.planMonths ? quoteMoney(q.deposit) : '—'],
+    ['Deposit basis', q.planMonths ? depositBasis : '—'],
   ];
   // Real user ask: "the credit period month: should be outright payemnt
   // since the person isnt making installemnts" -- and: "if we dont add a
@@ -240,8 +239,11 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
     ['Date:', dateStr, null],
     q.planMonths ? ['Credit Period months', String(q.planMonths), QRED] : ['Payment Type', 'Outright payment', QRED],
     ['No of Plots', String(qtyOfType), QRED],
-    ['Original Plot Price', ghs(q.listTotal / qtyOfType), null],
-    ...(q.discountTotal ? ([['Discount', ghs(q.discountTotal / qtyOfType), null]] as [string, string, [number, number, number] | null][]) : []),
+    ['Plot unit price', quoteMoney(q.listTotal / qtyOfType), null],
+    ['List total', quoteMoney(q.listTotal), null],
+    ...(q.standardDiscountTotal ? ([['Company discount', quoteMoney(q.standardDiscountTotal), null]] as [string, string, [number, number, number] | null][]) : []),
+    ...(q.additionalDiscountTotal ? ([['Additional discount', quoteMoney(q.additionalDiscountTotal), null]] as [string, string, [number, number, number] | null][]) : []),
+    ['Net price', quoteMoney(q.net), null],
     // Was (q.interestTotal || 0) / qtyOfType -- for 1.5+ plots that showed
     // only a single unit's interest (e.g. GHS 3,000) next to a "Cost with
     // Interest" that quietly still divided the REAL, correctly-scaled
@@ -251,9 +253,8 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
     // per-unit reference figure, interest is a whole-deal finance charge
     // -- shown as the real total here, matching what the Total row below
     // already (correctly) includes.
-    ['Interest', ghs(q.interestTotal || 0), null],
-    ['Cost with Interest', ghs(q.net + q.interestTotal), null],
-    ['Total', ghs(q.grand), null],
+    ['Interest', quoteMoney(q.interestTotal || 0), null],
+    ['Total', quoteMoney(q.grand), null],
   ];
   let ly = y;
   leftRows.forEach((r) => {
@@ -273,16 +274,16 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
       y,
       pageW,
       [
-        { label: 'Total Value', value: ghs(q.grand) },
-        { label: 'Deposit', value: ghs(q.deposit), color: QRED },
-        { label: 'Balance', value: ghs(q.balance) },
-        { label: 'Monthly Due', value: ghs(q.monthlyDue) },
+        { label: 'Total Value', value: quoteMoney(q.grand) },
+        { label: 'Deposit', value: quoteMoney(q.deposit), color: QRED },
+        { label: 'Balance', value: quoteMoney(q.balance) },
+        { label: 'Monthly Due', value: quoteMoney(q.monthlyDue) },
       ],
       theme
     );
     y = greenTable(doc, y, pageW, q.schedule, theme);
   } else {
-    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: ghs(q.grand) }], theme);
+    y = greenBar(doc, y, pageW, [{ label: 'Total Due (Outright)', value: quoteMoney(q.grand) }], theme);
   }
   y += 4;
 
@@ -315,9 +316,9 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
   doc.setFontSize(8.5);
   doc.setTextColor(20, 20, 20);
   const totalsRows: [string, string][] = [
-    ['Total Monthly Payments', ghs(q.balance)],
-    ['Advance Payment', ghs(q.deposit)],
-    ['Total Invoice Amount', ghs(q.grand)],
+    ['Total Monthly Payments', quoteMoney(q.balance)],
+    ['Advance Payment', quoteMoney(q.deposit)],
+    ['Total Invoice Amount', quoteMoney(q.grand)],
   ];
   totalsRows.forEach((r, i) => {
     doc.text(r[0], totalsX, ty + i * 7);
@@ -392,3 +393,4 @@ export function buildQuotationPdf(q: QuotationTotals, qtyOfType: number, client:
 export function quotationFilename(clientName: string): string {
   return `Quotation_${clientName.replace(/\s+/g, '_')}_${today()}.pdf`;
 }
+
