@@ -41,6 +41,18 @@ export function defaultDepositPctFraction(config: Config): number {
 // deposit, and everything else (balance, monthly schedule) is derived from
 // grand-total minus that amount instead of from any percent at all.
 export type DepositOverride = { mode: 'percent'; value: number } | { mode: 'amount'; value: number } | null;
+export type QuoteDiscountOverride = { mode: 'percent'; value: number } | { mode: 'amount'; value: number } | null;
+
+export function quoteMoney(value: number): string {
+  return 'GHS ' + value.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+export function extraDiscount(base: number, override: QuoteDiscountOverride): number {
+  if (!override) return 0;
+  return money(override.mode === 'percent' ? base * override.value / 100 : override.value);
+}
 
 export type PaymentPlanKey = 'Full Payment' | '3 Months' | '6 Months' | '9 Months' | '12 Months';
 
@@ -53,6 +65,8 @@ export interface InstallmentScheduleRow {
 
 export interface QuotationTotals {
   listTotal: number;
+  standardDiscountTotal: number;
+  additionalDiscountTotal: number;
   discountTotal: number;
   net: number;
   interestTotal: number;
@@ -69,6 +83,8 @@ export interface QuotationTotals {
   // deposit is its own stored depositTarget override, not a % choice),
   // so it's always false there.
   depositIncludesInterest: boolean;
+  depositMode: 'percent' | 'amount';
+  depositPercent: number | null;
 }
 
 export function pricingFor(config: Config, plotType: PlotType): { list: number; disc: number; eq: number } {
@@ -85,7 +101,7 @@ export function interestFor(config: Config, plan: PaymentPlanKey): number {
 // of net only). Standard and Technical Quotation both now let the client
 // choose true instead -- deposit as 30% of the net+interest grand.
 function computeInstallmentPlan(net: number, interestTotal: number, planMonths: number, depositPct: number, depositIncludesInterest = false, depositAmountOverride: number | null = null): { grand: number; deposit: number; balance: number; monthlyDue: number; schedule: InstallmentScheduleRow[] } {
-  const grand = net + interestTotal;
+  const grand = money(net + interestTotal);
   let deposit = 0;
   let balance = grand;
   let monthlyDue = 0;
@@ -94,15 +110,18 @@ function computeInstallmentPlan(net: number, interestTotal: number, planMonths: 
     // A real typed-in cash amount always wins over any percent -- that's
     // the whole point of the "deposit amount" mode (user ask 2026-10-31):
     // the client already told us the number, don't re-derive it from %.
-    // Clamped to [0, grand] so a mistyped figure larger than the whole
-    // quotation can't produce a negative balance.
-    deposit = depositAmountOverride != null ? Math.min(Math.max(depositAmountOverride, 0), grand) : Math.round((depositIncludesInterest ? grand : net) * depositPct);
-    balance = grand - deposit;
-    monthlyDue = Math.round(balance / planMonths);
+    // Reject an impossible amount. The UI must explain it before export;
+    // the calculation itself must never silently change what was typed.
+    if (depositAmountOverride != null && (!Number.isFinite(depositAmountOverride) || depositAmountOverride < 0 || depositAmountOverride > grand)) {
+      throw new RangeError('Deposit amount must be between zero and the quotation total.');
+    }
+    deposit = depositAmountOverride != null ? money(depositAmountOverride) : money((depositIncludesInterest ? grand : net) * depositPct);
+    balance = money(grand - deposit);
+    monthlyDue = money(balance / planMonths);
     let opening = balance;
     for (let m = 1; m <= planMonths; m++) {
       const payment = m === planMonths ? opening : monthlyDue;
-      const closing = Math.max(0, Math.round((opening - payment) * 100) / 100);
+      const closing = Math.max(0, money(opening - payment));
       schedule.push({ month: m, opening, payment, closing });
       opening = closing;
     }
@@ -110,7 +129,7 @@ function computeInstallmentPlan(net: number, interestTotal: number, planMonths: 
   return { grand, deposit, balance, monthlyDue, schedule };
 }
 
-export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey, depositIncludesInterest = false, depositOverride: DepositOverride = null): QuotationTotals {
+export function computeQuotationTotals(config: Config, plotType: PlotType, noPlots: number, plan: PaymentPlanKey, depositIncludesInterest = false, depositOverride: DepositOverride = null, discountOverride: QuoteDiscountOverride = null): QuotationTotals {
   const p = pricingFor(config, plotType);
   // noPlots is a full-plot-equivalent count (0.5 = one Half Plot), matching
   // previewGrandTotal/computeLeadQuotationTotals below -- see
@@ -120,8 +139,14 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
   const eq = noPlots || 1;
   const qty = eq / p.eq;
   const listTotal = p.list * qty;
-  const discountTotal = p.disc * qty;
-  const net = Math.max(listTotal - discountTotal, 0);
+  const standardDiscountTotal = p.disc * qty;
+  const discountBase = Math.max(listTotal - standardDiscountTotal, 0);
+  const additionalDiscountTotal = extraDiscount(discountBase, discountOverride);
+  if (!Number.isFinite(additionalDiscountTotal) || additionalDiscountTotal < 0 || additionalDiscountTotal > discountBase) {
+    throw new RangeError('Additional discount exceeds the price after the company discount.');
+  }
+  const discountTotal = money(standardDiscountTotal + additionalDiscountTotal);
+  const net = money(discountBase - additionalDiscountTotal);
   const interestTotal = interestFor(config, plan) * eq;
   const planMonths = PLAN_MONTHS[plan] ?? 0;
   // 'percent' mode overrides just this one quotation's %, clamped to a
@@ -131,7 +156,7 @@ export function computeQuotationTotals(config: Config, plotType: PlotType, noPlo
   const depositPct = depositOverride?.mode === 'percent' ? Math.max(0, Math.min(100, depositOverride.value)) / 100 : defaultDepositPctFraction(config);
   const depositAmountOverride = depositOverride?.mode === 'amount' ? depositOverride.value : null;
   const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest, depositAmountOverride);
-  return { listTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
+  return { listTotal, standardDiscountTotal, additionalDiscountTotal, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest, depositMode: depositOverride?.mode === 'amount' ? 'amount' : 'percent', depositPercent: depositOverride?.mode === 'amount' ? null : depositOverride?.mode === 'percent' ? depositOverride.value : defaultDepositPctFraction(config) * 100 };
 }
 
 // Ported from index.html's computeLead()+computeLeadQuotationTotals()
@@ -175,7 +200,7 @@ export function computeLeadQuotationTotals(config: Config, lead: Lead): Quotatio
       opening = closing;
     }
   }
-  return { listTotal: gross, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule, depositIncludesInterest: false };
+  return { listTotal: gross, standardDiscountTotal: disc, additionalDiscountTotal: 0, discountTotal: disc, net, interestTotal, grand, planMonths, deposit, balance, monthlyDue, schedule, depositIncludesInterest: false, depositMode: lead.depositTarget != null ? 'amount' : 'percent', depositPercent: lead.depositTarget != null ? null : defaultDepositPctFraction(config) * 100 };
 }
 
 // ---- Technical Quotation: geometry-driven pricing -----------------------
@@ -229,6 +254,8 @@ export interface TechnicalQuotationTotals {
   customAreas: number[];
   customArea: number;
   totalArea: number;
+  gross: number;
+  discountTotal: number;
   net: number;
   interestTotal: number;
   grand: number;
@@ -238,9 +265,11 @@ export interface TechnicalQuotationTotals {
   monthlyDue: number;
   schedule: InstallmentScheduleRow[];
   depositIncludesInterest: boolean;
+  depositMode: 'percent' | 'amount';
+  depositPercent: number | null;
 }
 
-export function computeTechnicalQuotationTotals(config: Config, fullCount: number, halfCount: number, customLots: TechLot[], plan: PaymentPlanKey, depositPctOverride: number | null, depositIncludesInterest = false): TechnicalQuotationTotals {
+export function computeTechnicalQuotationTotals(config: Config, fullCount: number, halfCount: number, customLots: TechLot[], plan: PaymentPlanKey, depositPctOverride: number | null, depositIncludesInterest = false, depositOverride: DepositOverride = null, discountOverride: QuoteDiscountOverride = null): TechnicalQuotationTotals {
   const rate = techPricePerSqft(config);
   const baseArea = techBaseAreaSqft(config);
   const fullArea = baseArea * fullCount;
@@ -248,11 +277,17 @@ export function computeTechnicalQuotationTotals(config: Config, fullCount: numbe
   const customAreas = customLots.map(techCustomLotArea);
   const customArea = customAreas.reduce((s, a) => s + a, 0);
   const totalArea = fullArea + halfArea + customArea;
-  const net = Math.round(totalArea * rate);
+  const gross = money(totalArea * rate);
+  const discountTotal = extraDiscount(gross, discountOverride);
+  if (!Number.isFinite(discountTotal) || discountTotal < 0 || discountTotal > gross) {
+    throw new RangeError('Discount exceeds the area price.');
+  }
+  const net = money(gross - discountTotal);
   const eq = baseArea > 0 ? totalArea / baseArea : 0;
   const interestTotal = Math.round(interestFor(config, plan) * eq);
   const planMonths = PLAN_MONTHS[plan] ?? 0;
-  const depositPct = depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : defaultDepositPctFraction(config);
-  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest);
-  return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest };
+  const depositPct = depositOverride?.mode === 'percent' ? depositOverride.value / 100 : depositPctOverride != null ? Math.max(0, Math.min(100, depositPctOverride)) / 100 : defaultDepositPctFraction(config);
+  const ip = computeInstallmentPlan(net, interestTotal, planMonths, depositPct, depositIncludesInterest, depositOverride?.mode === 'amount' ? depositOverride.value : null);
+  return { rate, fullCount, halfCount, fullArea, halfArea, customLots, customAreas, customArea, totalArea, gross, discountTotal, net, interestTotal, grand: ip.grand, planMonths, deposit: ip.deposit, balance: ip.balance, monthlyDue: ip.monthlyDue, schedule: ip.schedule, depositIncludesInterest, depositMode: depositOverride?.mode === 'amount' ? 'amount' : 'percent', depositPercent: depositOverride?.mode === 'amount' ? null : depositPct * 100 };
 }
+
