@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { AlertTriangle, BarChart3, Download, FileText, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
+import { AlertTriangle, BarChart3, Download, Eye, FileText, Pencil, Phone, Receipt, Upload, UserPlus } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import { PipePill, PipePillStrip } from '../../../shared/ui/PipePill';
 import { StageBadge } from '../../pipeline/components/StageBadge';
@@ -444,7 +444,7 @@ export function CompanyLeadsScreen() {
                           <Receipt className="size-3.5" aria-hidden="true" />
                         </button>
                         <button type="button" className={styles.editIconBtn} title={canManage ? 'Edit' : 'View'} aria-label={`${canManage ? 'Edit' : 'View'} ${l.name}`} onClick={() => navigate(`/dashboard/company-leads/${l.id}`)}>
-                          <Pencil className="size-3.5" aria-hidden="true" />
+                          {canManage ? <Pencil className="size-3.5" aria-hidden="true" /> : <Eye className="size-3.5" aria-hidden="true" />}
                         </button>
                         {canManage && <button
                           type="button"
