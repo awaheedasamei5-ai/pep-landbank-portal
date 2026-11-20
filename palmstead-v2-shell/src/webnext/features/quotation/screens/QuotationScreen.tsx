@@ -3,11 +3,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Download, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
-import { ghs } from '../../../shared/lib/format';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { useDownloadQuotationPdf } from '../hooks/useQuotationPdf';
-import { computeQuotationTotals, defaultDepositPctFraction, type DepositOverride, type PaymentPlanKey } from '../lib/quotationLogic';
+import { computeQuotationTotals, defaultDepositPctFraction, pricingFor, quoteMoney, type DepositOverride, type QuoteDiscountOverride, type PaymentPlanKey } from '../lib/quotationLogic';
 import type { PlotType } from '../../../types/domain';
 import { QuotationAppTabs, type QuotationAppTab } from './QuotationAppTabs';
 import { TemplateSettingsTab } from './TemplateSettingsTab';
@@ -53,6 +52,8 @@ export function QuotationScreen() {
   const [depositMode, setDepositMode] = useState<'standard' | 'percent' | 'amount'>('standard');
   const [depositPercentInput, setDepositPercentInput] = useState('');
   const [depositAmountInput, setDepositAmountInput] = useState('');
+  const [discountMode, setDiscountMode] = useState<'none' | 'amount' | 'percent'>('none');
+  const [discountInput, setDiscountInput] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
   const [clientAddress, setClientAddress] = useState('');
@@ -64,11 +65,25 @@ export function QuotationScreen() {
     setNoPlots(plotType === 'Half Plot' ? 0.5 : 1);
   }, [plotType, noPlotsTouched]);
 
-  const depositOverride: DepositOverride =
-    depositMode === 'percent' && depositPercentInput !== '' ? { mode: 'percent', value: Number(depositPercentInput) || 0 } :
-    depositMode === 'amount' && depositAmountInput !== '' ? { mode: 'amount', value: Number(depositAmountInput) || 0 } :
-    null;
-  const totals = config ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest, depositOverride) : null;
+  const baseTotals = config ? computeQuotationTotals(config, plotType, noPlots, plan) : null;
+  const discountBase = baseTotals ? baseTotals.net : 0;
+  const discountValue = Number(discountInput);
+  const discountError = discountMode === 'none' ? '' :
+    !discountInput.trim() ? 'Enter the additional discount.' :
+    discountMode === 'amount' && !/^\d+(?:\.\d{1,2})?$/.test(discountInput) ? 'Enter a valid amount with at most two decimal places.' :
+    !Number.isFinite(discountValue) || discountValue < 0 || (discountMode === 'percent' ? discountValue > 100 : discountValue > discountBase)
+      ? discountMode === 'percent' ? 'Discount percent must be between 0 and 100.' : `Discount cannot exceed ${quoteMoney(discountBase)}.` : '';
+  const discountOverride: QuoteDiscountOverride = discountMode === 'none' || discountError ? null : { mode: discountMode, value: discountValue };
+  const pricedTotals = config && !discountError ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest, null, discountOverride) : null;
+  const depositValue = Number(depositMode === 'amount' ? depositAmountInput : depositPercentInput);
+  const depositInput = depositMode === 'amount' ? depositAmountInput : depositPercentInput;
+  const depositError = plan === 'Full Payment' || depositMode === 'standard' ? '' :
+    !depositInput.trim() ? 'Enter the deposit before generating this quotation.' :
+    depositMode === 'amount' && !/^\d+(?:\.\d{1,2})?$/.test(depositInput) ? 'Enter a valid deposit with at most two decimal places.' :
+    !Number.isFinite(depositValue) || depositValue < 0 || (depositMode === 'amount' ? depositValue > (pricedTotals?.grand ?? 0) : depositValue > 100)
+      ? depositMode === 'amount' ? `Deposit cannot exceed the quotation total of ${quoteMoney(pricedTotals?.grand ?? 0)}.` : 'Deposit percent must be between 0 and 100.' : '';
+  const depositOverride: DepositOverride = plan === 'Full Payment' || depositMode === 'standard' || depositError ? null : { mode: depositMode, value: depositValue };
+  const totals = config && !discountError && !depositError ? computeQuotationTotals(config, plotType, noPlots, plan, depositIncludesInterest, depositOverride, discountOverride) : null;
   const standardPct = config ? Math.round(defaultDepositPctFraction(config) * 1000) / 10 : 30;
 
   return (
@@ -130,14 +145,30 @@ export function QuotationScreen() {
           </select>
         </div>
         <div className={styles.field}>
+          <label className={styles.label} htmlFor="quote-discount-mode">Additional quotation discount</label>
+          <select id="quote-discount-mode" className={styles.select} value={discountMode} onChange={(e) => setDiscountMode(e.target.value as typeof discountMode)}>
+            <option value="none">No additional discount</option>
+            <option value="amount">Discount amount (GHS)</option>
+            <option value="percent">Discount percent (%)</option>
+          </select>
+          <p className={styles.fieldHint}>Applied after the company plot discount and before plan interest. This quotation only.</p>
+        </div>
+        {discountMode !== 'none' && <div className={styles.field}>
+          <label className={styles.label} htmlFor="quote-discount-value">{discountMode === 'amount' ? 'Additional discount (GHS)' : 'Additional discount (%)'}</label>
+          <input id="quote-discount-value" className={styles.input} type="number" min={0} max={discountMode === 'percent' ? 100 : discountBase} step={discountMode === 'amount' ? '0.01' : 'any'} value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} aria-invalid={!!discountError} aria-describedby={discountError ? 'quote-discount-error' : undefined} />
+          {discountError && <p id="quote-discount-error" className={styles.fieldError} role="alert">{discountError}</p>}
+        </div>}
+        {plan !== 'Full Payment' && <>
+        <div className={styles.field}>
           <label className={styles.label}>Deposit calculation</label>
           <select
             className={styles.select}
             value={depositIncludesInterest ? 'with' : 'without'}
             onChange={(e) => setDepositIncludesInterest(e.target.value === 'with')}
+            disabled={depositMode === 'amount'}
           >
-            <option value="without">Before interest &mdash; {standardPct}% of the net price only</option>
-            <option value="with">After interest &mdash; {standardPct}% of net + interest combined</option>
+            <option value="without">Before interest &mdash; percent of the net price only</option>
+            <option value="with">After interest &mdash; percent of net + interest combined</option>
           </select>
         </div>
         <div className={styles.field}>
@@ -160,11 +191,14 @@ export function QuotationScreen() {
               type="number"
               min={0}
               max={100}
-              step={0.5}
+              step="any"
               placeholder={`e.g. ${standardPct}`}
               value={depositPercentInput}
               onChange={(e) => setDepositPercentInput(e.target.value)}
+              aria-invalid={!!depositError}
+              aria-describedby={depositError ? 'quote-deposit-error' : undefined}
             />
+            {depositError && <p id="quote-deposit-error" className={styles.fieldError} role="alert">{depositError}</p>}
           </div>
         )}
         {depositMode === 'amount' && (
@@ -174,16 +208,22 @@ export function QuotationScreen() {
               className={styles.input}
               type="number"
               min={0}
+              max={pricedTotals?.grand}
+              step="0.01"
               placeholder="e.g. 15000"
               value={depositAmountInput}
               onChange={(e) => setDepositAmountInput(e.target.value)}
+              aria-invalid={!!depositError}
+              aria-describedby={depositError ? 'quote-deposit-error' : undefined}
             />
+            {depositError && <p id="quote-deposit-error" className={styles.fieldError} role="alert">{depositError}</p>}
             <p className={styles.sub} style={{ marginTop: 6, fontSize: 12 }}>
               The monthly schedule below is calculated from the grand total minus this exact amount &mdash; the "before/after interest" choice above is ignored while this mode is active, since the deposit is no longer a
               percentage of anything.
             </p>
           </div>
         )}
+        </>}
       </div>
 
       <div className={styles.card}>
@@ -210,11 +250,12 @@ export function QuotationScreen() {
       {totals && (
         <>
           <div className={styles.card}>
-            <SummaryRow label="List total" value={ghs(totals.listTotal)} />
-            {totals.discountTotal > 0 && <SummaryRow label="Discount" value={`-${ghs(totals.discountTotal)}`} />}
-            <SummaryRow label="Net price" value={ghs(totals.net)} />
-            {totals.interestTotal > 0 && <SummaryRow label={`Interest (${plan})`} value={ghs(totals.interestTotal)} />}
-            <SummaryRow label="Grand total" value={ghs(totals.grand)} strong />
+            <SummaryRow label="List total" value={quoteMoney(totals.listTotal)} />
+            {totals.standardDiscountTotal > 0 && <SummaryRow label="Company plot discount" value={`-${quoteMoney(totals.standardDiscountTotal)}`} />}
+            {totals.additionalDiscountTotal > 0 && <SummaryRow label="Additional quotation discount" value={`-${quoteMoney(totals.additionalDiscountTotal)}`} />}
+            <SummaryRow label="Net price before interest" value={quoteMoney(totals.net)} />
+            {totals.interestTotal > 0 && <SummaryRow label={`Interest (${plan})`} value={quoteMoney(totals.interestTotal)} />}
+            <SummaryRow label="Grand total" value={quoteMoney(totals.grand)} strong />
           </div>
 
           {totals.planMonths > 0 ? (
@@ -228,10 +269,10 @@ export function QuotationScreen() {
                         ? `Deposit (${depositPercentInput}% of ${depositIncludesInterest ? 'net + interest' : 'net'})`
                         : `Deposit (${standardPct}% of ${depositIncludesInterest ? 'net + interest' : 'net'})`
                   }
-                  value={ghs(totals.deposit)}
+                  value={quoteMoney(totals.deposit)}
                 />
-                <SummaryRow label="Balance after deposit" value={ghs(totals.balance)} />
-                <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={ghs(totals.monthlyDue)} strong />
+                <SummaryRow label="Balance after deposit" value={quoteMoney(totals.balance)} />
+                <SummaryRow label={`Monthly due (${totals.planMonths} months)`} value={quoteMoney(totals.monthlyDue)} strong />
               </div>
 
               <div className={styles.sectitle}>Payment schedule</div>
@@ -249,9 +290,9 @@ export function QuotationScreen() {
                     {totals.schedule.map((row) => (
                       <tr key={row.month}>
                         <td>{row.month}</td>
-                        <td>{ghs(row.opening)}</td>
-                        <td>{ghs(row.payment)}</td>
-                        <td>{ghs(row.closing)}</td>
+                        <td>{quoteMoney(row.opening)}</td>
+                        <td>{quoteMoney(row.payment)}</td>
+                        <td>{quoteMoney(row.closing)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -300,6 +341,9 @@ export function QuotationScreen() {
                     plotType,
                     noPlots,
                     paymentPlan: plan,
+                    unitPrice: config ? pricingFor(config, plotType).list : undefined,
+                    discount: totals.discountTotal,
+                    depositTarget: totals.planMonths ? totals.deposit : undefined,
                     leadSource: 'Quotation',
                     returnTo: '/dashboard/quotation',
                   },
@@ -325,3 +369,4 @@ function SummaryRow({ label, value, strong }: { label: string; value: string; st
     </div>
   );
 }
+
