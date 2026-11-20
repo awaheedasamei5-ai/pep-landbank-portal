@@ -1,5 +1,5 @@
 import type { ActivityLogEntry, Lead, Payment, SiteVisit } from "../../types/domain";
-import type { SalesReportData } from "./salesReportData";
+import type { SalesClientCost, SalesConversation, SalesReportData } from "./salesReportData";
 
 export type SalesReportScope = "mine" | "master" | "company";
 
@@ -13,6 +13,8 @@ export interface SalesReportFilters {
   outcome: string;
   site: string;
   paymentPlan: string;
+  pool: string;
+  clientId: string;
 }
 
 export interface SalesStaffRow {
@@ -27,6 +29,30 @@ export interface SalesStaffRow {
   scheduledVisits: number;
   approvedPayments: number;
   approvedCash: number;
+  clients: number;
+  conversations: number;
+  attendedVisits: number;
+  payingClients: number;
+  pipelineValue: number;
+  outstanding: number;
+  attributedVisitCost: number;
+  visitToPayingRate: number | null;
+  knownCostPerPayingClient: number | null;
+}
+
+export interface SalesClientRow {
+  lead: Lead;
+  ownerName: string;
+  calls: ActivityLogEntry[];
+  activities: ActivityLogEntry[];
+  conversations: SalesConversation[];
+  visits: SiteVisit[];
+  approvedPayments: Payment[];
+  paidInPeriod: number;
+  paidToDate: number;
+  outstanding: number;
+  costs: SalesClientCost[];
+  attributedVisitCost: number;
 }
 
 export interface SalesMonthRow {
@@ -46,6 +72,9 @@ export interface SalesReport {
   activities: ActivityLogEntry[];
   visits: SiteVisit[];
   payments: Payment[];
+  conversations: SalesConversation[];
+  costs: SalesClientCost[];
+  clients: SalesClientRow[];
   newLeads: Lead[];
   requestedVisits: SiteVisit[];
   scheduledVisits: SiteVisit[];
@@ -59,6 +88,10 @@ export interface SalesReport {
   visitRequestWithoutLead: number;
   callsWithoutOutcome: number;
   unassignedCompanyLeads: number;
+  payingClients: number;
+  pipelineValue: number;
+  outstanding: number;
+  attributedVisitCost: number;
   sourceCounts: { name: string; count: number }[];
   stageCounts: { name: string; count: number }[];
   outcomeCounts: { name: string; count: number }[];
@@ -127,10 +160,11 @@ export function buildSalesReport(
   });
   const leads = cohort.filter(
     (lead) =>
+      (!filters.pool || scope !== "master" || (filters.pool === "company" ? lead.agent === "company" : lead.agent !== "company")) &&
+      (!filters.clientId || lead.id === filters.clientId) &&
       (!filters.staffKey ||
         !isManager ||
-        lead.agent === filters.staffKey ||
-        lead.assignedAgentKey === filters.staffKey) &&
+        (lead.agent === "company" ? lead.assignedAgentKey === filters.staffKey : lead.agent === filters.staffKey)) &&
       (!filters.source || (lead.leadSource ?? "") === filters.source) &&
       (!filters.stage || lead.stage === filters.stage) &&
       (!filters.paymentPlan || lead.paymentPlan === filters.paymentPlan),
@@ -141,7 +175,6 @@ export function buildSalesReport(
       entry.leadId &&
       leadIds.has(entry.leadId) &&
       within(entry.createdAt, filters) &&
-      (!filters.staffKey || !isManager || entry.agentKey === filters.staffKey) &&
       (!filters.action || entry.action === filters.action) &&
       (!filters.outcome || entry.outcome === filters.outcome),
   );
@@ -150,13 +183,14 @@ export function buildSalesReport(
     (visit) =>
       visit.leadId &&
       leadIds.has(visit.leadId) &&
-      (!filters.staffKey || !isManager || visit.agentKey === filters.staffKey) &&
       (!filters.site || visit.site === filters.site),
   );
   const payments = data.payments.filter(
     (payment) =>
-      leadIds.has(payment.leadId) && (!filters.staffKey || !isManager || payment.agentKey === filters.staffKey),
+      leadIds.has(payment.leadId),
   );
+  const conversations = data.conversations.filter((entry) => leadIds.has(entry.leadId) && within(entry.createdAt, filters));
+  const costs = data.costs.filter((entry) => leadIds.has(entry.leadId) && entry.sourceType === "site_visit");
   const newLeads = leads.filter((lead) => within(lead.date, filters));
   const requestedVisits = visits.filter((visit) => within(visit.createdAt, filters));
   const scheduledVisits = visits.filter((visit) => within(visit.visitDate, filters));
@@ -165,25 +199,41 @@ export function buildSalesReport(
   const visitedLeadIds = new Set(visits.map((visit) => visit.leadId));
   const newLeadsVisited = newLeads.filter((lead) => visitedLeadIds.has(lead.id)).length;
   const newLeadsPaid = newLeads.filter((lead) => lead.grandTotal > 0 && lead.amtPaid >= lead.grandTotal).length;
-  const keys = new Set<string>();
-  for (const lead of leads) keys.add(lead.agent === "company" ? (lead.assignedAgentKey ?? "company") : lead.agent);
-  for (const item of [...activities, ...visits]) keys.add(item.agentKey);
-  for (const payment of approvedPayments) keys.add(payment.agentKey);
-  if (filters.staffKey) keys.add(filters.staffKey);
+  const ownerByLead = new Map(leads.map((lead) => [lead.id, lead.agent]));
+  const clients: SalesClientRow[] = leads.map((lead) => {
+    const leadActivities = activities.filter((entry) => entry.leadId === lead.id);
+    const leadPayments = payments.filter((payment) => payment.leadId === lead.id && payment.status === "approved");
+    const leadCosts = costs.filter((entry) => entry.leadId === lead.id);
+    return {
+      lead, ownerName: lead.agent === "company" ? "Company pool" : (names[lead.agent] ?? lead.agent),
+      calls: leadActivities.filter(isCall), activities: leadActivities,
+      conversations: conversations.filter((entry) => entry.leadId === lead.id),
+      visits: visits.filter((visit) => visit.leadId === lead.id && within(visit.visitDate, filters)),
+      approvedPayments: leadPayments.filter((payment) => within(payment.date, filters)),
+      paidInPeriod: leadPayments.filter((payment) => within(payment.date, filters)).reduce((sum, payment) => sum + payment.amount, 0),
+      paidToDate: leadPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      outstanding: Math.max(lead.grandTotal - lead.amtPaid, 0),
+      costs: leadCosts,
+      attributedVisitCost: leadCosts.reduce((sum, entry) => sum + entry.amount, 0),
+    };
+  }).sort((a, b) => a.lead.name.localeCompare(b.lead.name) || a.lead.id.localeCompare(b.lead.id));
+  const keys = new Set(leads.map((lead) => lead.agent));
   const staff = [...keys]
     .filter(Boolean)
     .map((key) => {
-      const ownLeads = newLeads.filter(
-        (lead) => (lead.agent === "company" ? (lead.assignedAgentKey ?? "company") : lead.agent) === key,
-      );
-      const ownActivity = activities.filter((entry) => entry.agentKey === key);
+      const ownLeads = newLeads.filter((lead) => lead.agent === key);
+      const ownClients = clients.filter((client) => client.lead.agent === key);
+      const ownActivity = activities.filter((entry) => !!entry.leadId && ownerByLead.get(entry.leadId) === key);
       const ownCalls = ownActivity.filter(isCall);
-      const ownVisits = visits.filter((visit) => visit.agentKey === key);
-      const ownApproved = approvedPayments.filter((payment) => payment.agentKey === key);
+      const ownVisits = visits.filter((visit) => !!visit.leadId && ownerByLead.get(visit.leadId) === key);
+      const ownApproved = approvedPayments.filter((payment) => ownerByLead.get(payment.leadId) === key);
       const ownReached = ownCalls.filter(isReached).length;
+      const visitedIds = new Set(ownVisits.filter((visit) => visit.attended === true).map((visit) => visit.leadId));
+      const payingClients = ownClients.filter((client) => client.paidToDate > 0);
+      const attributedVisitCost = ownClients.reduce((sum, client) => sum + client.attributedVisitCost, 0);
       return {
         key,
-        name: names[key] ?? (key === "company" ? "Company / unassigned" : key),
+        name: names[key] ?? (key === "company" ? "Company pool" : key),
         newLeads: ownLeads.length,
         contactActivities: ownActivity.length,
         calls: ownCalls.length,
@@ -193,6 +243,15 @@ export function buildSalesReport(
         scheduledVisits: ownVisits.filter((visit) => within(visit.visitDate, filters)).length,
         approvedPayments: ownApproved.length,
         approvedCash: ownApproved.reduce((sum, payment) => sum + payment.amount, 0),
+        clients: ownClients.length,
+        conversations: conversations.filter((entry) => ownerByLead.get(entry.leadId) === key).length,
+        attendedVisits: ownVisits.filter((visit) => visit.attended === true && within(visit.visitDate, filters)).length,
+        payingClients: payingClients.length,
+        pipelineValue: ownClients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
+        outstanding: ownClients.reduce((sum, client) => sum + client.outstanding, 0),
+        attributedVisitCost,
+        visitToPayingRate: rate(payingClients.filter((client) => visitedIds.has(client.lead.id)).length, visitedIds.size),
+        knownCostPerPayingClient: payingClients.length ? attributedVisitCost / payingClients.length : null,
       };
     })
     .sort((a, b) => b.approvedCash - a.approvedCash || b.calls - a.calls || a.name.localeCompare(b.name));
@@ -218,6 +277,9 @@ export function buildSalesReport(
     activities,
     visits,
     payments,
+    conversations,
+    costs,
+    clients,
     newLeads,
     requestedVisits,
     scheduledVisits,
@@ -236,9 +298,14 @@ export function buildSalesReport(
     }).length,
     callsWithoutOutcome: calls.filter((entry) => !entry.outcome).length,
     unassignedCompanyLeads: leads.filter((lead) => lead.agent === "company" && !lead.assignedAgentKey).length,
+    payingClients: clients.filter((client) => client.paidToDate > 0).length,
+    pipelineValue: clients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
+    outstanding: clients.reduce((sum, client) => sum + client.outstanding, 0),
+    attributedVisitCost: clients.reduce((sum, client) => sum + client.attributedVisitCost, 0),
     sourceCounts: countBy(newLeads.map((lead) => lead.leadSource ?? "")),
     stageCounts: countBy(leads.map((lead) => lead.stage)),
     outcomeCounts: countBy(calls.map((entry) => entry.outcome ?? "")),
     loadedAt: data.loadedAt,
   };
 }
+
