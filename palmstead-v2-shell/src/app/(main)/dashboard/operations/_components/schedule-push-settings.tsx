@@ -107,12 +107,9 @@ export function SchedulePushSettings() {
     setErrorMessage(null);
     setDeviceState("busy");
     try {
-      const permission = Notification.permission === "granted" ? "granted" : await requestNotificationPermission();
-      if (permission !== "granted") {
-        setDeviceState(permission === "denied" ? "denied" : "disabled");
-        return;
-      }
-
+      // Check server readiness before asking the browser for permission.
+      // Otherwise a broken push configuration can consume the user's one
+      // permission prompt without ever creating a working subscription.
       const { data, error } = await requireSupabase().functions.invoke<PushConfig>("get-push-config");
       if (!data?.publicKey) {
         // Real root cause (2026-10-31): get-push-config already returns a
@@ -123,6 +120,12 @@ export function SchedulePushSettings() {
         // which friendlyFunctionsInvokeError reads for us.
         const message = error ? await friendlyFunctionsInvokeError(error, "The reminder service did not return its public device key.") : "The reminder service did not return its public device key.";
         throw Object.assign(new Error(message), { friendly: true });
+      }
+
+      const permission = Notification.permission === "granted" ? "granted" : await requestNotificationPermission();
+      if (permission !== "granted") {
+        setDeviceState(permission === "denied" ? "denied" : "disabled");
+        return;
       }
 
       const subscription =
@@ -260,3 +263,4 @@ export function SchedulePushSettings() {
     </Card>
   );
 }
+
