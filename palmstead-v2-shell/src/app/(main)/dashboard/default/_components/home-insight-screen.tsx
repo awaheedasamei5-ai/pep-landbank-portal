@@ -42,11 +42,10 @@ async function loadInsight(staffKey: string, isManager: boolean, metric: Metric)
   if (metric === "complaints") {
     const query = client.from("complaints")
       .select("id,name,agent_key,category,status,created_at")
-      .neq("status", "Resolved")
       .order("created_at", { ascending: false });
     const { data, error } = await (isManager ? query : query.eq("agent_key", staffKey));
     if (error) throw error;
-    return { leads: [] as LeadRow[], complaints: (data ?? []) as ComplaintRow[] };
+    return { leads: [] as LeadRow[], complaints: ((data ?? []) as ComplaintRow[]).filter((row) => row.status !== "Resolved") };
   }
   const query = client.from("leads")
     .select("id,name,agent_key,stage,date,grand_total,amt_paid")
