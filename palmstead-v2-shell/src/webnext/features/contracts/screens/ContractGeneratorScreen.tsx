@@ -376,10 +376,7 @@ function SelectedLeadPreview({
         { onSuccess: onGenerateSuccess },
       );
     } else {
-      // Walk-in has no v1-parity legacy-document fallback (see
-      // GenerateContractInput's own comment) -- a real published
-      // template must be picked first, guarded by the Select below.
-      generate.mutate({ lead: { ...lead, kyc: effectiveKyc } }, { onSuccess: onGenerateSuccess });
+      generate.mutate({ lead: { ...lead, kyc: effectiveKyc }, isWalkIn, amountPaidOverride }, { onSuccess: onGenerateSuccess });
     }
   }
 
@@ -463,19 +460,15 @@ function SelectedLeadPreview({
         </div>
       )}
 
-      {templateOptions.length > 0 && (
+      {(
         <div className="space-y-1.5">
-          <Label>Template {isWalkIn && <span className="text-destructive">*</span>}</Label>
-          <Select value={isWalkIn && !selected ? "" : templateVersionId} onValueChange={setTemplateVersionId}>
+          <Label>Document layout</Label>
+          <Select value={templateVersionId} onValueChange={setTemplateVersionId}>
             <SelectTrigger className="w-full sm:w-80">
-              <SelectValue placeholder={isWalkIn ? "Choose a published contract template" : "Standard (legacy document)"} />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {/* Walk-in has no v1-parity legacy-document fallback -- that
-                  path's own contracts.create() needs a real, non-null
-                  lead_id with no FK to relax the way contract_generations'
-                  was (see useContracts.ts's own comment). */}
-              {!isWalkIn && <SelectItem value="__standard__">Standard (legacy document)</SelectItem>}
+              <SelectItem value="__standard__">Standard company document (10 pages)</SelectItem>
               {templateOptions.map((o) => (
                 <SelectItem key={o.version.id} value={o.version.id}>
                   {o.templateName} · v{o.version.versionNumber}
@@ -483,13 +476,13 @@ function SelectedLeadPreview({
               ))}
             </SelectContent>
           </Select>
-          {isWalkIn && !selected && <p className="text-xs text-muted-foreground">A walk-in client needs a real published template picked here.</p>}
+          {selected && <p className="text-xs text-muted-foreground">Published templates use their own page layout. Check the preview before issuing.</p>}
         </div>
       )}
 
-      {isWalkIn && templateOptions.length === 0 && <p className="text-sm text-muted-foreground">{publishedVersionsLoading ? "Loading published contract templates…" : "No published contract template is available. Ask Contract administration to publish one."}</p>}
+      {isWalkIn && publishedVersionsLoading && <p className="text-sm text-muted-foreground">Loading additional published templates…</p>}
 
-      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && (!selected || !walkInAmountValid))} onClick={generateNow}>
+      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && !walkInAmountValid)} onClick={generateNow}>
         <FileDown />
         {generate.isPending ? "Generating…" : "Generate & download PDF"}
       </Button>
