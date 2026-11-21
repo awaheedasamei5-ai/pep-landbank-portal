@@ -15,16 +15,20 @@
 .sub { color: var(--c-muted); margin: 4px 0 0; font-size: 13.5px; }
 .emptyMsg { color: var(--c-muted); font-size: 13.5px; }
 
-.experienceLink {
-  background: none;
-  border: none;
-  color: var(--c-accent);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 0;
-  margin-top: 4px;
+.quickActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }
+.quickAction {
+  display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 76px;
+  padding: 13px 15px; border: 1px solid var(--c-line); border-radius: var(--r-md);
+  background: var(--c-card); color: var(--c-text); text-align: left; font: inherit;
+  box-shadow: var(--shadow); cursor: pointer; transition: border-color .16s ease, transform .16s ease;
 }
+.quickAction:hover, .quickAction:focus-visible { border-color: var(--c-accent); transform: translateY(-1px); }
+.quickAction:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.quickActionIcon { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px; background: var(--c-paper); color: var(--c-accent); }
+.quickActionCopy { display: grid; gap: 3px; min-width: 0; }
+.quickActionCopy strong { font-size: 14px; line-height: 1.2; }
+.quickActionCopy small { color: var(--c-muted); font-size: 12px; line-height: 1.35; }
+.quickActionArrow { flex: 0 0 auto; margin-left: auto; color: var(--c-muted); }
 
 .addBtn {
   background: var(--c-accent);
@@ -174,6 +178,7 @@
 }
 .clearBtn { border: 0; background: transparent; color: var(--c-accent); font-size: 13px; font-weight: 700; cursor: pointer; padding: 10px; }
 @media (width < 640px) {
+  .quickActions { grid-template-columns: minmax(0, 1fr); }
   .head { flex-wrap: wrap; }
   .queueGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filterRow > * { min-width: 0; }
