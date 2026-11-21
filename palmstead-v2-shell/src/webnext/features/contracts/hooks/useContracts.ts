@@ -7,7 +7,7 @@ import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
 import { buildContractFromSections } from '../lib/contractSectionsPdf';
 import { resolveContractFields, resolveSections, findUnresolvedTokens } from '../lib/contractFieldResolver';
-import type { ContractSection, Lead } from '../../../types/domain';
+import type { Config, ContractSection, Lead } from '../../../types/domain';
 
 export function useContracts() {
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -46,6 +46,8 @@ export type GenerateContractInput = {
   // used both for a walk-in's typed-in figure and for re-stating an
   // existing lead's current real amount at generation time.
   amountPaidOverride?: number;
+  acresOverride?: number;
+  legalOverride?: Pick<Config, 'contractPreamble' | 'contractDefinitions' | 'contractTerms'>;
 };
 
 // Builds the branded PDF and downloads it. Without a template, existing
@@ -69,7 +71,7 @@ export function useGenerateContract() {
   const queryClient = useQueryClient();
   const logDownload = useLogDownload();
   return useMutation({
-    mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride }: GenerateContractInput) => {
+    mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride, acresOverride, legalOverride }: GenerateContractInput) => {
       if (!config) throw new Error('Config not loaded yet');
       if (!profile) throw new Error('Not signed in');
 
@@ -141,7 +143,8 @@ export function useGenerateContract() {
         // Missing wordmark shouldn't stop the contract from generating.
       }
       const standardLead = isWalkIn ? { ...lead, amtPaid: amountPaidOverride ?? 0 } : lead;
-      const doc = buildContractOfSalePdf(standardLead, config, cover, wordmark);
+      const standardConfig = legalOverride ? { ...config, ...legalOverride } : config;
+      const doc = buildContractOfSalePdf(standardLead, standardConfig, cover, wordmark, acresOverride);
       const legacyDocFilename = contractFilename(lead.name);
       if (isWalkIn) {
         const ds = getDataSource(demoMode);
@@ -155,7 +158,7 @@ export function useGenerateContract() {
           templateVersionId: null,
           versionNumberSnapshot: null,
           contentSnapshot: [],
-          fieldValuesSnapshot: resolveContractFields(standardLead, config, amountPaidOverride),
+          fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
           pdfStoragePath: uploadedPath,
           generatedBy: profile.key,
           generatedByName: profile.name,
@@ -164,9 +167,24 @@ export function useGenerateContract() {
         logDownload(legacyDocFilename, 'pdf', doc.output('datauristring'));
         return null;
       }
+      const ds = getDataSource(demoMode);
+      const uploadedPath = await ds.contractGenerations.uploadPdf(`${lead.id}/standard-${crypto.randomUUID()}.pdf`, doc.output('blob') as Blob);
+      await ds.contractGenerations.create({
+        contractRequestId: contractRequestId ?? null,
+        leadId: lead.id,
+        clientName: lead.name,
+        templateId: null,
+        templateVersionId: null,
+        versionNumberSnapshot: null,
+        contentSnapshot: [],
+        fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
+        pdfStoragePath: uploadedPath,
+        generatedBy: profile.key,
+        generatedByName: profile.name,
+      });
       doc.save(legacyDocFilename);
       logDownload(legacyDocFilename, 'pdf', doc.output('datauristring'));
-      return getDataSource(demoMode).contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
+      return ds.contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
