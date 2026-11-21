@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Download } from 'lucide-react';
+import { ArrowUpRight, ClipboardList, Download, MessageSquareText } from 'lucide-react';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { Icon } from '../../../shared/ui/Icon';
@@ -148,19 +148,26 @@ export function SiteVisitsScreen() {
           <p className={styles.sub}>
             {filtered.length} {isManager ? 'company-wide' : 'logged'}
           </p>
-          {hasSveAccess && (
-            <button type="button" className={styles.experienceLink} onClick={() => navigate('/dashboard/site-visits/experience')}>
-              Experience feedback <Icon name="chevronRight" size={14} />
-            </button>
-          )}
-          <button type="button" className={styles.experienceLink} onClick={() => navigate('/dashboard/site-visits/reports')}>
-            Visit reports <Icon name="chevronRight" size={14} />
-          </button>
         </div>
         <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/site-visits/new')}>
           + Log visit
         </button>
       </div>
+
+      <nav className={styles.quickActions} aria-label="Site visit analysis">
+        {hasSveAccess && (
+          <button type="button" className={styles.quickAction} onClick={() => navigate('/dashboard/site-visits/experience')}>
+            <span className={styles.quickActionIcon}><MessageSquareText size={20} aria-hidden="true" /></span>
+            <span className={styles.quickActionCopy}><strong>Experience feedback</strong><small>Client responses and site manager reviews</small></span>
+            <ArrowUpRight size={18} className={styles.quickActionArrow} aria-hidden="true" />
+          </button>
+        )}
+        <button type="button" className={styles.quickAction} onClick={() => navigate('/dashboard/site-visits/reports')}>
+          <span className={styles.quickActionIcon}><ClipboardList size={20} aria-hidden="true" /></span>
+          <span className={styles.quickActionCopy}><strong>Visit reports</strong><small>Attendance, trends and downloadable PDF</small></span>
+          <ArrowUpRight size={18} className={styles.quickActionArrow} aria-hidden="true" />
+        </button>
+      </nav>
 
       {isManager && (
         <>
