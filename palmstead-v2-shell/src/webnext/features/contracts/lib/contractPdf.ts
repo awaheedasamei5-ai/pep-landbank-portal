@@ -737,3 +737,4 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
 export function contractFilename(clientName: string): string {
   return `ContractOfSale_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
 }
+
