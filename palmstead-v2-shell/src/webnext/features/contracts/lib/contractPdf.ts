@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { fmtLongDate } from '../../../shared/lib/format';
-import { computeLeadQuotationTotals, pricingFor, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
+import { computeLeadQuotationTotals, pricingFor } from '../../quotation/lib/quotationLogic';
 import type { Config, Lead } from '../../../types/domain';
 
 // Faithful port of index.html's Contract of Sale document (index.html:
@@ -603,18 +603,17 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   n++;
   y = contractNewPage(doc, n);
   ({ y, n } = contractBody(doc, y, n, 'IT IS NOW MUTUALLY agreed as follows:'));
-  const allocationDeposit = Math.round(t.grand * QUOTE_DEPOSIT_PCT);
   const transactionItems = [
     '1.3 THE TRANSACTION',
     '1.3.1 The consideration for ' + acres + ' Acres of land (more or less) is hereby agreed at ' + (t.discountTotal > 0 ? 'a discounted amount of ' : '') + contractMoney(t.grand) + '.',
     planLabel === 'Outright'
       ? '1.3.2 The Purchaser agrees to pay the full consideration of ' + contractMoney(t.grand) + ' on the execution of this contract.'
-      : '1.3.2 The Purchaser agrees to pay on the execution of this contract a deposit of ' + contractMoney(t.deposit) + ' which constitutes approximately a ' + depositPct + '%. The remaining balance shall be spread over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') equal monthly installment.',
-    planLabel === 'Outright' ? null : '1.3.3 Monthly Installment payment for ' + contractMoney(t.monthlyDue) + ' shall be done over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months extended credit period',
+      : '1.3.2 The Purchaser agrees to pay on the execution of this contract a deposit of ' + contractMoney(t.deposit) + ' which constitutes approximately ' + depositPct + '% of the net price. The remaining balance shall be spread over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') monthly installments.',
+    planLabel === 'Outright' ? null : '1.3.3 Monthly installment payments of ' + contractMoney(t.monthlyDue) + ' shall be made over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months. The final installment shall be adjusted to settle any rounding balance.',
     '1.3.4 All Payments shall be made via the Companies designated payment platforms and shall be in the name ' + vendorName + '. All Payment shall be duly receipted.',
-    '1.3.5 Upon initial deposit of ' + contractMoney(allocationDeposit) + ' ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
+    '1.3.5 Upon ' + (planLabel === 'Outright' ? 'receipt of the full consideration of ' + contractMoney(t.grand) : 'receipt of the agreed initial deposit of ' + contractMoney(t.deposit)) + ', ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
     '1.3.6 Indentures shall be released to Purchaser after final payment unless explicitly agreed.',
-    '1.3.7 All payments shall be due on the last working day of the month.',
+    '1.3.7 All monthly installments shall be due on the fifth (5th) day of each month.',
   ]
     .filter((x): x is string => x !== null)
     .join('\n\n');
