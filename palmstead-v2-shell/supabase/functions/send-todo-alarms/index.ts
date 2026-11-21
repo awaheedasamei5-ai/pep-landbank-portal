@@ -2,6 +2,18 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import webpush from "npm:web-push@3.6.7";
+import { Buffer } from "node:buffer";
+import { createECDH } from "node:crypto";
+
+function publicKeyFromPrivate(privateKey: string): string {
+  const secret = Buffer.from(privateKey, "base64url");
+  if (secret.length !== 32) throw new Error("Invalid VAPID private key length");
+  const ecdh = createECDH("prime256v1");
+  ecdh.setPrivateKey(secret);
+  const publicPoint = ecdh.getPublicKey(undefined, "uncompressed");
+  if (publicPoint.length !== 65 || publicPoint[0] !== 4) throw new Error("Invalid VAPID public point");
+  return publicPoint.toString("base64url");
+}
 
 type PushEvent = {
   id: string;
@@ -443,8 +455,13 @@ Deno.serve(async (request) => {
       return Response.json({ error: "Not authorized" }, { status: 401 });
     }
 
-    const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
     const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
+    let vapidPublic: string | undefined;
+    try {
+      vapidPublic = vapidPrivate ? publicKeyFromPrivate(vapidPrivate) : undefined;
+    } catch {
+      return Response.json({ error: "Device reminder keys need repair." }, { status: 503 });
+    }
     const [outbox, meetings, legacy] = await Promise.all([
       deliverOutbox(sb, vapidPublic, vapidPrivate),
       deliverMeetingOutbox(sb, vapidPublic, vapidPrivate),
@@ -455,4 +472,5 @@ Deno.serve(async (request) => {
     return Response.json({ error: "Push reminder worker could not complete its scheduled run." }, { status: 500 });
   }
 });
+
 
