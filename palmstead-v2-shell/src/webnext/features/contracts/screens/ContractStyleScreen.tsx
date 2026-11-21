@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
 import { Image as ImageIcon, Save, Upload } from "lucide-react";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useConfig, useUpdateConfig } from "../../manager/hooks/useConfigSettings";
 import { useContractStyleSettings, useUpdateContractStyleSettings } from "../hooks/useContractStyleSettings";
 import { friendlyError } from "../../../shared/lib/friendlyError";
@@ -34,7 +34,7 @@ const FONT_OPTIONS: { value: "times" | "helvetica" | "courier"; label: string; s
 //    renderer for now (see that file's own comment) -- flagged here too
 //    rather than implying every pixel of the document is configurable.
 export function ContractStyleScreen() {
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: config } = useConfig();
   const { data: styleSettings } = useContractStyleSettings();
 
@@ -233,3 +233,4 @@ function TypographyCard({ settings }: { settings: NonNullable<ReturnType<typeof 
     </Card>
   );
 }
+
