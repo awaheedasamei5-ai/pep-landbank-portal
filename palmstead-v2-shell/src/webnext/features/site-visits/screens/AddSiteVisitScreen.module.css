@@ -87,6 +87,20 @@
 }
 .dupWarning p { margin: 0; }
 .dupOverrideRow { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 700; cursor: pointer; }
+.dupOverrideRow:has(input:disabled) { opacity: .65; cursor: not-allowed; }
+.poolChoice { min-width: 0; margin: 0 0 12px; padding: 0; border: 0; }
+.poolChoice legend { margin-bottom: 9px; font-size: 13px; font-weight: 800; color: var(--c-text); }
+.poolOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.poolOption { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-card); cursor: pointer; }
+.poolOption[data-selected="true"] { border-color: var(--c-accent); box-shadow: inset 0 0 0 1px var(--c-accent); }
+.poolOption[data-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.poolOption:focus-within { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.poolOption input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--c-accent); }
+.poolOption span { display: grid; gap: 3px; min-width: 0; }
+.poolOption strong { font-size: 13px; line-height: 1.25; }
+.poolOption small, .poolHint { color: var(--c-muted); font-size: 12px; line-height: 1.4; }
+.poolHint { margin: 5px 0 12px; }
+@media (width < 560px) { .poolOptions { grid-template-columns: minmax(0, 1fr); } }
 .dupNote { color: var(--c-muted); margin-top: 6px !important; }
 
 .confirmCard {

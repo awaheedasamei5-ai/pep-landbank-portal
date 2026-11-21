@@ -131,7 +131,7 @@ export function AddSiteVisitScreen() {
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
   const [interestCustom, setInterestCustom] = useState('');
   const [addToPipeline, setAddToPipeline] = useState(false);
-  const [newLeadPool, setNewLeadPool] = useState<'personal' | 'company'>('personal');
+  const [newLeadPool, setNewLeadPool] = useState<'personal' | 'company' | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState(leadId ?? '');
 
   const today = new Date();
@@ -227,6 +227,10 @@ export function AddSiteVisitScreen() {
       setSaveError('This visit no longer matches the selected pipeline record. Return to that client and start the booking again.');
       return;
     }
+    if (addToPipeline && !newLeadPool) {
+      setSaveError('Choose Personal client or Company client before adding this client to a pipeline.');
+      return;
+    }
     if (addToPipeline && newLeadPool === 'company' && !canCreateCompanyLead) {
       setSaveError('Company Leads creation access is required. Choose a personal lead or ask Management to grant access.');
       return;
@@ -244,7 +248,7 @@ export function AddSiteVisitScreen() {
         return;
       }
       let newLead;
-      if (addToPipeline && !leadId && !isKnownClient && config) {
+      if (addToPipeline && !leadId && !isKnownClient && config && newLeadPool) {
         const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
         const pricing = previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
         newLead = { pool: newLeadPool, plotType, noPlots, unitPrice: pricing.listPrice,
@@ -332,7 +336,12 @@ export function AddSiteVisitScreen() {
             </div>
             {matchingLeads.length === 1 && !leadId && (
               <div className={styles.newClientNote} role="status">
-                This visit will be linked to {matchingLeads[0].plotType} · {matchingLeads[0].stage} in the existing client record.
+                Existing {matchingLeads[0].agent === 'company' ? 'Company Leads' : 'personal pipeline'} record found. This visit will be linked to {matchingLeads[0].plotType} · {matchingLeads[0].stage}; its source cannot be changed here.
+              </div>
+            )}
+            {leadId && selectedExistingLead && (
+              <div className={styles.newClientNote} role="status">
+                Linked to an existing {selectedExistingLead.agent === 'company' ? 'Company Leads' : 'personal pipeline'} record. The visit will keep that client's current pipeline.
               </div>
             )}
             {matchingLeads.length > 1 && !leadId && (
@@ -357,16 +366,26 @@ export function AddSiteVisitScreen() {
             )}
             {!isKnownClient && (
               <>
-                <p className={styles.newClientNote}>No matching record in Pipeline or the Client Database — confirm this is genuinely a new client before saving.</p>
+                <p className={styles.newClientNote}>No matching record was found. Choose where this client belongs before adding them to a pipeline.</p>
+                <fieldset className={styles.poolChoice}>
+                  <legend>Client source</legend>
+                  <div className={styles.poolOptions}>
+                    <label className={styles.poolOption} data-selected={newLeadPool === 'personal'}>
+                      <input type="radio" name="newLeadPool" checked={newLeadPool === 'personal'} onChange={() => setNewLeadPool('personal')} />
+                      <span><strong>Personal client</strong><small>Only your own staff pipeline</small></span>
+                    </label>
+                    <label className={styles.poolOption} data-selected={newLeadPool === 'company'} data-disabled={!canCreateCompanyLead}>
+                      <input type="radio" name="newLeadPool" checked={newLeadPool === 'company'} disabled={!canCreateCompanyLead} onChange={() => setNewLeadPool('company')} />
+                      <span><strong>Company client</strong><small>{canCreateCompanyLead ? 'Shared Company Leads pool' : 'Company Leads access required'}</small></span>
+                    </label>
+                  </div>
+                </fieldset>
                 <label className={styles.dupOverrideRow}>
-                  <input type="checkbox" checked={addToPipeline} onChange={(e) => setAddToPipeline(e.target.checked)} />
-                  Add {watchedName.trim().split(' ')[0] || 'this client'} to a pipeline and link the visit
+                  <input type="checkbox" checked={addToPipeline} disabled={!newLeadPool} onChange={(e) => setAddToPipeline(e.target.checked)} />
+                  Add {watchedName.trim().split(' ')[0] || 'this client'} to {newLeadPool === 'company' ? 'Company Leads' : 'my personal pipeline'} and link this visit
                 </label>
-                {addToPipeline && <div className={styles.field} role="group" aria-label="Choose pipeline for new client">
-                  <label className={styles.dupOverrideRow}><input type="radio" name="newLeadPool" checked={newLeadPool === 'personal'} onChange={() => setNewLeadPool('personal')} /> My personal pipeline</label>
-                  <label className={styles.dupOverrideRow}><input type="radio" name="newLeadPool" checked={newLeadPool === 'company'} disabled={!canCreateCompanyLead} onChange={() => setNewLeadPool('company')} /> Company Leads {canCreateCompanyLead ? '(shared)' : '(access required)'}</label>
-                  <p className={styles.sub}>{newLeadPricing ? `Opening quote: GHS ${newLeadPricing.grand.toLocaleString('en-GH', { minimumFractionDigits: 2 })} after GHS ${newLeadPricing.disc.toLocaleString('en-GH', { minimumFractionDigits: 2 })} standard discount. No payment is recorded.` : 'Loading the current plot price.'}</p>
-                </div>}
+                <p className={styles.poolHint}>A booking without this option stays unlinked; it does not create a pipeline record. You can link it later.</p>
+                {addToPipeline && <p className={styles.sub}>{newLeadPricing ? `Opening quote: GHS ${newLeadPricing.grand.toLocaleString('en-GH', { minimumFractionDigits: 2 })} after GHS ${newLeadPricing.disc.toLocaleString('en-GH', { minimumFractionDigits: 2 })} standard discount. No payment is recorded.` : 'Loading the current plot price.'}</p>}
               </>
             )}
             <div className={styles.field}>
