@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useSessionStore } from "../../../auth/useSessionStore";
-import { useContractRequests, useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useContractRequests, useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useContractTemplates } from "../hooks/useContractTemplates";
 import { useContractDrafts } from "../hooks/useContractDrafts";
 
@@ -23,7 +23,7 @@ const NAV: { href: string; title: string; description: string; icon: typeof File
 
 export function ContractsHubScreen() {
   const profile = useSessionStore((s) => s.profile);
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: requests } = useContractRequests();
   const { data: templates } = useContractTemplates();
   const { data: drafts } = useContractDrafts();
@@ -67,3 +67,4 @@ export function ContractsHubScreen() {
     </div>
   );
 }
+
