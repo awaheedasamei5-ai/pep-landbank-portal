@@ -14,6 +14,7 @@ import { useConfig, useUpdateConfig } from "../../manager/hooks/useConfigSetting
 import { useContractStyleSettings, useUpdateContractStyleSettings } from "../hooks/useContractStyleSettings";
 import { friendlyError } from "../../../shared/lib/friendlyError";
 import { buildContractOfSalePdf } from "../lib/contractPdf";
+import { ContractClauseEditor } from "../components/ContractClauseEditor";
 import type { Config, Lead } from "../../../types/domain";
 
 const MAX_IMAGE_BYTES = 500 * 1024;
@@ -98,9 +99,9 @@ function LegalTextCard({ config }: { config: Config }) {
         <CardDescription>Permanent changes affect future standard contracts. The original approved wording remains available below. Every save checks the ten-page layout first.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-1"><Label>Opening and WHEREAS clauses</Label><Textarea rows={8} value={preamble} onChange={(e) => setPreamble(e.target.value)} /></div>
-        <div className="space-y-1"><Label>Definitions and interpretation</Label><Textarea rows={8} value={definitions} onChange={(e) => setDefinitions(e.target.value)} /></div>
-        <div className="space-y-1"><Label>Representations, payment, remedies and notices</Label><Textarea rows={10} value={terms} onChange={(e) => setTerms(e.target.value)} /></div>
+        <ContractClauseEditor label="Opening and WHEREAS clauses" value={preamble} onChange={setPreamble} />
+        <ContractClauseEditor label="Definitions and interpretation" value={definitions} onChange={setDefinitions} />
+        <ContractClauseEditor label="Representations, payment, remedies and notices" value={terms} onChange={setTerms} />
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex flex-wrap gap-2">
           <Button disabled={!dirty || update.isPending} onClick={save}>{update.isPending ? "Saving…" : saved ? "Saved" : "Save as company standard"}</Button>
