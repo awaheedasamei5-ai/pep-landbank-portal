@@ -19,9 +19,8 @@ import {
 } from "@/components/ui/command";
 import type { NavMainItem } from "@/navigation/sidebar/sidebar-items";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
-import { useNotesAccess } from "@/lib/permissions/use-notes-access";
+import { filterNavigation, useNavigationAccess } from "@/lib/permissions/use-navigation-access";
 import { useAuthStore } from "@/stores/auth/auth-store";
-import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { useLeads } from "@/webnext/features/pipeline/hooks/useLeads";
 import { useAllLeads } from "@/webnext/features/payments/hooks/useLogPayment";
 import { useStaffDirectory } from "@/webnext/features/memos/hooks/useMemos";
@@ -42,7 +41,7 @@ function getSubItemGroup(groupLabel: string | undefined, itemTitle: string) {
   return sidebarGroupLabels.has(itemTitle) ? (groupLabel ?? "Other") : itemTitle;
 }
 
-const searchItems: SearchItem[] = sidebarItems.flatMap((group) =>
+function makeSearchItems(groups: ReturnType<typeof filterNavigation>): SearchItem[] { return groups.flatMap((group) =>
   group.items.flatMap((item) => {
     if (item.subItems) {
       return item.subItems.map((sub) => ({
@@ -67,13 +66,11 @@ const searchItems: SearchItem[] = sidebarItems.flatMap((group) =>
       },
     ];
   }),
-);
+); }
 
 function getAvailableItems(items: SearchItem[]) {
   return items.filter((item) => !item.disabled && !item.url.includes("coming-soon"));
 }
-
-const recommendations = getAvailableItems(searchItems);
 
 function groupBy(items: SearchItem[]) {
   const groups = [...new Set(items.map((item) => item.group))];
@@ -94,9 +91,14 @@ export function SearchDialog() {
   // real detail route, /dashboard/pipeline/[id]) -- reuses the exact same
   // own-vs-company-wide hooks Pipeline's own list screen already uses,
   // not a new search endpoint.
-  const isManager = useSessionStore((s) => s.profile?.role === "manager");
-  const profileKey = useAuthStore((s) => s.profile?.key);
-  const notesAccess = useNotesAccess(profileKey);
+  const profile = useAuthStore((s) => s.profile);
+  const isManager = profile?.role === "manager";
+  const profileKey = profile?.key;
+  const navigationAccess = useNavigationAccess(profileKey, isManager);
+  const searchItems = React.useMemo(
+    () => makeSearchItems(filterNavigation(sidebarItems, navigationAccess.data, isManager)),
+    [navigationAccess.data, isManager],
+  );
   const mine = useLeads();
   const master = useAllLeads();
   const leads = (isManager ? master.data : mine.data) ?? [];
@@ -196,13 +198,12 @@ export function SearchDialog() {
                 <CommandSeparator />
               </>
             )}
-            {renderGroups((query ? searchItems : recommendations).filter(
-              (item) => item.id !== "notes" || isManager || notesAccess.data?.view === true,
-            ))}
+            {renderGroups(getAvailableItems(searchItems))}
           </CommandList>
         </Command>
       </CommandDialog>
     </>
   );
 }
+
 
