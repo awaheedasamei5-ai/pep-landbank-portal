@@ -81,7 +81,7 @@ async function fetchManagerOverview(staffKey: string, isManager: boolean): Promi
     totalLeads: leads.length,
     pipelineValue,
     collected,
-    outstanding: Math.max(pipelineValue - collected, 0),
+    outstanding: leads.reduce((sum, lead) => sum + Math.max(Number(lead.grand_total ?? 0) - Number(lead.amt_paid ?? 0), 0), 0),
     fullyPaidCount: leads.filter((l) => Number(l.grand_total) > 0 && Number(l.amt_paid) >= Number(l.grand_total))
       .length,
     openComplaints: (complaintsRes.data ?? []).filter((c) => (c as { status: string }).status !== "Resolved").length,
