@@ -325,7 +325,9 @@ function SelectedLeadPreview({
   // real Log Payment flow; a walk-in has no ledger to diverge from, so a
   // plain typed figure is the legitimate case for one.
   const [walkInAmountPaid, setWalkInAmountPaid] = useState("0");
-  const amountPaidOverride = isWalkIn ? Number(walkInAmountPaid) || 0 : undefined;
+  const parsedWalkInAmountPaid = Number(walkInAmountPaid);
+  const walkInAmountValid = walkInAmountPaid.trim() !== "" && Number.isFinite(parsedWalkInAmountPaid) && parsedWalkInAmountPaid >= 0;
+  const amountPaidOverride = isWalkIn && walkInAmountValid ? parsedWalkInAmountPaid : undefined;
 
   const { data: generations } = useContractGenerations();
   const latestGen = isWalkIn ? null : (generations ?? []).filter((g) => g.leadId === lead.id)[0] ?? null;
@@ -356,6 +358,7 @@ function SelectedLeadPreview({
   }
 
   function generateNow() {
+    if (isWalkIn && !walkInAmountValid) return;
     if (selected) {
       generate.mutate(
         {
@@ -413,8 +416,10 @@ function SelectedLeadPreview({
               <Input
                 type="number"
                 min={0}
+                step="0.01"
                 value={walkInAmountPaid}
                 onChange={(e) => setWalkInAmountPaid(e.target.value)}
+                aria-invalid={!walkInAmountValid}
                 className="mt-0.5 h-7 w-32"
               />
             ) : (
@@ -438,6 +443,8 @@ function SelectedLeadPreview({
         </div>
       )}
 
+      {isWalkIn && !walkInAmountValid && <p className="text-sm text-destructive">Enter a valid amount paid of zero or more.</p>}
+
       <div className="flex items-center gap-2">
         {!hasKyc ? (
           <p className="text-sm text-muted-foreground">No KYC details captured yet — those fields will render blank on the PDF.</p>
@@ -459,9 +466,9 @@ function SelectedLeadPreview({
       {templateOptions.length > 0 && (
         <div className="space-y-1.5">
           <Label>Template {isWalkIn && <span className="text-destructive">*</span>}</Label>
-          <Select value={templateVersionId} onValueChange={setTemplateVersionId}>
+          <Select value={isWalkIn && !selected ? "" : templateVersionId} onValueChange={setTemplateVersionId}>
             <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
+              <SelectValue placeholder={isWalkIn ? "Choose a published contract template" : "Standard (legacy document)"} />
             </SelectTrigger>
             <SelectContent>
               {/* Walk-in has no v1-parity legacy-document fallback -- that
@@ -480,7 +487,9 @@ function SelectedLeadPreview({
         </div>
       )}
 
-      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && !selected)} onClick={generateNow}>
+      {isWalkIn && templateOptions.length === 0 && <p className="text-sm text-muted-foreground">No published contract template is available. Ask Contract administration to publish one.</p>}
+
+      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && (!selected || !walkInAmountValid))} onClick={generateNow}>
         <FileDown />
         {generate.isPending ? "Generating…" : "Generate & download PDF"}
       </Button>
@@ -497,4 +506,3 @@ function SelectedLeadPreview({
     </div>
   );
 }
-
