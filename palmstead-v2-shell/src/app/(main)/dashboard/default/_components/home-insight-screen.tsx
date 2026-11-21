@@ -17,7 +17,7 @@ type LeadRow = {
   name: string;
   agent_key: string;
   stage: string | null;
-  date: string | null;
+  date_added: string | null;
   grand_total: number | null;
   amt_paid: number | null;
 };
@@ -48,9 +48,9 @@ async function loadInsight(staffKey: string, isManager: boolean, metric: Metric)
     return { leads: [] as LeadRow[], complaints: ((data ?? []) as ComplaintRow[]).filter((row) => row.status !== "Resolved") };
   }
   const query = client.from("leads")
-    .select("id,name,agent_key,stage,date,grand_total,amt_paid")
+    .select("id,name,agent_key,stage,date_added,grand_total,amt_paid")
     .is("deleted_at", null)
-    .order("date", { ascending: false });
+    .order("date_added", { ascending: false });
   const { data, error } = await (isManager ? query : query.eq("agent_key", staffKey));
   if (error) throw error;
   const leads = ((data ?? []) as LeadRow[]).filter((lead) => {
@@ -110,7 +110,7 @@ export function HomeInsightScreen({ metric: rawMetric }: { metric?: string }) {
           </Link>
         )) : (rows as LeadRow[]).map((row) => (
           <Link key={row.id} href={row.agent_key === "company" ? `/dashboard/company-leads/${row.id}` : `/dashboard/pipeline/${row.id}`} className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-primary sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0"><p className="truncate font-medium">{row.name}</p><p className="mt-1 text-sm text-muted-foreground">{row.agent_key === "company" ? "Company lead" : isManager ? row.agent_key : "My lead"} · {row.date || "No date"}</p></div>
+            <div className="min-w-0"><p className="truncate font-medium">{row.name}</p><p className="mt-1 text-sm text-muted-foreground">{row.agent_key === "company" ? "Company lead" : isManager ? row.agent_key : "My lead"} · {row.date_added || "No date"}</p></div>
             <div className="flex items-center justify-between gap-4 sm:justify-end"><div className="text-sm tabular-nums"><p>{ghs(row.grand_total ?? 0)} total</p><p className="text-muted-foreground">{ghs(Math.max(Number(row.grand_total ?? 0) - Number(row.amt_paid ?? 0), 0))} due</p></div><ArrowUpRight className="size-4 shrink-0 text-muted-foreground" /></div>
           </Link>
         ))}
