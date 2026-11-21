@@ -72,7 +72,21 @@ function contractField(doc: jsPDF, x: number, y: number, w: number, label: strin
   const lab = label ? label + ': ' : '';
   const labW = lab ? doc.getTextWidth(lab) : 0;
   if (lab) doc.text(lab, x, y);
-  if (value) doc.text(String(value), x + labW + 1, y);
+  if (value) {
+    const fieldValue = String(value).replace(/\s+/g, ' ').trim();
+    const available = w - labW - 3;
+    if (available <= 0) throw new Error(`The ${label || 'contract'} field has no room for its value.`);
+    let size = 10.5;
+    while (size > 8 && doc.getTextWidth(fieldValue) > available) {
+      size -= 0.5;
+      doc.setFontSize(size);
+    }
+    if (doc.getTextWidth(fieldValue) > available) {
+      throw new Error(`The ${label || 'contract'} entry is too long for the reference form. Shorten it before generating the PDF.`);
+    }
+    doc.text(fieldValue, x + labW + 1, y);
+    doc.setFontSize(10.5);
+  }
   doc.setDrawColor(...CONTRACT_INK);
   doc.setLineDashPattern([0.6, 0.6], 0);
   doc.line(x + labW, y + 0.8, x + w, y + 0.8);
@@ -375,7 +389,12 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 9;
   doc.setFont('times', 'normal');
   doc.setFontSize(10.5);
-  doc.text('NAME OF CLIENT: ' + String(lead.name || '').toUpperCase(), 14, y);
+  const nameLabel = 'NAME OF CLIENT: ';
+  doc.text(nameLabel, 14, y);
+  const nameValueX = 14 + doc.getTextWidth(nameLabel) + 1;
+  fitContractName(doc, purchaserName, pageW - nameValueX - 14);
+  doc.text(purchaserName, nameValueX, y);
+  doc.setFontSize(10.5);
   y += 10;
   const k = lead.kyc || {};
   contractField(doc, 14, y, 86, 'NATIONALITY', k.nationality || '');
