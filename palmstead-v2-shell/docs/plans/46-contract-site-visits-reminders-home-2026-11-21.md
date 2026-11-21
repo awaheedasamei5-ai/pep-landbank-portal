@@ -4,7 +4,7 @@
 
 - Site Visit source choice and separate Experience/Reports actions shipped in V2 PR #111. Home metric drill-down shipped in #112. Operations reminder service repair shipped in #113. The production reminder configuration function returned HTTP 200 and the scheduled worker returned 200; this browser did not grant notification permission, so an actual subscribed device alert is still unverified.
 - The supplied reference and a V2-generated PDF are both ten A4 pages, but equal page counts conceal significant layout differences. The reference uses embedded Goudy Old Style, while the app uses Times. Page 2's party block was roughly 30 mm too low, omitted the vendor postal line and client reference, and put the logo/letterhead about 30 mm too low. Page 10's signature rows were 2–11 mm too low and had different column positions. The current code still has no authoritative client-reference field equivalent to the example's printed code. Do not substitute a government ID or invent one.
-- This contract slice corrects title/signature positioning and handles a two-line purchaser name without crossing the signing fields. A synthetic ordinary and long-name PDF retained ten pages. The private filled reference and its extracted contents stay outside the repository. The remaining legal-text pages, exact font, KYC fields and generated-template path need their own parity and privacy review before the contract can be called an exact reproduction.
+- This contract slice corrects title/signature positioning and handles a two-line purchaser name without crossing the signing fields. It moves registration sections and their note closer to the reference, puts checkbox squares after labels and leaves land use blank unless explicitly captured. A synthetic ordinary and long-name PDF retained ten pages. The private filled reference and its extracted contents stay outside the repository. The remaining legal-text pages, exact font, client-reference source and generated-template path need their own parity and privacy review before the contract can be called an exact reproduction.
 
 ## Contract reference page map
 
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 1 | Full-page photograph | Existing cover asset; verify image placement in generated documents. |
 | 2 | Parties, address, client reference, logo and office address | Repositioned parties and logo; add a reliable client reference only after the source is mapped. Font remains different. |
-| 3–4 | Registration, identity, contact, package, payment and official-use form | Field-by-field comparison, blank-field semantics and readability check needed. |
+| 3–4 | Registration, identity, contact, package, payment and official-use form | Section spacing and checkbox order corrected. Field-by-field content and actual Management/Staff data read-back still needed. |
 | 5 | Parties and recitals | Compare current Management legal text and dynamic party/acreage values to reference; no silent clause edits. |
 | 6 | Definitions | Verify all definitions and page boundary. |
 | 7 | Transaction and vendor warranties | Verify deposit, installment and allocation amounts against quotation and payment ledger. |
