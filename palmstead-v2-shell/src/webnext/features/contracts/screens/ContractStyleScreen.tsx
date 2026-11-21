@@ -13,7 +13,7 @@ import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useConfig, useUpdateConfig } from "../../manager/hooks/useConfigSettings";
 import { useContractStyleSettings, useUpdateContractStyleSettings } from "../hooks/useContractStyleSettings";
 import { friendlyError } from "../../../shared/lib/friendlyError";
-import { buildContractOfSalePdf } from "../lib/contractPdf";
+import { buildContractOfSalePdf, loadContractFontBase64 } from "../lib/contractPdf";
 import { ContractClauseEditor } from "../components/ContractClauseEditor";
 import type { Config, Lead } from "../../../types/domain";
 
@@ -83,7 +83,8 @@ function LegalTextCard({ config }: { config: Config }) {
         paymentPlan: "9 Months",
         amtPaid: 20016,
       } as Lead;
-      buildContractOfSalePdf(sampleLead, { ...config, contractPreamble: preamble, contractDefinitions: definitions, contractTerms: terms }, null, null);
+      const fontBase64 = await loadContractFontBase64();
+      buildContractOfSalePdf(sampleLead, { ...config, contractPreamble: preamble, contractDefinitions: definitions, contractTerms: terms }, null, null, undefined, fontBase64);
       await update.mutateAsync({ contractPreamble: preamble.trim(), contractDefinitions: definitions.trim(), contractTerms: terms.trim() });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

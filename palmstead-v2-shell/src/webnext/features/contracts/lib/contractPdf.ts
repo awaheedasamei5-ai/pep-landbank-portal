@@ -16,6 +16,37 @@ import type { Config, Lead } from '../../../types/domain';
 // an already-valid real state rather than cutting a corner.
 
 export const CONTRACT_INK: [number, number, number] = [31, 56, 99];
+const CONTRACT_GOUDY_FONT = 'SortsMillGoudy';
+const contractGoudyDocuments = new WeakSet<jsPDF>();
+let contractFontPromise: Promise<string> | null = null;
+
+// Sorts Mill Goudy is the OFL-licensed revival of the reference PDF's
+// embedded Goudy Old Style. Keep the font file and OFL notice together in
+// public/fonts. Loading the exact same bytes for the save preflight and
+// issued PDF prevents a font-width mismatch from changing page breaks.
+export function loadContractFontBase64(): Promise<string> {
+  if (!contractFontPromise) {
+    contractFontPromise = fetch('/fonts/SortsMillGoudy-Regular.ttf')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('The contract font could not be loaded. Please try again.');
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 8192) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        }
+        return btoa(binary);
+      })
+      .catch((error: unknown) => {
+        contractFontPromise = null;
+        throw error;
+      });
+  }
+  return contractFontPromise;
+}
+
+function setContractFont(doc: jsPDF, style: 'normal' | 'bold'): void {
+  doc.setFont(style === 'normal' && contractGoudyDocuments.has(doc) ? CONTRACT_GOUDY_FONT : 'times', style);
+}
 const CONTRACT_MONTH_WORDS: Record<number, string> = { 3: 'Three', 6: 'Six', 9: 'Nine', 12: 'Twelve' };
 const CONTRACT_CHECKBOX_SIZE = 4.8;
 
@@ -83,7 +114,7 @@ export function contractNewPage(doc: jsPDF, n: number): number {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   contractBorder(doc, pageW, pageH);
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(9);
   doc.setTextColor(90, 110, 150);
   doc.text('pg. ' + n, 14, pageH - 14);
@@ -92,7 +123,7 @@ export function contractNewPage(doc: jsPDF, n: number): number {
 }
 
 function contractField(doc: jsPDF, x: number, y: number, w: number, label: string, value: string) {
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   doc.setTextColor(...CONTRACT_INK);
   const lab = label ? label + ': ' : '';
@@ -130,7 +161,7 @@ function contractField(doc: jsPDF, x: number, y: number, w: number, label: strin
 
 function contractCheckbox(doc: jsPDF, x: number, y: number, label: string, checked: boolean): number {
   const s = CONTRACT_CHECKBOX_SIZE;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   if (label) doc.text(label, x, y);
   const boxX = x + (label ? doc.getTextWidth(label) + 2 : 0);
@@ -138,16 +169,18 @@ function contractCheckbox(doc: jsPDF, x: number, y: number, label: string, check
   doc.setLineWidth(0.4);
   doc.rect(boxX, y - 4.2, s, s);
   if (checked) {
-    doc.setFont('times', 'bold');
+    setContractFont(doc, 'bold');
     doc.setFontSize(9);
     doc.text('X', boxX + 1.2, y - 0.3);
   }
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   return boxX + s + 7;
 }
 
 function contractCheckRow(doc: jsPDF, x: number, y: number, pageW: number, options: string[], selected: string): number {
+  setContractFont(doc, 'normal');
+  doc.setFontSize(10.5);
   let cx = x;
   options.forEach((opt) => {
     const w = CONTRACT_CHECKBOX_SIZE + 2 + doc.getTextWidth(opt) + 7;
@@ -189,11 +222,11 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
     const lines: string[] = doc.splitTextToSize(body, w);
     const h = Math.max(lines.length * sp.lineH, sp.lineH);
     ensure(h + sp.itemGap);
-    doc.setFont('times', boldMarker ? 'bold' : 'normal');
+    setContractFont(doc, boldMarker ? 'bold' : 'normal');
     doc.setFontSize(10);
     doc.setTextColor(...CONTRACT_INK);
     doc.text(marker, markerX, y);
-    doc.setFont('times', 'normal');
+    setContractFont(doc, 'normal');
     doc.setFontSize(10);
     doc.text(body, bodyX, y, { maxWidth: w, align: 'justify' });
     y += h + sp.itemGap;
@@ -209,7 +242,7 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
       const romanOrLetter = !isSectionHeading && !threeLevel && para.match(/^((?:[ivx]+|[a-z]))\.\s+([\s\S]+)$/i);
       const twoLevel = !isSectionHeading && !threeLevel && !romanOrLetter && para.match(/^(\d+\.\d+)\s+([\s\S]+)$/);
       if (isSectionHeading) {
-        doc.setFont('times', 'bold');
+        setContractFont(doc, 'bold');
         doc.setFontSize(12.5);
         const hLines: string[] = doc.splitTextToSize(para, marginR - 14);
         ensure(hLines.length * sp.headLineH + sp.headLead * 2);
@@ -224,7 +257,7 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
         const bodyIsHeading = twoLevel[2] === twoLevel[2].toUpperCase() && twoLevel[2].length < 40;
         if (bodyIsHeading) {
           ensure(sp.subheadGap);
-          doc.setFont('times', 'bold');
+          setContractFont(doc, 'bold');
           doc.setFontSize(11);
           doc.text(twoLevel[1] + '  ' + twoLevel[2], 14, y);
           y += sp.subheadGap;
@@ -236,7 +269,7 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
         const lines: string[] = doc.splitTextToSize(para, w);
         const h = lines.length * sp.lineH;
         ensure(h + sp.paraGap);
-        doc.setFont('times', 'normal');
+        setContractFont(doc, 'normal');
         doc.setFontSize(10);
         doc.text(para, 14, y, { maxWidth: w, align: 'justify' });
         y += h + sp.paraGap;
@@ -268,7 +301,7 @@ function contractUnderlinedPara(doc: jsPDF, y: number, n: number, underlinedText
   const w = pageW - 28;
   const lineH = CONTRACT_SPACING_ROOMY.lineH;
   const fullText = underlinedText + restText;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...CONTRACT_INK);
   const lines: string[] = doc.splitTextToSize(fullText, w);
@@ -301,7 +334,7 @@ function contractLeadBoldPara(doc: jsPDF, y: number, n: number, boldLead: string
   const w = pageW - 28;
   const sp = dense ? CONTRACT_SPACING_TIGHT : CONTRACT_SPACING_ROOMY;
   const fullText = boldLead + rest;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...CONTRACT_INK);
   const lines: string[] = doc.splitTextToSize(fullText, w);
@@ -315,14 +348,14 @@ function contractLeadBoldPara(doc: jsPDF, y: number, n: number, boldLead: string
       const take = Math.min(remaining, line.length);
       const boldPart = line.slice(0, take);
       const restPart = line.slice(take);
-      doc.setFont('times', 'bold');
+      setContractFont(doc, 'bold');
       doc.text(boldPart, 14, y + i * sp.lineH);
       const bw = doc.getTextWidth(boldPart);
-      doc.setFont('times', 'normal');
+      setContractFont(doc, 'normal');
       doc.text(restPart, 14 + bw, y + i * sp.lineH);
       remaining -= take;
     } else {
-      doc.setFont('times', 'normal');
+      setContractFont(doc, 'normal');
       doc.text(line, 14, y + i * sp.lineH);
     }
   });
@@ -351,8 +384,13 @@ function splitClausesBeforeMarkers(text: string, markers: string[]): string[] {
   return chunks.map((arr) => arr.join('\n\n'));
 }
 
-export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri: string | null, wordmarkDataUri: string | null, acresOverride?: number): jsPDF {
+export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri: string | null, wordmarkDataUri: string | null, acresOverride?: number, fontBase64?: string): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  if (fontBase64) {
+    doc.addFileToVFS('SortsMillGoudy-Regular.ttf', fontBase64);
+    doc.addFont('SortsMillGoudy-Regular.ttf', CONTRACT_GOUDY_FONT, 'normal');
+    contractGoudyDocuments.add(doc);
+  }
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const t = computeLeadQuotationTotals(config, lead);
@@ -384,7 +422,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // ---- Page 2: title page ----
   n = 2;
   y = contractNewPage(doc, n);
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   // Match the reference title leaf's five distinct baselines. The vendor
   // address is part of the party block, not the letterhead at the foot.
@@ -392,15 +430,15 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   doc.text('BETWEEN', pageW / 2, 73.6, { align: 'center' });
   doc.text(vendorName, pageW / 2, 92.2, { align: 'center' });
   centeredAddress(doc, '(' + vendorAddress + ')', 96.9, 2, pageW - 28);
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.text('AND', pageW / 2, 115.5, { align: 'center' });
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   const purchaserName = String(lead.name || '').trim().toUpperCase();
   if (!purchaserName) throw new Error('Add the client name before generating the Contract of Sale.');
   fitContractName(doc, purchaserName, pageW - 28);
   doc.text(purchaserName, pageW / 2, 134.1, { align: 'center' });
   if (purchaserAddress) {
-    doc.setFont('times', 'normal');
+    setContractFont(doc, 'normal');
     centeredAddress(doc, '(' + purchaserAddress + ')', 139, 2, pageW - 28);
   }
   if (wordmarkDataUri) {
@@ -410,25 +448,25 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
       // A malformed wordmark shouldn't block the rest of the document.
     }
   }
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(11);
   centeredAddress(doc, vendorAddress, 199.3, 2, pageW - 28);
 
   // ---- Page 3: KYC I-III ----
   n = 3;
   y = contractNewPage(doc, n);
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('KNOW YOUR CUSTOMER AND TRANSACTION DETAILS', pageW / 2, y, { align: 'center' });
   y += 6;
   doc.setFontSize(9.5);
   doc.text('PLEASE READ CAREFULLY AND COMPLETE ALL RELEVANT SECTIONS.', pageW / 2, y, { align: 'center' });
   y += 11;
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('I. PERSONAL DETAILS', 14, y);
   y += 9;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   const nameLabel = 'NAME OF CLIENT: ';
   doc.text(nameLabel, 14, y);
@@ -455,11 +493,11 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractField(doc, 108, y, 86, 'LOCATION', k.location || '');
   y += 10;
 
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('II. CONTACT PERSON', 14, y);
   y += 9;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   contractField(doc, 14, y, pageW - 28, 'NAME', k.contactName || '');
   y += 9;
@@ -471,11 +509,11 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractField(doc, 14, y, pageW - 28, 'RELATION TO CLIENT', k.contactRelation || '');
   y += 11;
 
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('III. LAND USAGE AND DEVELOPMENT', 14, y);
   y += 11;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   contractCheckRow(doc, 14, y, pageW, ['Residential', 'Commercial'], k.landUsage || '');
   y += 11;
@@ -491,36 +529,34 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // ---- Page 4: KYC IV-VI ----
   n = 4;
   y = contractNewPage(doc, n);
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('IV. MODE OF PAYMENT:', 14, y);
   y += 10;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   contractCheckRow(doc, 14, y, pageW, ['1. Cheque', '2. Bank deposit', '3. Momo', '5. Bank Transfer'], '');
   y += 10;
   doc.text('All cheques should be written in the name of "' + vendorName + '"', 14, y);
   y += 10;
 
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   const hdLines: string[] = doc.splitTextToSize('V. HOW DID YOU HEAR ABOUT US? Please help us appreciate how you heard about ' + (config.quoteCompanyName || 'Trulander JSF Limited') + '.', pageW - 28);
   doc.text(hdLines, 14, y);
   y += hdLines.length * 5.5 + 6;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
-  contractCheckRow(doc, 14, y, pageW, ['1.Facebook', '2. Instagram', '3. LinkedIn', '4. Google', '5. TikTok', '6. Website'], '');
-  y += 10;
-  contractCheckRow(doc, 14, y, pageW, ['7.Friends and Relatives', '8. Sales Executive'], '');
-  y += 10;
+  y = contractCheckRow(doc, 14, y, pageW, ['1.Facebook', '2. Instagram', '3. LinkedIn', '4. Google', '5. TikTok', '6. Website'], '') + 2;
+  y = contractCheckRow(doc, 14, y, pageW, ['7.Friends and Relatives', '8. Sales Executive'], '') + 2;
   contractField(doc, 14, y, pageW - 28, 'Name of Sales Executive', '');
   y += 14;
 
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.text('VI. OFFICIAL USE ONLY', 14, y);
   y += 10;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   doc.text('Payment Terms: Cash', 14, y);
   contractCheckbox(doc, 52, y, '', false);
@@ -539,11 +575,11 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractField(doc, 108, y, 86, 'Amount due monthly: GHS', t.monthlyDue ? contractMoney(t.monthlyDue).replace('GHS ', '') : '');
   y += 15;
 
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(10.5);
   doc.text('MANAGER', 14, y);
   y += 10;
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   contractField(doc, 14, y, pageW - 28, 'Name', '');
   y += 10;
   contractField(doc, 14, y, pageW - 28, 'Sign.', '');
@@ -556,7 +592,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // ---- Page 5: Contract of Sale opening + WHEREAS ----
   n = 5;
   y = contractNewPage(doc, n);
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(12);
   doc.text('CONTRACT OF SALE', pageW / 2, y, { align: 'center' });
   doc.setLineWidth(0.3);
@@ -579,7 +615,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
     ' herein called "the Purchaser", which expression shall, where the context so requires, include his legal heirs, successors, successors-in-interest, executors, legal representatives, and/or assigns) of the other part.',
   ));
   ({ y, n } = contractLeadBoldPara(doc, y, n, 'The Purchaser and the Vendor shall where the context so require be referred as "the Parties" and individually as "a party"', ''));
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(10.5);
   doc.setTextColor(...CONTRACT_INK);
   doc.text('WHEREAS;', 14, y);
@@ -645,7 +681,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
       n++;
       y = contractNewPage(doc, n);
     }
-    doc.setFont('times', 'bold');
+    setContractFont(doc, 'bold');
     doc.setFontSize(11);
     doc.setTextColor(...CONTRACT_INK);
     doc.text('{SIGNATURE PAGE TO FOLLOW}', pageW / 2, y, { align: 'center' });
@@ -658,7 +694,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   const purchaserX = 111.3;
   const witnessX = 25.4;
   const colW = 86;
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...CONTRACT_INK);
   const vLines: string[] = doc.splitTextToSize('SIGNED AND DELIVERED ON BEHALF OF THE VENDOR:', colW);
@@ -667,7 +703,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   doc.text(pLines, purchaserX, 25.5);
   drawContractPartyName(doc, vendorName, vendorX, 39.5, colW);
   drawContractPartyName(doc, purchaserName, purchaserX, 39.5, colW);
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.setFontSize(11);
   const sigRows: [string, string][] = [
     ['Sign', '............................................'],
@@ -679,10 +715,10 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
     doc.text(lab + ' ' + dots, vendorX, rowY);
     doc.text(lab + ' ' + dots, purchaserX, rowY);
   });
-  doc.setFont('times', 'bold');
+  setContractFont(doc, 'bold');
   doc.text('WITNESS:', witnessX, 109.3);
   doc.text('WITNESS:', purchaserX, 109.3);
-  doc.setFont('times', 'normal');
+  setContractFont(doc, 'normal');
   doc.text('In the presence of:', witnessX, 123.2);
   doc.text('In the presence of:', purchaserX, 123.2);
   sigRows.forEach(([lab, dots], index) => {
