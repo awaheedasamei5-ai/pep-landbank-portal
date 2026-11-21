@@ -18,6 +18,27 @@ import type { Config, Lead } from '../../../types/domain';
 export const CONTRACT_INK: [number, number, number] = [31, 56, 99];
 const CONTRACT_MONTH_WORDS: Record<number, string> = { 3: 'Three', 6: 'Six', 9: 'Nine', 12: 'Twelve' };
 
+function fitContractName(doc: jsPDF, name: string, maxWidth: number): number {
+  for (let size = 11; size >= 8.5; size -= 0.5) {
+    doc.setFontSize(size);
+    if (doc.getTextWidth(name) <= maxWidth) return size;
+  }
+  throw new Error('The client name is too long for the reference contract layout. Shorten it before generating the PDF.');
+}
+
+function drawContractPartyName(doc: jsPDF, name: string, x: number, y: number, maxWidth: number): void {
+  doc.setFontSize(11);
+  let lines: string[] = doc.splitTextToSize(name, maxWidth);
+  if (lines.length > 2) {
+    doc.setFontSize(9.5);
+    lines = doc.splitTextToSize(name, maxWidth);
+  }
+  if (lines.length > 2) {
+    throw new Error('The client name needs more than two signature lines. Shorten it before generating the PDF.');
+  }
+  doc.text(lines, x, y, { lineHeightFactor: 1.2 });
+}
+
 // CONTRACT_OF_SALE_BLUEPRINT.md §6.3/§8 -- exported so contractSectionsPdf.ts
 // (the new structured-content renderer for Preview + real generation)
 // reuses these exact primitives rather than re-deriving the page border/
@@ -308,20 +329,31 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   n = 2;
   y = contractNewPage(doc, n);
   doc.setFont('times', 'bold');
-  doc.setFontSize(14);
-  ['CONTRACT OF SALES', 'BETWEEN', 'TRULANDER JSF LTD.', 'AND'].forEach((line, i) => doc.text(line, pageW / 2, 90 + i * 13, { align: 'center' }));
-  doc.text(String(lead.name || '').toUpperCase(), pageW / 2, 90 + 4 * 13 + 8, { align: 'center' });
+  doc.setFontSize(11);
+  // Match the reference title leaf's five distinct baselines. The vendor
+  // address is part of the party block, not the letterhead at the foot.
+  doc.text('CONTRACT OF SALES', pageW / 2, 55, { align: 'center' });
+  doc.text('BETWEEN', pageW / 2, 73.6, { align: 'center' });
+  doc.text('TRULANDER JSF LTD.', pageW / 2, 92.2, { align: 'center' });
+  doc.text('(P. O. BOX CO 3644, TEMA)', pageW / 2, 96.9, { align: 'center' });
+  doc.setFont('times', 'normal');
+  doc.text('AND', pageW / 2, 115.5, { align: 'center' });
+  doc.setFont('times', 'bold');
+  const purchaserName = String(lead.name || '').trim().toUpperCase();
+  if (!purchaserName) throw new Error('Add the client name before generating the Contract of Sale.');
+  fitContractName(doc, purchaserName, pageW - 28);
+  doc.text(purchaserName, pageW / 2, 134.1, { align: 'center' });
   if (wordmarkDataUri) {
     try {
-      doc.addImage(wordmarkDataUri, 'PNG', pageW / 2 - 25, 205, 50, 25);
+      doc.addImage(wordmarkDataUri, 'PNG', pageW / 2 - 25, 174, 50, 18);
     } catch {
       // A malformed wordmark shouldn't block the rest of the document.
     }
   }
   doc.setFont('times', 'normal');
-  doc.setFontSize(10.5);
-  doc.text('Post Office Box CO 3644', pageW / 2, 235, { align: 'center' });
-  doc.text('Tema', pageW / 2, 241, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text('Post Office Box CO 3644', pageW / 2, 199.3, { align: 'center' });
+  doc.text('Tema', pageW / 2, 204, { align: 'center' });
 
   // ---- Page 3: KYC I-III ----
   n = 3;
@@ -554,44 +586,46 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // ---- Signature page ----
   n++;
   y = contractNewPage(doc, n);
-  const colW = pageW / 2 - 14;
+  const vendorX = 12.7;
+  const purchaserX = 111.3;
+  const witnessX = 25.4;
+  const colW = 86;
   doc.setFont('times', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(...CONTRACT_INK);
   const vLines: string[] = doc.splitTextToSize('SIGNED AND DELIVERED ON BEHALF OF THE VENDOR:', colW);
   const pLines: string[] = doc.splitTextToSize('SIGNED AND DELIVERED ON BEHALF OF THE PURCHASER:', colW);
-  doc.text(vLines, 14, y);
-  doc.text(pLines, pageW / 2 + 4, y);
-  y += Math.max(vLines.length, pLines.length) * 5.5 + 10;
-  doc.text(vendorName, 14, y);
-  doc.text(String(lead.name || '').toUpperCase(), pageW / 2 + 4, y);
-  y += 14;
+  doc.text(vLines, vendorX, 25.5);
+  doc.text(pLines, purchaserX, 25.5);
+  drawContractPartyName(doc, vendorName, vendorX, 39.5, colW);
+  drawContractPartyName(doc, purchaserName, purchaserX, 39.5, colW);
   doc.setFont('times', 'normal');
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   const sigRows: [string, string][] = [
-    ['Sign', '…………………………………....'],
-    ['Name', '…………………………………....'],
-    ['Designation', '…………………………………....'],
+    ['Sign', '............................................'],
+    ['Name:', '............................................'],
+    ['Designation:', '....................................'],
   ];
-  sigRows.forEach(([lab, dots]) => {
-    doc.text(lab + ' ' + dots, 14, y);
-    doc.text(lab + ' ' + dots, pageW / 2 + 4, y);
-    y += 16;
+  sigRows.forEach(([lab, dots], index) => {
+    const rowY = [58.2, 72.1, 86][index];
+    doc.text(lab + ' ' + dots, vendorX, rowY);
+    doc.text(lab + ' ' + dots, purchaserX, rowY);
   });
-  y += 8;
   doc.setFont('times', 'bold');
-  doc.text('WITNESS:', 14, y);
-  doc.text('WITNESS:', pageW / 2 + 4, y);
-  y += 8;
+  doc.text('WITNESS:', witnessX, 109.3);
+  doc.text('WITNESS:', purchaserX, 109.3);
   doc.setFont('times', 'normal');
-  doc.text('In the presence of:', 14, y);
-  doc.text('In the presence of:', pageW / 2 + 4, y);
-  y += 10;
-  sigRows.forEach(([lab, dots]) => {
-    doc.text(lab + ': ' + dots, 14, y);
-    doc.text(lab + ': ' + dots, pageW / 2 + 4, y);
-    y += 16;
+  doc.text('In the presence of:', witnessX, 123.2);
+  doc.text('In the presence of:', purchaserX, 123.2);
+  sigRows.forEach(([lab, dots], index) => {
+    const rowY = [132.5, 141.9, 155.8][index];
+    doc.text(lab + ' ' + dots, witnessX, rowY);
+    doc.text(lab + ' ' + dots, purchaserX, rowY);
   });
+
+  if (doc.getNumberOfPages() !== 10) {
+    throw new Error('The contract text no longer fits the required ten-page layout. Review the contract wording before generating it.');
+  }
 
   return doc;
 }
@@ -599,3 +633,4 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
 export function contractFilename(clientName: string): string {
   return `ContractOfSale_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
 }
+
