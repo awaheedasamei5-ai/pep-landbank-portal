@@ -460,25 +460,23 @@ function SelectedLeadPreview({
         </div>
       )}
 
-      {(
-        <div className="space-y-1.5">
-          <Label>Document layout</Label>
-          <Select value={templateVersionId} onValueChange={setTemplateVersionId}>
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__standard__">Standard company document (10 pages)</SelectItem>
-              {templateOptions.map((o) => (
-                <SelectItem key={o.version.id} value={o.version.id}>
-                  {o.templateName} · v{o.version.versionNumber}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selected && <p className="text-xs text-muted-foreground">Published templates use their own page layout. Check the preview before issuing.</p>}
-        </div>
-      )}
+      <div className="space-y-1.5">
+        <Label>Document layout</Label>
+        <Select value={templateVersionId} onValueChange={setTemplateVersionId}>
+          <SelectTrigger className="w-full sm:w-80">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__standard__">Standard company document (10 pages)</SelectItem>
+            {templateOptions.map((o) => (
+              <SelectItem key={o.version.id} value={o.version.id}>
+                {o.templateName} · v{o.version.versionNumber}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selected && <p className="text-xs text-muted-foreground">Published templates use their own page layout. Check the preview before issuing.</p>}
+      </div>
 
       {isWalkIn && publishedVersionsLoading && <p className="text-sm text-muted-foreground">Loading additional published templates…</p>}
 
