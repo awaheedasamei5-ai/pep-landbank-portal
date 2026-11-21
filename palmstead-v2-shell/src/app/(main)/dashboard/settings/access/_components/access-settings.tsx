@@ -29,6 +29,16 @@ const SUPPORTED_KEYS = [
   "company_leads.create",
   "announcements.view",
   "announcements.comment",
+  "allocations.manage",
+  "contracts.generate",
+  "payments.manage",
+  "polls.create",
+];
+const ACCESS_GROUPS = [
+  { title: "Operations", keys: SUPPORTED_KEYS.filter((key) => key.startsWith("operations.")) },
+  { title: "Sales and finance", keys: ["company_leads.view", "company_leads.create", "allocations.manage", "contracts.generate", "payments.manage"] },
+  { title: "Communication", keys: ["announcements.view", "announcements.comment", "memorandum.view", "memorandum.manage", "polls.create"] },
+  { title: "Personal workspace", keys: ["notes.view", "notes.manage"] },
 ];
 
 export function AccessSettings() {
@@ -120,8 +130,8 @@ export function AccessSettings() {
       <div className="flex flex-col gap-1">
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
-          Choose a staff member, then set their access to Operations, Notes, Memorandum, Company Leads and Announcements.
-          Denying view also blocks actions within that area. Project access covers work items, comments and reports.
+          Choose a staff member, then set the access they need for each area. A view restriction also blocks actions
+          within that area. Payment controls apply to payment records, not the entire Accounting app.
         </p>
       </div>
       {loading && (
@@ -170,8 +180,12 @@ export function AccessSettings() {
             </CardContent>
           </Card>
           {person && (
-            <div className="grid min-w-0 gap-3">
-              {permissions.map((permission) => {
+            <div className="grid min-w-0 gap-6">
+              {ACCESS_GROUPS.map((group) => <section key={group.title} className="grid min-w-0 gap-3" aria-label={group.title}>
+                <h2 className="text-lg font-semibold">{group.title}</h2>
+                {group.keys.map((key) => {
+                const permission = permissions.find((entry) => entry.key === key);
+                if (!permission) return null;
                 const override = overrides.find(
                   (entry) => entry.staff_key === person.agent_key && entry.permission_key === permission.key,
                 );
@@ -190,9 +204,10 @@ export function AccessSettings() {
                   (entry) => entry.role === person.role && entry.permission_key === viewKey,
                 );
                 const viewAllowed = viewOverride ? viewOverride.granted : viewRoleAllows;
+                const hasViewDependency = SUPPORTED_KEYS.includes(viewKey) && viewKey !== permission.key;
                 const effective =
                   (override ? override.granted : roleAllows) &&
-                  (!/\.(manage|create|comment)$/.test(permission.key) || viewAllowed);
+                  (!hasViewDependency || viewAllowed);
                 return (
                   <Card key={permission.key} className="min-w-0">
                     <CardHeader className="gap-2">
@@ -232,7 +247,8 @@ export function AccessSettings() {
                     </CardContent>
                   </Card>
                 );
-              })}
+                })}
+              </section>)}
             </div>
           )}
         </>
