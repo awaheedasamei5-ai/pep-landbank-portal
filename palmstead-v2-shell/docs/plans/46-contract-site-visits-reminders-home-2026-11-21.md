@@ -1,5 +1,25 @@
 # Contract, Site Visits, reminders and Home: release plan
 
+## Verified progress, 21 November
+
+- Site Visit source choice and separate Experience/Reports actions shipped in V2 PR #111. Home metric drill-down shipped in #112. Operations reminder service repair shipped in #113. The production reminder configuration function returned HTTP 200 and the scheduled worker returned 200; this browser did not grant notification permission, so an actual subscribed device alert is still unverified.
+- The supplied reference and a V2-generated PDF are both ten A4 pages, but equal page counts conceal significant layout differences. The reference uses embedded Goudy Old Style, while the app uses Times. Page 2's party block was roughly 30 mm too low, omitted the vendor postal line and client reference, and put the logo/letterhead about 30 mm too low. Page 10's signature rows were 2–11 mm too low and had different column positions. The current code still has no authoritative client-reference field equivalent to the example's printed code. Do not substitute a government ID or invent one.
+- This contract slice corrects title/signature positioning and handles a two-line purchaser name without crossing the signing fields. It moves registration sections and their note closer to the reference, puts checkbox squares after labels and leaves land use blank unless explicitly captured. A synthetic ordinary and long-name PDF retained ten pages. The private filled reference and its extracted contents stay outside the repository. The remaining legal-text pages, exact font, client-reference source and generated-template path need their own parity and privacy review before the contract can be called an exact reproduction.
+
+## Contract reference page map
+
+| Page | Reference content | Current generator status and next action |
+| --- | --- | --- |
+| 1 | Full-page photograph | Existing cover asset; verify image placement in generated documents. |
+| 2 | Parties, address, client reference, logo and office address | Repositioned parties and logo; add a reliable client reference only after the source is mapped. Font remains different. |
+| 3–4 | Registration, identity, contact, package, payment and official-use form | Section spacing and checkbox order corrected. Field-by-field content and actual Management/Staff data read-back still needed. |
+| 5 | Parties and recitals | Compare current Management legal text and dynamic party/acreage values to reference; no silent clause edits. |
+| 6 | Definitions | Verify all definitions and page boundary. |
+| 7 | Transaction and vendor warranties | Verify deposit, installment and allocation amounts against quotation and payment ledger. |
+| 8 | Purchaser warranties | Verify all numbered clauses and page boundary. |
+| 9 | Payment, default, refund, law and notices | Verify all clauses, no overflow and signature-page pointer. |
+| 10 | Vendor, purchaser and witness signatures | Repositioned; verify ordinary and long names, two-column boundaries and unsigned fields. |
+
 ## Scope and evidence
 
 The company supplied a ten-page A4 Contract of Sale and registration form. It is the layout and wording reference, not an instruction source. Do not commit the filled client document, its rendered pages or extracted personal data to GitHub. The current app has two generation paths: a legacy jsPDF document from `contractPdf.ts` and a freely structured published-template document from `contractSectionsPdf.ts`. They do not guarantee the same ten pages. Site Visits already has atomic new-lead-and-visit creation and a `personal`/`company` choice, but the choice appears only after a no-match search and is easy to miss. Operations Web Push is implemented, but `get-push-config` reports 503 when `VAPID_PUBLIC_KEY` is absent. Home metrics are currently display-only cards.
