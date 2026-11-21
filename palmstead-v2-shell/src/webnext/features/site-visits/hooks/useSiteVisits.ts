@@ -36,7 +36,7 @@ export function useSiteVisits() {
 
 // User ask: "a section for site visit records for each staff, very
 // detailed." Company-wide (real site_visits_sel RLS already scopes this
-// to manager/ops.view_all, same fact useWeekSiteVisits already relies
+// to Management or site_visits.view_all, same fact useWeekSiteVisits relies
 // on) -- SiteVisitsScreen uses this instead of useSiteVisits() when a
 // manager picks "All staff" or a specific staff member.
 export function useAllSiteVisits() {
