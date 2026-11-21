@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useContractClauses, useCreateContractClause } from "../hooks/useContractTemplates";
 
 const UNCATEGORIZED = "Uncategorized";
@@ -21,7 +21,7 @@ const UNCATEGORIZED = "Uncategorized";
 // clause group having a separate page", restructuring the prior single
 // side-panel Clause Library into real dedicated routes, one per group.
 export function ContractClausesScreen() {
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: clauses, isLoading } = useContractClauses();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -142,3 +142,4 @@ function NewClauseDialog({ open, onOpenChange, categories }: { open: boolean; on
     </Dialog>
   );
 }
+
