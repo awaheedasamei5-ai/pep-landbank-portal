@@ -7,7 +7,6 @@ import { FileDown, UserPlus, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +20,7 @@ import { useConfig } from "../../manager/hooks/useConfigSettings";
 import { useSessionStore } from "../../../auth/useSessionStore";
 import { ghs } from "../../../shared/lib/format";
 import { LeadKycDialog } from "../components/LeadKycDialog";
+import { ContractClauseEditor } from "../components/ContractClauseEditor";
 import { resolveContractFields, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
 import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from "../hooks/useContractAi";
 import { useContractDrafts, useDeleteContractDraft, useUpdateContractDraft } from "../hooks/useContractDrafts";
@@ -523,9 +523,9 @@ function SelectedLeadPreview({
             <Button type="button" variant="outline" size="sm" onClick={() => { if (!temporaryLegalOpen && config) { setTemporaryPreamble(config.contractPreamble); setTemporaryDefinitions(config.contractDefinitions); setTemporaryTerms(config.contractTerms); } setTemporaryLegalOpen(!temporaryLegalOpen); }}>{temporaryLegalOpen ? "Use company standard" : "Edit for this client"}</Button>
           </div>
           {temporaryLegalOpen && <div className="space-y-3">
-            <div className="space-y-1"><Label>Opening and WHEREAS</Label><Textarea rows={6} value={temporaryPreamble} onChange={(e) => setTemporaryPreamble(e.target.value)} /></div>
-            <div className="space-y-1"><Label>Definitions</Label><Textarea rows={6} value={temporaryDefinitions} onChange={(e) => setTemporaryDefinitions(e.target.value)} /></div>
-            <div className="space-y-1"><Label>Terms and notices</Label><Textarea rows={8} value={temporaryTerms} onChange={(e) => setTemporaryTerms(e.target.value)} /></div>
+            <ContractClauseEditor label="Opening and WHEREAS" value={temporaryPreamble} onChange={setTemporaryPreamble} />
+            <ContractClauseEditor label="Definitions" value={temporaryDefinitions} onChange={setTemporaryDefinitions} />
+            <ContractClauseEditor label="Terms and notices" value={temporaryTerms} onChange={setTemporaryTerms} />
             <Button type="button" variant="ghost" size="sm" onClick={() => { if (config) { setTemporaryPreamble(config.contractPreamble); setTemporaryDefinitions(config.contractDefinitions); setTemporaryTerms(config.contractTerms); } }}>Restore company standard text</Button>
           </div>}
         </div>
