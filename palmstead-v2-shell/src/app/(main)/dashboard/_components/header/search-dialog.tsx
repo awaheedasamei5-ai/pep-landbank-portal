@@ -21,7 +21,6 @@ import type { NavMainItem } from "@/navigation/sidebar/sidebar-items";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { filterNavigation, useNavigationAccess } from "@/lib/permissions/use-navigation-access";
 import { useAuthStore } from "@/stores/auth/auth-store";
-import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { useLeads } from "@/webnext/features/pipeline/hooks/useLeads";
 import { useAllLeads } from "@/webnext/features/payments/hooks/useLogPayment";
 import { useStaffDirectory } from "@/webnext/features/memos/hooks/useMemos";
@@ -92,8 +91,9 @@ export function SearchDialog() {
   // real detail route, /dashboard/pipeline/[id]) -- reuses the exact same
   // own-vs-company-wide hooks Pipeline's own list screen already uses,
   // not a new search endpoint.
-  const isManager = useSessionStore((s) => s.profile?.role === "manager");
-  const profileKey = useAuthStore((s) => s.profile?.key);
+  const profile = useAuthStore((s) => s.profile);
+  const isManager = profile?.role === "manager";
+  const profileKey = profile?.key;
   const navigationAccess = useNavigationAccess(profileKey, isManager);
   const searchItems = React.useMemo(
     () => makeSearchItems(filterNavigation(sidebarItems, navigationAccess.data, isManager)),

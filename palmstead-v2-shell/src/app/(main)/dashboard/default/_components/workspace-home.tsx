@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { today } from "@/lib/palmstead/format";
 import { useManagerOverview } from "@/lib/palmstead/use-manager-overview";
+import { canOpenNavigationItem, useNavigationAccess } from "@/lib/permissions/use-navigation-access";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { useAnnouncements } from "../../announcements/_components/use-announcements";
 import { useMySchedule } from "../../operations/_components/use-my-schedule";
@@ -19,9 +20,14 @@ function weekEnd(start: string): string {
 
 export function WorkspaceHome() {
   const profile = useAuthStore((state) => state.profile);
+  const isManager = profile?.role === "manager";
+  const access = useNavigationAccess(profile?.key, isManager);
+  const canViewOperations = canOpenNavigationItem("operations-tracker", access.data, isManager);
+  const canViewSchedule = isManager || access.data?.["operations.todos.view"] === true || access.data?.["operations.meetings.view"] === true;
+  const canViewAnnouncements = canOpenNavigationItem("announcements", access.data, isManager);
   const start = today();
-  const schedule = useMySchedule(profile?.key, start, weekEnd(start));
-  const announcements = useAnnouncements(profile?.key);
+  const schedule = useMySchedule(canViewSchedule ? profile?.key : undefined, start, weekEnd(start));
+  const announcements = useAnnouncements(canViewAnnouncements ? profile?.key : undefined);
   const overview = useManagerOverview();
   const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 4);
   const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
@@ -40,31 +46,31 @@ export function WorkspaceHome() {
               {profile?.role === "manager" ? "Review the team and open the work that needs attention." : "Your next tasks, client visits and company updates are here."}
             </p>
           </div>
-          <Link href="/dashboard/operations?view=schedule" className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          {canViewSchedule && <Link href="/dashboard/operations?view=schedule" className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             <CalendarDays className="size-4" aria-hidden="true" /> Open schedule
-          </Link>
+          </Link>}
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-3">
-          <Link href="/dashboard/operations" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
+          {canViewOperations && <Link href="/dashboard/operations" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <ClipboardList className="size-5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Operations</span><span className="block text-xs text-muted-foreground">Tasks and projects</span></span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>
+          </Link>}
           <Link href="/dashboard/site-visits" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <MapPinned className="size-5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Site visits</span><span className="block text-xs text-muted-foreground">{overview.data ? `${overview.data.siteVisitsCount} visible visits` : "Bookings and outcomes"}</span></span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </Link>
-          <Link href="/dashboard/announcements" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
+          {canViewAnnouncements && <Link href="/dashboard/announcements" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <Megaphone className="size-5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Company updates</span><span className="block text-xs text-muted-foreground">{unread ? `${unread} unread` : "News and notices"}</span></span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>
+          </Link>}
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="min-w-0">
+        {canViewSchedule && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Coming up</CardTitle>
             <Link href="/dashboard/operations?view=schedule" className="text-sm font-medium text-primary hover:underline">View schedule</Link>
@@ -80,8 +86,8 @@ export function WorkspaceHome() {
               </Link>
             ))}
           </CardContent>
-        </Card>
-        <Card className="min-w-0">
+        </Card>}
+        {canViewAnnouncements && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Company updates</CardTitle>
             <Link href="/dashboard/announcements" className="text-sm font-medium text-primary hover:underline">All updates</Link>
@@ -97,7 +103,7 @@ export function WorkspaceHome() {
               </Link>
             ))}
           </CardContent>
-        </Card>
+        </Card>}
       </div>
     </section>
   );
