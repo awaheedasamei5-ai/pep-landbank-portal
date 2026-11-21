@@ -267,7 +267,7 @@ function SelectedLeadPreview({
   const deleteDraft = useDeleteContractDraft();
   const updateDraft = useUpdateContractDraft();
   const { data: templates } = useContractTemplates();
-  const { data: publishedVersions } = usePublishedContractTemplateVersions();
+  const { data: publishedVersions, isLoading: publishedVersionsLoading } = usePublishedContractTemplateVersions();
   const totals = config ? computeLeadQuotationTotals(config, lead) : null;
   const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(undefined);
   const [kycOpen, setKycOpen] = useState(false);
@@ -487,7 +487,7 @@ function SelectedLeadPreview({
         </div>
       )}
 
-      {isWalkIn && templateOptions.length === 0 && <p className="text-sm text-muted-foreground">No published contract template is available. Ask Contract administration to publish one.</p>}
+      {isWalkIn && templateOptions.length === 0 && <p className="text-sm text-muted-foreground">{publishedVersionsLoading ? "Loading published contract templates…" : "No published contract template is available. Ask Contract administration to publish one."}</p>}
 
       <Button type="button" disabled={generate.isPending || !config || (isWalkIn && (!selected || !walkInAmountValid))} onClick={generateNow}>
         <FileDown />
