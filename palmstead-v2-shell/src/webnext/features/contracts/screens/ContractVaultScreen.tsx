@@ -80,7 +80,7 @@ export function ContractVaultScreen() {
                             {g.versionNumberSnapshot != null && <span className="ml-1 font-mono text-xs text-muted-foreground">v{g.versionNumberSnapshot}</span>}
                           </span>
                         ) : (
-                          <Badge variant="outline">Legacy</Badge>
+                          <Badge variant="outline">{g.pdfStoragePath ? "Standard PDF" : "Legacy record"}</Badge>
                         )}
                       </TableCell>
                       <TableCell>{g.generatedByName}</TableCell>
