@@ -7,12 +7,13 @@ import { FileDown, UserPlus, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
 import { useAllLeads } from "../../payments/hooks/useLogPayment";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts, useCanFulfilContracts } from "../hooks/useContractRequests";
 import { useContracts, useGenerateContract } from "../hooks/useContracts";
 import { useContractTemplates, usePublishedContractTemplateVersions, useContractGenerations } from "../hooks/useContractTemplates";
 import { computeLeadQuotationTotals } from "../../quotation/lib/quotationLogic";
@@ -166,7 +167,7 @@ function WalkInClientForm({ onCancel, onSubmit }: { onCancel: () => void; onSubm
   const [noPlots, setNoPlots] = useState("1");
   const [paymentPlan, setPaymentPlan] = useState<PaymentPlan>("Full Payment");
 
-  const valid = name.trim().length > 0 && contact.trim().length > 0;
+  const valid = name.trim().length > 0 && contact.trim().length > 0 && Number.isInteger(Number(noPlots)) && Number(noPlots) > 0;
 
   function submit() {
     if (!valid) return;
@@ -178,7 +179,7 @@ function WalkInClientForm({ onCancel, onSubmit }: { onCancel: () => void; onSubm
       address: address.trim() || undefined,
       date: new Date().toISOString().slice(0, 10),
       plotType,
-      noPlots: Math.max(1, Number(noPlots) || 1),
+      noPlots: Number(noPlots) * (plotType === "Half Plot" ? 0.5 : 1),
       paymentPlan,
       amtPaid: 0,
       stage: "2A",
@@ -263,12 +264,34 @@ function SelectedLeadPreview({
   resumeDraftId: string | null;
 }) {
   const { data: config } = useConfig();
+  const canEditLegalText = useCanAdministerContracts();
   const generate = useGenerateContract();
   const deleteDraft = useDeleteContractDraft();
   const updateDraft = useUpdateContractDraft();
   const { data: templates } = useContractTemplates();
   const { data: publishedVersions, isLoading: publishedVersionsLoading } = usePublishedContractTemplateVersions();
-  const totals = config ? computeLeadQuotationTotals(config, lead) : null;
+  const [plotTypeForContract, setPlotTypeForContract] = useState<PlotType>(lead.plotType);
+  const [plotCountForContract, setPlotCountForContract] = useState(String((lead.noPlots || 1) / (lead.plotType === "Half Plot" ? 0.5 : 1)));
+  const [acresForContract, setAcresForContract] = useState("");
+  const [priceForContract, setPriceForContract] = useState("");
+  const [depositForContract, setDepositForContract] = useState("");
+  const [temporaryLegalOpen, setTemporaryLegalOpen] = useState(false);
+  const [temporaryPreamble, setTemporaryPreamble] = useState(config?.contractPreamble ?? "");
+  const [temporaryDefinitions, setTemporaryDefinitions] = useState(config?.contractDefinitions ?? "");
+  const [temporaryTerms, setTemporaryTerms] = useState(config?.contractTerms ?? "");
+  const plotCount = Number(plotCountForContract);
+  const plotChanged = plotTypeForContract !== lead.plotType || plotCount !== (lead.noPlots || 1) / (lead.plotType === "Half Plot" ? 0.5 : 1);
+  const contractLead: Lead = {
+    ...lead,
+    plotType: plotTypeForContract,
+    noPlots: plotCount * (plotTypeForContract === "Half Plot" ? 0.5 : 1),
+    ...(plotChanged ? { unitPrice: undefined, discount: undefined, netTotal: undefined, grandTotal: undefined, depositTarget: undefined } : {}),
+    ...(priceForContract.trim() ? { grandTotal: Number(priceForContract) } : {}),
+    ...(depositForContract.trim() ? { depositTarget: Number(depositForContract) } : {}),
+  };
+  const totals = config && Number.isFinite(plotCount) && plotCount > 0 ? computeLeadQuotationTotals(config, contractLead) : null;
+  const acresOverride = acresForContract.trim() ? Number(acresForContract) : undefined;
+  const transactionValid = Number.isInteger(plotCount) && plotCount > 0 && (!priceForContract.trim() || (Number.isFinite(Number(priceForContract)) && Number(priceForContract) > 0)) && (!depositForContract.trim() || (Number.isFinite(Number(depositForContract)) && Number(depositForContract) >= 0 && Number(depositForContract) <= (totals?.grand ?? 0))) && (acresOverride === undefined || (Number.isFinite(acresOverride) && acresOverride > 0)) && (!temporaryLegalOpen || (!!temporaryPreamble.trim() && !!temporaryDefinitions.trim() && !!temporaryTerms.trim()));
   const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(undefined);
   const [kycOpen, setKycOpen] = useState(false);
   const effectiveKyc = kycOverride ?? lead.kyc;
@@ -358,7 +381,7 @@ function SelectedLeadPreview({
   }
 
   function generateNow() {
-    if (isWalkIn && !walkInAmountValid) return;
+    if ((isWalkIn && !walkInAmountValid) || !transactionValid) return;
     if (selected) {
       generate.mutate(
         {
@@ -376,7 +399,7 @@ function SelectedLeadPreview({
         { onSuccess: onGenerateSuccess },
       );
     } else {
-      generate.mutate({ lead: { ...lead, kyc: effectiveKyc }, isWalkIn, amountPaidOverride }, { onSuccess: onGenerateSuccess });
+      generate.mutate({ lead: { ...contractLead, kyc: effectiveKyc }, isWalkIn, amountPaidOverride, acresOverride, legalOverride: temporaryLegalOpen ? { contractPreamble: temporaryPreamble, contractDefinitions: temporaryDefinitions, contractTerms: temporaryTerms } : undefined }, { onSuccess: onGenerateSuccess });
     }
   }
 
@@ -393,12 +416,27 @@ function SelectedLeadPreview({
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            {lead.contact} · {lead.plotType} · {lead.noPlots || 1} plot(s)
+            {lead.contact} · {lead.plotType} · {(lead.noPlots || 1) / (lead.plotType === "Half Plot" ? 0.5 : 1)} plot(s)
           </div>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onChange}>
           Change
         </Button>
+      </div>
+
+      <div className="rounded-md border bg-muted/20 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium">Details for this contract</p>
+          <p className="text-xs text-muted-foreground">Prefilled from the client record. Changes here affect this PDF only; they do not change Pipeline, Quotation or Payments.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1"><Label>Plot type</Label><Select value={plotTypeForContract} onValueChange={(v) => setPlotTypeForContract(v as PlotType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Full Plot">Full Plot</SelectItem><SelectItem value="Half Plot">Half Plot</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label>Number of plots</Label><Input type="number" min={1} step={1} value={plotCountForContract} onChange={(e) => setPlotCountForContract(e.target.value)} /></div>
+          <div className="space-y-1"><Label>Acres, if different</Label><Input type="number" min={0} step="0.001" value={acresForContract} onChange={(e) => setAcresForContract(e.target.value)} placeholder={String(Math.round((contractLead.noPlots || 1) * 0.1607 * 100) / 100)} /></div>
+          <div className="space-y-1"><Label>Agreed total, if different (GHS)</Label><Input type="number" min={0} step="0.01" value={priceForContract} onChange={(e) => setPriceForContract(e.target.value)} placeholder={totals ? totals.grand.toFixed(2) : ""} /></div>
+          <div className="space-y-1 sm:col-span-2"><Label>Agreed deposit, if different (GHS)</Label><Input type="number" min={0} step="0.01" value={depositForContract} onChange={(e) => setDepositForContract(e.target.value)} placeholder={totals ? totals.deposit.toFixed(2) : ""} /></div>
+        </div>
+        {!transactionValid && <p className="text-sm text-destructive">Enter a whole number of plots, a positive price and land size, and a deposit no greater than the total.</p>}
       </div>
 
       {totals && (
@@ -478,9 +516,24 @@ function SelectedLeadPreview({
         {selected && <p className="text-xs text-muted-foreground">Published templates use their own page layout. Check the preview before issuing.</p>}
       </div>
 
+      {!selected && canEditLegalText && (
+        <div className="rounded-md border p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><p className="text-sm font-medium">Legal wording for this client</p><p className="text-xs text-muted-foreground">A temporary exception is saved in this client&apos;s PDF only. The company standard stays unchanged.</p></div>
+            <Button type="button" variant="outline" size="sm" onClick={() => { if (!temporaryLegalOpen && config) { setTemporaryPreamble(config.contractPreamble); setTemporaryDefinitions(config.contractDefinitions); setTemporaryTerms(config.contractTerms); } setTemporaryLegalOpen(!temporaryLegalOpen); }}>{temporaryLegalOpen ? "Use company standard" : "Edit for this client"}</Button>
+          </div>
+          {temporaryLegalOpen && <div className="space-y-3">
+            <div className="space-y-1"><Label>Opening and WHEREAS</Label><Textarea rows={6} value={temporaryPreamble} onChange={(e) => setTemporaryPreamble(e.target.value)} /></div>
+            <div className="space-y-1"><Label>Definitions</Label><Textarea rows={6} value={temporaryDefinitions} onChange={(e) => setTemporaryDefinitions(e.target.value)} /></div>
+            <div className="space-y-1"><Label>Terms and notices</Label><Textarea rows={8} value={temporaryTerms} onChange={(e) => setTemporaryTerms(e.target.value)} /></div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { if (config) { setTemporaryPreamble(config.contractPreamble); setTemporaryDefinitions(config.contractDefinitions); setTemporaryTerms(config.contractTerms); } }}>Restore company standard text</Button>
+          </div>}
+        </div>
+      )}
+
       {isWalkIn && publishedVersionsLoading && <p className="text-sm text-muted-foreground">Loading additional published templates…</p>}
 
-      <Button type="button" disabled={generate.isPending || !config || (isWalkIn && !walkInAmountValid)} onClick={generateNow}>
+      <Button type="button" disabled={generate.isPending || !config || !transactionValid || (isWalkIn && !walkInAmountValid)} onClick={generateNow}>
         <FileDown />
         {generate.isPending ? "Generating…" : "Generate & download PDF"}
       </Button>
