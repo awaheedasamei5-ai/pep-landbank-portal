@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { monthKey, shiftMonth, today } from "@/lib/palmstead/format";
 import { requireSupabase } from "@/lib/supabase.client";
+import { useAuthStore } from "@/stores/auth/auth-store";
 
 // Direct port of web-next's src/data/source.ts manager.overview() (the
 // real Supabase branch) -- same 5 real queries, same real aggregation.
@@ -31,15 +32,20 @@ function computeMonthlyTrend(payments: { date: string; amount: number }[]): numb
   return months.map((mk) => payments.filter((p) => monthKey(p.date) === mk).reduce((s, p) => s + p.amount, 0));
 }
 
-async function fetchManagerOverview(): Promise<ManagerOverview> {
+async function fetchManagerOverview(staffKey: string, isManager: boolean): Promise<ManagerOverview> {
   const client = requireSupabase();
   const sixMonthsAgo = `${shiftMonth(today().slice(0, 7), -5)}-01`;
+  const leadsQuery = client.from("leads").select("agent_key,grand_total,amt_paid,stage").is("deleted_at", null);
+  const complaintsQuery = client.from("complaints").select("status");
+  const visitsQuery = client.from("site_visits").select("id").is("deleted_at", null);
+  const staffQuery = client.from("profiles").select("agent_key,name").eq("active", true);
+  const paymentsQuery = client.from("payments").select("amount,payment_date").eq("status", "approved").gte("payment_date", sixMonthsAgo);
   const [leadsRes, complaintsRes, visitsRes, staffRes, paymentsRes] = await Promise.all([
-    client.from("leads").select("agent_key,grand_total,amt_paid,stage").is("deleted_at", null),
-    client.from("complaints").select("status"),
-    client.from("site_visits").select("id"),
-    client.from("profiles").select("agent_key,name").eq("active", true),
-    client.from("payments").select("amount,payment_date").eq("status", "approved").gte("payment_date", sixMonthsAgo),
+    isManager ? leadsQuery : leadsQuery.eq("agent_key", staffKey),
+    isManager ? complaintsQuery : complaintsQuery.eq("agent_key", staffKey),
+    isManager ? visitsQuery : visitsQuery.eq("agent_key", staffKey),
+    isManager ? staffQuery : staffQuery.eq("agent_key", staffKey),
+    isManager ? paymentsQuery : paymentsQuery.eq("agent_key", staffKey),
   ]);
   if (leadsRes.error) throw leadsRes.error;
   if (complaintsRes.error) throw complaintsRes.error;
@@ -92,5 +98,13 @@ async function fetchManagerOverview(): Promise<ManagerOverview> {
 }
 
 export function useManagerOverview() {
-  return useQuery({ queryKey: ["managerOverview"], queryFn: fetchManagerOverview });
+  const profile = useAuthStore((state) => state.profile);
+  const staffKey = profile?.key;
+  const isManager = profile?.role === "manager";
+  return useQuery({
+    queryKey: ["homeOverview", staffKey, isManager],
+    enabled: Boolean(staffKey),
+    queryFn: () => fetchManagerOverview(staffKey as string, isManager),
+  });
 }
+
