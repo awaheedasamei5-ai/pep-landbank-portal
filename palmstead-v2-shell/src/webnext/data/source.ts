@@ -616,6 +616,10 @@ export interface DataSource {
           | "companyEmail"
           | "companyTin"
           | "quoteFooterAddress"
+          | "contractCompanyAddress"
+          | "contractPreamble"
+          | "contractDefinitions"
+          | "contractTerms"
           | "receiptThanksText"
           | "receiptLogoImage"
           | "quoteDocTypeText"
@@ -2772,6 +2776,10 @@ function createLiveDataSource(): DataSource {
         if (patch.companyEmail !== undefined) dbPatch.company_email = patch.companyEmail;
         if (patch.companyTin !== undefined) dbPatch.company_tin = patch.companyTin;
         if (patch.quoteFooterAddress !== undefined) dbPatch.quote_footer_address = patch.quoteFooterAddress;
+        if (patch.contractCompanyAddress !== undefined) dbPatch.contract_company_address = patch.contractCompanyAddress;
+        if (patch.contractPreamble !== undefined) dbPatch.contract_preamble = patch.contractPreamble;
+        if (patch.contractDefinitions !== undefined) dbPatch.contract_definitions = patch.contractDefinitions;
+        if (patch.contractTerms !== undefined) dbPatch.contract_terms = patch.contractTerms;
         if (patch.receiptThanksText !== undefined) dbPatch.receipt_thanks_text = patch.receiptThanksText;
         if (patch.receiptLogoImage !== undefined) dbPatch.receipt_logo_image = patch.receiptLogoImage;
         if (patch.quoteDocTypeText !== undefined) dbPatch.quote_doc_type_text = patch.quoteDocTypeText;
