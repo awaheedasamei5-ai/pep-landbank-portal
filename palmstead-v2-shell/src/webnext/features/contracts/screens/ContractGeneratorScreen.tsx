@@ -119,7 +119,7 @@ function ContractGeneratorInner() {
               </>
             )
           ) : (
-            <SelectedLeadPreview lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} />
+            <SelectedLeadPreview key={selectedLead.id} lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} />
           )}
         </CardContent>
       </Card>
@@ -493,7 +493,8 @@ function SelectedLeadPreview({
         </div>
       )}
 
-      <LeadKycDialog lead={{ ...lead, kyc: effectiveKyc }} open={kycOpen} onOpenChange={setKycOpen} onSaved={setKycOverride} allowSkip />
+      <LeadKycDialog lead={{ ...lead, kyc: effectiveKyc }} open={kycOpen} onOpenChange={setKycOpen} onSaved={setKycOverride} allowSkip persist={!isWalkIn} />
     </div>
   );
 }
+

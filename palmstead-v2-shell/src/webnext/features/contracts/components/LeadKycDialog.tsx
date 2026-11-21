@@ -24,12 +24,14 @@ export function LeadKycDialog({
   onOpenChange,
   onSaved,
   allowSkip = true,
+  persist = true,
 }: {
   lead: Lead;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: (kyc: LeadKyc) => void;
   allowSkip?: boolean;
+  persist?: boolean;
 }) {
   const update = useUpdateLead();
   const [kyc, setKyc] = useState<LeadKyc>(lead.kyc ?? {});
@@ -43,7 +45,7 @@ export function LeadKycDialog({
   async function save() {
     setError(null);
     try {
-      await update.mutateAsync({ id: lead.id, patch: { kyc } });
+      if (persist) await update.mutateAsync({ id: lead.id, patch: { kyc } });
       onSaved?.(kyc);
       onOpenChange(false);
     } catch (e) {
@@ -56,7 +58,7 @@ export function LeadKycDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>KYC — {lead.name}</DialogTitle>
-          <DialogDescription>Know-your-customer details, baked into the generated contract.</DialogDescription>
+          <DialogDescription>{persist ? "Know-your-customer details, saved to the client record and included in the contract." : "These details will be included in this contract. Create a client record separately to keep them for future use."}</DialogDescription>
         </DialogHeader>
 
         {completenessNote && (
@@ -164,11 +166,12 @@ export function LeadKycDialog({
               Skip for now
             </Button>
           )}
-          <Button type="button" onClick={save} disabled={update.isPending}>
-            {update.isPending ? "Saving…" : "Save KYC details"}
+          <Button type="button" onClick={save} disabled={persist && update.isPending}>
+            {persist && update.isPending ? "Saving…" : "Save KYC details"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
