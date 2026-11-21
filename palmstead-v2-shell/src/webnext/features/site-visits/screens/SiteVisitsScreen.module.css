@@ -32,7 +32,7 @@
 
 .addBtn {
   background: var(--c-accent);
-  color: #fff;
+  color: var(--primary-foreground);
   border: none;
   border-radius: var(--r-pill);
   padding: 10px 16px;
