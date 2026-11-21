@@ -34,7 +34,7 @@ export function LeadKycDialog({
   persist?: boolean;
 }) {
   const update = useUpdateLead();
-  const [kyc, setKyc] = useState<LeadKyc>(lead.kyc ?? {});
+  const [kyc, setKyc] = useState<LeadKyc>({ ...lead.kyc, address: lead.kyc?.address || lead.address || "" });
   const [error, setError] = useState<string | null>(null);
   const { data: completenessNote } = useKycCompletenessSummary({ ...lead, kyc });
 
@@ -107,7 +107,12 @@ export function LeadKycDialog({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Location / address</Label>
+          <Label>Client address for contract</Label>
+          <Input value={kyc.address ?? ""} onChange={(e) => set("address", e.target.value)} placeholder="Postal or digital address" maxLength={240} />
+          <p className="text-xs text-muted-foreground">Printed under the purchaser&apos;s name and in the opening Contract of Sale paragraph.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Location</Label>
           <Input value={kyc.location ?? ""} onChange={(e) => set("location", e.target.value)} />
         </div>
 
@@ -174,4 +179,3 @@ export function LeadKycDialog({
     </Dialog>
   );
 }
-

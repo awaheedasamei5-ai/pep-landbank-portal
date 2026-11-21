@@ -7,7 +7,7 @@ import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
 import { buildContractFromSections } from '../lib/contractSectionsPdf';
 import { resolveContractFields, resolveSections, findUnresolvedTokens } from '../lib/contractFieldResolver';
-import type { ContractSection, Lead } from '../../../types/domain';
+import type { Config, ContractSection, Lead } from '../../../types/domain';
 
 export function useContracts() {
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -23,8 +23,9 @@ export function useContracts() {
 // optional. Generate() is called plainly with a lead:
 export type GenerateContractInput = {
   lead: Lead;
-  // Omitted/undefined => the original v1-parity hardcoded-text path below,
-  // preserved byte-for-byte (nothing that already works is being touched).
+  // Omitted/undefined => the standard ten-page document. For an existing
+  // lead this retains the legacy metadata path; a walk-in gets a stored
+  // PDF snapshot because there is no lead row for legacy metadata.
   // Provided => the new template studio path: resolve -> render ->
   // upload -> snapshot, per §8 steps 1-3.
   template?: {
@@ -37,23 +38,21 @@ export type GenerateContractInput = {
   contractRequestId?: string | null;
   // docs/plans/17-contract-of-sale-v3-gaps-plan.md Phase 3 -- a walk-in
   // client (typed in directly, never added to the real leads table) has
-  // no real lead.id to record. Only valid with `template` set: the
-  // walk-in path has no v1-parity legacy-document fallback, since that
-  // path's own contracts.create() needs a real, non-null lead_id and
-  // has no FK to relax the way contract_generations.lead_id did.
+  // no real lead.id to record. The standard renderer stores its PDF in
+  // contract_generations with a null lead/template pointer.
   isWalkIn?: boolean;
   // Overrides resolveContractFields' default (lead.amtPaid) -- the real
   // fix for "let us enter the amount already paid before generating",
   // used both for a walk-in's typed-in figure and for re-stating an
   // existing lead's current real amount at generation time.
   amountPaidOverride?: number;
+  acresOverride?: number;
+  legalOverride?: Pick<Config, 'contractPreamble' | 'contractDefinitions' | 'contractTerms'>;
 };
 
-// Builds the branded PDF and downloads it. Without a template, this is the
-// original v1-parity path: buildContractOfSalePdf() regenerates the exact
-// same flat-Config-text document fresh every time (metadata-only record,
-// no blob stored) -- unchanged, per §8 step 4 ("existing contracts/
-// contract_requests fulfil logic runs unchanged").
+// Builds the branded PDF and downloads it. Without a template, existing
+// leads retain the v1-parity metadata path. Walk-ins store the same ten-page
+// renderer's PDF and resolved-field snapshot in the private vault.
 //
 // With a template, this is the new §8 generation-time snapshot: every
 // {{token}} in the PUBLISHED version's content is resolved against real
@@ -72,7 +71,7 @@ export function useGenerateContract() {
   const queryClient = useQueryClient();
   const logDownload = useLogDownload();
   return useMutation({
-    mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride }: GenerateContractInput) => {
+    mutationFn: async ({ lead, template, contractRequestId, isWalkIn, amountPaidOverride, acresOverride, legalOverride }: GenerateContractInput) => {
       if (!config) throw new Error('Config not loaded yet');
       if (!profile) throw new Error('Not signed in');
 
@@ -101,7 +100,9 @@ export function useGenerateContract() {
         logDownload(templateDocFilename, 'pdf', doc.output('datauristring'));
         const ds = getDataSource(demoMode);
         const pdfBlob = doc.output('blob') as Blob;
-        const storagePath = `${isWalkIn ? 'walk-in' : lead.id}/${template.templateVersionId}-${Date.now()}.pdf`;
+        const storagePath = isWalkIn
+          ? `walk-in/${profile.key}/${crypto.randomUUID()}.pdf`
+          : `${lead.id}/${template.templateVersionId}-${Date.now()}.pdf`;
         const uploadedPath = await ds.contractGenerations.uploadPdf(storagePath, pdfBlob);
         await ds.contractGenerations.create({
           contractRequestId: contractRequestId ?? null,
@@ -141,11 +142,49 @@ export function useGenerateContract() {
       } catch {
         // Missing wordmark shouldn't stop the contract from generating.
       }
-      const doc = buildContractOfSalePdf(lead, config, cover, wordmark);
+      const standardLead = isWalkIn ? { ...lead, amtPaid: amountPaidOverride ?? 0 } : lead;
+      const standardConfig = legalOverride ? { ...config, ...legalOverride } : config;
+      const doc = buildContractOfSalePdf(standardLead, standardConfig, cover, wordmark, acresOverride);
       const legacyDocFilename = contractFilename(lead.name);
+      if (isWalkIn) {
+        const ds = getDataSource(demoMode);
+        const storagePath = `walk-in/${profile.key}/${crypto.randomUUID()}.pdf`;
+        const uploadedPath = await ds.contractGenerations.uploadPdf(storagePath, doc.output('blob') as Blob);
+        await ds.contractGenerations.create({
+          contractRequestId: null,
+          leadId: null,
+          clientName: lead.name,
+          templateId: null,
+          templateVersionId: null,
+          versionNumberSnapshot: null,
+          contentSnapshot: [],
+          fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
+          pdfStoragePath: uploadedPath,
+          generatedBy: profile.key,
+          generatedByName: profile.name,
+        });
+        doc.save(legacyDocFilename);
+        logDownload(legacyDocFilename, 'pdf', doc.output('datauristring'));
+        return null;
+      }
+      const ds = getDataSource(demoMode);
+      const uploadedPath = await ds.contractGenerations.uploadPdf(`${lead.id}/standard-${crypto.randomUUID()}.pdf`, doc.output('blob') as Blob);
+      await ds.contractGenerations.create({
+        contractRequestId: contractRequestId ?? null,
+        leadId: lead.id,
+        clientName: lead.name,
+        templateId: null,
+        templateVersionId: null,
+        versionNumberSnapshot: null,
+        contentSnapshot: [],
+        fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
+        pdfStoragePath: uploadedPath,
+        generatedBy: profile.key,
+        generatedByName: profile.name,
+      });
       doc.save(legacyDocFilename);
       logDownload(legacyDocFilename, 'pdf', doc.output('datauristring'));
-      return getDataSource(demoMode).contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
+      return ds.contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });

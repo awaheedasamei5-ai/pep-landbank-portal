@@ -825,6 +825,7 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     companyEmail: (r.company_email as string) ?? "",
     companyTin: (r.company_tin as string) ?? "",
     quoteFooterAddress: (r.quote_footer_address as string) ?? "",
+    contractCompanyAddress: (r.contract_company_address as string) ?? "Post Office Box CO 3644\nTema",
     receiptThanksText:
       (r.receipt_thanks_text as string) ??
       "Thank you for your payment. This receipt confirms the amount above was received by us and applied to your account.",
@@ -838,6 +839,9 @@ export function mapConfigRow(r: Record<string, unknown>): Config {
     contractPreamble: (r.contract_preamble as string) ?? "",
     contractDefinitions: (r.contract_definitions as string) ?? "",
     contractTerms: (r.contract_terms as string) ?? "",
+    contractStandardPreamble: (r.contract_standard_preamble as string) ?? (r.contract_preamble as string) ?? "",
+    contractStandardDefinitions: (r.contract_standard_definitions as string) ?? (r.contract_definitions as string) ?? "",
+    contractStandardTerms: (r.contract_standard_terms as string) ?? (r.contract_terms as string) ?? "",
     contractCoverImage: (r.contract_cover_image as string) ?? null,
     contractWordmarkImage: (r.contract_wordmark_image as string) ?? null,
     techFullPlotLengthFt: Number(r.tech_full_plot_length_ft ?? 70),

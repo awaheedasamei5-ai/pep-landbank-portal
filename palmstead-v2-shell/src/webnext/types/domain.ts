@@ -204,6 +204,7 @@ export interface LeadUpdate {
 }
 
 export interface LeadKyc {
+  address?: string;
   nationality?: string;
   occupation?: string;
   dob?: string;
@@ -612,6 +613,7 @@ export interface Config {
   companyEmail: string;
   companyTin: string;
   quoteFooterAddress: string;
+  contractCompanyAddress: string;
   receiptThanksText: string;
   receiptLogoImage: string | null;
   // Real columns quote_doc_type_text/quote_notes_text/quote_land_note_text
@@ -637,6 +639,9 @@ export interface Config {
   contractPreamble: string;
   contractDefinitions: string;
   contractTerms: string;
+  contractStandardPreamble: string;
+  contractStandardDefinitions: string;
+  contractStandardTerms: string;
   contractCoverImage: string | null;
   contractWordmarkImage: string | null;
   // Real columns tech_full_plot_length_ft/tech_full_plot_width_ft/

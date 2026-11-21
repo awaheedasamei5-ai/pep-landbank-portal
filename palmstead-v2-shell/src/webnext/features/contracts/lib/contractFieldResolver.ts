@@ -1,5 +1,5 @@
-import { fmtLongDate, ghs, today } from '../../../shared/lib/format';
-import { computeLeadQuotationTotals, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
+import { fmtLongDate, today } from '../../../shared/lib/format';
+import { computeLeadQuotationTotals, defaultDepositPctFraction, pricingFor, quoteMoney } from '../../quotation/lib/quotationLogic';
 import type { Config, ContractSection, Lead, LeadKyc } from '../../../types/domain';
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §9 capability 1 / §11 report 3 -- the one
@@ -47,6 +47,7 @@ export type ContractFieldKey =
   | 'kycLandUsage'
   | 'vendorCeoName'
   | 'vendorCompanyName'
+  | 'vendorCompanyAddress'
   | 'generationDate'
   | 'amountPaidToDate'
   | 'balanceOutstanding';
@@ -79,6 +80,7 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
   kycLandUsage: 'Land usage',
   vendorCeoName: 'Vendor CEO name',
   vendorCompanyName: 'Vendor company name',
+  vendorCompanyAddress: 'Vendor company address',
   generationDate: 'Generation date',
   amountPaidToDate: 'Amount paid to date',
   balanceOutstanding: 'Balance outstanding',
@@ -94,21 +96,21 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
 // not wait for a refetch.
 export function resolveContractFields(lead: Lead, config: Config, amountPaidOverride?: number): Record<ContractFieldKey, string> {
   const totals = computeLeadQuotationTotals(config, lead);
-  const depositTarget = lead.depositTarget != null ? lead.depositTarget : Math.round(totals.net * QUOTE_DEPOSIT_PCT);
+  const depositTarget = lead.depositTarget != null ? lead.depositTarget : Math.round(totals.net * defaultDepositPctFraction(config));
   const amountPaid = amountPaidOverride != null ? amountPaidOverride : lead.amtPaid || 0;
   return {
     clientLegalName: lead.name || '',
-    clientAddress: lead.address || lead.kyc?.location || '',
+    clientAddress: lead.kyc?.address || lead.address || lead.kyc?.location || '',
     clientContact: lead.contact || '',
     plotType: lead.plotType || '',
-    noPlots: String(lead.noPlots || 1),
+    noPlots: String((lead.noPlots || 1) / pricingFor(config, lead.plotType).eq),
     landAcres: String(Math.round(0.1607 * (lead.noPlots || 1) * 100) / 100),
-    unitPrice: ghs(lead.unitPrice || 0),
-    discount: ghs(lead.discount || 0),
-    grandTotal: ghs(totals.grand),
-    depositAmount: ghs(depositTarget),
-    depositPercent: `${Math.round(QUOTE_DEPOSIT_PCT * 100)}%`,
-    monthlyInstallment: ghs(totals.monthlyDue),
+    unitPrice: quoteMoney(lead.unitPrice || 0),
+    discount: quoteMoney(lead.discount || 0),
+    grandTotal: quoteMoney(totals.grand),
+    depositAmount: quoteMoney(depositTarget),
+    depositPercent: `${totals.net ? Math.round(depositTarget / totals.net * 1000) / 10 : 0}%`,
+    monthlyInstallment: quoteMoney(totals.monthlyDue),
     paymentPlanMonths: String(totals.planMonths),
     kycNationality: lead.kyc?.nationality || '',
     kycOccupation: lead.kyc?.occupation || '',
@@ -119,9 +121,10 @@ export function resolveContractFields(lead: Lead, config: Config, amountPaidOver
     kycLandUsage: lead.kyc?.landUsage || '',
     vendorCeoName: config.contractCeoName || '',
     vendorCompanyName: (config.quoteCompanyName || 'Trulander JSF Limited').toUpperCase(),
+    vendorCompanyAddress: config.contractCompanyAddress || '',
     generationDate: fmtLongDate(today()),
-    amountPaidToDate: ghs(amountPaid),
-    balanceOutstanding: ghs(Math.max(0, totals.grand - amountPaid)),
+    amountPaidToDate: quoteMoney(amountPaid),
+    balanceOutstanding: quoteMoney(Math.max(0, totals.grand - amountPaid)),
   };
 }
 

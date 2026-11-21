@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { fmtLongDate, ghs } from '../../../shared/lib/format';
+import { fmtLongDate } from '../../../shared/lib/format';
 import { computeLeadQuotationTotals, pricingFor, QUOTE_DEPOSIT_PCT } from '../../quotation/lib/quotationLogic';
 import type { Config, Lead } from '../../../types/domain';
 
@@ -18,6 +18,32 @@ import type { Config, Lead } from '../../../types/domain';
 export const CONTRACT_INK: [number, number, number] = [31, 56, 99];
 const CONTRACT_MONTH_WORDS: Record<number, string> = { 3: 'Three', 6: 'Six', 9: 'Nine', 12: 'Twelve' };
 const CONTRACT_CHECKBOX_SIZE = 4.8;
+
+function contractMoney(amount: number): string {
+  if (!Number.isFinite(amount)) throw new Error('Contract amount must be a valid number.');
+  return 'GHS ' + amount.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function contractAddress(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function centeredAddress(doc: jsPDF, address: string, y: number, maxLines: number, maxWidth: number): void {
+  const clean = contractAddress(address);
+  for (let fontSize = 11; fontSize >= 8.5; fontSize -= 0.5) {
+    doc.setFontSize(fontSize);
+    const lines: string[] = doc.splitTextToSize(clean, maxWidth);
+    if (lines.length <= maxLines) {
+      doc.text(lines, doc.internal.pageSize.getWidth() / 2, y, { align: 'center', lineHeightFactor: 1.15 });
+      return;
+    }
+  }
+  throw new Error('The address is too long for the contract title page. Shorten it before generating the PDF.');
+}
+
+function assertReferencePage(actual: number, expected: number, section: string): void {
+  if (actual !== expected) throw new Error(`${section} no longer fits its reference page. Shorten the wording or address before generating the ten-page contract.`);
+}
 
 function fitContractName(doc: jsPDF, name: string, maxWidth: number): number {
   for (let size = 11; size >= 8.5; size -= 0.5) {
@@ -72,6 +98,7 @@ function contractField(doc: jsPDF, x: number, y: number, w: number, label: strin
   const lab = label ? label + ': ' : '';
   const labW = lab ? doc.getTextWidth(lab) : 0;
   if (lab) doc.text(lab, x, y);
+  let wrappedAddress = false;
   if (value) {
     const fieldValue = String(value).replace(/\s+/g, ' ').trim();
     const available = w - labW - 3;
@@ -81,15 +108,23 @@ function contractField(doc: jsPDF, x: number, y: number, w: number, label: strin
       size -= 0.5;
       doc.setFontSize(size);
     }
-    if (doc.getTextWidth(fieldValue) > available) {
-      throw new Error(`The ${label || 'contract'} entry is too long for the reference form. Shorten it before generating the PDF.`);
+    if (doc.getTextWidth(fieldValue) > available && label === 'ADDRESS') {
+      doc.setFontSize(8);
+      const lines: string[] = doc.splitTextToSize(fieldValue, available);
+      if (lines.length > 2) throw new Error('The client address needs more than two form lines. Shorten it before generating the PDF.');
+      doc.text(lines, x + labW + 1, y, { lineHeightFactor: 1.15 });
+      wrappedAddress = true;
+    } else {
+      if (doc.getTextWidth(fieldValue) > available) {
+        throw new Error(`The ${label || 'contract'} entry is too long for the reference form. Shorten it before generating the PDF.`);
+      }
+      doc.text(fieldValue, x + labW + 1, y);
     }
-    doc.text(fieldValue, x + labW + 1, y);
     doc.setFontSize(10.5);
   }
   doc.setDrawColor(...CONTRACT_INK);
   doc.setLineDashPattern([0.6, 0.6], 0);
-  doc.line(x + labW, y + 0.8, x + w, y + 0.8);
+  doc.line(x + labW, y + (wrappedAddress ? 4.4 : 0.8), x + w, y + (wrappedAddress ? 4.4 : 0.8));
   doc.setLineDashPattern([], 0);
 }
 
@@ -316,7 +351,7 @@ function splitClausesBeforeMarkers(text: string, markers: string[]): string[] {
   return chunks.map((arr) => arr.join('\n\n'));
 }
 
-export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri: string | null, wordmarkDataUri: string | null): jsPDF {
+export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri: string | null, wordmarkDataUri: string | null, acresOverride?: number): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -324,8 +359,11 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   const depositPct = t.net ? Math.round((t.deposit / t.net) * 1000) / 10 : 0;
   const planLabel = lead.paymentPlan === 'Full Payment' ? 'Outright' : lead.paymentPlan;
   const vendorName = (config.quoteCompanyName || 'Trulander JSF Limited').toUpperCase();
+  const vendorAddress = contractAddress(config.contractCompanyAddress || 'Post Office Box CO 3644 Tema');
+  const purchaserAddress = contractAddress(lead.kyc?.address || lead.address || lead.kyc?.location || '');
   const ceo = (config.contractCeoName || 'FRANK ADU PEPRAH').toUpperCase();
-  const acres = contractAcres(lead);
+  const acres = acresOverride ?? contractAcres(lead);
+  if (!Number.isFinite(acres) || acres <= 0) throw new Error('Contract land size must be greater than zero acres.');
   // lead.noPlots is a full-plot-equivalent count -- a signed legal
   // contract needs to read "1 x Half Plot" for one half plot, not the
   // confusing "0.5 x Half Plot" (see previewGrandTotal's own comment in
@@ -352,8 +390,8 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // address is part of the party block, not the letterhead at the foot.
   doc.text('CONTRACT OF SALES', pageW / 2, 55, { align: 'center' });
   doc.text('BETWEEN', pageW / 2, 73.6, { align: 'center' });
-  doc.text('TRULANDER JSF LTD.', pageW / 2, 92.2, { align: 'center' });
-  doc.text('(P. O. BOX CO 3644, TEMA)', pageW / 2, 96.9, { align: 'center' });
+  doc.text(vendorName, pageW / 2, 92.2, { align: 'center' });
+  centeredAddress(doc, '(' + vendorAddress + ')', 96.9, 2, pageW - 28);
   doc.setFont('times', 'normal');
   doc.text('AND', pageW / 2, 115.5, { align: 'center' });
   doc.setFont('times', 'bold');
@@ -361,6 +399,10 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   if (!purchaserName) throw new Error('Add the client name before generating the Contract of Sale.');
   fitContractName(doc, purchaserName, pageW - 28);
   doc.text(purchaserName, pageW / 2, 134.1, { align: 'center' });
+  if (purchaserAddress) {
+    doc.setFont('times', 'normal');
+    centeredAddress(doc, '(' + purchaserAddress + ')', 139, 2, pageW - 28);
+  }
   if (wordmarkDataUri) {
     try {
       doc.addImage(wordmarkDataUri, 'PNG', pageW / 2 - 25, 174, 50, 18);
@@ -370,8 +412,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   }
   doc.setFont('times', 'normal');
   doc.setFontSize(11);
-  doc.text('Post Office Box CO 3644', pageW / 2, 199.3, { align: 'center' });
-  doc.text('Tema', pageW / 2, 204, { align: 'center' });
+  centeredAddress(doc, vendorAddress, 199.3, 2, pageW - 28);
 
   // ---- Page 3: KYC I-III ----
   n = 3;
@@ -408,7 +449,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 9;
   contractField(doc, 14, y, pageW - 28, 'ID NO.', k.idNumber || '');
   y += 9;
-  contractField(doc, 14, y, pageW - 28, 'ADDRESS', lead.address || '');
+  contractField(doc, 14, y, pageW - 28, 'ADDRESS', purchaserAddress);
   y += 9;
   contractField(doc, 14, y, 86, 'EMAIL', k.email || '');
   contractField(doc, 108, y, 86, 'LOCATION', k.location || '');
@@ -487,15 +528,15 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractCheckbox(doc, 73, y, '', false);
   contractField(doc, 81, y, pageW - 14 - 81, 'Number of plots', qtyOfType + ' x ' + (lead.plotType || 'Full Plot'));
   y += 10;
-  contractField(doc, 14, y, 86, 'Agreed price GHS', ghs(t.grand).replace('GHS ', ''));
-  contractField(doc, 108, y, 86, 'Amount paid GHS', ghs(lead.amtPaid).replace('GHS ', ''));
+  contractField(doc, 14, y, 86, 'Agreed price GHS', contractMoney(t.grand).replace('GHS ', ''));
+  contractField(doc, 108, y, 86, 'Amount paid GHS', contractMoney(lead.amtPaid).replace('GHS ', ''));
   y += 10;
   contractField(doc, 14, y, pageW - 28, 'Amount in words', '');
   y += 10;
   contractField(doc, 14, y, pageW - 28, '', '');
   y += 10;
   contractField(doc, 14, y, 86, 'Final payment date', planLabel === 'Outright' ? '' : 'within ' + t.planMonths + ' months of deposit');
-  contractField(doc, 108, y, 86, 'Amount due monthly: GHS', t.monthlyDue ? ghs(t.monthlyDue).replace('GHS ', '') : '');
+  contractField(doc, 108, y, 86, 'Amount due monthly: GHS', t.monthlyDue ? contractMoney(t.monthlyDue).replace('GHS ', '') : '');
   y += 15;
 
   doc.setFont('times', 'bold');
@@ -528,13 +569,13 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // reference lays them out, not merged into one run-on sentence.
   ({ y, n } = contractBody(doc, y, n, 'THIS CONTRACT OF SALE (The Agreement) is made on this day of ………………………………..'));
   ({ y, n } = contractBody(doc, y, n, 'BETWEEN'));
-  ({ y, n } = contractBody(doc, y, n, vendorName + ' of P.O. BOX CO3644, Tema represented by its CEO, ' + ceo + ' (herein called "the Vendor" which expression shall where the context so requires, include its successors or assigns) on one part.'));
+  ({ y, n } = contractBody(doc, y, n, vendorName + ' of ' + vendorAddress + ' represented by its CEO, ' + ceo + ' (herein called "the Vendor" which expression shall where the context so requires, include its successors or assigns) on one part.'));
   ({ y, n } = contractBody(doc, y, n, 'AND'));
   ({ y, n } = contractUnderlinedPara(
     doc,
     y,
     n,
-    String(lead.name || '').toUpperCase() + ' of ' + (lead.address || '…………………………………………..'),
+    String(lead.name || '').toUpperCase() + ' of ' + (purchaserAddress || '…………………………………………..'),
     ' herein called "the Purchaser", which expression shall, where the context so requires, include his legal heirs, successors, successors-in-interest, executors, legal representatives, and/or assigns) of the other part.',
   ));
   ({ y, n } = contractLeadBoldPara(doc, y, n, 'The Purchaser and the Vendor shall where the context so require be referred as "the Parties" and individually as "a party"', ''));
@@ -545,6 +586,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 8;
   ({ y, n } = contractBody(doc, y, n, (config.contractPreamble || '').replace('{ACRES}', String(acres))));
   ({ y, n } = contractLeadBoldPara(doc, y, n, 'NOW THEREFORE,', ' in consideration of the foregoing and the terms set forth in this Agreement, the receipt and sufficiency of which is hereby acknowledged, and intending to be legally bound hereby, the Parties agree as follows:'));
+  assertReferencePage(n, 5, 'The opening clauses');
 
   // ---- 1. Definitions and Interpretation (editable, static) ----
   // Reference document starts Section 1 on its own fresh page (page 6)
@@ -554,6 +596,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   n++;
   y = contractNewPage(doc, n);
   ({ y, n } = contractBody(doc, y, n, config.contractDefinitions || ''));
+  assertReferencePage(n, 6, 'Definitions');
 
   // ---- 1.3 The Transaction (dynamic, computed from this lead) ----
   // Reference also force-breaks here -- "IT IS NOW MUTUALLY agreed..." opens page 7.
@@ -563,13 +606,13 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   const allocationDeposit = Math.round(t.grand * QUOTE_DEPOSIT_PCT);
   const transactionItems = [
     '1.3 THE TRANSACTION',
-    '1.3.1 The consideration for ' + acres + ' Acres of land (more or less) is hereby agreed at ' + (t.discountTotal > 0 ? 'a discounted amount of ' : '') + ghs(t.grand) + '.',
+    '1.3.1 The consideration for ' + acres + ' Acres of land (more or less) is hereby agreed at ' + (t.discountTotal > 0 ? 'a discounted amount of ' : '') + contractMoney(t.grand) + '.',
     planLabel === 'Outright'
-      ? '1.3.2 The Purchaser agrees to pay the full consideration of ' + ghs(t.grand) + ' on the execution of this contract.'
-      : '1.3.2 The Purchaser agrees to pay on the execution of this contract a deposit of ' + ghs(t.deposit) + ' which constitutes approximately a ' + depositPct + '%. The remaining balance shall be spread over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') equal monthly installment.',
-    planLabel === 'Outright' ? null : '1.3.3 Monthly Installment payment for ' + ghs(t.monthlyDue) + ' shall be done over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months extended credit period',
+      ? '1.3.2 The Purchaser agrees to pay the full consideration of ' + contractMoney(t.grand) + ' on the execution of this contract.'
+      : '1.3.2 The Purchaser agrees to pay on the execution of this contract a deposit of ' + contractMoney(t.deposit) + ' which constitutes approximately a ' + depositPct + '%. The remaining balance shall be spread over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') equal monthly installment.',
+    planLabel === 'Outright' ? null : '1.3.3 Monthly Installment payment for ' + contractMoney(t.monthlyDue) + ' shall be done over a ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months extended credit period',
     '1.3.4 All Payments shall be made via the Companies designated payment platforms and shall be in the name ' + vendorName + '. All Payment shall be duly receipted.',
-    '1.3.5 Upon initial deposit of ' + ghs(allocationDeposit) + ' ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
+    '1.3.5 Upon initial deposit of ' + contractMoney(allocationDeposit) + ' ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
     '1.3.6 Indentures shall be released to Purchaser after final payment unless explicitly agreed.',
     '1.3.7 All payments shall be due on the last working day of the month.',
   ]
@@ -586,15 +629,18 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   // after Management edits clause wording.
   const termsChunks = splitClausesBeforeMarkers(config.contractTerms || '', ['2.2 ', '3. ']);
   ({ y, n } = contractBody(doc, y, n, termsChunks[0] || ''));
+  assertReferencePage(n, 7, 'The transaction and vendor warranties');
   if (termsChunks[1]) {
     n++;
     y = contractNewPage(doc, n);
     ({ y, n } = contractBody(doc, y, n, termsChunks[1]));
+    assertReferencePage(n, 8, 'Purchaser warranties');
   }
   if (termsChunks[2]) {
     n++;
     y = contractNewPage(doc, n);
     ({ y, n } = contractBody(doc, y, n, termsChunks[2], true));
+    assertReferencePage(n, 9, 'Final terms');
     y += 8;
     if (y > pageH - 24) {
       n++;
@@ -656,4 +702,3 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
 export function contractFilename(clientName: string): string {
   return `ContractOfSale_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
 }
-
