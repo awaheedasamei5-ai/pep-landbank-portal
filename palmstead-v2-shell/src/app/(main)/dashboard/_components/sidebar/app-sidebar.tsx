@@ -14,7 +14,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
-import { useNotesAccess } from "@/lib/permissions/use-notes-access";
+import { filterNavigation, useNavigationAccess } from "@/lib/permissions/use-navigation-access";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
@@ -37,24 +37,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // itself needs to differ by role, not a second nav item or route.
   const profile = useAuthStore((s) => s.profile);
   const isManager = profile?.role === "manager";
-  const notesAccess = useNotesAccess(profile?.key);
-  const roleItems = isManager
-    ? sidebarItems
-    : sidebarItems
-        .filter((group) => group.label !== "Management")
-        .map((group) =>
-          group.items.some((item) => item.id === "master-pipeline")
-            ? {
-                ...group,
-                items: group.items.map((item) =>
-                  item.id === "master-pipeline" ? { ...item, title: "My Pipeline" } : item,
-                ),
-              }
-            : group,
-        );
-  const items = isManager || notesAccess.data?.view === true
-    ? roleItems
-    : roleItems.map((group) => ({ ...group, items: group.items.filter((item) => item.id !== "notes") }));
+  const navigationAccess = useNavigationAccess(profile?.key, isManager);
+  const items = filterNavigation(sidebarItems, navigationAccess.data, isManager);
 
   const variant = isSynced ? sidebarVariant : props.variant;
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
@@ -89,4 +73,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </Sidebar>
   );
 }
+
 
