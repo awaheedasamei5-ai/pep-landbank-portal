@@ -20,7 +20,7 @@ import {
   usePublishContractTemplateVersion,
   useDecideContractApproval,
 } from "../hooks/useContractTemplates";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { MergeFieldsPanel } from "../components/MergeFieldsPanel";
 import { ClauseLibraryPanel } from "../components/ClauseLibraryPanel";
 import type { ContractSection, ContractSectionKind, ContractTemplateVersion, ContractTemplateVersionStatus } from "../../../types/domain";
@@ -60,7 +60,7 @@ export function TemplateDetailScreen() {
   const params = useParams<{ id: string }>();
   const templateId = params.id;
   const router = useRouter();
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: templates } = useContractTemplates();
   const { data: versions } = useContractTemplateVersions(templateId ?? "");
   const createVersion = useCreateContractTemplateVersion();
@@ -415,3 +415,4 @@ function SectionCard({
     </div>
   );
 }
+

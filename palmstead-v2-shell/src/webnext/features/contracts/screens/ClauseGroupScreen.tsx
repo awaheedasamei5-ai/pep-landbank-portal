@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useContractClauses, useCreateContractClause, useUpdateContractClause } from "../hooks/useContractTemplates";
 import type { ContractClause } from "../../../types/domain";
 
@@ -25,7 +25,7 @@ const UNCATEGORIZED = "Uncategorized";
 export function ClauseGroupScreen() {
   const params = useParams<{ category: string }>();
   const category = decodeURIComponent(params.category ?? "");
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: clauses, isLoading } = useContractClauses();
   const [addingNew, setAddingNew] = useState(false);
 
@@ -147,3 +147,4 @@ function ClauseCard({ clause }: { clause: ContractClause }) {
     </Card>
   );
 }
+

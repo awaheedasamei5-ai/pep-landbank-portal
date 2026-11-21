@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useContractTemplates, useContractTemplateVersions, useCreateContractTemplate, useCreateContractTemplateVersion } from "../hooks/useContractTemplates";
 import type { ContractTemplate, ContractTemplateVersionStatus } from "../../../types/domain";
 
@@ -31,7 +31,7 @@ const STATUS_VARIANT: Record<ContractTemplateVersionStatus, "outline" | "seconda
 // Document Template Studio Dashboard.jsx (both real sources studied for
 // the blueprint). Native shadcn rebuild of web-next's TemplateStudioScreen.
 export function TemplateStudioScreen() {
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const router = useRouter();
   const { data: templates, isLoading } = useContractTemplates();
   const createTemplate = useCreateContractTemplate();
@@ -129,3 +129,4 @@ function TemplateCard({ template, onOpen }: { template: ContractTemplate; onOpen
     </button>
   );
 }
+

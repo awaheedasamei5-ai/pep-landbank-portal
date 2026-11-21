@@ -7,7 +7,7 @@ import { ArrowLeft, FileDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useContractTemplates, useContractTemplateVersions } from "../hooks/useContractTemplates";
-import { useCanFulfilContracts } from "../hooks/useContractRequests";
+import { useCanAdministerContracts } from "../hooks/useContractRequests";
 import { useConfig } from "../../manager/hooks/useConfigSettings";
 import { resolveContractFields, resolveSections } from "../lib/contractFieldResolver";
 import { buildContractFromSections, contractFilename } from "../lib/contractSectionsPdf";
@@ -64,7 +64,7 @@ export function TemplatePreviewScreen() {
   const searchParams = useSearchParams();
   const requestedVersionId = searchParams.get("version");
   const router = useRouter();
-  const canManage = useCanFulfilContracts();
+  const canManage = useCanAdministerContracts();
   const { data: templates } = useContractTemplates();
   const { data: versions } = useContractTemplateVersions(templateId ?? "");
   const { data: config } = useConfig();
@@ -190,3 +190,4 @@ function ExplainableSection({ text }: { text: string }) {
     </div>
   );
 }
+

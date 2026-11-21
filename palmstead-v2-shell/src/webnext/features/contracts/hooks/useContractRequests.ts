@@ -13,6 +13,14 @@ export function useCanFulfilContracts(): boolean {
   return !!profile;
 }
 
+// Contract generation/fulfilment is open to signed-in staff during the
+// current rollout. Template, clause and style writes have a narrower
+// database policy, so their screens must use the same boundary.
+export function useCanAdministerContracts(): boolean {
+  const profile = useSessionStore((s) => s.profile);
+  return profile?.role === 'manager' || profile?.key === 'elizabeth';
+}
+
 export function useContractRequests() {
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
@@ -46,3 +54,4 @@ export function useFulfilContractRequest() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contractRequests'] }),
   });
 }
+
