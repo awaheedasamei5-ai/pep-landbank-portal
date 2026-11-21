@@ -27,16 +27,19 @@ const SUPPORTED_KEYS = [
   "memorandum.manage",
   "company_leads.view",
   "company_leads.create",
+  "site_visits.view_all",
   "announcements.view",
   "announcements.comment",
   "allocations.manage",
+  "contracts.view_all",
   "contracts.generate",
+  "payments.view_all",
   "payments.manage",
   "polls.create",
 ];
 const ACCESS_GROUPS = [
   { title: "Operations", keys: SUPPORTED_KEYS.filter((key) => key.startsWith("operations.")) },
-  { title: "Sales and finance", keys: ["company_leads.view", "company_leads.create", "allocations.manage", "contracts.generate", "payments.manage"] },
+  { title: "Sales and finance", keys: ["company_leads.view", "company_leads.create", "site_visits.view_all", "allocations.manage", "contracts.view_all", "contracts.generate", "payments.view_all", "payments.manage"] },
   { title: "Communication", keys: ["announcements.view", "announcements.comment", "memorandum.view", "memorandum.manage", "polls.create"] },
   { title: "Personal workspace", keys: ["notes.view", "notes.manage"] },
 ];
@@ -131,7 +134,8 @@ export function AccessSettings() {
         <h1 className="font-semibold text-2xl tracking-tight">Staff access</h1>
         <p className="text-muted-foreground text-sm">
           Choose a staff member, then set the access they need for each area. A view restriction also blocks actions
-          within that area. Payment controls apply to payment records, not the entire Accounting app.
+          within that area. Cross-staff viewing is set separately for visits, contracts and payments. Payment controls
+          apply to client payment records, not the entire Accounting app.
         </p>
       </div>
       {loading && (

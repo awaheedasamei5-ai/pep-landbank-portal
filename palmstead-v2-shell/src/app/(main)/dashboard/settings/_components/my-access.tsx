@@ -14,8 +14,11 @@ const AREAS = [
   { label: "Memorandum", view: "memorandum.view", manage: "memorandum.manage", elevated: "Full" },
   { label: "Company Leads", view: "company_leads.view", manage: "company_leads.create", elevated: "View + create" },
   { label: "Announcements", view: "announcements.view", manage: "announcements.comment", elevated: "View + comment" },
+  { label: "View all site visits", manage: "site_visits.view_all", elevated: "Allowed" },
   { label: "Manage plot allocations", manage: "allocations.manage", elevated: "Allowed" },
+  { label: "View all contracts", manage: "contracts.view_all", elevated: "Allowed" },
   { label: "Generate contracts", manage: "contracts.generate", elevated: "Allowed" },
+  { label: "View all client payments", manage: "payments.view_all", elevated: "Allowed" },
   { label: "Manage payment records", manage: "payments.manage", elevated: "Allowed" },
   { label: "Create polls", manage: "polls.create", elevated: "Allowed" },
 ] as const;

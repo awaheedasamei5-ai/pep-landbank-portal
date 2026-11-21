@@ -43,7 +43,7 @@ const DETAIL_FIELDS: { key: keyof SiteVisit; label: string }[] = [
 // Real production table (site_visits) is agent-scoped by RLS exactly like
 // leads/payments for a plain agent -- listForAgent() already enforces it
 // server-side. Management additionally gets a company-wide, per-staff
-// "site visit records" view here (real ops.view_all/manager RLS already
+// "site visit records" view here (real site_visits.view_all/Management RLS
 // lets listAll() return every row -- same fact useWeekSiteVisits/Reports
 // already rely on), same isMaster-style widening Master Pipeline got
 // rather than a second bespoke screen.
