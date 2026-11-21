@@ -160,24 +160,26 @@ export function PortalForwardLink({ href, ...props }: Omit<ComponentProps<typeof
   return <Link {...props} href={portalHrefWithReturnTo(href, from, navigation?.role)} />;
 }
 
-export function PortalBackLink({ fallback, className }: { fallback?: string; className?: string }) {
+export function PortalBackLink({ fallback, className, skipSamePath = false }: { fallback?: string; className?: string; skipSamePath?: boolean }) {
   const pathname = usePathname();
   const search = useSearchParams().toString();
   const navigation = usePortalNavigation();
   const href = search ? `${pathname}?${search}` : pathname;
   const target = resolvePortalReturn(href, navigation?.trail ?? emptyPortalTrail(), fallback, navigation?.role);
+  const samePath = skipSamePath && target.href.split("?")[0] === pathname;
+  const targetHref = samePath ? (safePortalHref(fallback ?? "/dashboard/default", navigation?.role) ?? "/dashboard/default") : target.href;
   return (
     <Button variant="ghost" size="sm" className={className} asChild>
       <Link
-        href={target.href}
+        href={targetHref}
         onNavigate={(event) => {
-          if (!navigation) return;
+          if (!navigation || samePath) return;
           event.preventDefault();
           navigation.back(href, fallback);
         }}
       >
         <ArrowLeft aria-hidden="true" data-icon="inline-start" />
-        Back to {portalTitle(target.href)}
+        Back to {portalTitle(targetHref)}
       </Link>
     </Button>
   );
@@ -199,3 +201,4 @@ export function usePortalTab<const T extends readonly string[]>(key: "tab" | "vi
   };
   return [value, select] as const;
 }
+

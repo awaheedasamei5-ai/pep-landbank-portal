@@ -25,7 +25,7 @@ export default function Page() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <PortalBackLink fallback="/dashboard/default" />
+        <PortalBackLink fallback="/dashboard/default" skipSamePath />
       </div>
       <PageHeader
         title="Accounting"
@@ -84,3 +84,4 @@ export default function Page() {
     </div>
   );
 }
+
