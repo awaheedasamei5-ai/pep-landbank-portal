@@ -26,6 +26,9 @@ export interface FinanceOverview {
 }
 
 async function fetchFinanceOverview(scope: { isManager: boolean; agentKey: string | undefined }): Promise<FinanceOverview> {
+  if (!scope.isManager && !scope.agentKey) {
+    throw new Error("Accounting overview requires a signed-in staff profile.");
+  }
   const sb = requireSupabase();
   const thisMonth = today().slice(0, 7);
   const monthStart = `${thisMonth}-01`;
@@ -85,5 +88,6 @@ export function useFinanceOverview(isManager: boolean, agentKey: string | undefi
   return useQuery({
     queryKey: ["finance-overview", isManager, agentKey],
     queryFn: () => fetchFinanceOverview({ isManager, agentKey }),
+    enabled: isManager || Boolean(agentKey),
   });
 }
