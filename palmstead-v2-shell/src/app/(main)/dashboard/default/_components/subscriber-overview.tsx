@@ -27,16 +27,10 @@ function initials(name: string): string {
     .join("");
 }
 
-// Matches the real `leads_sel` RLS exactly (agent_key = own OR role =
-// manager OR key in the trusted set) -- these are the only accounts
-// whose unfiltered leads query in useManagerOverview() actually returns
-// every lead; everyone else's "company-wide" copy would be a lie.
-const COMPANY_WIDE_KEYS = ["elias", "emmanuel", "elizabeth"];
-
 export function SubscriberOverview() {
   const { data, isLoading } = useManagerOverview();
   const profile = useAuthStore((s) => s.profile);
-  const seesCompanyWide = profile?.role === "manager" || (!!profile?.key && COMPANY_WIDE_KEYS.includes(profile.key));
+  const seesCompanyWide = profile?.role === "manager";
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
 
   return (
@@ -68,8 +62,8 @@ export function SubscriberOverview() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="leading-none">By agent</CardTitle>
-          <CardDescription>Real pipeline value per agent, ranked highest first.</CardDescription>
+          <CardTitle className="leading-none">{seesCompanyWide ? "By agent" : "My pipeline"}</CardTitle>
+          <CardDescription>{seesCompanyWide ? "Real pipeline value per agent, ranked highest first." : "Value of leads assigned to you."}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pt-0">
           {isLoading && <p className="text-muted-foreground text-sm">Loading…</p>}
@@ -100,3 +94,4 @@ export function SubscriberOverview() {
     </div>
   );
 }
+
