@@ -17,6 +17,7 @@ import type { Config, Lead } from '../../../types/domain';
 
 export const CONTRACT_INK: [number, number, number] = [31, 56, 99];
 const CONTRACT_MONTH_WORDS: Record<number, string> = { 3: 'Three', 6: 'Six', 9: 'Nine', 12: 'Twelve' };
+const CONTRACT_CHECKBOX_SIZE = 4.8;
 
 function fitContractName(doc: jsPDF, name: string, maxWidth: number): number {
   for (let size = 11; size >= 8.5; size -= 0.5) {
@@ -79,25 +80,28 @@ function contractField(doc: jsPDF, x: number, y: number, w: number, label: strin
 }
 
 function contractCheckbox(doc: jsPDF, x: number, y: number, label: string, checked: boolean): number {
-  const s = 3.6;
+  const s = CONTRACT_CHECKBOX_SIZE;
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  if (label) doc.text(label, x, y);
+  const boxX = x + (label ? doc.getTextWidth(label) + 2 : 0);
   doc.setDrawColor(...CONTRACT_INK);
   doc.setLineWidth(0.4);
-  doc.rect(x, y - 3.1, s, s);
+  doc.rect(boxX, y - 4.2, s, s);
   if (checked) {
     doc.setFont('times', 'bold');
     doc.setFontSize(9);
-    doc.text('X', x + 0.6, y - 0.3);
+    doc.text('X', boxX + 1.2, y - 0.3);
   }
   doc.setFont('times', 'normal');
   doc.setFontSize(10.5);
-  if (label) doc.text(label, x + s + 2, y);
-  return x + s + 2 + (label ? doc.getTextWidth(label) : 0) + 7;
+  return boxX + s + 7;
 }
 
 function contractCheckRow(doc: jsPDF, x: number, y: number, pageW: number, options: string[], selected: string): number {
   let cx = x;
   options.forEach((opt) => {
-    const w = 3.6 + 2 + doc.getTextWidth(opt) + 7;
+    const w = CONTRACT_CHECKBOX_SIZE + 2 + doc.getTextWidth(opt) + 7;
     if (cx + w > pageW - 14) {
       cx = x;
       y += 8;
@@ -382,14 +386,14 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 12;
   doc.text('ID TYPE:', 14, y);
   contractCheckRow(doc, 34, y, pageW, ['Voters', 'Passport', 'Ghana Card', "Driver's License"], k.idType || '');
-  y += 11;
+  y += 9;
   contractField(doc, 14, y, pageW - 28, 'ID NO.', k.idNumber || '');
-  y += 10;
+  y += 9;
   contractField(doc, 14, y, pageW - 28, 'ADDRESS', lead.address || '');
-  y += 10;
+  y += 9;
   contractField(doc, 14, y, 86, 'EMAIL', k.email || '');
   contractField(doc, 108, y, 86, 'LOCATION', k.location || '');
-  y += 13;
+  y += 10;
 
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
@@ -398,14 +402,14 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   doc.setFont('times', 'normal');
   doc.setFontSize(10.5);
   contractField(doc, 14, y, pageW - 28, 'NAME', k.contactName || '');
-  y += 10;
+  y += 9;
   contractField(doc, 14, y, 86, 'PHONE', k.contactPhone || '');
   contractField(doc, 108, y, 86, 'EMAIL', k.contactEmail || '');
-  y += 10;
+  y += 9;
   contractField(doc, 14, y, pageW - 28, 'ADDRESS', k.contactAddress || '');
-  y += 10;
+  y += 9;
   contractField(doc, 14, y, pageW - 28, 'RELATION TO CLIENT', k.contactRelation || '');
-  y += 13;
+  y += 11;
 
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
@@ -413,10 +417,10 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 11;
   doc.setFont('times', 'normal');
   doc.setFontSize(10.5);
-  contractCheckRow(doc, 14, y, pageW, ['Residential', 'Commercial'], k.landUsage || 'Residential');
+  contractCheckRow(doc, 14, y, pageW, ['Residential', 'Commercial'], k.landUsage || '');
   y += 11;
   contractField(doc, 14, y, pageW - 28, 'If commercial indicate exact usage', k.landUsageDetail || '');
-  y += 16;
+  y += 19;
   doc.text('PREFERRED PACKAGE: Carefully select a package that best suits your financial plan.', 14, y);
   y += 10;
   const pkgMap: Record<string, string> = { 'Full Payment': '1. OUTRIGHT', '3 Months': '2. Three (3) Months', '6 Months': '3. Six (6) Months', '9 Months': '4. Nine (9) Months', '12 Months': '5. Twelve (12) Months' };
@@ -436,7 +440,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractCheckRow(doc, 14, y, pageW, ['1. Cheque', '2. Bank deposit', '3. Momo', '5. Bank Transfer'], '');
   y += 10;
   doc.text('All cheques should be written in the name of "' + vendorName + '"', 14, y);
-  y += 13;
+  y += 10;
 
   doc.setFont('times', 'bold');
   doc.setFontSize(11);
@@ -473,7 +477,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   y += 10;
   contractField(doc, 14, y, 86, 'Final payment date', planLabel === 'Outright' ? '' : 'within ' + t.planMonths + ' months of deposit');
   contractField(doc, 108, y, 86, 'Amount due monthly: GHS', t.monthlyDue ? ghs(t.monthlyDue).replace('GHS ', '') : '');
-  y += 17;
+  y += 15;
 
   doc.setFont('times', 'bold');
   doc.setFontSize(10.5);
@@ -487,7 +491,7 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   contractField(doc, 14, y, pageW - 28, 'Tel.', '');
   y += 14;
   doc.setFontSize(9.5);
-  doc.text('Note: The above details shall be read of part of the terms of the Contract of Sale Document', 14, pageH - 24);
+  doc.text('Note: The above details shall be read of part of the terms of the Contract of Sale Document', 14, pageH - 41);
 
   // ---- Page 5: Contract of Sale opening + WHEREAS ----
   n = 5;
