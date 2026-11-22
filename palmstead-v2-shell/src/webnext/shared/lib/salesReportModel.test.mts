@@ -275,3 +275,36 @@ test("unassigned company leads appear as current quality issues only in company 
   assert.equal(buildSalesReport(unassigned, "mine", "adams", false, filters).qualityIssues.some((issue) => issue.id === "d"), false);
 });
 
+test("allocation-only names stay out of sales figures until valued or worked", () => {
+  const source = data.leads[2];
+  const allocation = {
+    ...source,
+    leadSource: "Plot allocation import",
+    assignedAgentKey: undefined,
+    contact: "",
+    stage: "1",
+    unitPrice: 0,
+    grandTotal: 0,
+    amtPaid: 0,
+    notes: "Imported from allocation document",
+  };
+  const imported = {
+    ...data,
+    leads: [
+      ...data.leads,
+      { ...allocation, id: "placeholder" },
+      { ...allocation, id: "valued", grandTotal: 500 },
+      { ...allocation, id: "worked" },
+    ],
+    conversations: [
+      ...data.conversations,
+      { id: "worked-note", leadId: "worked", authorKey: "adams", channel: "call", body: "Discussed plots", createdAt: "2026-11-04T09:00:00Z" },
+    ],
+  } as SalesReportData;
+  const report = buildSalesReport(imported, "company", "adams", false, { ...filters, source: "Plot allocation import" });
+  assert.deepEqual(report.leads.map((lead) => lead.id), ["valued", "worked"]);
+  assert.equal(report.excludedImportPlaceholders, 1);
+  assert.equal(report.qualityIssues.some((issue) => issue.id === "placeholder"), false);
+  assert.equal(buildSalesReport(imported, "mine", "adams", false, filters).excludedImportPlaceholders, 0);
+});
+
