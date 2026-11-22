@@ -389,7 +389,7 @@ function SelectedLeadPreview({
     if (selected) {
       generate.mutate(
         {
-          lead: { ...lead, kyc: effectiveKyc },
+          lead: { ...contractLead, kyc: effectiveKyc },
           template: {
             templateId: selected.version.templateId,
             templateVersionId: selected.version.id,
@@ -399,6 +399,7 @@ function SelectedLeadPreview({
           },
           isWalkIn,
           amountPaidOverride,
+          acresOverride,
         },
         { onSuccess: onGenerateSuccess },
       );
