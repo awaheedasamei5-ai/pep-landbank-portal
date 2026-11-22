@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableEmpty } from "@/components/table-empty";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
-import { useAllContractsForVault, useContractTemplates, useRemoveContractFromActiveVault } from "../hooks/useContractTemplates";
+import { useAllContractsForVault, useContractTemplates, useRemoveContractFromActiveVault, useRemoveLegacyContractFromActiveVault } from "../hooks/useContractTemplates";
 import { requireSupabase } from "@/lib/supabase.client";
 import { useSessionStore } from "../../../auth/useSessionStore";
 import type { ContractGeneration } from "../../../types/domain";
@@ -35,6 +35,7 @@ export function ContractVaultScreen() {
   const [removeReason, setRemoveReason] = useState("");
   const manager = useSessionStore((state) => state.profile?.role === "manager");
   const removeFromVault = useRemoveContractFromActiveVault();
+  const removeLegacy = useRemoveLegacyContractFromActiveVault();
 
   const q = query.trim().toLowerCase();
   const filtered = (generations ?? []).filter((g) => (showRemoved || !g.voidedAt) && (!q || g.clientName.toLowerCase().includes(q)));
@@ -43,6 +44,7 @@ export function ContractVaultScreen() {
     setRemoveTarget(null);
     setRemoveReason("");
     removeFromVault.reset();
+    removeLegacy.reset();
   }
 
   return (
@@ -113,7 +115,7 @@ export function ContractVaultScreen() {
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           {!g.voidedAt && g.pdfStoragePath && <Button asChild type="button" size="sm" variant="outline"><Link href={g.leadId ? `/dashboard/contract-of-sale/generate?lead=${encodeURIComponent(g.leadId)}&correct=${encodeURIComponent(g.id)}` : `/dashboard/contract-of-sale/generate?copy=${encodeURIComponent(g.id)}`}><Pencil />Correct KYC</Link></Button>}
-                          {manager && !g.voidedAt && g.pdfStoragePath && <Button type="button" size="sm" variant="outline" onClick={() => setRemoveTarget(g)}><Trash2 />Remove</Button>}
+                          {manager && !g.voidedAt && <Button type="button" size="sm" variant="outline" onClick={() => setRemoveTarget(g)}><Trash2 />Remove</Button>}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -129,16 +131,16 @@ export function ContractVaultScreen() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove from active vault?</DialogTitle>
-            <DialogDescription>The issued PDF is kept in the audit history. This copy will disappear from the active list, and Management can find it under Show removed.</DialogDescription>
+            <DialogDescription>{removeTarget?.isLegacyRecord ? "This older record has no stored PDF. Its audit entry remains available under Show removed." : "The issued PDF is kept in the audit history. This copy will disappear from the active list, and Management can find it under Show removed."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="contract-remove-reason">Reason for removal</Label>
             <Input id="contract-remove-reason" value={removeReason} onChange={(event) => setRemoveReason(event.target.value)} placeholder="For example, incorrect client address" />
           </div>
-          {removeFromVault.isError && <p role="alert" className="text-sm text-destructive">{(removeFromVault.error as Error).message}</p>}
+          {(removeFromVault.isError || removeLegacy.isError) && <p role="alert" className="text-sm text-destructive">{((removeFromVault.error || removeLegacy.error) as Error).message}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeRemove}>Cancel</Button>
-            <Button type="button" variant="destructive" disabled={removeReason.trim().length < 5 || removeFromVault.isPending} onClick={() => removeTarget && removeFromVault.mutate({ id: removeTarget.id, reason: removeReason }, { onSuccess: closeRemove })}>{removeFromVault.isPending ? "Removing…" : "Remove from active vault"}</Button>
+            <Button type="button" variant="destructive" disabled={removeReason.trim().length < 5 || removeFromVault.isPending || removeLegacy.isPending} onClick={() => { if (!removeTarget) return; const action = removeTarget.isLegacyRecord ? removeLegacy : removeFromVault; action.mutate({ id: removeTarget.id, reason: removeReason }, { onSuccess: closeRemove }); }}>{removeFromVault.isPending || removeLegacy.isPending ? "Removing…" : "Remove from active vault"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
