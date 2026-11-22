@@ -115,7 +115,7 @@ export interface SalesMonthRow {
 
 export interface SalesQualityIssue {
   id: string;
-  kind: "Missing call outcome" | "Unlinked visit" | "Company lead without handler";
+  kind: "Missing call outcome" | "Unlinked visit" | "Company lead without handler" | "Unverified payment plan";
   date: string;
   client: string;
   owner: string;
@@ -160,6 +160,11 @@ export interface SalesReport {
 }
 
 export const GHANA_TIME_ZONE = "Africa/Accra";
+
+export function salesPaymentPlanLabel(value: string): string {
+  const plan = value.trim();
+  return plan === "[object Object]" || !plan ? "Unverified payment plan" : plan;
+}
 
 export function ghanaDate(value: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -258,7 +263,7 @@ export function buildSalesReport(
         (lead.agent === "company" ? lead.assignedAgentKey === filters.staffKey : lead.agent === filters.staffKey)) &&
       (!filters.source || (lead.leadSource ?? "") === filters.source) &&
       (!filters.stage || lead.stage === filters.stage) &&
-      (!filters.paymentPlan || lead.paymentPlan === filters.paymentPlan),
+      (!filters.paymentPlan || salesPaymentPlanLabel(lead.paymentPlan) === filters.paymentPlan),
   );
   const reportableIds = new Set(reportableSalesLeads(data).map((lead) => lead.id));
   const excludedImportPlaceholders = selectedLeads.filter((lead) => !reportableIds.has(lead.id)).length;
@@ -318,6 +323,14 @@ export function buildSalesReport(
       client: lead.name,
       owner: "Company pool",
       recordUrl: `/dashboard/company-leads/${lead.id}`,
+    })),
+    ...leads.filter((lead) => salesPaymentPlanLabel(lead.paymentPlan) === "Unverified payment plan").map((lead) => ({
+      id: lead.id,
+      kind: "Unverified payment plan" as const,
+      date: ghanaDate(lead.date),
+      client: lead.name,
+      owner: lead.agent === "company" ? "Company pool" : (names[lead.agent] ?? lead.agent),
+      recordUrl: `${lead.agent === "company" ? "/dashboard/company-leads" : "/dashboard/pipeline"}/${lead.id}`,
     })),
   ].sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
   const newLeads = leads.filter((lead) => within(lead.date, filters));
@@ -443,4 +456,5 @@ export function buildSalesReport(
     loadedAt: data.loadedAt,
   };
 }
+
 
