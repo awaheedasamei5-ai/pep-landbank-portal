@@ -370,8 +370,8 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               ["Attributed visit cost", ghs(report.attributedVisitCost), "Recorded attended-visit cost only"],
               [
                 "Data gaps",
-                (report.callsWithoutOutcome + report.visitRequestWithoutLead).toLocaleString(),
-                "Calls without outcome + unlinked visit requests",
+                report.qualityIssues.length.toLocaleString(),
+                "Call outcomes, visit links and company handlers needing attention",
               ],
             ].map(([label, value, note]) => (
               <Card key={label}>
@@ -544,6 +544,47 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               </Card>
             ))}
           </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Records needing attention</CardTitle>
+              <CardDescription>
+                Calls and visit requests use the selected dates. Unassigned company handlers reflect current lead
+                records. Open a record to complete its missing information.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {report.qualityIssues.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No missing call outcomes, visit links or company handlers in this scope.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Issue</TableHead>
+                      <TableHead>Ghana date</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Staff / pool</TableHead>
+                      <TableHead>Record</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.qualityIssues.map((issue) => (
+                      <TableRow key={`${issue.kind}-${issue.id}`}>
+                        <TableCell className="min-w-36 whitespace-normal font-medium">{issue.kind}</TableCell>
+                        <TableCell>{issue.date}</TableCell>
+                        <TableCell className="min-w-40 whitespace-normal">{issue.client}</TableCell>
+                        <TableCell className="min-w-32 whitespace-normal">{issue.owner}</TableCell>
+                        <TableCell>
+                          <Link className="text-primary underline-offset-2 hover:underline" href={issue.recordUrl}>
+                            Open record
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Call register</CardTitle>
