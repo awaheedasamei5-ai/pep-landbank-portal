@@ -45,6 +45,7 @@ function table(
   headers: string[],
   rows: (string | number)[][],
   widths?: Record<number, number>,
+  links?: string[],
 ): number {
   autoTable(doc, {
     startY: y,
@@ -55,9 +56,21 @@ function table(
     headStyles: { fillColor: PDF_INK, textColor: [255, 255, 255], fontStyle: "bold" },
     alternateRowStyles: { fillColor: [246, 248, 250] },
     columnStyles: widths
-      ? Object.fromEntries(Object.entries(widths).map(([key, cellWidth]) => [key, { cellWidth }]))
+      ? Object.fromEntries(
+          Object.entries(widths).map(([key, cellWidth]) => [
+            key,
+            { cellWidth, ...(links && Number(key) === headers.length - 1 ? { textColor: PDF_LEAF } : {}) },
+          ]),
+        )
       : undefined,
     showHead: "everyPage",
+    didDrawCell: links
+      ? (cell) => {
+          if (cell.section !== "body" || cell.column.index !== headers.length - 1) return;
+          const href = links[cell.row.index];
+          if (href) doc.link(cell.cell.x, cell.cell.y, cell.cell.width, cell.cell.height, { url: href });
+        }
+      : undefined,
   });
   return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
 }
@@ -317,15 +330,16 @@ export async function buildSalesReportPdf(
     y = table(
       doc,
       y,
-      ["Issue", "Ghana date", "Client", "Staff / pool", "Record ID"],
+      ["Issue", "Ghana date", "Client", "Staff / pool", "Record"],
       report.qualityIssues.map((issue) => [
         issue.kind,
         issue.date,
         safe(issue.client),
         safe(issue.owner),
-        issue.id,
+        "Open record",
       ]),
-      { 0: 37, 1: 23, 2: 43, 3: 34, 4: 43 },
+      { 0: 43, 1: 24, 2: 51, 3: 39, 4: 23 },
+      report.qualityIssues.map((issue) => `https://palmstead-v2-shell.vercel.app${issue.recordUrl}`),
     );
   }
   if (sections.has("registers")) {
