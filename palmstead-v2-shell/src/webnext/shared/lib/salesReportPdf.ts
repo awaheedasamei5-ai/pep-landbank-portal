@@ -106,6 +106,7 @@ export async function buildSalesReportPdf(
     `Pool: ${report.filters.pool || "all"}; client: ${report.filters.clientId || "all"}.`,
     "Activity and lead cohorts use their event dates; payment cash uses payment date and approved status.",
     "Current stage and paid-in-full conversion are snapshots, not historical stage transitions.",
+    `${report.excludedImportPlaceholders} allocation-only names without sales evidence were excluded from this scope.`,
   ];
   for (const line of scopeLines) {
     doc.text(line, 12, y);
