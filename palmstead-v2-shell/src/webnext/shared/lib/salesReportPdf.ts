@@ -15,13 +15,14 @@ import {
 import { sanitizePdfText } from "./pdfText";
 import type { SalesPeriodComparison, SalesReport } from "./salesReportModel";
 
-export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "registers" | "clients";
+export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "quality" | "registers" | "clients";
 export const SALES_PDF_SECTIONS: { key: SalesPdfSection; label: string }[] = [
   { key: "overview", label: "Executive scorecard" },
   { key: "comparison", label: "Previous period" },
   { key: "trend", label: "Monthly trend" },
   { key: "staff", label: "Staff comparison" },
   { key: "mix", label: "Conversion and data quality" },
+  { key: "quality", label: "Records needing attention" },
   { key: "registers", label: "Calls, visits and receipts" },
   { key: "clients", label: "Client records and discussions" },
 ];
@@ -305,6 +306,25 @@ export async function buildSalesReportPdf(
           "Receipts are approved client payments; visit cost is an attributed cost snapshot. Their difference is not company profit.",
         ],
       ],
+    );
+  }
+  if (sections.has("quality")) {
+    y = openTopSection(
+      "Records needing attention",
+      "Dated call and visit gaps; company handler assignments are current",
+    );
+    y = table(
+      doc,
+      y,
+      ["Issue", "Ghana date", "Client", "Staff / pool", "Record ID"],
+      report.qualityIssues.map((issue) => [
+        issue.kind,
+        issue.date,
+        safe(issue.client),
+        safe(issue.owner),
+        issue.id,
+      ]),
+      { 0: 37, 1: 23, 2: 43, 3: 34, 4: 43 },
     );
   }
   if (sections.has("registers")) {
