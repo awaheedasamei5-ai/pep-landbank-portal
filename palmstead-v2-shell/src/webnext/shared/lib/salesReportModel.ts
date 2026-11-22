@@ -148,6 +148,7 @@ export interface SalesReport {
   callsWithoutOutcome: number;
   unassignedCompanyLeads: number;
   qualityIssues: SalesQualityIssue[];
+  excludedImportPlaceholders: number;
   payingClients: number;
   pipelineValue: number;
   outstanding: number;
@@ -204,6 +205,33 @@ function isReached(entry: ActivityLogEntry): boolean {
   return (entry.outcome ?? "").toLowerCase().startsWith("reached");
 }
 
+// The allocation document was imported as company lead names. Names and
+// import notes alone are not sales evidence. Preserve any record that was
+// subsequently worked, valued, assigned or linked to an actual event.
+export function reportableSalesLeads(data: SalesReportData): Lead[] {
+  const workedIds = new Set([
+    ...data.activity.map((entry) => entry.leadId),
+    ...data.visits.map((visit) => visit.leadId),
+    ...data.payments.map((payment) => payment.leadId),
+    ...data.conversations.map((entry) => entry.leadId),
+    ...data.costs.map((entry) => entry.leadId),
+  ]);
+  return data.leads.filter((lead) => {
+    if (lead.agent !== "company" || lead.leadSource?.trim().toLowerCase() !== "plot allocation import") return true;
+    return (
+      lead.grandTotal > 0 ||
+      lead.unitPrice > 0 ||
+      lead.amtPaid > 0 ||
+      lead.stage !== "1" ||
+      !!lead.assignedAgentKey ||
+      !!lead.contact?.trim() ||
+      !!lead.nextAction?.trim() ||
+      !!lead.nextActionDate ||
+      workedIds.has(lead.id)
+    );
+  });
+}
+
 export function buildSalesReport(
   data: SalesReportData,
   scope: SalesReportScope,
@@ -218,7 +246,7 @@ export function buildSalesReport(
     if (scope === "company") return lead.agent === "company";
     return isManager;
   });
-  const leads = cohort.filter(
+  const selectedLeads = cohort.filter(
     (lead) =>
       (!filters.pool ||
         scope !== "master" ||
@@ -231,6 +259,9 @@ export function buildSalesReport(
       (!filters.stage || lead.stage === filters.stage) &&
       (!filters.paymentPlan || lead.paymentPlan === filters.paymentPlan),
   );
+  const reportableIds = new Set(reportableSalesLeads(data).map((lead) => lead.id));
+  const excludedImportPlaceholders = selectedLeads.filter((lead) => !reportableIds.has(lead.id)).length;
+  const leads = selectedLeads.filter((lead) => reportableIds.has(lead.id));
   const leadIds = new Set(leads.map((lead) => lead.id));
   const activities = data.activity.filter(
     (entry) =>
@@ -400,6 +431,7 @@ export function buildSalesReport(
     callsWithoutOutcome: qualityIssues.filter((entry) => entry.kind === "Missing call outcome").length,
     unassignedCompanyLeads: leads.filter((lead) => lead.agent === "company" && !lead.assignedAgentKey).length,
     qualityIssues,
+    excludedImportPlaceholders,
     payingClients: clients.filter((client) => client.paidToDate > 0).length,
     pipelineValue: clients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
     outstanding: clients.reduce((sum, client) => sum + client.outstanding, 0),
