@@ -307,6 +307,7 @@ export async function buildSalesReportPdf(
         ["Calls without outcome", report.callsWithoutOutcome],
         ["Unlinked visit requests", report.visitRequestWithoutLead],
         ["Company leads without handler", report.unassignedCompanyLeads],
+        ["Unverified payment plans", report.qualityIssues.filter((issue) => issue.kind === "Unverified payment plan").length],
         ["Reached denominator", `${report.reached} reached / ${report.calls.length} genuine calls`],
         ["Lead cohort denominator", `${report.newLeads.length} leads created within selection`],
         ["Sales definition", "Approved payment entries are client receipts, not booked sales or bank reconciliation."],
@@ -325,7 +326,7 @@ export async function buildSalesReportPdf(
   if (sections.has("quality")) {
     y = openTopSection(
       "Records needing attention",
-      "Dated call and visit gaps; company handler assignments are current",
+      "Dated call and visit gaps; company handlers and payment plans are current",
     );
     y = table(
       doc,
