@@ -4,7 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
-import { buildContractOfSalePdf, contractFilename, loadContractFontBase64 } from '../lib/contractPdf';
+import { contractFilename, prepareStandardContractPdf } from '../lib/contractPdf';
 import { buildContractFromSections } from '../lib/contractSectionsPdf';
 import { resolveContractFields, resolveSections, findUnresolvedTokens } from '../lib/contractFieldResolver';
 import type { Config, ContractSection, Lead } from '../../../types/domain';
@@ -130,22 +130,9 @@ export function useGenerateContract() {
         return ds.contracts.create(lead.id, lead.name, lead.agent, profile.key, profile.name);
       }
 
-      let cover: string | null = null;
-      let wordmark: string | null = null;
-      try {
-        cover = config.contractCoverImage || (await loadImageAsDataUri('/contract-cover.jpg'));
-      } catch {
-        // Missing cover image shouldn't stop the contract from generating.
-      }
-      try {
-        wordmark = config.contractWordmarkImage || (await loadImageAsDataUri('/trulander-wordmark.png'));
-      } catch {
-        // Missing wordmark shouldn't stop the contract from generating.
-      }
       const standardLead = isWalkIn ? { ...lead, amtPaid: amountPaidOverride ?? 0 } : lead;
       const standardConfig = legalOverride ? { ...config, ...legalOverride } : config;
-      const fontBase64 = await loadContractFontBase64();
-      const doc = buildContractOfSalePdf(standardLead, standardConfig, cover, wordmark, acresOverride, fontBase64);
+      const doc = await prepareStandardContractPdf(standardLead, standardConfig, acresOverride);
       const legacyDocFilename = contractFilename(lead.name);
       if (isWalkIn) {
         const ds = getDataSource(demoMode);
