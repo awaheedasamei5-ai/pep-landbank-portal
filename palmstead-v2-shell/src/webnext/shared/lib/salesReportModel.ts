@@ -209,6 +209,7 @@ function isReached(entry: ActivityLogEntry): boolean {
 // import notes alone are not sales evidence. Preserve any record that was
 // subsequently worked, valued, assigned or linked to an actual event.
 export function reportableSalesLeads(data: SalesReportData): Lead[] {
+  const importFollowUp = "confirm contact details and real payment history with client";
   const workedIds = new Set([
     ...data.activity.map((entry) => entry.leadId),
     ...data.visits.map((visit) => visit.leadId),
@@ -225,7 +226,7 @@ export function reportableSalesLeads(data: SalesReportData): Lead[] {
       lead.stage !== "1" ||
       !!lead.assignedAgentKey ||
       !!lead.contact?.trim() ||
-      !!lead.nextAction?.trim() ||
+      (!!lead.nextAction?.trim() && lead.nextAction.trim().toLowerCase() !== importFollowUp) ||
       !!lead.nextActionDate ||
       workedIds.has(lead.id)
     );
