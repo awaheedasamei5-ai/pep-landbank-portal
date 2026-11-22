@@ -843,6 +843,7 @@ export interface DataSource {
   // screen, itself gated to canManageContracts-equivalent staff.
   contracts: {
     list(): Promise<Contract[]>;
+    removeFromActiveVault(id: string, reason: string): Promise<Contract>;
     create(
       leadId: string,
       clientName: string,
@@ -3311,6 +3312,17 @@ function createLiveDataSource(): DataSource {
           .order("created_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractRow);
+      },
+      async removeFromActiveVault(id, reason) {
+        const { data, error } = await requireClient()
+          .from("contracts")
+          .update({ voided_at: new Date().toISOString(), void_reason: reason.trim() })
+          .eq("id", id)
+          .is("voided_at", null)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractRow(data);
       },
       async create(leadId, clientName, agentKey, createdBy, createdByName) {
         const { data, error } = await requireClient()
