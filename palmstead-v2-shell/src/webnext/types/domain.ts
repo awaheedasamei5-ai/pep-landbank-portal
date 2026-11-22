@@ -1903,6 +1903,7 @@ export interface ContractField {
 // Documenso's own "templateId is lineage, not a live dependency"
 // discipline -- never read live to redisplay a past generation.
 export interface ContractGeneration {
+  isLegacyRecord?: boolean;
   id: string;
   contractRequestId: string | null;
   // null for a walk-in client (docs/plans/17-contract-of-sale-v3-gaps-plan.md
