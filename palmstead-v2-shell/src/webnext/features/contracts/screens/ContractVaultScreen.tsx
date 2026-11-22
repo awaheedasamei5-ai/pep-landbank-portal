@@ -131,7 +131,7 @@ export function ContractVaultScreen() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove from active vault?</DialogTitle>
-            <DialogDescription>The issued PDF is kept in the audit history. This copy will disappear from the active list, and Management can find it under Show removed.</DialogDescription>
+            <DialogDescription>{removeTarget?.isLegacyRecord ? "This older record has no stored PDF. Its audit entry remains available under Show removed." : "The issued PDF is kept in the audit history. This copy will disappear from the active list, and Management can find it under Show removed."}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="contract-remove-reason">Reason for removal</Label>
@@ -140,7 +140,7 @@ export function ContractVaultScreen() {
           {(removeFromVault.isError || removeLegacy.isError) && <p role="alert" className="text-sm text-destructive">{((removeFromVault.error || removeLegacy.error) as Error).message}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={closeRemove}>Cancel</Button>
-            <Button type="button" variant="destructive" disabled={removeReason.trim().length < 5 || removeFromVault.isPending || removeLegacy.isPending} onClick={() => { if (!removeTarget) return; const action = removeTarget.pdfStoragePath ? removeFromVault : removeLegacy; action.mutate({ id: removeTarget.id, reason: removeReason }, { onSuccess: closeRemove }); }}>{removeFromVault.isPending || removeLegacy.isPending ? "Removing…" : "Remove from active vault"}</Button>
+            <Button type="button" variant="destructive" disabled={removeReason.trim().length < 5 || removeFromVault.isPending || removeLegacy.isPending} onClick={() => { if (!removeTarget) return; const action = removeTarget.isLegacyRecord ? removeLegacy : removeFromVault; action.mutate({ id: removeTarget.id, reason: removeReason }, { onSuccess: closeRemove }); }}>{removeFromVault.isPending || removeLegacy.isPending ? "Removing…" : "Remove from active vault"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
