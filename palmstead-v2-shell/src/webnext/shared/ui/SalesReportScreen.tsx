@@ -26,6 +26,7 @@ import {
   compareSalesPeriods,
   ghanaDate,
   precedingSalesPeriod,
+  reportableSalesLeads,
   type SalesReportFilters,
   type SalesReportScope,
 } from "../lib/salesReportModel";
@@ -137,16 +138,17 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     setFilters((current) => ({ ...current, [field]: value }));
   const choices = useMemo(() => {
     const data = dataQuery.data;
+    const reportable = data ? reportableSalesLeads(data) : [];
     const unique = (values: (string | null | undefined)[]) =>
       [...new Set(values.filter((value): value is string => !!value))].sort();
     return {
-      source: unique(data?.leads.map((lead) => lead.leadSource) ?? []),
-      stage: unique(data?.leads.map((lead) => lead.stage) ?? []),
+      source: unique(reportable.map((lead) => lead.leadSource)),
+      stage: unique(reportable.map((lead) => lead.stage)),
       action: unique(data?.activity.map((entry) => entry.action) ?? []),
       outcome: unique(data?.activity.map((entry) => entry.outcome) ?? []),
       site: unique(data?.visits.map((visit) => visit.site) ?? []),
-      plan: unique(data?.leads.map((lead) => lead.paymentPlan) ?? []),
-      clients: (data?.leads ?? [])
+      plan: unique(reportable.map((lead) => lead.paymentPlan)),
+      clients: reportable
         .filter((lead) =>
           scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
         )
@@ -339,6 +341,12 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
       )}
       {report && (
         <>
+          {report.excludedImportPlaceholders > 0 && (
+            <p className="text-muted-foreground text-sm">
+              {report.excludedImportPlaceholders.toLocaleString()} allocation-import names without contact, deal
+              value, progress or linked activity are excluded from sales figures and client records in this scope.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ["New leads", report.newLeads.length.toLocaleString(), "Created in selected dates"],
@@ -370,8 +378,8 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               ["Attributed visit cost", ghs(report.attributedVisitCost), "Recorded attended-visit cost only"],
               [
                 "Data gaps",
-                (report.callsWithoutOutcome + report.visitRequestWithoutLead).toLocaleString(),
-                "Calls without outcome + unlinked visit requests",
+                report.qualityIssues.length.toLocaleString(),
+                "Call outcomes, visit links and company handlers needing attention",
               ],
             ].map(([label, value, note]) => (
               <Card key={label}>
@@ -544,6 +552,47 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               </Card>
             ))}
           </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Records needing attention</CardTitle>
+              <CardDescription>
+                Calls and visit requests use the selected dates. Unassigned company handlers reflect current lead
+                records. Open a record to complete its missing information.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {report.qualityIssues.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No missing call outcomes, visit links or company handlers in this scope.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Issue</TableHead>
+                      <TableHead>Ghana date</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Staff / pool</TableHead>
+                      <TableHead>Record</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {report.qualityIssues.map((issue) => (
+                      <TableRow key={`${issue.kind}-${issue.id}`}>
+                        <TableCell className="min-w-36 whitespace-normal font-medium">{issue.kind}</TableCell>
+                        <TableCell>{issue.date}</TableCell>
+                        <TableCell className="min-w-40 whitespace-normal">{issue.client}</TableCell>
+                        <TableCell className="min-w-32 whitespace-normal">{issue.owner}</TableCell>
+                        <TableCell>
+                          <Link className="text-primary underline-offset-2 hover:underline" href={issue.recordUrl}>
+                            Open record
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Call register</CardTitle>

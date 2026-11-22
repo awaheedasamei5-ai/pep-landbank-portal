@@ -242,3 +242,70 @@ test("equal-length preceding period compares dated events within the same lead p
   );
 });
 
+test("quality register identifies records without crossing personal and company pools", () => {
+  const master = buildSalesReport(data, "master", "manager", true, filters);
+  assert.deepEqual(
+    master.qualityIssues.map((issue) => issue.id),
+    ["call-c", "legacy-call-a", "unlinked"],
+  );
+  assert.equal(master.qualityIssues.find((issue) => issue.id === "unlinked")?.recordUrl, "/dashboard/site-visits/unlinked");
+  assert.deepEqual(
+    buildSalesReport(data, "mine", "adams", false, filters).qualityIssues.map((issue) => issue.id),
+    ["legacy-call-a"],
+  );
+  assert.deepEqual(
+    buildSalesReport(data, "company", "adams", false, filters).qualityIssues.map((issue) => issue.id),
+    ["call-c"],
+  );
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, site: "North" }).visitRequestWithoutLead, 1);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, site: "South" }).visitRequestWithoutLead, 0);
+});
+
+test("unassigned company leads appear as current quality issues only in company scope", () => {
+  const unassigned = {
+    ...data,
+    leads: [
+      ...data.leads,
+      { ...data.leads[2], id: "d", name: "Client D", date: "2026-10-01", assignedAgentKey: undefined },
+    ],
+  } as SalesReportData;
+  const company = buildSalesReport(unassigned, "company", "adams", false, filters);
+  assert.equal(company.unassignedCompanyLeads, 1);
+  assert.equal(company.qualityIssues.find((issue) => issue.id === "d")?.kind, "Company lead without handler");
+  assert.equal(buildSalesReport(unassigned, "mine", "adams", false, filters).qualityIssues.some((issue) => issue.id === "d"), false);
+});
+
+test("allocation-only names stay out of sales figures until valued or worked", () => {
+  const source = data.leads[2];
+  const allocation = {
+    ...source,
+    leadSource: "Plot allocation import",
+    assignedAgentKey: undefined,
+    contact: "",
+    stage: "1",
+    unitPrice: 0,
+    grandTotal: 0,
+    amtPaid: 0,
+    notes: "Imported from allocation document",
+    nextAction: "Confirm contact details and real payment history with client",
+  };
+  const imported = {
+    ...data,
+    leads: [
+      ...data.leads,
+      { ...allocation, id: "placeholder" },
+      { ...allocation, id: "valued", grandTotal: 500 },
+      { ...allocation, id: "worked" },
+    ],
+    conversations: [
+      ...data.conversations,
+      { id: "worked-note", leadId: "worked", authorKey: "adams", channel: "call", body: "Discussed plots", createdAt: "2026-11-04T09:00:00Z" },
+    ],
+  } as SalesReportData;
+  const report = buildSalesReport(imported, "company", "adams", false, { ...filters, source: "Plot allocation import" });
+  assert.deepEqual(report.leads.map((lead) => lead.id), ["valued", "worked"]);
+  assert.equal(report.excludedImportPlaceholders, 1);
+  assert.equal(report.qualityIssues.some((issue) => issue.id === "placeholder"), false);
+  assert.equal(buildSalesReport(imported, "mine", "adams", false, filters).excludedImportPlaceholders, 0);
+});
+

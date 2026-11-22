@@ -15,13 +15,14 @@ import {
 import { sanitizePdfText } from "./pdfText";
 import type { SalesPeriodComparison, SalesReport } from "./salesReportModel";
 
-export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "registers" | "clients";
+export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "quality" | "registers" | "clients";
 export const SALES_PDF_SECTIONS: { key: SalesPdfSection; label: string }[] = [
   { key: "overview", label: "Executive scorecard" },
   { key: "comparison", label: "Previous period" },
   { key: "trend", label: "Monthly trend" },
   { key: "staff", label: "Staff comparison" },
   { key: "mix", label: "Conversion and data quality" },
+  { key: "quality", label: "Records needing attention" },
   { key: "registers", label: "Calls, visits and receipts" },
   { key: "clients", label: "Client records and discussions" },
 ];
@@ -44,6 +45,7 @@ function table(
   headers: string[],
   rows: (string | number)[][],
   widths?: Record<number, number>,
+  links?: string[],
 ): number {
   autoTable(doc, {
     startY: y,
@@ -54,9 +56,21 @@ function table(
     headStyles: { fillColor: PDF_INK, textColor: [255, 255, 255], fontStyle: "bold" },
     alternateRowStyles: { fillColor: [246, 248, 250] },
     columnStyles: widths
-      ? Object.fromEntries(Object.entries(widths).map(([key, cellWidth]) => [key, { cellWidth }]))
+      ? Object.fromEntries(
+          Object.entries(widths).map(([key, cellWidth]) => [
+            key,
+            { cellWidth, ...(links && Number(key) === headers.length - 1 ? { textColor: PDF_LEAF } : {}) },
+          ]),
+        )
       : undefined,
     showHead: "everyPage",
+    didDrawCell: links
+      ? (cell) => {
+          if (cell.section !== "body" || cell.column.index !== headers.length - 1) return;
+          const href = links[cell.row.index];
+          if (href) doc.link(cell.cell.x, cell.cell.y, cell.cell.width, cell.cell.height, { url: href });
+        }
+      : undefined,
   });
   return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
 }
@@ -105,6 +119,7 @@ export async function buildSalesReportPdf(
     `Pool: ${report.filters.pool || "all"}; client: ${report.filters.clientId || "all"}.`,
     "Activity and lead cohorts use their event dates; payment cash uses payment date and approved status.",
     "Current stage and paid-in-full conversion are snapshots, not historical stage transitions.",
+    `${report.excludedImportPlaceholders} allocation-only names without sales evidence were excluded from this scope.`,
   ];
   for (const line of scopeLines) {
     doc.text(line, 12, y);
@@ -305,6 +320,26 @@ export async function buildSalesReportPdf(
           "Receipts are approved client payments; visit cost is an attributed cost snapshot. Their difference is not company profit.",
         ],
       ],
+    );
+  }
+  if (sections.has("quality")) {
+    y = openTopSection(
+      "Records needing attention",
+      "Dated call and visit gaps; company handler assignments are current",
+    );
+    y = table(
+      doc,
+      y,
+      ["Issue", "Ghana date", "Client", "Staff / pool", "Record"],
+      report.qualityIssues.map((issue) => [
+        issue.kind,
+        issue.date,
+        safe(issue.client),
+        safe(issue.owner),
+        "Open record",
+      ]),
+      { 0: 43, 1: 24, 2: 51, 3: 39, 4: 23 },
+      report.qualityIssues.map((issue) => `https://palmstead-v2-shell.vercel.app${issue.recordUrl}`),
     );
   }
   if (sections.has("registers")) {

@@ -113,6 +113,15 @@ export interface SalesMonthRow {
   approvedCash: number;
 }
 
+export interface SalesQualityIssue {
+  id: string;
+  kind: "Missing call outcome" | "Unlinked visit" | "Company lead without handler";
+  date: string;
+  client: string;
+  owner: string;
+  recordUrl: string;
+}
+
 export interface SalesReport {
   filters: SalesReportFilters;
   scope: SalesReportScope;
@@ -138,6 +147,8 @@ export interface SalesReport {
   visitRequestWithoutLead: number;
   callsWithoutOutcome: number;
   unassignedCompanyLeads: number;
+  qualityIssues: SalesQualityIssue[];
+  excludedImportPlaceholders: number;
   payingClients: number;
   pipelineValue: number;
   outstanding: number;
@@ -194,6 +205,34 @@ function isReached(entry: ActivityLogEntry): boolean {
   return (entry.outcome ?? "").toLowerCase().startsWith("reached");
 }
 
+// The allocation document was imported as company lead names. Names and
+// import notes alone are not sales evidence. Preserve any record that was
+// subsequently worked, valued, assigned or linked to an actual event.
+export function reportableSalesLeads(data: SalesReportData): Lead[] {
+  const importFollowUp = "confirm contact details and real payment history with client";
+  const workedIds = new Set([
+    ...data.activity.map((entry) => entry.leadId),
+    ...data.visits.map((visit) => visit.leadId),
+    ...data.payments.map((payment) => payment.leadId),
+    ...data.conversations.map((entry) => entry.leadId),
+    ...data.costs.map((entry) => entry.leadId),
+  ]);
+  return data.leads.filter((lead) => {
+    if (lead.agent !== "company" || lead.leadSource?.trim().toLowerCase() !== "plot allocation import") return true;
+    return (
+      lead.grandTotal > 0 ||
+      lead.unitPrice > 0 ||
+      lead.amtPaid > 0 ||
+      lead.stage !== "1" ||
+      !!lead.assignedAgentKey ||
+      !!lead.contact?.trim() ||
+      (!!lead.nextAction?.trim() && lead.nextAction.trim().toLowerCase() !== importFollowUp) ||
+      !!lead.nextActionDate ||
+      workedIds.has(lead.id)
+    );
+  });
+}
+
 export function buildSalesReport(
   data: SalesReportData,
   scope: SalesReportScope,
@@ -208,7 +247,7 @@ export function buildSalesReport(
     if (scope === "company") return lead.agent === "company";
     return isManager;
   });
-  const leads = cohort.filter(
+  const selectedLeads = cohort.filter(
     (lead) =>
       (!filters.pool ||
         scope !== "master" ||
@@ -221,6 +260,9 @@ export function buildSalesReport(
       (!filters.stage || lead.stage === filters.stage) &&
       (!filters.paymentPlan || lead.paymentPlan === filters.paymentPlan),
   );
+  const reportableIds = new Set(reportableSalesLeads(data).map((lead) => lead.id));
+  const excludedImportPlaceholders = selectedLeads.filter((lead) => !reportableIds.has(lead.id)).length;
+  const leads = selectedLeads.filter((lead) => reportableIds.has(lead.id));
   const leadIds = new Set(leads.map((lead) => lead.id));
   const activities = data.activity.filter(
     (entry) =>
@@ -239,6 +281,45 @@ export function buildSalesReport(
     (entry) => leadIds.has(entry.leadId) && within(entry.createdAt, filters),
   );
   const costs = data.costs.filter((entry) => leadIds.has(entry.leadId) && entry.sourceType === "site_visit");
+  const unlinkedVisits = data.visits.filter((visit) => {
+    if (visit.leadId || !within(visit.createdAt, filters)) return false;
+    if (filters.clientId || filters.source || filters.stage || filters.paymentPlan) return false;
+    if (filters.site && visit.site !== filters.site) return false;
+    if (scope === "master")
+      return isManager && filters.pool !== "company" && (!filters.staffKey || visit.agentKey === filters.staffKey);
+    if (scope === "mine") return visit.agentKey === viewerKey;
+    return false;
+  });
+  const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+  const qualityIssues: SalesQualityIssue[] = [
+    ...calls.filter((entry) => !entry.outcome?.trim()).map((entry) => {
+      const lead = leadById.get(entry.leadId ?? "");
+      return {
+        id: entry.id,
+        kind: "Missing call outcome" as const,
+        date: ghanaDate(entry.createdAt),
+        client: lead?.name ?? entry.client,
+        owner: entry.agentName ?? names[entry.agentKey] ?? entry.agentKey,
+        recordUrl: `${lead?.agent === "company" ? "/dashboard/company-leads" : "/dashboard/pipeline"}/${entry.leadId}`,
+      };
+    }),
+    ...unlinkedVisits.map((visit) => ({
+      id: visit.id,
+      kind: "Unlinked visit" as const,
+      date: ghanaDate(visit.createdAt),
+      client: visit.name,
+      owner: visit.agentName ?? names[visit.agentKey] ?? visit.agentKey,
+      recordUrl: `/dashboard/site-visits/${visit.id}`,
+    })),
+    ...leads.filter((lead) => lead.agent === "company" && !lead.assignedAgentKey).map((lead) => ({
+      id: lead.id,
+      kind: "Company lead without handler" as const,
+      date: ghanaDate(lead.date),
+      client: lead.name,
+      owner: "Company pool",
+      recordUrl: `/dashboard/company-leads/${lead.id}`,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date) || a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
   const newLeads = leads.filter((lead) => within(lead.date, filters));
   const requestedVisits = visits.filter((visit) => within(visit.createdAt, filters));
   const scheduledVisits = visits.filter((visit) => within(visit.visitDate, filters));
@@ -347,16 +428,11 @@ export function buildSalesReport(
     reachedRate: rate(reached, calls.length),
     newLeadToVisitRate: rate(newLeadsVisited, newLeads.length),
     newLeadToPaidRate: rate(newLeadsPaid, newLeads.length),
-    visitRequestWithoutLead: data.visits.filter((visit) => {
-      if (visit.leadId || !within(visit.createdAt, filters)) return false;
-      if (filters.clientId || filters.source || filters.stage || filters.paymentPlan || filters.site) return false;
-      if (scope === "master")
-        return isManager && filters.pool !== "company" && (!filters.staffKey || visit.agentKey === filters.staffKey);
-      if (scope === "mine") return visit.agentKey === viewerKey;
-      return false;
-    }).length,
-    callsWithoutOutcome: calls.filter((entry) => !entry.outcome).length,
+    visitRequestWithoutLead: unlinkedVisits.length,
+    callsWithoutOutcome: qualityIssues.filter((entry) => entry.kind === "Missing call outcome").length,
     unassignedCompanyLeads: leads.filter((lead) => lead.agent === "company" && !lead.assignedAgentKey).length,
+    qualityIssues,
+    excludedImportPlaceholders,
     payingClients: clients.filter((client) => client.paidToDate > 0).length,
     pipelineValue: clients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
     outstanding: clients.reduce((sum, client) => sum + client.outstanding, 0),
