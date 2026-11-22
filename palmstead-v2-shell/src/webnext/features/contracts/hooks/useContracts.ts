@@ -76,7 +76,7 @@ export function useGenerateContract() {
       if (!profile) throw new Error('Not signed in');
 
       if (template) {
-        const fieldValues = resolveContractFields(lead, config, amountPaidOverride);
+        const fieldValues = resolveContractFields(lead, config, amountPaidOverride, acresOverride);
         const resolvedContent = resolveSections(template.content, fieldValues);
         const missing = findUnresolvedTokens(resolvedContent);
         if (missing.length > 0) {
@@ -146,7 +146,7 @@ export function useGenerateContract() {
           templateVersionId: null,
           versionNumberSnapshot: null,
           contentSnapshot: [],
-          fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
+          fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride, acresOverride),
           pdfStoragePath: uploadedPath,
           generatedBy: profile.key,
           generatedByName: profile.name,
@@ -165,7 +165,7 @@ export function useGenerateContract() {
         templateVersionId: null,
         versionNumberSnapshot: null,
         contentSnapshot: [],
-        fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride),
+        fieldValuesSnapshot: resolveContractFields(standardLead, standardConfig, amountPaidOverride, acresOverride),
         pdfStoragePath: uploadedPath,
         generatedBy: profile.key,
         generatedByName: profile.name,
