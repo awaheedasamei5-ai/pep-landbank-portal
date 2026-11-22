@@ -13,7 +13,7 @@ import {
   pdfSectionTitle,
 } from "./pdfReport";
 import { sanitizePdfText } from "./pdfText";
-import type { SalesPeriodComparison, SalesReport } from "./salesReportModel";
+import { salesPaymentPlanLabel, type SalesPeriodComparison, type SalesReport } from "./salesReportModel";
 
 export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "quality" | "registers" | "clients";
 export const SALES_PDF_SECTIONS: { key: SalesPdfSection; label: string }[] = [
@@ -432,7 +432,7 @@ export async function buildSalesReportPdf(
         y,
         ["Field", "Recorded value"],
         [
-          ["Stage / plan", `${client.lead.stage} / ${client.lead.paymentPlan}`],
+          ["Stage / plan", `${client.lead.stage} / ${salesPaymentPlanLabel(client.lead.paymentPlan)}`],
           ["Plot / quantity", `${client.lead.plotType} / ${client.lead.noPlots}`],
           [
             "Source / handler",
@@ -525,4 +525,5 @@ export async function buildSalesReportPdf(
   pdfReportFooter(doc, "PEP Landbank | Sales performance");
   return doc;
 }
+
 
