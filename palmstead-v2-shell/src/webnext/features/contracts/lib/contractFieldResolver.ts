@@ -94,7 +94,7 @@ export const CONTRACT_FIELD_LABELS: Record<ContractFieldKey, string> = {
 // has no Lead row to read from at all, and an existing lead's "Update
 // amount paid" flow should reflect what was just entered immediately,
 // not wait for a refetch.
-export function resolveContractFields(lead: Lead, config: Config, amountPaidOverride?: number): Record<ContractFieldKey, string> {
+export function resolveContractFields(lead: Lead, config: Config, amountPaidOverride?: number, acresOverride?: number): Record<ContractFieldKey, string> {
   const totals = computeLeadQuotationTotals(config, lead);
   const depositTarget = lead.depositTarget != null ? lead.depositTarget : Math.round(totals.net * defaultDepositPctFraction(config));
   const amountPaid = amountPaidOverride != null ? amountPaidOverride : lead.amtPaid || 0;
@@ -104,7 +104,7 @@ export function resolveContractFields(lead: Lead, config: Config, amountPaidOver
     clientContact: lead.contact || '',
     plotType: lead.plotType || '',
     noPlots: String((lead.noPlots || 1) / pricingFor(config, lead.plotType).eq),
-    landAcres: String(Math.round(0.1607 * (lead.noPlots || 1) * 100) / 100),
+    landAcres: String(acresOverride ?? Math.round(0.1607 * (lead.noPlots || 1) * 100) / 100),
     unitPrice: quoteMoney(lead.unitPrice || 0),
     discount: quoteMoney(lead.discount || 0),
     grandTotal: quoteMoney(totals.grand),
