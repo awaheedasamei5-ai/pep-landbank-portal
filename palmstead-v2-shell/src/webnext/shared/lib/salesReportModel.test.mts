@@ -1,5 +1,11 @@
 import type { SalesReportData } from "./salesReportData.ts";
-import { buildSalesReport, compareSalesPeriods, ghanaDate, precedingSalesPeriod } from "./salesReportModel.ts";
+import {
+  buildSalesReport,
+  compareSalesPeriods,
+  ghanaDate,
+  precedingSalesPeriod,
+  salesPaymentPlanLabel,
+} from "./salesReportModel.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -152,6 +158,28 @@ const filters = {
 
 test("Ghana dates use the local day at a UTC boundary", () => {
   assert.equal(ghanaDate("2026-11-01T23:30:00Z"), "2026-11-01");
+});
+
+test("legacy object payment plans are labelled for review and can be filtered", () => {
+  assert.equal(salesPaymentPlanLabel("[object Object]"), "Unverified payment plan");
+  const legacy = {
+    ...data,
+    leads: data.leads.map((lead) => (lead.id === "a" ? { ...lead, paymentPlan: "[object Object]" } : lead)),
+  } as SalesReportData;
+  const personal = buildSalesReport(legacy, "mine", "adams", false, filters);
+  assert.equal(personal.qualityIssues.find((issue) => issue.kind === "Unverified payment plan")?.id, "a");
+  assert.deepEqual(
+    buildSalesReport(legacy, "mine", "adams", false, { ...filters, paymentPlan: "Unverified payment plan" }).leads.map(
+      (lead) => lead.id,
+    ),
+    ["a"],
+  );
+  assert.equal(
+    buildSalesReport(legacy, "mine", "elias", false, filters).qualityIssues.filter(
+      (issue) => issue.kind === "Unverified payment plan",
+    ).length,
+    0,
+  );
 });
 
 test("a genuine call excludes automatic activity; cash excludes pending payments", () => {
@@ -308,4 +336,5 @@ test("allocation-only names stay out of sales figures until valued or worked", (
   assert.equal(report.qualityIssues.some((issue) => issue.id === "placeholder"), false);
   assert.equal(buildSalesReport(imported, "mine", "adams", false, filters).excludedImportPlaceholders, 0);
 });
+
 
