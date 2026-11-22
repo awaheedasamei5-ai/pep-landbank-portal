@@ -4,7 +4,7 @@ import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { useLogDownload } from '../../../shared/hooks/useLogDownload';
-import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
+import { buildContractOfSalePdf, contractFilename, loadContractFontBase64 } from '../lib/contractPdf';
 import { buildContractFromSections } from '../lib/contractSectionsPdf';
 import { resolveContractFields, resolveSections, findUnresolvedTokens } from '../lib/contractFieldResolver';
 import type { Config, ContractSection, Lead } from '../../../types/domain';
@@ -144,7 +144,8 @@ export function useGenerateContract() {
       }
       const standardLead = isWalkIn ? { ...lead, amtPaid: amountPaidOverride ?? 0 } : lead;
       const standardConfig = legalOverride ? { ...config, ...legalOverride } : config;
-      const doc = buildContractOfSalePdf(standardLead, standardConfig, cover, wordmark, acresOverride);
+      const fontBase64 = await loadContractFontBase64();
+      const doc = buildContractOfSalePdf(standardLead, standardConfig, cover, wordmark, acresOverride, fontBase64);
       const legacyDocFilename = contractFilename(lead.name);
       if (isWalkIn) {
         const ds = getDataSource(demoMode);
@@ -192,3 +193,4 @@ export function useGenerateContract() {
     },
   });
 }
+

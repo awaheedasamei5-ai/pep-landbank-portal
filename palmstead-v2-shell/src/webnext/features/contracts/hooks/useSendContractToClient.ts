@@ -3,7 +3,7 @@ import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
 import { loadImageAsDataUri } from '../../../shared/lib/image';
-import { buildContractOfSalePdf, contractFilename } from '../lib/contractPdf';
+import { buildContractOfSalePdf, contractFilename, loadContractFontBase64 } from '../lib/contractPdf';
 import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import type { Lead } from '../../../types/domain';
 
@@ -41,7 +41,8 @@ export function useSendContractToClient() {
         // Missing wordmark shouldn't stop the contract from generating.
       }
 
-      const doc = buildContractOfSalePdf(lead, config, cover, wordmark);
+      const fontBase64 = await loadContractFontBase64();
+      const doc = buildContractOfSalePdf(lead, config, cover, wordmark, undefined, fontBase64);
       const pdfBlob = doc.output('blob') as Blob;
 
       const ds = getDataSource(demoMode);
@@ -96,3 +97,4 @@ export function useSendContractToClient() {
     },
   });
 }
+
