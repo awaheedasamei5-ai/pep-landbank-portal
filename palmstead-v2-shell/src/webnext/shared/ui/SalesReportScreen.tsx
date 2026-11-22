@@ -413,7 +413,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                           <TableCell>{format(row.current)}</TableCell>
                           <TableCell>{format(row.previous)}</TableCell>
                           <TableCell>
-                            {delta >= 0 ? "+" : ""}
+                            {delta > 0 ? "+" : ""}
                             {format(delta)}
                             {row.previous > 0 ? ` (${((delta / row.previous) * 100).toFixed(1)}%)` : ""}
                           </TableCell>
