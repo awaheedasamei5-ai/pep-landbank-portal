@@ -871,6 +871,9 @@ export function mapContractRow(r: Record<string, unknown>): Contract {
     createdBy: r.created_by as string,
     createdByName: r.created_by_name as string,
     createdAt: r.created_at as string,
+    voidedAt: (r.voided_at as string | null) ?? null,
+    voidedBy: (r.voided_by as string | null) ?? null,
+    voidReason: (r.void_reason as string | null) ?? null,
   };
 }
 
