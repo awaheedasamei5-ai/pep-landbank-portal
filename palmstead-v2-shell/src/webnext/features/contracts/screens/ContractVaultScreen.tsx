@@ -112,7 +112,7 @@ export function ContractVaultScreen() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {!g.voidedAt && g.leadId && g.pdfStoragePath && <Button asChild type="button" size="sm" variant="outline"><Link href={`/dashboard/contract-of-sale/generate?lead=${encodeURIComponent(g.leadId)}&correct=${encodeURIComponent(g.id)}`}><Pencil />Correct KYC</Link></Button>}
+                          {!g.voidedAt && g.pdfStoragePath && <Button asChild type="button" size="sm" variant="outline"><Link href={g.leadId ? `/dashboard/contract-of-sale/generate?lead=${encodeURIComponent(g.leadId)}&correct=${encodeURIComponent(g.id)}` : `/dashboard/contract-of-sale/generate?copy=${encodeURIComponent(g.id)}`}><Pencil />Correct KYC</Link></Button>}
                           {manager && !g.voidedAt && g.pdfStoragePath && <Button type="button" size="sm" variant="outline" onClick={() => setRemoveTarget(g)}><Trash2 />Remove</Button>}
                         </div>
                       </TableCell>

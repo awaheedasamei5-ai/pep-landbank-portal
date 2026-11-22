@@ -28,6 +28,44 @@ import { contractFilename, prepareStandardContractPdf } from "../lib/contractPdf
 import { friendlyError } from "../../../shared/lib/friendlyError";
 import type { Lead, PlotType, PaymentPlan } from "../../../types/domain";
 
+function snapshotMoney(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const amount = Number(value.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(amount) ? amount : undefined;
+}
+
+function walkInFromSnapshot(fields: Record<string, string>, profileKey: string): Lead {
+  const plotType: PlotType = fields.plotType === "Half Plot" ? "Half Plot" : "Full Plot";
+  const plotCount = Math.max(1, Number(fields.noPlots) || 1);
+  const months = Number(fields.paymentPlanMonths);
+  const paymentPlan: PaymentPlan = months === 3 || months === 6 || months === 9 || months === 12 ? `${months} Months` : "Full Payment";
+  return {
+    id: `walkin-copy-${crypto.randomUUID()}`,
+    agent: profileKey,
+    name: fields.clientLegalName || "",
+    contact: fields.clientContact || "",
+    address: fields.clientAddress || "",
+    date: new Date().toISOString().slice(0, 10),
+    plotType,
+    noPlots: plotCount * (plotType === "Half Plot" ? 0.5 : 1),
+    paymentPlan,
+    grandTotal: snapshotMoney(fields.grandTotal),
+    depositTarget: snapshotMoney(fields.depositAmount),
+    amtPaid: snapshotMoney(fields.amountPaidToDate) ?? 0,
+    stage: "2A",
+    kyc: {
+      address: fields.clientAddress || "",
+      nationality: fields.kycNationality || "",
+      occupation: fields.kycOccupation || "",
+      idType: fields.kycIdType || "",
+      idNumber: fields.kycIdNumber || "",
+      contactName: fields.kycContactName || "",
+      contactPhone: fields.kycContactPhone || "",
+      landUsage: fields.kycLandUsage || "",
+    },
+  } as Lead;
+}
+
 // Standalone generator for the real Contract of Sale PDF (index.html's
 // buildContractOfSalePDF). Gated the same way v1's canManageContracts()
 // gates the real "Contract of Sale APP": manager or the 'elizabeth' key
@@ -50,8 +88,11 @@ function ContractGeneratorInner() {
   const searchParams = useSearchParams();
   const resumeLeadId = searchParams.get("lead");
   const resumeDraftId = searchParams.get("draft");
-  const correctionSourceId = searchParams.get("correct");
+  const correctionSourceId = searchParams.get("correct") || searchParams.get("copy");
   const { data: leads } = useAllLeads();
+  const { data: generations } = useContractGenerations();
+  const sourceGeneration = correctionSourceId ? generations?.find((g) => g.id === correctionSourceId) : null;
+  const profileKey = useSessionStore((state) => state.profile?.key ?? "");
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const [query, setQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -66,12 +107,18 @@ function ContractGeneratorInner() {
   // list loads, auto-select it so "Resume" lands exactly where Generate
   // normally lands after a manual client search.
   useEffect(() => {
-    if (resumeLeadId && leads && !selectedLead) {
+    if (selectedLead || (correctionSourceId && !generations)) return;
+    if (sourceGeneration && !sourceGeneration.leadId) {
+      setSelectedLead(walkInFromSnapshot(sourceGeneration.fieldValuesSnapshot, profileKey));
+      setIsWalkIn(true);
+      return;
+    }
+    if (resumeLeadId && leads) {
       const match = leads.find((l) => l.id === resumeLeadId);
       if (match) setSelectedLead(match);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeLeadId, leads]);
+  }, [resumeLeadId, leads, correctionSourceId, generations, sourceGeneration, profileKey, selectedLead]);
 
   const q = query.trim().toLowerCase();
   const matches = q ? (leads ?? []).filter((l) => l.name.toLowerCase().includes(q) || l.contact.includes(q)).slice(0, 8) : [];
@@ -123,7 +170,7 @@ function ContractGeneratorInner() {
               </>
             )
           ) : (
-            <SelectedLeadPreview key={selectedLead.id} lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} correctionSourceId={correctionSourceId} />
+            <SelectedLeadPreview key={selectedLead.id} lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} correctionSourceId={correctionSourceId} copyFields={sourceGeneration?.fieldValuesSnapshot} />
           )}
         </CardContent>
       </Card>
@@ -261,12 +308,14 @@ function SelectedLeadPreview({
   onChange,
   resumeDraftId,
   correctionSourceId,
+  copyFields,
 }: {
   lead: Lead;
   isWalkIn: boolean;
   onChange: () => void;
   resumeDraftId: string | null;
   correctionSourceId: string | null;
+  copyFields?: Record<string, string>;
 }) {
   const { data: config } = useConfig();
   const canEditLegalText = useCanAdministerContracts();
@@ -277,11 +326,11 @@ function SelectedLeadPreview({
   const updateDraft = useUpdateContractDraft();
   const { data: templates } = useContractTemplates();
   const { data: publishedVersions, isLoading: publishedVersionsLoading } = usePublishedContractTemplateVersions();
-  const [plotTypeForContract, setPlotTypeForContract] = useState<PlotType>(lead.plotType);
-  const [plotCountForContract, setPlotCountForContract] = useState(String((lead.noPlots || 1) / (lead.plotType === "Half Plot" ? 0.5 : 1)));
-  const [acresForContract, setAcresForContract] = useState("");
-  const [priceForContract, setPriceForContract] = useState("");
-  const [depositForContract, setDepositForContract] = useState("");
+  const [plotTypeForContract, setPlotTypeForContract] = useState<PlotType>(copyFields?.plotType === "Half Plot" ? "Half Plot" : lead.plotType);
+  const [plotCountForContract, setPlotCountForContract] = useState(copyFields?.noPlots || String((lead.noPlots || 1) / (lead.plotType === "Half Plot" ? 0.5 : 1)));
+  const [acresForContract, setAcresForContract] = useState(copyFields?.landAcres || "");
+  const [priceForContract, setPriceForContract] = useState(copyFields?.grandTotal ? String(snapshotMoney(copyFields.grandTotal) ?? "") : "");
+  const [depositForContract, setDepositForContract] = useState(copyFields?.depositAmount ? String(snapshotMoney(copyFields.depositAmount) ?? "") : "");
   const [temporaryLegalOpen, setTemporaryLegalOpen] = useState(false);
   const [temporaryPreamble, setTemporaryPreamble] = useState(config?.contractPreamble ?? "");
   const [temporaryDefinitions, setTemporaryDefinitions] = useState(config?.contractDefinitions ?? "");
@@ -299,7 +348,17 @@ function SelectedLeadPreview({
   const totals = config && Number.isFinite(plotCount) && plotCount > 0 ? computeLeadQuotationTotals(config, contractLead) : null;
   const acresOverride = acresForContract.trim() ? Number(acresForContract) : undefined;
   const transactionValid = Number.isInteger(plotCount) && plotCount > 0 && (!priceForContract.trim() || (Number.isFinite(Number(priceForContract)) && Number(priceForContract) > 0)) && (!depositForContract.trim() || (Number.isFinite(Number(depositForContract)) && Number(depositForContract) >= 0 && Number(depositForContract) <= (totals?.grand ?? 0))) && (acresOverride === undefined || (Number.isFinite(acresOverride) && acresOverride > 0)) && (!temporaryLegalOpen || (!!temporaryPreamble.trim() && !!temporaryDefinitions.trim() && !!temporaryTerms.trim()));
-  const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(undefined);
+  const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(copyFields ? {
+    ...lead.kyc,
+    address: copyFields.clientAddress || lead.kyc?.address,
+    nationality: copyFields.kycNationality || lead.kyc?.nationality,
+    occupation: copyFields.kycOccupation || lead.kyc?.occupation,
+    idType: copyFields.kycIdType || lead.kyc?.idType,
+    idNumber: copyFields.kycIdNumber || lead.kyc?.idNumber,
+    contactName: copyFields.kycContactName || lead.kyc?.contactName,
+    contactPhone: copyFields.kycContactPhone || lead.kyc?.contactPhone,
+    landUsage: copyFields.kycLandUsage || lead.kyc?.landUsage,
+  } : undefined);
   const [kycOpen, setKycOpen] = useState(false);
   useEffect(() => { if (correctionSourceId) setKycOpen(true); }, [correctionSourceId]);
   const effectiveKyc = kycOverride ?? lead.kyc;
@@ -355,7 +414,7 @@ function SelectedLeadPreview({
   // pipeline-payment-integrity's standing caution) with a link out to the
   // real Log Payment flow; a walk-in has no ledger to diverge from, so a
   // plain typed figure is the legitimate case for one.
-  const [walkInAmountPaid, setWalkInAmountPaid] = useState("0");
+  const [walkInAmountPaid, setWalkInAmountPaid] = useState(String(snapshotMoney(copyFields?.amountPaidToDate) ?? lead.amtPaid ?? 0));
   const parsedWalkInAmountPaid = Number(walkInAmountPaid);
   const walkInAmountValid = walkInAmountPaid.trim() !== "" && Number.isFinite(parsedWalkInAmountPaid) && parsedWalkInAmountPaid >= 0;
   const amountPaidOverride = isWalkIn && walkInAmountValid ? parsedWalkInAmountPaid : undefined;
@@ -454,7 +513,7 @@ function SelectedLeadPreview({
       <div className="rounded-md border bg-muted/20 p-4 space-y-3">
         <div>
           <p className="text-sm font-medium">Details for this contract</p>
-          <p className="text-xs text-muted-foreground">Prefilled from the client record. Changes here affect this PDF only; they do not change Pipeline, Quotation or Payments.</p>
+          <p className="text-xs text-muted-foreground">{isWalkIn ? "Details for this standalone PDF. A replacement keeps the earlier copy in the vault for audit." : "Pricing changes here affect this PDF only. KYC changes are saved to the client record; Payments and Quotation stay unchanged."}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1"><Label>Plot type</Label><Select value={plotTypeForContract} onValueChange={(v) => setPlotTypeForContract(v as PlotType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Full Plot">Full Plot</SelectItem><SelectItem value="Half Plot">Half Plot</SelectItem></SelectContent></Select></div>
