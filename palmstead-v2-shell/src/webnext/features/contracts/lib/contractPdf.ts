@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { fmtLongDate } from '../../../shared/lib/format';
+import { loadImageAsDataUri } from '../../../shared/lib/image';
 import { computeLeadQuotationTotals, pricingFor } from '../../quotation/lib/quotationLogic';
 import type { Config, Lead } from '../../../types/domain';
 
@@ -382,6 +383,23 @@ function splitClausesBeforeMarkers(text: string, markers: string[]): string[] {
     chunks[chunks.length - 1].push(c);
   });
   return chunks.map((arr) => arr.join('\n\n'));
+}
+
+export async function prepareStandardContractPdf(lead: Lead, config: Config, acresOverride?: number): Promise<jsPDF> {
+  let cover: string | null = null;
+  let wordmark: string | null = null;
+  try {
+    cover = config.contractCoverImage || (await loadImageAsDataUri('/contract-cover.jpg'));
+  } catch {
+    // A missing optional image must not prevent a legal document.
+  }
+  try {
+    wordmark = config.contractWordmarkImage || (await loadImageAsDataUri('/trulander-wordmark.png'));
+  } catch {
+    // The title remains readable without an optional wordmark.
+  }
+  const fontBase64 = await loadContractFontBase64();
+  return buildContractOfSalePdf(lead, config, cover, wordmark, acresOverride, fontBase64);
 }
 
 export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri: string | null, wordmarkDataUri: string | null, acresOverride?: number, fontBase64?: string): jsPDF {

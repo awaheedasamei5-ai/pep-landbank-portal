@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
-import { loadImageAsDataUri } from '../../../shared/lib/image';
-import { buildContractOfSalePdf, contractFilename, loadContractFontBase64 } from '../lib/contractPdf';
+import { contractFilename, prepareStandardContractPdf } from '../lib/contractPdf';
 import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
 import type { Lead } from '../../../types/domain';
 
@@ -28,21 +27,7 @@ export function useSendContractToClient() {
       if (!config) throw new Error('Config not loaded yet');
       if (!profile) throw new Error('Not signed in');
 
-      let cover: string | null = null;
-      let wordmark: string | null = null;
-      try {
-        cover = config.contractCoverImage || (await loadImageAsDataUri('/contract-cover.jpg'));
-      } catch {
-        // Missing cover image shouldn't stop the contract from generating.
-      }
-      try {
-        wordmark = config.contractWordmarkImage || (await loadImageAsDataUri('/trulander-wordmark.png'));
-      } catch {
-        // Missing wordmark shouldn't stop the contract from generating.
-      }
-
-      const fontBase64 = await loadContractFontBase64();
-      const doc = buildContractOfSalePdf(lead, config, cover, wordmark, undefined, fontBase64);
+      const doc = await prepareStandardContractPdf(lead, config);
       const pdfBlob = doc.output('blob') as Blob;
 
       const ds = getDataSource(demoMode);
