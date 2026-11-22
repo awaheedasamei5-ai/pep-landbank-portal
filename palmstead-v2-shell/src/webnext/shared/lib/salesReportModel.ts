@@ -17,6 +17,56 @@ export interface SalesReportFilters {
   clientId: string;
 }
 
+export interface SalesPeriodComparison {
+  from: string;
+  to: string;
+  rows: { label: string; current: number; previous: number; unit: "count" | "money" }[];
+}
+
+export function precedingSalesPeriod(filters: SalesReportFilters): SalesReportFilters {
+  const day = 86_400_000;
+  const from = Date.parse(`${filters.from}T00:00:00Z`);
+  const to = Date.parse(`${filters.to}T00:00:00Z`);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    throw new Error("Choose a valid report date range.");
+  }
+  const days = Math.round((to - from) / day) + 1;
+  return {
+    ...filters,
+    from: new Date(from - days * day).toISOString().slice(0, 10),
+    to: new Date(from - day).toISOString().slice(0, 10),
+  };
+}
+
+// Compare only dated events. Current stage, pipeline value, outstanding balance,
+// and cost attribution have no historical snapshots and cannot be backdated.
+export function compareSalesPeriods(current: SalesReport, previous: SalesReport): SalesPeriodComparison {
+  const sumReceipts = (report: SalesReport) =>
+    report.approvedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  return {
+    from: previous.filters.from,
+    to: previous.filters.to,
+    rows: [
+      { label: "New leads", current: current.newLeads.length, previous: previous.newLeads.length, unit: "count" },
+      { label: "Genuine calls", current: current.calls.length, previous: previous.calls.length, unit: "count" },
+      { label: "Reached calls", current: current.reached, previous: previous.reached, unit: "count" },
+      {
+        label: "Visit requests",
+        current: current.requestedVisits.length,
+        previous: previous.requestedVisits.length,
+        unit: "count",
+      },
+      {
+        label: "Conversations",
+        current: current.conversations.length,
+        previous: previous.conversations.length,
+        unit: "count",
+      },
+      { label: "Approved receipts", current: sumReceipts(current), previous: sumReceipts(previous), unit: "money" },
+    ],
+  };
+}
+
 export interface SalesStaffRow {
   key: string;
   name: string;
@@ -160,7 +210,9 @@ export function buildSalesReport(
   });
   const leads = cohort.filter(
     (lead) =>
-      (!filters.pool || scope !== "master" || (filters.pool === "company" ? lead.agent === "company" : lead.agent !== "company")) &&
+      (!filters.pool ||
+        scope !== "master" ||
+        (filters.pool === "company" ? lead.agent === "company" : lead.agent !== "company")) &&
       (!filters.clientId || lead.id === filters.clientId) &&
       (!filters.staffKey ||
         !isManager ||
@@ -180,16 +232,12 @@ export function buildSalesReport(
   );
   const calls = activities.filter(isCall);
   const visits = data.visits.filter(
-    (visit) =>
-      visit.leadId &&
-      leadIds.has(visit.leadId) &&
-      (!filters.site || visit.site === filters.site),
+    (visit) => visit.leadId && leadIds.has(visit.leadId) && (!filters.site || visit.site === filters.site),
   );
-  const payments = data.payments.filter(
-    (payment) =>
-      leadIds.has(payment.leadId),
+  const payments = data.payments.filter((payment) => leadIds.has(payment.leadId));
+  const conversations = data.conversations.filter(
+    (entry) => leadIds.has(entry.leadId) && within(entry.createdAt, filters),
   );
-  const conversations = data.conversations.filter((entry) => leadIds.has(entry.leadId) && within(entry.createdAt, filters));
   const costs = data.costs.filter((entry) => leadIds.has(entry.leadId) && entry.sourceType === "site_visit");
   const newLeads = leads.filter((lead) => within(lead.date, filters));
   const requestedVisits = visits.filter((visit) => within(visit.createdAt, filters));
@@ -200,23 +248,29 @@ export function buildSalesReport(
   const newLeadsVisited = newLeads.filter((lead) => visitedLeadIds.has(lead.id)).length;
   const newLeadsPaid = newLeads.filter((lead) => lead.grandTotal > 0 && lead.amtPaid >= lead.grandTotal).length;
   const ownerByLead = new Map(leads.map((lead) => [lead.id, lead.agent]));
-  const clients: SalesClientRow[] = leads.map((lead) => {
-    const leadActivities = activities.filter((entry) => entry.leadId === lead.id);
-    const leadPayments = payments.filter((payment) => payment.leadId === lead.id && payment.status === "approved");
-    const leadCosts = costs.filter((entry) => entry.leadId === lead.id);
-    return {
-      lead, ownerName: lead.agent === "company" ? "Company pool" : (names[lead.agent] ?? lead.agent),
-      calls: leadActivities.filter(isCall), activities: leadActivities,
-      conversations: conversations.filter((entry) => entry.leadId === lead.id),
-      visits: visits.filter((visit) => visit.leadId === lead.id && within(visit.visitDate, filters)),
-      approvedPayments: leadPayments.filter((payment) => within(payment.date, filters)),
-      paidInPeriod: leadPayments.filter((payment) => within(payment.date, filters)).reduce((sum, payment) => sum + payment.amount, 0),
-      paidToDate: leadPayments.reduce((sum, payment) => sum + payment.amount, 0),
-      outstanding: Math.max(lead.grandTotal - lead.amtPaid, 0),
-      costs: leadCosts,
-      attributedVisitCost: leadCosts.reduce((sum, entry) => sum + entry.amount, 0),
-    };
-  }).sort((a, b) => a.lead.name.localeCompare(b.lead.name) || a.lead.id.localeCompare(b.lead.id));
+  const clients: SalesClientRow[] = leads
+    .map((lead) => {
+      const leadActivities = activities.filter((entry) => entry.leadId === lead.id);
+      const leadPayments = payments.filter((payment) => payment.leadId === lead.id && payment.status === "approved");
+      const leadCosts = costs.filter((entry) => entry.leadId === lead.id);
+      return {
+        lead,
+        ownerName: lead.agent === "company" ? "Company pool" : (names[lead.agent] ?? lead.agent),
+        calls: leadActivities.filter(isCall),
+        activities: leadActivities,
+        conversations: conversations.filter((entry) => entry.leadId === lead.id),
+        visits: visits.filter((visit) => visit.leadId === lead.id && within(visit.visitDate, filters)),
+        approvedPayments: leadPayments.filter((payment) => within(payment.date, filters)),
+        paidInPeriod: leadPayments
+          .filter((payment) => within(payment.date, filters))
+          .reduce((sum, payment) => sum + payment.amount, 0),
+        paidToDate: leadPayments.reduce((sum, payment) => sum + payment.amount, 0),
+        outstanding: Math.max(lead.grandTotal - lead.amtPaid, 0),
+        costs: leadCosts,
+        attributedVisitCost: leadCosts.reduce((sum, entry) => sum + entry.amount, 0),
+      };
+    })
+    .sort((a, b) => a.lead.name.localeCompare(b.lead.name) || a.lead.id.localeCompare(b.lead.id));
   const keys = new Set(leads.map((lead) => lead.agent));
   const staff = [...keys]
     .filter(Boolean)
@@ -250,7 +304,10 @@ export function buildSalesReport(
         pipelineValue: ownClients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
         outstanding: ownClients.reduce((sum, client) => sum + client.outstanding, 0),
         attributedVisitCost,
-        visitToPayingRate: rate(payingClients.filter((client) => visitedIds.has(client.lead.id)).length, visitedIds.size),
+        visitToPayingRate: rate(
+          payingClients.filter((client) => visitedIds.has(client.lead.id)).length,
+          visitedIds.size,
+        ),
         knownCostPerPayingClient: payingClients.length ? attributedVisitCost / payingClients.length : null,
       };
     })
@@ -293,7 +350,8 @@ export function buildSalesReport(
     visitRequestWithoutLead: data.visits.filter((visit) => {
       if (visit.leadId || !within(visit.createdAt, filters)) return false;
       if (filters.clientId || filters.source || filters.stage || filters.paymentPlan || filters.site) return false;
-      if (scope === "master") return isManager && filters.pool !== "company" && (!filters.staffKey || visit.agentKey === filters.staffKey);
+      if (scope === "master")
+        return isManager && filters.pool !== "company" && (!filters.staffKey || visit.agentKey === filters.staffKey);
       if (scope === "mine") return visit.agentKey === viewerKey;
       return false;
     }).length,

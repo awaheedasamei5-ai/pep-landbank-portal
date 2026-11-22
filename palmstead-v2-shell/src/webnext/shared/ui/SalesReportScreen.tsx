@@ -12,6 +12,8 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,8 +21,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useSessionStore } from "../../auth/useSessionStore";
 import { getDataSource } from "../../data/source";
 import { loadSalesReportData } from "../lib/salesReportData";
-import { buildSalesReport, ghanaDate, type SalesReportFilters, type SalesReportScope } from "../lib/salesReportModel";
-import { buildSalesReportPdf } from "../lib/salesReportPdf";
+import {
+  buildSalesReport,
+  compareSalesPeriods,
+  ghanaDate,
+  precedingSalesPeriod,
+  type SalesReportFilters,
+  type SalesReportScope,
+} from "../lib/salesReportModel";
+import { buildSalesReportPdf, SALES_PDF_SECTIONS, type SalesPdfSection } from "../lib/salesReportPdf";
 
 const chartConfig = {
   calls: { label: "Genuine calls", color: "var(--chart-1)" },
@@ -90,6 +99,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
   const [filters, setFilters] = useState<SalesReportFilters>(initialFilters);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [pdfSections, setPdfSections] = useState<SalesPdfSection[]>(SALES_PDF_SECTIONS.map((section) => section.key));
   const dataQuery = useQuery({
     queryKey: ["salesReportData", profile?.key],
     queryFn: loadSalesReportData,
@@ -110,6 +120,19 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     if (!dataQuery.data || !profile || (scope === "master" && !isManager) || filters.from > filters.to) return null;
     return buildSalesReport(dataQuery.data, scope, profile.key, !!isManager, filters, names);
   }, [dataQuery.data, profile, scope, isManager, filters, names]);
+  const comparison = useMemo(() => {
+    if (!report || !dataQuery.data || !profile) return null;
+    const previous = buildSalesReport(
+      dataQuery.data,
+      scope,
+      profile.key,
+      !!isManager,
+      precedingSalesPeriod(filters),
+      names,
+    );
+    return compareSalesPeriods(report, previous);
+  }, [report, dataQuery.data, profile, scope, isManager, filters, names]);
+  const activePdfSections = pdfSections.filter((section) => section !== "staff" || isManager);
   const update = (field: keyof SalesReportFilters, value: string) =>
     setFilters((current) => ({ ...current, [field]: value }));
   const choices = useMemo(() => {
@@ -123,9 +146,11 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
       outcome: unique(data?.activity.map((entry) => entry.outcome) ?? []),
       site: unique(data?.visits.map((visit) => visit.site) ?? []),
       plan: unique(data?.leads.map((lead) => lead.paymentPlan) ?? []),
-      clients: (data?.leads ?? []).filter((lead) =>
-        scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
-      ).sort((a, b) => a.name.localeCompare(b.name)),
+      clients: (data?.leads ?? [])
+        .filter((lead) =>
+          scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
     };
   }, [dataQuery.data, scope, isManager, profile?.key]);
   const title = { company: "Company Leads Report", master: "Master Pipeline Report", mine: "My Pipeline Report" }[
@@ -138,7 +163,10 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     setExporting(true);
     setExportError(null);
     try {
-      const pdf = await buildSalesReportPdf(report, profile.name);
+      const pdf = await buildSalesReportPdf(report, profile.name, {
+        sections: activePdfSections,
+        comparison: comparison ?? undefined,
+      });
       pdf.save(`Palmstead-${scope}-sales-${filters.from}-to-${filters.to}.pdf`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : "Could not create the PDF.");
@@ -167,12 +195,38 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               <Link href="/dashboard/pipeline/daily-reports">Daily Management reports</Link>
             </Button>
           )}
-          <Button onClick={download} disabled={!report || exporting}>
+          <Button onClick={download} disabled={!report || exporting || activePdfSections.length === 0}>
             <Download />
             {exporting ? "Preparing PDF…" : "Download PDF"}
           </Button>
         </div>
       </div>
+      <Card>
+        <CardContent>
+          <FieldSet>
+            <FieldLegend>PDF sections</FieldLegend>
+            <p className="text-muted-foreground text-sm">
+              Choose what the downloaded report includes. Its date range and filters always match the screen.
+            </p>
+            <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {SALES_PDF_SECTIONS.filter((section) => section.key !== "staff" || isManager).map((section) => (
+                <Field key={section.key} orientation="horizontal">
+                  <Checkbox
+                    id={`sales-pdf-${section.key}`}
+                    checked={pdfSections.includes(section.key)}
+                    onCheckedChange={(checked) =>
+                      setPdfSections((current) =>
+                        checked === true ? [...current, section.key] : current.filter((key) => key !== section.key),
+                      )
+                    }
+                  />
+                  <FieldLabel htmlFor={`sales-pdf-${section.key}`}>{section.label}</FieldLabel>
+                </Field>
+              ))}
+            </FieldGroup>
+          </FieldSet>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Report scope</CardTitle>
@@ -209,13 +263,26 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
             />
           )}
           {scope === "master" && (
-            <FilterSelect label="Lead pool" value={filters.pool} options={["personal", "company"]}
-              labels={{ personal: "Staff pipelines", company: "Company Leads" }} onChange={(value) => update("pool", value)} />
+            <FilterSelect
+              label="Lead pool"
+              value={filters.pool}
+              options={["personal", "company"]}
+              labels={{ personal: "Staff pipelines", company: "Company Leads" }}
+              onChange={(value) => update("pool", value)}
+            />
           )}
-          <FilterSelect label="Client" value={filters.clientId}
+          <FilterSelect
+            label="Client"
+            value={filters.clientId}
             options={choices.clients.map((lead) => lead.id)}
-            labels={Object.fromEntries(choices.clients.map((lead) => [lead.id, `${lead.name} · ${lead.date} · ${lead.agent === "company" ? "Company" : "Staff"}`]))}
-            onChange={(value) => update("clientId", value)} />
+            labels={Object.fromEntries(
+              choices.clients.map((lead) => [
+                lead.id,
+                `${lead.name} · ${lead.date} · ${lead.agent === "company" ? "Company" : "Staff"}`,
+              ]),
+            )}
+            onChange={(value) => update("clientId", value)}
+          />
           <FilterSelect
             label="Source"
             value={filters.source}
@@ -293,7 +360,11 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                 ghs(report.approvedPayments.reduce((sum, payment) => sum + payment.amount, 0)),
                 `${report.approvedPayments.length} approved entries`,
               ],
-              ["Client records", report.clients.length.toLocaleString(), `${report.payingClients} with approved payments to date`],
+              [
+                "Client records",
+                report.clients.length.toLocaleString(),
+                `${report.payingClients} with approved payments to date`,
+              ],
               ["Pipeline value", ghs(report.pipelineValue), "Current quoted deal totals"],
               ["Outstanding", ghs(report.outstanding), "Current deal balance snapshot"],
               ["Attributed visit cost", ghs(report.attributedVisitCost), "Recorded attended-visit cost only"],
@@ -312,6 +383,48 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               </Card>
             ))}
           </div>
+          {comparison && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Previous period comparison</CardTitle>
+                <CardDescription>
+                  {comparison.from} to {comparison.to}, the same number of Ghana calendar days. Only dated activity is
+                  compared; deal values and stages are current snapshots.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Measure</TableHead>
+                      <TableHead>Selected period</TableHead>
+                      <TableHead>Previous period</TableHead>
+                      <TableHead>Change</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comparison.rows.map((row) => {
+                      const format = (value: number) =>
+                        row.unit === "money" ? ghs(value) : value.toLocaleString("en-GH");
+                      const delta = row.current - row.previous;
+                      return (
+                        <TableRow key={row.label}>
+                          <TableCell className="font-medium">{row.label}</TableCell>
+                          <TableCell>{format(row.current)}</TableCell>
+                          <TableCell>{format(row.previous)}</TableCell>
+                          <TableCell>
+                            {delta > 0 ? "+" : ""}
+                            {format(delta)}
+                            {row.previous > 0 ? ` (${((delta / row.previous) * 100).toFixed(1)}%)` : ""}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Monthly trend</CardTitle>
@@ -362,7 +475,8 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               <CardHeader>
                 <CardTitle>Staff comparison</CardTitle>
                 <CardDescription>
-                  Deals and approved receipts are grouped by lead owner. Company-owned leads stay in the Company pool even when a staff handler is assigned. Calls and visits are linked to those clients.
+                  Deals and approved receipts are grouped by lead owner. Company-owned leads stay in the Company pool
+                  even when a staff handler is assigned. Calls and visits are linked to those clients.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -399,7 +513,9 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                         <TableCell>{ghs(row.outstanding)}</TableCell>
                         <TableCell>{ghs(row.attributedVisitCost)}</TableCell>
                         <TableCell>{pct(row.visitToPayingRate)}</TableCell>
-                        <TableCell>{row.knownCostPerPayingClient === null ? "N/A" : ghs(row.knownCostPerPayingClient)}</TableCell>
+                        <TableCell>
+                          {row.knownCostPerPayingClient === null ? "N/A" : ghs(row.knownCostPerPayingClient)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -476,31 +592,70 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
           <Card>
             <CardHeader>
               <CardTitle>Client records</CardTitle>
-              <CardDescription>One deal at a time. Conversations, calls, visits and receipts use the selected dates; value, balance and recorded visit cost are current snapshots.</CardDescription>
+              <CardDescription>
+                One deal at a time. Conversations, calls, visits and receipts use the selected dates; value, balance and
+                recorded visit cost are current snapshots.
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {report.clients.length === 0 && <p className="text-muted-foreground text-sm">No clients match these filters.</p>}
+              {report.clients.length === 0 && (
+                <p className="text-muted-foreground text-sm">No clients match these filters.</p>
+              )}
               {report.clients.map((client) => (
                 <div key={client.lead.id} className="min-w-0 rounded-xl border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <Link className="font-semibold text-primary hover:underline" href={`${client.lead.agent === "company" ? "/dashboard/company-leads" : "/dashboard/pipeline"}/${client.lead.id}`}>{client.lead.name}</Link>
-                      <p className="text-muted-foreground text-xs">{client.ownerName} · Added {client.lead.date} · Stage {client.lead.stage} · {client.lead.paymentPlan}</p>
+                      <Link
+                        className="font-semibold text-primary hover:underline"
+                        href={`${client.lead.agent === "company" ? "/dashboard/company-leads" : "/dashboard/pipeline"}/${client.lead.id}`}
+                      >
+                        {client.lead.name}
+                      </Link>
+                      <p className="text-muted-foreground text-xs">
+                        {client.ownerName} · Added {client.lead.date} · Stage {client.lead.stage} ·{" "}
+                        {client.lead.paymentPlan}
+                      </p>
                     </div>
                     <span className="text-sm font-medium">{ghs(client.lead.grandTotal)}</span>
                   </div>
                   <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                    <p>Approved in period: <strong>{ghs(client.paidInPeriod)}</strong></p>
-                    <p>Paid to date: <strong>{ghs(client.paidToDate)}</strong></p>
-                    <p>Outstanding: <strong>{ghs(client.outstanding)}</strong></p>
-                    <p>Attributed visit cost: <strong>{ghs(client.attributedVisitCost)}</strong></p>
+                    <p>
+                      Approved in period: <strong>{ghs(client.paidInPeriod)}</strong>
+                    </p>
+                    <p>
+                      Paid to date: <strong>{ghs(client.paidToDate)}</strong>
+                    </p>
+                    <p>
+                      Outstanding: <strong>{ghs(client.outstanding)}</strong>
+                    </p>
+                    <p>
+                      Attributed visit cost: <strong>{ghs(client.attributedVisitCost)}</strong>
+                    </p>
                   </div>
-                  <p className="mt-2 text-xs">{client.calls.length} calls · {client.conversations.length} conversations · {client.visits.length} scheduled visits · {client.approvedPayments.length} approved receipts in period</p>
-                  <p className="mt-2 text-sm">Next action: {client.lead.nextAction || "Not recorded"}{client.lead.nextActionDate ? ` · Due ${client.lead.nextActionDate}` : ""}</p>
+                  <p className="mt-2 text-xs">
+                    {client.calls.length} calls · {client.conversations.length} conversations · {client.visits.length}{" "}
+                    scheduled visits · {client.approvedPayments.length} approved receipts in period
+                  </p>
+                  <p className="mt-2 text-sm">
+                    Next action: {client.lead.nextAction || "Not recorded"}
+                    {client.lead.nextActionDate ? ` · Due ${client.lead.nextActionDate}` : ""}
+                  </p>
                   {client.conversations.slice(0, 3).map((entry) => (
-                    <p key={entry.id} className="mt-2 break-words border-t pt-2 text-sm"><span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} · {entry.channel} · {names[entry.authorKey] ?? entry.authorKey}</span><br />{entry.body}{entry.nextAction ? ` · Next: ${entry.nextAction}` : ""}</p>
+                    <p key={entry.id} className="mt-2 break-words border-t pt-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {new Date(entry.createdAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} ·{" "}
+                        {entry.channel} · {names[entry.authorKey] ?? entry.authorKey}
+                      </span>
+                      <br />
+                      {entry.body}
+                      {entry.nextAction ? ` · Next: ${entry.nextAction}` : ""}
+                    </p>
                   ))}
-                  {client.conversations.length > 3 && <p className="text-muted-foreground mt-2 text-xs">All {client.conversations.length} conversations are included in the PDF.</p>}
+                  {client.conversations.length > 3 && (
+                    <p className="text-muted-foreground mt-2 text-xs">
+                      All {client.conversations.length} conversations are included in the PDF.
+                    </p>
+                  )}
                 </div>
               ))}
             </CardContent>
