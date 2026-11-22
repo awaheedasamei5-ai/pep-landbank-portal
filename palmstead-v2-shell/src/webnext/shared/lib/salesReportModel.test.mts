@@ -242,3 +242,36 @@ test("equal-length preceding period compares dated events within the same lead p
   );
 });
 
+test("quality register identifies records without crossing personal and company pools", () => {
+  const master = buildSalesReport(data, "master", "manager", true, filters);
+  assert.deepEqual(
+    master.qualityIssues.map((issue) => issue.id),
+    ["call-c", "legacy-call-a", "unlinked"],
+  );
+  assert.equal(master.qualityIssues.find((issue) => issue.id === "unlinked")?.recordUrl, "/dashboard/site-visits/unlinked");
+  assert.deepEqual(
+    buildSalesReport(data, "mine", "adams", false, filters).qualityIssues.map((issue) => issue.id),
+    ["legacy-call-a"],
+  );
+  assert.deepEqual(
+    buildSalesReport(data, "company", "adams", false, filters).qualityIssues.map((issue) => issue.id),
+    ["call-c"],
+  );
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, site: "North" }).visitRequestWithoutLead, 1);
+  assert.equal(buildSalesReport(data, "master", "manager", true, { ...filters, site: "South" }).visitRequestWithoutLead, 0);
+});
+
+test("unassigned company leads appear as current quality issues only in company scope", () => {
+  const unassigned = {
+    ...data,
+    leads: [
+      ...data.leads,
+      { ...data.leads[2], id: "d", name: "Client D", date: "2026-10-01", assignedAgentKey: undefined },
+    ],
+  } as SalesReportData;
+  const company = buildSalesReport(unassigned, "company", "adams", false, filters);
+  assert.equal(company.unassignedCompanyLeads, 1);
+  assert.equal(company.qualityIssues.find((issue) => issue.id === "d")?.kind, "Company lead without handler");
+  assert.equal(buildSalesReport(unassigned, "mine", "adams", false, filters).qualityIssues.some((issue) => issue.id === "d"), false);
+});
+
