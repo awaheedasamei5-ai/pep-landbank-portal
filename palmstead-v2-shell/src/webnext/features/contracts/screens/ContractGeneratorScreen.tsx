@@ -21,10 +21,13 @@ import { useSessionStore } from "../../../auth/useSessionStore";
 import { ghs } from "../../../shared/lib/format";
 import { LeadKycDialog } from "../components/LeadKycDialog";
 import { ContractClauseEditor } from "../components/ContractClauseEditor";
-import { resolveContractFields, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
+import { resolveContractFields, resolveSections, findUnresolvedTokens, CONTRACT_FIELD_LABELS } from "../lib/contractFieldResolver";
 import { useConsistencyScanSummary, useMissingDataChecklistDraft, type ContractFieldChange } from "../hooks/useContractAi";
 import { useContractDrafts, useDeleteContractDraft, useUpdateContractDraft } from "../hooks/useContractDrafts";
 import { contractFilename, prepareStandardContractPdf } from "../lib/contractPdf";
+import { buildContractFromSections } from "../lib/contractSectionsPdf";
+import { getDataSource } from "../../../data/source";
+import { loadImageAsDataUri } from "../../../shared/lib/image";
 import { friendlyError } from "../../../shared/lib/friendlyError";
 import type { Lead, PlotType, PaymentPlan } from "../../../types/domain";
 
@@ -266,6 +269,7 @@ function SelectedLeadPreview({
   resumeDraftId: string | null;
 }) {
   const { data: config } = useConfig();
+  const demoMode = useSessionStore((s) => s.demoMode);
   const canEditLegalText = useCanAdministerContracts();
   const generate = useGenerateContract();
   const [previewPending, setPreviewPending] = useState(false);
@@ -408,16 +412,28 @@ function SelectedLeadPreview({
     }
   }
 
-  async function previewStandardPdf() {
-    if (!config || selected || !transactionValid || (isWalkIn && !walkInAmountValid)) return;
+  async function previewDocumentPdf() {
+    if (!config || !transactionValid || (isWalkIn && !walkInAmountValid)) return;
     setPreviewError(null);
     setPreviewPending(true);
     try {
       const previewLead = { ...contractLead, kyc: effectiveKyc, ...(isWalkIn ? { amtPaid: amountPaidOverride ?? 0 } : {}) };
-      const previewConfig = temporaryLegalOpen
-        ? { ...config, contractPreamble: temporaryPreamble, contractDefinitions: temporaryDefinitions, contractTerms: temporaryTerms }
-        : config;
-      const doc = await prepareStandardContractPdf(previewLead, previewConfig, acresOverride);
+      let doc;
+      if (selected) {
+        const fields = resolveContractFields(previewLead, config, amountPaidOverride, acresOverride);
+        const content = resolveSections(selected.version.content, fields);
+        const missing = findUnresolvedTokens(content);
+        if (missing.length) throw new Error(`Complete these fields before previewing: ${missing.join(", ")}.`);
+        const style = await getDataSource(demoMode).contractStyleSettings.get();
+        let cover: string | null = null;
+        try { cover = config.contractCoverImage || await loadImageAsDataUri("/contract-cover.jpg"); } catch { /* Cover is optional. */ }
+        doc = buildContractFromSections(selected.templateName, content, style, cover);
+      } else {
+        const previewConfig = temporaryLegalOpen
+          ? { ...config, contractPreamble: temporaryPreamble, contractDefinitions: temporaryDefinitions, contractTerms: temporaryTerms }
+          : config;
+        doc = await prepareStandardContractPdf(previewLead, previewConfig, acresOverride);
+      }
       doc.save(`Preview-${contractFilename(lead.name)}`);
     } catch (error) {
       setPreviewError(friendlyError(error, "The preview could not be prepared."));
@@ -557,18 +573,16 @@ function SelectedLeadPreview({
       {isWalkIn && publishedVersionsLoading && <p className="text-sm text-muted-foreground">Loading additional published templates…</p>}
 
       <div className="flex flex-wrap gap-2">
-        {!selected && (
-          <Button type="button" variant="outline" disabled={previewPending || generate.isPending || !config || !transactionValid || (isWalkIn && !walkInAmountValid)} onClick={previewStandardPdf}>
-            <FileDown />
-            {previewPending ? "Preparing preview…" : "Preview PDF"}
-          </Button>
-        )}
+        <Button type="button" variant="outline" disabled={previewPending || generate.isPending || !config || !transactionValid || (isWalkIn && !walkInAmountValid)} onClick={previewDocumentPdf}>
+          <FileDown />
+          {previewPending ? "Preparing preview…" : "Preview PDF"}
+        </Button>
         <Button type="button" disabled={previewPending || generate.isPending || !config || !transactionValid || (isWalkIn && !walkInAmountValid)} onClick={generateNow}>
           <FileDown />
           {generate.isPending ? "Generating…" : "Generate & download PDF"}
         </Button>
       </div>
-      {!selected && <p className="text-xs text-muted-foreground">Preview downloads the exact standard document for review. It does not issue a contract or add a vault record.</p>}
+      <p className="text-xs text-muted-foreground">Preview downloads this document for review. It does not issue a contract or add a vault record.</p>
       {previewError && <p className="text-sm text-destructive" role="alert">{previewError}</p>}
 
       {generate.isError && <p className="text-sm text-destructive">{(generate.error as Error).message}</p>}
