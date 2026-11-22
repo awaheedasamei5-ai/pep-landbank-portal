@@ -164,6 +164,7 @@ export function useAllContractsForVault() {
 
   const generations = generationsQuery.data ?? [];
   const legacyAsGenerations: ContractGeneration[] = (contractsQuery.data ?? []).map((c) => ({
+    isLegacyRecord: true,
     id: c.id,
     contractRequestId: null,
     leadId: c.leadId,
