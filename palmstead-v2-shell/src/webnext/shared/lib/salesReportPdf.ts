@@ -13,7 +13,7 @@ import {
   pdfSectionTitle,
 } from "./pdfReport";
 import { sanitizePdfText } from "./pdfText";
-import type { SalesPeriodComparison, SalesReport } from "./salesReportModel";
+import { salesPaymentPlanLabel, type SalesPeriodComparison, type SalesReport } from "./salesReportModel";
 
 export type SalesPdfSection = "overview" | "comparison" | "trend" | "staff" | "mix" | "quality" | "registers" | "clients";
 export const SALES_PDF_SECTIONS: { key: SalesPdfSection; label: string }[] = [
@@ -307,6 +307,7 @@ export async function buildSalesReportPdf(
         ["Calls without outcome", report.callsWithoutOutcome],
         ["Unlinked visit requests", report.visitRequestWithoutLead],
         ["Company leads without handler", report.unassignedCompanyLeads],
+        ["Unverified payment plans", report.qualityIssues.filter((issue) => issue.kind === "Unverified payment plan").length],
         ["Reached denominator", `${report.reached} reached / ${report.calls.length} genuine calls`],
         ["Lead cohort denominator", `${report.newLeads.length} leads created within selection`],
         ["Sales definition", "Approved payment entries are client receipts, not booked sales or bank reconciliation."],
@@ -325,7 +326,7 @@ export async function buildSalesReportPdf(
   if (sections.has("quality")) {
     y = openTopSection(
       "Records needing attention",
-      "Dated call and visit gaps; company handler assignments are current",
+      "Dated call and visit gaps; company handlers and payment plans are current",
     );
     y = table(
       doc,
@@ -432,7 +433,7 @@ export async function buildSalesReportPdf(
         y,
         ["Field", "Recorded value"],
         [
-          ["Stage / plan", `${client.lead.stage} / ${client.lead.paymentPlan}`],
+          ["Stage / plan", `${client.lead.stage} / ${salesPaymentPlanLabel(client.lead.paymentPlan)}`],
           ["Plot / quantity", `${client.lead.plotType} / ${client.lead.noPlots}`],
           [
             "Source / handler",
@@ -525,4 +526,5 @@ export async function buildSalesReportPdf(
   pdfReportFooter(doc, "PEP Landbank | Sales performance");
   return doc;
 }
+
 

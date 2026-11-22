@@ -27,6 +27,7 @@ import {
   ghanaDate,
   precedingSalesPeriod,
   reportableSalesLeads,
+  salesPaymentPlanLabel,
   type SalesReportFilters,
   type SalesReportScope,
 } from "../lib/salesReportModel";
@@ -147,7 +148,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
       action: unique(data?.activity.map((entry) => entry.action) ?? []),
       outcome: unique(data?.activity.map((entry) => entry.outcome) ?? []),
       site: unique(data?.visits.map((visit) => visit.site) ?? []),
-      plan: unique(reportable.map((lead) => lead.paymentPlan)),
+      plan: unique(reportable.map((lead) => salesPaymentPlanLabel(lead.paymentPlan))),
       clients: reportable
         .filter((lead) =>
           scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
@@ -379,7 +380,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               [
                 "Data gaps",
                 report.qualityIssues.length.toLocaleString(),
-                "Call outcomes, visit links and company handlers needing attention",
+                "Call outcomes, visit links, company handlers and payment plans needing attention",
               ],
             ].map(([label, value, note]) => (
               <Card key={label}>
@@ -556,13 +557,13 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
             <CardHeader>
               <CardTitle>Records needing attention</CardTitle>
               <CardDescription>
-                Calls and visit requests use the selected dates. Unassigned company handlers reflect current lead
-                records. Open a source record to review the gap and its surrounding history.
+                Calls and visit requests use the selected dates. Company handlers and unverified payment plans reflect
+                current lead records. Open a source record to review the gap and its surrounding history.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {report.qualityIssues.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No missing call outcomes, visit links or company handlers in this scope.</p>
+                <p className="text-muted-foreground text-sm">No records needing attention in this scope.</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -662,7 +663,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                       </Link>
                       <p className="text-muted-foreground text-xs">
                         {client.ownerName} · Added {client.lead.date} · Stage {client.lead.stage} ·{" "}
-                        {client.lead.paymentPlan}
+                        {salesPaymentPlanLabel(client.lead.paymentPlan)}
                       </p>
                     </div>
                     <span className="text-sm font-medium">{ghs(client.lead.grandTotal)}</span>
@@ -718,4 +719,5 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     </div>
   );
 }
+
 
