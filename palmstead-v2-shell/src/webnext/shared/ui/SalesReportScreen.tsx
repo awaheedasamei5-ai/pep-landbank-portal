@@ -26,6 +26,7 @@ import {
   compareSalesPeriods,
   ghanaDate,
   precedingSalesPeriod,
+  reportableSalesLeads,
   type SalesReportFilters,
   type SalesReportScope,
 } from "../lib/salesReportModel";
@@ -137,16 +138,17 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     setFilters((current) => ({ ...current, [field]: value }));
   const choices = useMemo(() => {
     const data = dataQuery.data;
+    const reportable = data ? reportableSalesLeads(data) : [];
     const unique = (values: (string | null | undefined)[]) =>
       [...new Set(values.filter((value): value is string => !!value))].sort();
     return {
-      source: unique(data?.leads.map((lead) => lead.leadSource) ?? []),
-      stage: unique(data?.leads.map((lead) => lead.stage) ?? []),
+      source: unique(reportable.map((lead) => lead.leadSource)),
+      stage: unique(reportable.map((lead) => lead.stage)),
       action: unique(data?.activity.map((entry) => entry.action) ?? []),
       outcome: unique(data?.activity.map((entry) => entry.outcome) ?? []),
       site: unique(data?.visits.map((visit) => visit.site) ?? []),
-      plan: unique(data?.leads.map((lead) => lead.paymentPlan) ?? []),
-      clients: (data?.leads ?? [])
+      plan: unique(reportable.map((lead) => lead.paymentPlan)),
+      clients: reportable
         .filter((lead) =>
           scope === "master" ? isManager : scope === "company" ? lead.agent === "company" : lead.agent === profile?.key,
         )
@@ -339,6 +341,12 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
       )}
       {report && (
         <>
+          {report.excludedImportPlaceholders > 0 && (
+            <p className="text-muted-foreground text-sm">
+              {report.excludedImportPlaceholders.toLocaleString()} allocation-import names without contact, deal
+              value, progress or linked activity are excluded from sales figures and client records in this scope.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               ["New leads", report.newLeads.length.toLocaleString(), "Created in selected dates"],
