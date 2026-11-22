@@ -557,7 +557,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               <CardTitle>Records needing attention</CardTitle>
               <CardDescription>
                 Calls and visit requests use the selected dates. Unassigned company handlers reflect current lead
-                records. Open a record to complete its missing information.
+                records. Open a source record to review the gap and its surrounding history.
               </CardDescription>
             </CardHeader>
             <CardContent>
