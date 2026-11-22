@@ -156,7 +156,7 @@ export async function buildSalesReportPdf(
       comparison.rows.map((row) => {
         const format = (value: number) => (row.unit === "money" ? money(value) : value.toLocaleString("en-GH"));
         const delta = row.current - row.previous;
-        return [row.label, format(row.current), format(row.previous), `${delta >= 0 ? "+" : ""}${format(delta)}`];
+        return [row.label, format(row.current), format(row.previous), `${delta > 0 ? "+" : ""}${format(delta)}`];
       }),
     );
     y = continuingSection(doc, y, "Comparison basis", undefined, 30);
@@ -170,9 +170,9 @@ export async function buildSalesReportPdf(
       y,
     );
     y += 18;
-    for (const label of ["Genuine calls", "Visit requests"] as const) {
+    for (const label of ["New leads", "Genuine calls", "Visit requests"] as const) {
       const row = comparison.rows.find((item) => item.label === label);
-      if (!row) continue;
+      if (!row || (row.current === 0 && row.previous === 0)) continue;
       y = continuingSection(doc, y, label, "Previous versus selected period", 57);
       y = pdfBarChart(doc, 14, y, 180, 43, [
         { label: "Previous", value: row.previous, color: PDF_GOLD },
