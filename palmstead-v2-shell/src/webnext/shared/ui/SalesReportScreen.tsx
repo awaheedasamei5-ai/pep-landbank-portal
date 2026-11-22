@@ -380,7 +380,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               [
                 "Data gaps",
                 report.qualityIssues.length.toLocaleString(),
-                "Call outcomes, visit links and company handlers needing attention",
+                "Call outcomes, visit links, company handlers and payment plans needing attention",
               ],
             ].map(([label, value, note]) => (
               <Card key={label}>
@@ -557,13 +557,13 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
             <CardHeader>
               <CardTitle>Records needing attention</CardTitle>
               <CardDescription>
-                Calls and visit requests use the selected dates. Unassigned company handlers reflect current lead
-                records. Open a source record to review the gap and its surrounding history.
+                Calls and visit requests use the selected dates. Company handlers and unverified payment plans reflect
+                current lead records. Open a source record to review the gap and its surrounding history.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {report.qualityIssues.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No missing call outcomes, visit links or company handlers in this scope.</p>
+                <p className="text-muted-foreground text-sm">No records needing attention in this scope.</p>
               ) : (
                 <Table>
                   <TableHeader>
