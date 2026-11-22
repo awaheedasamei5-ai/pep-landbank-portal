@@ -1916,6 +1916,9 @@ export interface ContractGeneration {
   generatedBy: string;
   generatedByName: string;
   generatedAt: string;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
 }
 
 // Real table `contract_drafts` -- an in-progress contract a staff member

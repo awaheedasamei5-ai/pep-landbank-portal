@@ -942,6 +942,9 @@ export function mapContractGenerationRow(r: Record<string, unknown>): ContractGe
     generatedBy: r.generated_by as string,
     generatedByName: r.generated_by_name as string,
     generatedAt: r.generated_at as string,
+    voidedAt: (r.voided_at as string | null) ?? null,
+    voidedBy: (r.voided_by as string | null) ?? null,
+    voidReason: (r.void_reason as string | null) ?? null,
   };
 }
 

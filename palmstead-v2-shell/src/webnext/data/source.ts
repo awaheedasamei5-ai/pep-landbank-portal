@@ -924,6 +924,7 @@ export interface DataSource {
   };
   contractGenerations: {
     list(): Promise<ContractGeneration[]>;
+    removeFromActiveVault(id: string, reason: string): Promise<ContractGeneration>;
     create(input: {
       contractRequestId: string | null;
       leadId: string | null;
@@ -3568,6 +3569,17 @@ function createLiveDataSource(): DataSource {
           .order("generated_at", { ascending: false });
         if (error) throw error;
         return (data ?? []).map(mapContractGenerationRow);
+      },
+      async removeFromActiveVault(id, reason) {
+        const { data, error } = await requireClient()
+          .from("contract_generations")
+          .update({ voided_at: new Date().toISOString(), void_reason: reason.trim() })
+          .eq("id", id)
+          .is("voided_at", null)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapContractGenerationRow(data);
       },
       async create(input) {
         const { data, error } = await requireClient()
