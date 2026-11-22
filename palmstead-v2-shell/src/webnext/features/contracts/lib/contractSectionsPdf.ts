@@ -97,6 +97,8 @@ export function buildContractFromSections(title: string, sections: ContractSecti
       // numbered-clause heuristics, since this only needs to be good
       // enough to catch the common "heading alone at the bottom" case,
       // not reproduce contractBody's exact per-paragraph layout.
+      doc.setFont(headingFamily, 'bold');
+      doc.setFontSize(headingSize);
       const headingLines: string[] = doc.splitTextToSize(section.text ?? '', pageW - 28);
       let neededHeight = headingLines.length * 6.6 + 4;
       const next = sections[i + 1];
