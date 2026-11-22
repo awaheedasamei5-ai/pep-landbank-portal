@@ -287,6 +287,7 @@ test("allocation-only names stay out of sales figures until valued or worked", (
     grandTotal: 0,
     amtPaid: 0,
     notes: "Imported from allocation document",
+    nextAction: "Confirm contact details and real payment history with client",
   };
   const imported = {
     ...data,
