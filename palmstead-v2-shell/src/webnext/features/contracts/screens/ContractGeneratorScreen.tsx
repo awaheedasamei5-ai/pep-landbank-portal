@@ -50,6 +50,7 @@ function ContractGeneratorInner() {
   const searchParams = useSearchParams();
   const resumeLeadId = searchParams.get("lead");
   const resumeDraftId = searchParams.get("draft");
+  const correctionSourceId = searchParams.get("correct");
   const { data: leads } = useAllLeads();
   const { data: contracts, isLoading: contractsLoading } = useContracts();
   const [query, setQuery] = useState("");
@@ -122,7 +123,7 @@ function ContractGeneratorInner() {
               </>
             )
           ) : (
-            <SelectedLeadPreview key={selectedLead.id} lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} />
+            <SelectedLeadPreview key={selectedLead.id} lead={selectedLead} isWalkIn={isWalkIn} onChange={reset} resumeDraftId={resumeDraftId} correctionSourceId={correctionSourceId} />
           )}
         </CardContent>
       </Card>
@@ -259,11 +260,13 @@ function SelectedLeadPreview({
   isWalkIn,
   onChange,
   resumeDraftId,
+  correctionSourceId,
 }: {
   lead: Lead;
   isWalkIn: boolean;
   onChange: () => void;
   resumeDraftId: string | null;
+  correctionSourceId: string | null;
 }) {
   const { data: config } = useConfig();
   const canEditLegalText = useCanAdministerContracts();
@@ -298,6 +301,7 @@ function SelectedLeadPreview({
   const transactionValid = Number.isInteger(plotCount) && plotCount > 0 && (!priceForContract.trim() || (Number.isFinite(Number(priceForContract)) && Number(priceForContract) > 0)) && (!depositForContract.trim() || (Number.isFinite(Number(depositForContract)) && Number(depositForContract) >= 0 && Number(depositForContract) <= (totals?.grand ?? 0))) && (acresOverride === undefined || (Number.isFinite(acresOverride) && acresOverride > 0)) && (!temporaryLegalOpen || (!!temporaryPreamble.trim() && !!temporaryDefinitions.trim() && !!temporaryTerms.trim()));
   const [kycOverride, setKycOverride] = useState<typeof lead.kyc>(undefined);
   const [kycOpen, setKycOpen] = useState(false);
+  useEffect(() => { if (correctionSourceId) setKycOpen(true); }, [correctionSourceId]);
   const effectiveKyc = kycOverride ?? lead.kyc;
   const hasKyc = !!effectiveKyc && Object.values(effectiveKyc).some((v) => v);
 
@@ -427,6 +431,7 @@ function SelectedLeadPreview({
 
   return (
     <div className="space-y-4">
+      {correctionSourceId && <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">Correct the KYC details, then preview and generate a replacement PDF. The earlier issued PDF stays in the vault for audit until Management removes it from the active list.</div>}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -527,7 +532,7 @@ function SelectedLeadPreview({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__standard__">Standard company document (10 pages)</SelectItem>
+            <SelectItem value="__standard__">Standard quotation Royal Palm Enclave</SelectItem>
             {templateOptions.map((o) => (
               <SelectItem key={o.version.id} value={o.version.id}>
                 {o.templateName} · v{o.version.versionNumber}

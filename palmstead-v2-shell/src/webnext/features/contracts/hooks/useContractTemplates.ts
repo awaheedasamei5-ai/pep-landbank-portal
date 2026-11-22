@@ -122,6 +122,15 @@ export function useContractGenerations() {
   return useQuery({ queryKey: ['contractGenerations'], queryFn: () => getDataSource(demoMode).contractGenerations.list() });
 }
 
+export function useRemoveContractFromActiveVault() {
+  const demoMode = useSessionStore((s) => s.demoMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => getDataSource(demoMode).contractGenerations.removeFromActiveVault(id, reason),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contractGenerations'] }),
+  });
+}
+
 // docs/plans/41-complete-system-findings-and-phased-fix-plan.md Phase 7,
 // C2.5 -- the legacy `contracts` table (the v1-parity path's own
 // metadata-only record, no stored PDF) and `contract_generations` (the
@@ -159,6 +168,9 @@ export function useAllContractsForVault() {
     generatedBy: c.createdBy,
     generatedByName: c.createdByName,
     generatedAt: c.createdAt,
+    voidedAt: null,
+    voidedBy: null,
+    voidReason: null,
   }));
 
   // A template-based generation already writes BOTH tables (useGenerateContract),
