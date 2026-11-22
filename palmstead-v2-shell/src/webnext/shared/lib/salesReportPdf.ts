@@ -111,7 +111,14 @@ export async function buildSalesReportPdf(
     y += 5.5;
   }
   y += 4;
+  let bodyStarted = false;
+  const openTopSection = (title: string, note?: string) => {
+    if (bodyStarted) return newSection(doc, title, note);
+    bodyStarted = true;
+    return pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), title, note);
+  };
   if (sections.has("overview")) {
+    bodyStarted = true;
     y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Executive scorecard");
     y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
       { label: "New leads", value: report.newLeads.length, accent: PDF_LEAF },
@@ -138,8 +145,7 @@ export async function buildSalesReportPdf(
   }
   if (sections.has("comparison") && options.comparison) {
     const comparison = options.comparison;
-    y = newSection(
-      doc,
+    y = openTopSection(
       "Previous period comparison",
       `${comparison.from} to ${comparison.to} | equal number of calendar days`,
     );
@@ -175,7 +181,7 @@ export async function buildSalesReportPdf(
     }
   }
   if (sections.has("trend")) {
-    y = newSection(doc, "Monthly activity trend", "Calls logged in the selected period");
+    y = openTopSection("Monthly activity trend", "Calls logged in the selected period");
     const trend = report.months.slice(-12);
     if (trend.length) {
       y = pdfBarChart(
@@ -199,6 +205,7 @@ export async function buildSalesReportPdf(
   }
 
   if (sections.has("staff") && report.canCompareStaff) {
+    bodyStarted = true;
     y = continuingSection(doc, y, "Deal owner activity", "Company deals remain in the company pool", 45);
     y = table(
       doc,
@@ -247,6 +254,7 @@ export async function buildSalesReportPdf(
     );
   }
   if (sections.has("mix")) {
+    bodyStarted = true;
     y = continuingSection(doc, y, "Conversion and mix");
     y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
       { label: "Lead to visit", value: percent(report.newLeadToVisitRate) },
@@ -300,6 +308,11 @@ export async function buildSalesReportPdf(
     );
   }
   if (sections.has("registers")) {
+    bodyStarted = true;
+    if (!report.calls.length && !report.requestedVisits.length && !report.approvedPayments.length) {
+      y = continuingSection(doc, y, "Activity registers", "No dated records match the selected filters", 28);
+      y = table(doc, y, ["Result"], [["No calls, visit requests or approved receipts in this period"]]);
+    }
     if (report.calls.length) {
       y = continuingSection(doc, y, "Call register", `${report.calls.length} genuine calls in the selected period`, 38);
       y = table(
@@ -361,9 +374,12 @@ export async function buildSalesReportPdf(
   }
 
   if (sections.has("clients")) {
+    if (!report.clients.length) {
+      y = openTopSection("Client records", "No clients match the selected filters");
+      y = table(doc, y, ["Result"], [["No client records in this report scope"]]);
+    }
     for (const client of report.clients) {
-      y = newSection(
-        doc,
+      y = openTopSection(
         `Client | ${safe(client.lead.name)}`,
         `${client.ownerName} | ${client.lead.agent === "company" ? "Company Leads" : "Staff pipeline"} | Added ${client.lead.date}`,
       );
