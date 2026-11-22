@@ -1805,6 +1805,9 @@ export interface Contract {
   createdBy: string;
   createdByName: string;
   createdAt: string;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
 }
 
 // CONTRACT_OF_SALE_BLUEPRINT.md §4 -- the real template-studio entities.
