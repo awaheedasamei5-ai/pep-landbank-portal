@@ -20,7 +20,7 @@ function matchesFilter(banner: Banner, filter: Filter): boolean {
 }
 
 function MiniMap({ banners, filter }: { banners: Banner[]; filter: Filter }) {
-  const container = useRef<HTMLDivElement>(null);
+  const container = useRef<HTMLElement>(null);
   const map = useRef<LeafletMapInstance | null>(null);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ function MiniMap({ banners, filter }: { banners: Banner[]; filter: Filter }) {
 
   if (!plotted.length) return <div className="flex aspect-square items-center justify-center rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">No mapped banners match this view.</div>;
   return <div className="relative aspect-square overflow-hidden rounded-lg border bg-muted/30">
-    <div ref={container} className="absolute inset-0" role="region" aria-label={`Map of ${plotted.length} banner locations. Use the full tracker link for the accessible register.`} />
+    <section ref={container} className="absolute inset-0" aria-label={`Map of ${plotted.length} banner locations. Use the full tracker link for the accessible register.`} />
     {error && <p role="alert" className="absolute inset-x-3 top-3 rounded-md bg-card p-3 text-sm text-destructive shadow-sm">{error}</p>}
   </div>;
 }
@@ -81,9 +81,9 @@ export function BannerOverview() {
         <div className="rounded-lg bg-muted/50 p-2"><p className="text-lg font-semibold tabular-nums">{banners.isLoading ? "…" : withLocation}</p><p className="text-xs text-muted-foreground">On map</p></div>
         <div className="rounded-lg bg-muted/50 p-2"><p className="text-lg font-semibold tabular-nums">{banners.isLoading ? "…" : attention}</p><p className="text-xs text-muted-foreground">Attention</p></div>
       </div>
-      <div className="flex flex-wrap gap-1" role="group" aria-label="Filter banner map">
+      <fieldset className="flex min-w-0 flex-wrap gap-1 border-0 p-0"><legend className="sr-only">Filter banner map</legend>
         {([ ["all", "All"], ["attention", "Attention"], ["placed", "Placed"] ] as const).map(([value, label]) => <Button key={value} type="button" size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</Button>)}
-      </div>
+      </fieldset>
       {banners.isLoading && <div className="flex aspect-square items-center justify-center rounded-lg bg-muted/30 text-sm text-muted-foreground">Loading map…</div>}
       {banners.isError && <p role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive">Banner locations could not load.</p>}
       {banners.data && <MiniMap banners={all} filter={filter} />}
