@@ -255,6 +255,23 @@ test("client evidence stays in its pool and receipts follow deal owner, not paym
   );
 });
 
+test("contact recency uses full visible history, excludes future events, and stays in the owning pool", () => {
+  const later = {
+    ...data,
+    loadedAt: "2026-11-23T12:00:00Z",
+    activity: [...data.activity, { id: "future-call", leadId: "b", agentKey: "elias", action: "Call", createdAt: "2026-11-30T09:00:00Z" }],
+  } as SalesReportData;
+  const narrow = { ...filters, from: "2026-11-20", to: "2026-11-23" };
+  const master = buildSalesReport(later, "master", "manager", true, narrow);
+  assert.equal(master.calls.length, 0);
+  assert.equal(master.needingContact, 2);
+  assert.equal(master.clients.find((client) => client.lead.id === "b")?.daysSinceContact, 21);
+  assert.equal(master.clients.find((client) => client.lead.id === "b")?.needsContact, true);
+  assert.equal(master.clients.find((client) => client.lead.id === "a")?.needsContact, false);
+  assert.equal(buildSalesReport(later, "mine", "adams", false, narrow).needingContact, 0);
+  assert.equal(buildSalesReport(later, "company", "adams", false, narrow).needingContact, 1);
+});
+
 test("equal-length preceding period compares dated events within the same lead pool", () => {
   const selected = { ...filters, from: "2026-11-03", to: "2026-11-04", pool: "company" };
   const prior = precedingSalesPeriod(selected);

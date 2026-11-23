@@ -112,18 +112,25 @@ export async function buildSalesReportPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...PDF_INK);
+  const selectedStaff = report.filters.staffKey
+    ? report.staff.find((row) => row.key === report.filters.staffKey)?.name ?? report.filters.staffKey
+    : "all";
+  const selectedClient = report.filters.clientId
+    ? report.clients.find((row) => row.lead.id === report.filters.clientId)?.lead.name ?? "selected client unavailable"
+    : "all";
   const scopeLines = [
     `Data loaded: ${new Date(report.loadedAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} Ghana time`,
-    `Filters: staff ${report.filters.staffKey || "all"}; source ${report.filters.source || "all"}; stage ${report.filters.stage || "all"};`,
+    `Filters: staff ${safe(selectedStaff)}; source ${report.filters.source || "all"}; stage ${report.filters.stage || "all"};`,
     `action ${report.filters.action || "all"}; outcome ${report.filters.outcome || "all"}; site ${report.filters.site || "all"}; plan ${report.filters.paymentPlan || "all"}.`,
-    `Pool: ${report.filters.pool || "all"}; client: ${report.filters.clientId || "all"}.`,
+    `Pool: ${report.filters.pool || "all"}; client: ${safe(selectedClient)}.`,
     "Activity and lead cohorts use their event dates; payment cash uses payment date and approved status.",
     "Current stage and paid-in-full conversion are snapshots, not historical stage transitions.",
     `${report.excludedImportPlaceholders} allocation-only names without sales evidence were excluded from this scope.`,
   ];
   for (const line of scopeLines) {
-    doc.text(line, 12, y);
-    y += 5.5;
+    const wrapped = doc.splitTextToSize(line, doc.internal.pageSize.getWidth() - 24);
+    doc.text(wrapped, 12, y);
+    y += 5.5 * wrapped.length;
   }
   y += 4;
   let bodyStarted = false;
@@ -156,6 +163,10 @@ export async function buildSalesReportPdf(
       { label: "Outstanding", value: money(report.outstanding) },
       { label: "Recorded visit cost", value: money(report.attributedVisitCost) },
       { label: "Conversations", value: report.conversations.length },
+    ]);
+    y = continuingSection(doc, y, "Contact follow-up", "Current snapshot from all visible calls and timestamped discussions", 30);
+    y = table(doc, y, ["Open clients needing contact", "Definition"], [
+      [report.needingContact, "No recorded call or discussion for 14 or more days"],
     ]);
   }
   if (sections.has("comparison") && options.comparison) {
@@ -238,6 +249,14 @@ export async function buildSalesReportPdf(
         row.payingClients,
       ]),
     );
+    y = continuingSection(
+      doc,
+      y,
+      "Contact recency by owner",
+      "Open clients without a recorded call or discussion for 14+ days; current snapshot",
+      35,
+    );
+    y = table(doc, y, ["Owner", "Clients", "Need contact"], report.staff.map((row) => [row.name, row.clients, row.needingContact]));
     y = continuingSection(
       doc,
       y,
@@ -434,6 +453,7 @@ export async function buildSalesReportPdf(
         ["Field", "Recorded value"],
         [
           ["Stage / plan", `${client.lead.stage} / ${salesPaymentPlanLabel(client.lead.paymentPlan)}`],
+          ["Last recorded contact", client.lastContactAt ? `${when(client.lastContactAt)} (${client.daysSinceContact} days ago)${client.needsContact ? " - follow-up needed" : ""}` : `No call or discussion recorded${client.needsContact ? " - follow-up needed" : ""}`],
           ["Plot / quantity", `${client.lead.plotType} / ${client.lead.noPlots}`],
           [
             "Source / handler",

@@ -376,6 +376,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               ],
               ["Pipeline value", ghs(report.pipelineValue), "Current quoted deal totals"],
               ["Outstanding", ghs(report.outstanding), "Current deal balance snapshot"],
+              ["Needs contact", report.needingContact.toLocaleString(), "Open clients with no recorded call or discussion for 14+ days; current snapshot"],
               ["Attributed visit cost", ghs(report.attributedVisitCost), "Recorded attended-visit cost only"],
               [
                 "Data gaps",
@@ -500,6 +501,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                       <TableHead>Visit requests</TableHead>
                       <TableHead>Approved receipts</TableHead>
                       <TableHead>Clients</TableHead>
+                      <TableHead>Need contact</TableHead>
                       <TableHead>Conversations</TableHead>
                       <TableHead>Outstanding</TableHead>
                       <TableHead>Visit cost</TableHead>
@@ -518,6 +520,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                         <TableCell>{row.visitRequests}</TableCell>
                         <TableCell>{ghs(row.approvedCash)}</TableCell>
                         <TableCell>{row.clients}</TableCell>
+                        <TableCell>{row.needingContact}</TableCell>
                         <TableCell>{row.conversations}</TableCell>
                         <TableCell>{ghs(row.outstanding)}</TableCell>
                         <TableCell>{ghs(row.attributedVisitCost)}</TableCell>
@@ -690,6 +693,12 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                     Next action: {client.lead.nextAction || "Not recorded"}
                     {client.lead.nextActionDate ? ` · Due ${client.lead.nextActionDate}` : ""}
                   </p>
+                  <p className="mt-2 text-sm">
+                    Last recorded call or discussion: {client.lastContactAt
+                      ? `${new Date(client.lastContactAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} (${client.daysSinceContact} days ago)`
+                      : "None recorded"}
+                    {client.needsContact ? " · Follow-up needed" : ""}
+                  </p>
                   {client.conversations.slice(0, 3).map((entry) => (
                     <p key={entry.id} className="mt-2 break-words border-t pt-2 text-sm">
                       <span className="text-muted-foreground">
@@ -711,7 +720,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
             </CardContent>
           </Card>
           <p className="text-muted-foreground text-xs">
-            Payments are approved client receipts, not booked sales or verified bank cash. A scheduled visit is not
+            Contact recency uses all visible call and discussion history as of this report load, regardless of the selected event dates. Payments are approved client receipts, not booked sales or verified bank cash. A scheduled visit is not
             proof of attendance. Historical owner and stage transitions cannot be reconstructed from current records.
           </p>
         </>

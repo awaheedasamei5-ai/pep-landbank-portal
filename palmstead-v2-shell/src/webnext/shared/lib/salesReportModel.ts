@@ -81,6 +81,7 @@ export interface SalesStaffRow {
   approvedPayments: number;
   approvedCash: number;
   clients: number;
+  needingContact: number;
   conversations: number;
   attendedVisits: number;
   payingClients: number;
@@ -104,6 +105,9 @@ export interface SalesClientRow {
   outstanding: number;
   costs: SalesClientCost[];
   attributedVisitCost: number;
+  lastContactAt: string | null;
+  daysSinceContact: number | null;
+  needsContact: boolean;
 }
 
 export interface SalesMonthRow {
@@ -151,6 +155,7 @@ export interface SalesReport {
   qualityIssues: SalesQualityIssue[];
   excludedImportPlaceholders: number;
   payingClients: number;
+  needingContact: number;
   pipelineValue: number;
   outstanding: number;
   attributedVisitCost: number;
@@ -337,6 +342,20 @@ export function buildSalesReport(
   const requestedVisits = visits.filter((visit) => within(visit.createdAt, filters));
   const scheduledVisits = visits.filter((visit) => within(visit.visitDate, filters));
   const approvedPayments = payments.filter((payment) => payment.status === "approved" && within(payment.date, filters));
+  // Current contact recency uses the full visible history, even when the
+  // report's event window is narrow. Pipeline updates and automated payment
+  // events are not evidence that someone actually spoke with the client.
+  const asOf = ghanaDate(data.loadedAt);
+  const latestContact = new Map<string, string>();
+  for (const entry of [...data.activity.filter(isCall), ...data.conversations]) {
+    if (!leadIds.has(entry.leadId ?? "") || ghanaDate(entry.createdAt) > asOf) continue;
+    const leadId = entry.leadId as string;
+    if (entry.createdAt > (latestContact.get(leadId) ?? "")) latestContact.set(leadId, entry.createdAt);
+  }
+  const daysSince = (date: string) => {
+    const elapsed = Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${ghanaDate(date)}T00:00:00Z`);
+    return Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 86_400_000)) : null;
+  };
   const reached = calls.filter(isReached).length;
   const visitedLeadIds = new Set(visits.map((visit) => visit.leadId));
   const newLeadsVisited = newLeads.filter((lead) => visitedLeadIds.has(lead.id)).length;
@@ -347,6 +366,9 @@ export function buildSalesReport(
       const leadActivities = activities.filter((entry) => entry.leadId === lead.id);
       const leadPayments = payments.filter((payment) => payment.leadId === lead.id && payment.status === "approved");
       const leadCosts = costs.filter((entry) => entry.leadId === lead.id);
+      const lastContactAt = latestContact.get(lead.id) ?? null;
+      const daysSinceContact = lastContactAt ? daysSince(lastContactAt) : null;
+      const openDeal = lead.grandTotal <= 0 || lead.amtPaid < lead.grandTotal;
       return {
         lead,
         ownerName: lead.agent === "company" ? "Company pool" : (names[lead.agent] ?? lead.agent),
@@ -362,6 +384,9 @@ export function buildSalesReport(
         outstanding: Math.max(lead.grandTotal - lead.amtPaid, 0),
         costs: leadCosts,
         attributedVisitCost: leadCosts.reduce((sum, entry) => sum + entry.amount, 0),
+        lastContactAt,
+        daysSinceContact,
+        needsContact: openDeal && (daysSinceContact ?? daysSince(lead.date) ?? 0) >= 14,
       };
     })
     .sort((a, b) => a.lead.name.localeCompare(b.lead.name) || a.lead.id.localeCompare(b.lead.id));
@@ -392,6 +417,7 @@ export function buildSalesReport(
         approvedPayments: ownApproved.length,
         approvedCash: ownApproved.reduce((sum, payment) => sum + payment.amount, 0),
         clients: ownClients.length,
+        needingContact: ownClients.filter((client) => client.needsContact).length,
         conversations: conversations.filter((entry) => ownerByLead.get(entry.leadId) === key).length,
         attendedVisits: ownVisits.filter((visit) => visit.attended === true && within(visit.visitDate, filters)).length,
         payingClients: payingClients.length,
@@ -447,6 +473,7 @@ export function buildSalesReport(
     qualityIssues,
     excludedImportPlaceholders,
     payingClients: clients.filter((client) => client.paidToDate > 0).length,
+    needingContact: clients.filter((client) => client.needsContact).length,
     pipelineValue: clients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
     outstanding: clients.reduce((sum, client) => sum + client.outstanding, 0),
     attributedVisitCost: clients.reduce((sum, client) => sum + client.attributedVisitCost, 0),
