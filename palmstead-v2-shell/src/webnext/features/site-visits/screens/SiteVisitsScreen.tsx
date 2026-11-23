@@ -14,7 +14,6 @@ import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { SiteVisit } from '../../../types/domain';
 import { useAllSiteVisits, useCancelSiteVisit, useSiteVisits } from '../hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
-import { useCanManageCompanyLeads } from '../../company-leads/hooks/useCompanyLeads';
 import { leadDestination } from '../lib/leadDestination';
 import styles from './SiteVisitsScreen.module.css';
 
@@ -60,7 +59,20 @@ export function SiteVisitsScreen() {
   // same leftover-pilot scope SveManagementScreen's own gate had, opened
   // the same way (see that screen's comment for the matching RLS fix).
   const hasSveAccess = !!profile;
-  const canManageCompanyLeads = useCanManageCompanyLeads();
+  const companyCreateAccess = useQuery({
+    queryKey: ['siteVisitCompanyLeadCreate', profile?.key],
+    enabled: !!profile?.key && !demoMode,
+    queryFn: async () => {
+      const db = requireSupabase();
+      const [view, create] = await Promise.all([
+        db.rpc('has_permission', { p_key: 'company_leads.view' }),
+        db.rpc('has_permission', { p_key: 'company_leads.create' }),
+      ]);
+      if (view.error || create.error) throw view.error ?? create.error;
+      return view.data === true && create.data === true;
+    },
+  });
+  const canCreateCompanyLead = demoMode || isManager || companyCreateAccess.data === true;
   const mine = useSiteVisits();
   const all = useAllSiteVisits();
   const { data: visits, isLoading } = isManager ? all : mine;
@@ -294,7 +306,7 @@ export function SiteVisitsScreen() {
                       navigate(leadRoute);
                     }}
                   >
-                    View {leadOwners.data?.[v.leadId!] === 'company' ? 'Company Lead' : 'pipeline lead'} →
+                    View {leadOwners.data?.[v.leadId ?? ''] === 'company' ? 'Company Lead' : 'pipeline lead'} →
                   </button>
                 ) : v.leadId ? (
                   <p className={styles.detailValue}>{leadOwners.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account. Open the visit record for its other details.'}</p>
@@ -309,7 +321,7 @@ export function SiteVisitsScreen() {
                   >
                     Add to my pipeline
                   </button>
-                  {canManageCompanyLeads && <button
+                  {canCreateCompanyLead && <button
                     type="button"
                     className={styles.pdfRowBtn}
                     onClick={(e) => {
