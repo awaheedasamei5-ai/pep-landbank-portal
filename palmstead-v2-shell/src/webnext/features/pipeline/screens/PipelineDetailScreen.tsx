@@ -1475,4 +1475,3 @@ export function DangerZoneSection({ lead, onDeleted }: { lead: Lead; onDeleted: 
   );
 }
 
-
