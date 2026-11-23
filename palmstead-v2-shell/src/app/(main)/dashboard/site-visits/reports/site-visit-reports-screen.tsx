@@ -27,12 +27,14 @@ type Survey = {id:string;invite_id:string;created_at:string;overall_rating:numbe
 type ApprovedPayment = {id:string;lead_id:string;amount:number;payment_date:string};
 type Cost = {id:string;lead_id:string;source_id:string;amount:number};
 type CostDay = {id:string;visit_date:string};
+type LeadOwner = {id:string;agent_key:string};
+type PipelinePool = 'personal'|'company'|'unlinked'|'unknown';
 type DayForm = {
   id:string;visit_date:string|null;status:string;approved_by:string|null;finalized_at:string|null;
   vehicle_rental_est:number|null;drivers_tip_est:number|null;fuel_est:number|null;refreshment_est:number|null;tnt_est:number|null;
   vehicle_rental_act:number|null;drivers_tip_act:number|null;fuel_act:number|null;refreshment_act:number|null;tnt_act:number|null;
 };
-type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];forms:DayForm[]};
+type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];forms:DayForm[];leadOwners:Record<string,'personal'|'company'>};
 type Outcome = 'all'|'attended'|'not-attended'|'cancelled'|'pending';
 
 async function allPages<T>(make:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>):Promise<T[]> {
@@ -59,6 +61,7 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
   const inviteRows:Invite[]=[];
   const paymentRows:ApprovedPayment[]=[];
   const costRows:Cost[]=[];
+  const leadOwners:Record<string,'personal'|'company'>={};
   const visitIds=visits.map((v)=>v.id);
   const leadIds=[...new Set(visits.map((v)=>v.lead_id).filter((id):id is string=>!!id))];
   // Keep each request small enough for PostgREST URL limits. RLS still scopes every row.
@@ -76,14 +79,17 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
   }
   for(let offset=0;offset<leadIds.length;offset+=100){
     const ids=leadIds.slice(offset,offset+100);
-    const [payments,costs]=await Promise.all([
+    const [payments,costs,owners]=await Promise.all([
       db.from('payments').select('id,lead_id,amount,payment_date').eq('status','approved').in('lead_id',ids),
       db.from('client_cost_attributions').select('id,lead_id,source_id,amount').eq('source_type','site_visit').in('lead_id',ids),
+      db.from('leads').select('id,agent_key').in('id',ids),
     ]);
     if(payments.error)throw new Error(payments.error.message);
     if(costs.error)throw new Error(costs.error.message);
+    if(owners.error)throw new Error(owners.error.message);
     paymentRows.push(...((payments.data??[]) as ApprovedPayment[]));
     costRows.push(...((costs.data??[]) as Cost[]));
+    for(const owner of (owners.data??[]) as LeadOwner[]) leadOwners[owner.id]=owner.agent_key==='company'?'company':'personal';
   }
   const costDays:CostDay[]=[];
   const formIds=[...new Set(costRows.map((cost)=>cost.source_id))];
@@ -92,7 +98,14 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
     if(error)throw new Error(error.message);
     costDays.push(...((data??[]) as CostDay[]));
   }
-  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,forms};
+  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,forms,leadOwners};
+}
+function pipelinePool(visit:Visit,data:VisitData|undefined):PipelinePool{
+  if(!visit.lead_id)return 'unlinked';
+  return data?.leadOwners[visit.lead_id]??'unknown';
+}
+function pipelinePoolLabel(pool:PipelinePool){
+  return {personal:'Staff pipeline',company:'Company Leads',unlinked:'Unlinked',unknown:'Linked lead unavailable'}[pool];
 }
 function outcome(v:Visit):Exclude<Outcome,'all'>{
   if(v.deleted_at) return 'cancelled';
@@ -202,6 +215,7 @@ export function SiteVisitReportsScreen(){
   const [source,setSource]=useState('');
   const [status,setStatus]=useState<Outcome>('all');
   const [linkFilter,setLinkFilter]=useState<'all'|'linked'|'unlinked'>('all');
+  const [poolFilter,setPoolFilter]=useState<'all'|PipelinePool>('all');
   const [surveyFilter,setSurveyFilter]=useState<'all'|'invited'|'submitted'|'missing'>('all');
   const [intentSearch,setIntentSearch]=useState('');
   const [paymentFilter,setPaymentFilter]=useState<'all'|'later'|'none'|'unassessable'>('all');
@@ -260,6 +274,7 @@ export function SiteVisitReportsScreen(){
     const laterPayment=assessable&&(data?.payments??[]).some((payment)=>payment.lead_id===v.lead_id&&payment.payment_date>=v.visit_date);
     return (!site||v.site?.trim()===site)&&(!source||v.source?.trim()===source)&&(status==='all'||outcome(v)===status)
       &&(linkFilter==='all'||(linkFilter==='linked' ? !!v.lead_id : !v.lead_id))
+      &&(poolFilter==='all'||pipelinePool(v,data)===poolFilter)
       &&(surveyFilter==='all'||(surveyFilter==='submitted'?submitted:surveyFilter==='invited'?invites.some((invite)=>!!invite.sent_at):!submitted))
       &&(!intentSearch.trim()||responses.some((response)=>response.purchase_intent?.toLocaleLowerCase().includes(intentSearch.trim().toLocaleLowerCase())))
       &&(paymentFilter==='all'||(paymentFilter==='later'?laterPayment:paymentFilter==='none'?assessable&&!laterPayment:!assessable));
@@ -281,6 +296,10 @@ export function SiteVisitReportsScreen(){
     linked:filtered.filter((v)=>!!v.lead_id).length,
     rescheduled:filtered.filter((v)=>!!v.rescheduled_at).length,
   }),[filtered,today]);
+  const poolCounts=useMemo(()=>filtered.reduce((counts,visit)=>{
+    counts[pipelinePool(visit,report.data)]++;
+    return counts;
+  },{personal:0,company:0,unlinked:0,unknown:0}),[filtered,report.data]);
   const activeBookings=counts.records-counts.cancelled;
   const recordedOutcomes=counts.attended+counts.noShow;
   const staffRows=useMemo(()=>{
@@ -315,7 +334,7 @@ export function SiteVisitReportsScreen(){
       doc.text('Date basis: scheduled visit date. Attendance is counted only when explicitly marked.',14,y);y+=6;
       doc.text('Unconfirmed is not a no-show. Staff follow-up text is not a client survey.',14,y);y+=6;
       doc.text('Approved payment after a visit is a sequence, not proof that the visit caused the sale.',14,y);y+=6;
-      const appliedFilters=`Filters: site ${site||'all'}; source ${source||'all'}; outcome ${status}; lead ${linkFilter}; survey ${surveyFilter}; intent ${intentSearch.trim()||'all'}; payment ${paymentFilter}.`;
+      const appliedFilters=`Filters: site ${site||'all'}; visit source ${source||'all'}; outcome ${status}; lead ${linkFilter}; pipeline ${poolFilter}; survey ${surveyFilter}; intent ${intentSearch.trim()||'all'}; payment ${paymentFilter}.`;
       doc.setFontSize(8);doc.setTextColor(71,85,105);
       const filterLines=doc.splitTextToSize(appliedFilters,182) as string[];
       doc.text(filterLines,14,y);y+=filterLines.length*4+9;
@@ -324,12 +343,13 @@ export function SiteVisitReportsScreen(){
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Scope and outcomes');
       autoTable(doc,{startY:y,margin:{left:14,right:14},body:[
         ['Site',site||'All sites'],['Source',source||'All sources'],['Outcome',status==='all'?'All outcomes':outcomeLabel(status)],
-        ['Lead link',linkFilter],['Client survey',surveyFilter],['Purchase intent contains',intentSearch.trim()||'Any answer'],
+        ['Lead link',linkFilter],['Pipeline ownership',poolFilter==='all'?'All':pipelinePoolLabel(poolFilter)],['Client survey',surveyFilter],['Purchase intent contains',intentSearch.trim()||'Any answer'],
         ['Payment follow-through',paymentFilter==='all'?'All visits':paymentFilter==='later'?'Later approved payment':paymentFilter==='none'?'No visible later approved payment':'Cannot assess without attendance and lead link'],
         ['Visit records in scope',counts.records],['Attended',counts.attended],['Explicitly not attended',counts.noShow],
         ['Cancelled',counts.cancelled],['Attendance not recorded',counts.unconfirmed],['Past visits with unknown attendance',counts.pastUnconfirmed],
         ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
-        ['Staff follow-up text recorded',counts.withFeedback],['Linked to pipeline lead',counts.linked],['Unlinked to pipeline lead',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
+        ['Staff follow-up text recorded',counts.withFeedback],['Linked to staff pipeline',poolCounts.personal],['Linked to Company Leads',poolCounts.company],
+        ['Unlinked to pipeline lead',poolCounts.unlinked],['Linked lead unavailable',poolCounts.unknown],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
       if(compare||pdfSections.trend||pdfSections.evidence||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
       if(compare&&priorPeriod){
@@ -430,7 +450,7 @@ export function SiteVisitReportsScreen(){
       if(pdfSections.register){
       if(y>245){doc.addPage();y=20}
       y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visit register',filtered.length+' records');
-      autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Lead','Feedback']],body:filtered.map((v)=>[v.visit_date,agentName(v),v.name,v.site??'—',outcomeLabel(outcome(v)),v.lead_id?'Linked':'—',v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
+      autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff','Client','Site','Outcome','Pipeline','Feedback']],body:filtered.map((v)=>[v.visit_date,agentName(v),v.name,v.site??'—',outcomeLabel(outcome(v)),pipelinePoolLabel(pipelinePool(v,report.data)),v.feedback_after?'Recorded':'—']),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
       }
       pdfReportFooter(doc,'Palmstead');
       doc.save('Palmstead-site-visits-'+from+'-to-'+to+'.pdf');
@@ -449,14 +469,15 @@ export function SiteVisitReportsScreen(){
       <label className="grid gap-1 text-sm">To<Input type="date" value={to} onChange={(e)=>setTo(e.target.value)}/></label>
       {manager&&<label className="grid gap-1 text-sm">Staff<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={staffKey} onChange={(e)=>setStaffKey(e.target.value)}><option value="">All staff</option>{report.data?.staff.map((s)=><option key={s.agent_key} value={s.agent_key}>{s.name}{s.active?'':' (former)'}</option>)}</select></label>}
       <label className="grid gap-1 text-sm">Site<select className="h-9 min-w-36 max-w-56 rounded-md border bg-background px-3" value={site} onChange={(e)=>setSite(e.target.value)}><option value="">All sites</option>{sites.map((v)=><option key={v}>{v}</option>)}</select></label>
-      <label className="grid gap-1 text-sm">Source<select className="h-9 min-w-36 max-w-56 rounded-md border bg-background px-3" value={source} onChange={(e)=>setSource(e.target.value)}><option value="">All sources</option>{sources.map((v)=><option key={v}>{v}</option>)}</select></label>
+      <label className="grid gap-1 text-sm">Visit source<select className="h-9 min-w-36 max-w-56 rounded-md border bg-background px-3" value={source} onChange={(e)=>setSource(e.target.value)}><option value="">All sources</option>{sources.map((v)=><option key={v}>{v}</option>)}</select></label>
       <label className="grid gap-1 text-sm">Outcome<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={status} onChange={(e)=>setStatus(e.target.value as Outcome)}><option value="all">All outcomes</option><option value="attended">Attended</option><option value="not-attended">Did not attend</option><option value="pending">Unconfirmed</option><option value="cancelled">Cancelled</option></select></label>
       <label className="grid gap-1 text-sm">Pipeline link<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={linkFilter} onChange={(e)=>setLinkFilter(e.target.value as typeof linkFilter)}><option value="all">All visits</option><option value="linked">Linked lead</option><option value="unlinked">Unlinked visit</option></select></label>
+      <label className="grid gap-1 text-sm">Pipeline ownership<select className="h-9 min-w-44 rounded-md border bg-background px-3" value={poolFilter} onChange={(e)=>setPoolFilter(e.target.value as typeof poolFilter)}><option value="all">All visits</option><option value="personal">Staff pipeline</option><option value="company">Company Leads</option><option value="unlinked">Unlinked visit</option><option value="unknown">Linked lead unavailable</option></select></label>
       <label className="grid gap-1 text-sm">Client survey<select className="h-9 min-w-40 rounded-md border bg-background px-3" value={surveyFilter} onChange={(e)=>setSurveyFilter(e.target.value as typeof surveyFilter)}><option value="all">All surveys</option><option value="invited">Invitation sent</option><option value="submitted">Response submitted</option><option value="missing">No response</option></select></label>
       <label className="grid gap-1 text-sm">Purchase intent contains<Input className="min-w-40 max-w-56" value={intentSearch} onChange={(e)=>setIntentSearch(e.target.value)} placeholder="e.g. ready"/></label>
       <label className="grid gap-1 text-sm">Payment follow-through<select className="h-9 min-w-44 max-w-64 rounded-md border bg-background px-3" value={paymentFilter} onChange={(e)=>setPaymentFilter(e.target.value as typeof paymentFilter)}><option value="all">All visits</option><option value="later">Later approved payment</option><option value="none">No visible later approved payment</option><option value="unassessable">Attendance or lead link missing</option></select></label>
       <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={compare} onChange={(e)=>setCompare(e.target.checked)}/>Compare previous equal-length period</label>
-      <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,7)+'-01');setTo(today);setStaffKey('');setSite('');setSource('');setStatus('all');setLinkFilter('all');setSurveyFilter('all');setIntentSearch('');setPaymentFilter('all');setCompare(false)}}>Reset filters</Button>
+      <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,7)+'-01');setTo(today);setStaffKey('');setSite('');setSource('');setStatus('all');setLinkFilter('all');setPoolFilter('all');setSurveyFilter('all');setIntentSearch('');setPaymentFilter('all');setCompare(false)}}>Reset filters</Button>
       <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['evidence','Survey, payment and cost'],['logistics','Authorization and logistics'],['cohorts','Staff comparison'],['register','Visit register']] as const).filter(([key])=>manager||(key!=='cohorts'&&key!=='logistics')).map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
       <Button onClick={download} disabled={!report.data||pdfBusy||(compare&&!priorReport.data)}><Download className="size-4"/>{pdfBusy?'Preparing…':'Download selected PDF sections'}</Button>
     </CardContent></Card>
@@ -471,7 +492,7 @@ export function SiteVisitReportsScreen(){
         ['Visit records',counts.records],['Attended',counts.attended],['Attendance unknown',counts.unconfirmed],
         ['Past visits still unconfirmed',counts.pastUnconfirmed],['Did not attend',counts.noShow],['Cancelled',counts.cancelled],
         ['Outcome recording coverage',percent(recordedOutcomes,activeBookings)],['Attended among recorded outcomes',percent(counts.attended,recordedOutcomes)],
-        ['Staff follow-up text',counts.withFeedback],['Linked leads',counts.linked],['Unlinked visits',counts.records-counts.linked],['Rescheduled',counts.rescheduled],
+        ['Staff follow-up text',counts.withFeedback],['Staff pipeline visits',poolCounts.personal],['Company Leads visits',poolCounts.company],['Unlinked visits',poolCounts.unlinked],['Linked lead unavailable',poolCounts.unknown],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=><Card key={label}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></CardContent></Card>)}</div>
       <Card><CardHeader><CardTitle>Client response and commercial follow-through</CardTitle></CardHeader><CardContent>
         <p className="mb-4 text-sm text-muted-foreground">Surveys join by visit invitation. Payments and reviewed costs join through an exact pipeline lead and a confirmed attended visit.</p>
@@ -502,7 +523,7 @@ export function SiteVisitReportsScreen(){
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
-      <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Lead','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{agentName(v)}</td><td className="py-2 pr-3">{v.deleted_at?v.name:<Link className="font-medium text-primary underline-offset-4 hover:underline" href={`/dashboard/site-visits/${v.id}`}>{v.name}</Link>}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{v.lead_id?'Linked':'—'}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
+      <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Pipeline','Feedback'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{agentName(v)}</td><td className="py-2 pr-3">{v.deleted_at?v.name:<Link className="font-medium text-primary underline-offset-4 hover:underline" href={`/dashboard/site-visits/${v.id}`}>{v.name}</Link>}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{pipelinePoolLabel(pipelinePool(v,report.data))}</td><td className="py-2 pr-3">{v.feedback_after?'Recorded':'—'}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
       <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. Payment follow-through is assessable only for confirmed attended visits with an exact lead link; no visible payment does not establish that the client has not paid. A linked lead does not establish a sale.</p>
     </>}
   </main>;
