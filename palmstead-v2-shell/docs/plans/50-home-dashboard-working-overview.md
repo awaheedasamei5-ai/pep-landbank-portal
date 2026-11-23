@@ -21,8 +21,8 @@ References:
 ## Release slice
 
 1. Improve the greeting and app shortcuts while keeping theme colors and accessible links.
-2. Add upcoming visits and banner condition panels with direct record links, loading, empty and error states.
-3. Make KPI values and panel rows wrap on small screens; use the available width in home insight lists.
+2. Add upcoming visits with direct record links. Represent banners on an interactive, square map with status filters, real location counts, clickable pins and a route-planning link into Banner Tracker. Do not list banner names on the home page.
+3. Keep the task, visit and news panels compact, place the map beside pipeline diagrams on wide screens, and make KPI values wrap on small screens. Use the available width in home insight lists.
 4. Typecheck, build preview, inspect Management and Staff at desktop and mobile widths, then release only after verifying the exact preview and production deployment.
 
 ## Follow-on dashboard work
