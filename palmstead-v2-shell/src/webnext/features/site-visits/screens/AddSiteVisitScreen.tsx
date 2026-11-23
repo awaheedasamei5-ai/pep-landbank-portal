@@ -128,6 +128,8 @@ export function AddSiteVisitScreen() {
   const isVisibleLeadsLoading = profile?.role === 'manager' ? allPipelineLeads.isLoading : ownPipelineLeads.isLoading || companyLeads.isLoading;
   const [confirmedVisit, setConfirmedVisit] = useState<SiteVisit | null>(null);
   const [confirmedLeadId, setConfirmedLeadId] = useState<string | undefined>(undefined);
+  const [confirmedLeadPool, setConfirmedLeadPool] = useState<'personal' | 'company' | null>(null);
+  const [confirmedNewLeadCreated, setConfirmedNewLeadCreated] = useState(false);
   const [interestPreset, setInterestPreset] = useState<string>(PLOT_PRESETS[1]);
   const [interestCustom, setInterestCustom] = useState('');
   const [addToPipeline, setAddToPipeline] = useState(false);
@@ -219,6 +221,9 @@ export function AddSiteVisitScreen() {
 
   async function onSubmit(values: FormValues) {
     setSaveError(null);
+    // The source choice can remain in state after the client details change.
+    // Only a booking with no matching lead may create a new pipeline record.
+    const creatingNewLead = addToPipeline && !leadId && !isKnownClient;
     if (isVisibleLeadsLoading) {
       setSaveError('Checking this client’s existing pipeline records. Wait a moment, then try again.');
       return;
@@ -227,15 +232,15 @@ export function AddSiteVisitScreen() {
       setSaveError('This visit no longer matches the selected pipeline record. Return to that client and start the booking again.');
       return;
     }
-    if (addToPipeline && !newLeadPool) {
+    if (creatingNewLead && !newLeadPool) {
       setSaveError('Choose Personal client or Company client before adding this client to a pipeline.');
       return;
     }
-    if (addToPipeline && newLeadPool === 'company' && !canCreateCompanyLead) {
+    if (creatingNewLead && newLeadPool === 'company' && !canCreateCompanyLead) {
       setSaveError('Company Leads creation access is required. Choose a personal lead or ask Management to grant access.');
       return;
     }
-    if (addToPipeline && !leadId && !isKnownClient && !config) {
+    if (creatingNewLead && !config) {
       setSaveError('Pricing settings are still loading. Wait a moment before adding this client to your pipeline.');
       return;
     }
@@ -248,7 +253,7 @@ export function AddSiteVisitScreen() {
         return;
       }
       let newLead;
-      if (addToPipeline && !leadId && !isKnownClient && config && newLeadPool) {
+      if (creatingNewLead && config && newLeadPool) {
         const { plotType, noPlots } = inferPlotTypeAndCount(interestPreset, interestCustom);
         const pricing = previewGrandTotal(config, plotType, noPlots, 0, null, 'Full Payment');
         newLead = { pool: newLeadPool, plotType, noPlots, unitPrice: pricing.listPrice,
@@ -266,9 +271,12 @@ export function AddSiteVisitScreen() {
       // logistics" -- stays on this screen with a summary rather than
       // immediately navigating away, so the confirmation is actually seen.
       setConfirmedLeadId(rec.leadId ?? undefined);
+      setConfirmedLeadPool(newLead ? newLead.pool : selectedExistingLeadId
+        ? (selectedExistingLead?.agent === 'company' ? 'company' : 'personal') : null);
+      setConfirmedNewLeadCreated(Boolean(newLead));
       setConfirmedVisit(rec);
     } catch (e) {
-      setSaveError(friendlyError(e, addToPipeline ? 'The visit and new lead were not saved. Please check the details and try again.' : 'Failed to save this visit'));
+      setSaveError(friendlyError(e, creatingNewLead ? 'The visit and new lead were not saved. Please check the details and try again.' : 'Failed to save this visit'));
     }
   }
 
@@ -284,10 +292,10 @@ export function AddSiteVisitScreen() {
           <p className={styles.confirmNote}>
             Management has been notified, and {confirmedVisit.name.split(' ')[0]} has been texted the pick-up details. You can download the request form, log another visit, or head back to your visits list.
           </p>
-          {addToPipeline && confirmedLeadId && confirmedLeadId !== leadId && (
-            <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was added to {newLeadPool === 'company' ? 'Company Leads' : 'your personal pipeline'} and linked to this visit.</p>
+          {confirmedNewLeadCreated && confirmedLeadId && (
+            <p className={styles.confirmNote}>{confirmedVisit.name.split(' ')[0]} was added to {confirmedLeadPool === 'company' ? 'Company Leads' : 'your personal pipeline'} and linked to this visit.</p>
           )}
-          {confirmedLeadId && !addToPipeline && (
+          {confirmedLeadId && !confirmedNewLeadCreated && (
             <p className={styles.confirmNote}>This visit is linked to the existing pipeline record and will appear in the client’s Client 360 history.</p>
           )}
           <button type="button" className={styles.pdfBtn} disabled={downloadPdf.isPending} onClick={() => downloadPdf.mutate(confirmedVisit)}>
@@ -297,7 +305,7 @@ export function AddSiteVisitScreen() {
             <button type="button" className={styles.cancel} onClick={() => setConfirmedVisit(null)}>
               Log another
             </button>
-            <button type="button" className={styles.save} onClick={() => navigate(confirmedLeadId ? `/dashboard/${addToPipeline ? (newLeadPool === 'company' ? 'company-leads' : 'pipeline') : (selectedExistingLead?.agent === 'company' ? 'company-leads' : 'pipeline')}/${confirmedLeadId}` : '/dashboard/site-visits')}>
+            <button type="button" className={styles.save} onClick={() => navigate(confirmedLeadId ? `/dashboard/${confirmedLeadPool === 'company' ? 'company-leads' : 'pipeline'}/${confirmedLeadId}` : '/dashboard/site-visits')}>
               Done
             </button>
           </div>
