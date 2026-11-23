@@ -34,7 +34,7 @@ export function SubscriberOverview() {
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
       <Card className="min-w-0">
         <CardHeader>
           <CardTitle className="leading-none">Pipeline by stage</CardTitle>
