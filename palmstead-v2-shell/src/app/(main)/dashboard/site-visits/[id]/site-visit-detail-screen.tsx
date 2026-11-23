@@ -18,6 +18,7 @@ import { useSetSiteVisitAttendance } from '@/webnext/features/sve-management/hoo
 import { getDataSource } from '@/webnext/data/source';
 import { mapSiteVisitRow } from '@/webnext/data/mappers';
 import type { SiteVisit } from '@/webnext/types/domain';
+import { leadDestination } from '@/webnext/features/site-visits/lib/leadDestination';
 
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
   return <div className="min-w-0 border-b border-border/60 py-3 last:border-0">
@@ -50,6 +51,16 @@ export function SiteVisitDetailScreen() {
     },
   });
   const visit = query.data;
+  const leadOwner = useQuery({
+    queryKey: ['site-visit-lead-owner', visit?.leadId, profile?.key],
+    enabled: !!visit?.leadId && !demoMode,
+    queryFn: async () => {
+      const { data, error } = await requireSupabase().from('leads').select('agent_key').eq('id', visit!.leadId!).maybeSingle();
+      if (error) throw error;
+      return data?.agent_key ?? null;
+    },
+  });
+  const leadRoute = visit?.leadId ? (demoMode ? `/dashboard/pipeline/${visit.leadId}` : leadDestination(visit.leadId, leadOwner.data)) : null;
   const formPdf = useDownloadSiteVisitFormPdf();
   const saveAttendance = useSetSiteVisitAttendance();
   const [attendanceChoice, setAttendanceChoice] = useState<boolean | null>(null);
@@ -125,7 +136,7 @@ export function SiteVisitDetailScreen() {
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Connected records</CardTitle></CardHeader><CardContent className="space-y-4 text-sm">
           <div><p className="font-medium">Visit report</p><Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/site-visits/reports?from=${visit.visitDate}&to=${visit.visitDate}`}><ExternalLink className="size-4" /> View this visit date in reports</Link></Button><p className="mt-2 text-muted-foreground">The report includes every visit scheduled for this date and uses recorded attendance outcomes.</p></div>
-          <div><p className="font-medium">Pipeline lead</p>{visit.leadId ? <Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/pipeline/${visit.leadId}`}><ExternalLink className="size-4" /> Open linked lead</Link></Button> : <p className="mt-1 text-muted-foreground">No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.</p>}</div>
+          <div><p className="font-medium">Pipeline lead</p>{leadRoute ? <Button asChild variant="outline" className="mt-2"><Link href={leadRoute}><ExternalLink data-icon="inline-start" /> Open {leadOwner.data === 'company' ? 'Company Lead' : 'pipeline lead'}</Link></Button> : <p className="mt-1 text-muted-foreground">{visit.leadId ? leadOwner.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account.' : 'No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.'}</p>}</div>
           <div><p className="font-medium">Client feedback and site manager review</p><div className="mt-2 flex flex-wrap gap-2"><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=feedback&date=${visit.visitDate}&visit=${visit.id}`}><ExternalLink className="size-4" /> Open this client’s feedback</Link></Button><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=reports&date=${visit.visitDate}`}><ExternalLink className="size-4" /> Open this day’s report</Link></Button></div><p className="mt-2 text-muted-foreground">Review the separate client response and the site manager day report there.</p></div>
           <div><p className="font-medium">Visit authorization and cost</p><Button asChild variant="outline" className="mt-2"><Link href="/dashboard/site-visit-authorization"><ExternalLink className="size-4" /> Open authorization</Link></Button><p className="mt-2 text-muted-foreground">Cost is recorded by the authorization workflow; this view does not infer an amount from the visit request.</p></div>
         </CardContent></Card>
