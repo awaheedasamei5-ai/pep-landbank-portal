@@ -156,7 +156,10 @@ export async function buildSalesReportPdf(
       { label: "Outstanding", value: money(report.outstanding) },
       { label: "Recorded visit cost", value: money(report.attributedVisitCost) },
       { label: "Conversations", value: report.conversations.length },
-      { label: "Needs contact", value: report.needingContact },
+    ]);
+    y = continuingSection(doc, y, "Contact follow-up", "Current snapshot from all visible calls and timestamped discussions", 30);
+    y = table(doc, y, ["Open clients needing contact", "Definition"], [
+      [report.needingContact, "No recorded call or discussion for 14 or more days"],
     ]);
   }
   if (sections.has("comparison") && options.comparison) {
