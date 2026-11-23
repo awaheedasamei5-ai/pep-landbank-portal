@@ -442,7 +442,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
                 </div>
                 {existing && (
                   <span className={`${styles.status} ${existing.status === 'sent' ? styles.statusDone : styles.statusPending}`}>
-                    {existing.status === 'sent' ? 'Report sent' : 'Draft in progress'}
+                    {existing.status === 'sent' ? 'Report published' : 'Draft in progress'}
                   </span>
                 )}
               </div>
@@ -459,7 +459,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
       {allDays.length > 0 && days.length === 0 && <p className={styles.emptyMsg}>No site visits for {daysPeriod.label}. Widen the filter above to see older ones.</p>}
 
       <div className={styles.reportHead} style={{ marginTop: 22 }}>
-        Sent reports
+        Published reports
       </div>
       <PeriodFilterBar state={sentPeriod} resultCount={sentReports.length} totalCount={allSentReports.length} />
       {sentReports.map((r) => (
@@ -468,7 +468,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
             <div className={styles.rowMain}>
               <div className={styles.name}>{fmtLongDate(r.visitDate)}</div>
               <div className={styles.meta}>
-                {r.entries.length} scheduled client{r.entries.length === 1 ? '' : 's'} · sent {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
+                {r.entries.length} scheduled client{r.entries.length === 1 ? '' : 's'} · published {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
               </div>
             </div>
             <div className={styles.right}>
@@ -651,7 +651,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
         <div className={styles.rowMain}>
           <div className={styles.name}>{fmtLongDate(visitDate)}</div>
           <div className={styles.meta}>
-            {report.site} · {entries.length} client{entries.length === 1 ? '' : 's'} · {report.status === 'sent' ? 'Sent' : 'Draft'}
+            {report.site} · {entries.length} client{entries.length === 1 ? '' : 's'} · {report.status === 'sent' ? 'Published' : 'Draft'}
           </div>
         </div>
         <button type="button" className={styles.copyBtn} onClick={onClose}>
