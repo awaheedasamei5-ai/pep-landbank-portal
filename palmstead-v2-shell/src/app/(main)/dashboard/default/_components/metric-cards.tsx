@@ -23,10 +23,10 @@ export function MetricCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {cards.map((c) => (
-        <Link key={c.label} href={`/dashboard/default/insights?metric=${c.metric}`} aria-label={`View ${c.label.toLowerCase()} details`} className="rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-          <Card className="h-full bg-linear-to-t from-primary/5 to-card shadow-xs transition-colors hover:border-primary/50 dark:bg-card">
+        <Link key={c.label} href={`/dashboard/default/insights?metric=${c.metric}`} aria-label={`View ${c.label.toLowerCase()} details`} className="min-w-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          <Card className="h-full min-w-0 bg-linear-to-t from-primary/5 to-card shadow-xs transition-colors hover:border-primary/50 dark:bg-card">
           <CardHeader>
             <CardTitle>
               <div className="flex size-7 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
@@ -36,7 +36,7 @@ export function MetricCards() {
             <CardDescription>{c.label}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
-            <div className="font-medium text-3xl tabular-nums leading-none tracking-tight">
+            <div className="break-words font-medium text-2xl tabular-nums leading-tight tracking-tight sm:text-3xl">
               {isLoading ? <span className="text-lg text-muted-foreground">Loading…</span> : c.value}
             </div>
             <span className="text-xs text-muted-foreground">View details →</span>
