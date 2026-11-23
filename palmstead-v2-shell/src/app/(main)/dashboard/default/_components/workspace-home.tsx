@@ -13,7 +13,6 @@ import { useAuthStore } from "@/stores/auth/auth-store";
 import { useAnnouncements } from "../../announcements/_components/use-announcements";
 import { useMySchedule } from "../../operations/_components/use-my-schedule";
 import { useSiteVisits } from "@/webnext/features/site-visits/hooks/useSiteVisits";
-import { useBanners } from "@/webnext/features/banners/hooks/useBanners";
 import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { getDataSource } from "@/webnext/data/source";
 
@@ -41,13 +40,11 @@ export function WorkspaceHome() {
     enabled: Boolean(isManager && profile?.key),
     queryFn: () => getDataSource(demoMode).siteVisits.listAll(),
   });
-  const banners = useBanners();
   const visibleVisits = isManager ? teamVisits : myVisits;
   const nextVisits = (visibleVisits.data ?? [])
     .filter((visit) => !visit.deletedAt && visit.visitDate >= start && visit.status.toLowerCase() !== "cancelled")
     .sort((a, b) => `${a.visitDate} ${a.visitTime ?? ""}`.localeCompare(`${b.visitDate} ${b.visitTime ?? ""}`))
     .slice(0, 3);
-  const needsBannerAttention = (banners.data ?? []).filter((banner) => banner.status === "needs_maintenance" || banner.status === "being_replaced");
   const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 4);
   const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
   const news = published.slice(0, 3);
@@ -82,7 +79,7 @@ export function WorkspaceHome() {
           </Link>
           <Link href="/dashboard/banners" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <FlagTriangleRight className="size-5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Banners</span><span className="block text-xs text-muted-foreground">{banners.data ? `${needsBannerAttention.length} need attention` : "Locations and inspections"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Banners</span><span className="block text-xs text-muted-foreground">Map and inspections</span></span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </Link>
           {canViewAnnouncements && <Link href="/dashboard/announcements" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
@@ -93,7 +90,7 @@ export function WorkspaceHome() {
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {canViewSchedule && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Coming up</CardTitle>
@@ -124,19 +121,6 @@ export function WorkspaceHome() {
               <span className="min-w-0"><span className="block truncate text-sm font-medium">{visit.name}</span><span className="block truncate text-xs text-muted-foreground">{isManager ? `${visit.agentName} · ` : ""}{visit.site || "Site pending"}</span></span>
               <span className="shrink-0 text-right text-xs text-muted-foreground">{visit.visitDate}{visit.visitTime ? <span className="block">{visit.visitTime}</span> : null}</span>
             </Link>)}
-          </CardContent>
-        </Card>
-        <Card className="min-w-0">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">Banner condition</CardTitle>
-            <Link href="/dashboard/banners" className="shrink-0 text-sm font-medium text-primary hover:underline">Open map</Link>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {banners.isLoading && <p className="text-sm text-muted-foreground">Loading banners…</p>}
-            {banners.isError && <p role="alert" className="text-sm text-destructive">Banner records are unavailable. Open Banners to retry.</p>}
-            {banners.data && <div className="flex flex-wrap gap-2 text-xs"><Badge variant="secondary">{banners.data.length} tracked</Badge><Badge variant={needsBannerAttention.length ? "destructive" : "outline"}>{needsBannerAttention.length} need attention</Badge></div>}
-            {banners.data && needsBannerAttention.length === 0 && <p className="text-sm text-muted-foreground">No banners currently marked for maintenance or replacement.</p>}
-            {needsBannerAttention.slice(0, 3).map((banner) => <Link key={banner.id} href={`/dashboard/banners/${banner.id}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50"><span className="min-w-0"><span className="block truncate text-sm font-medium">{banner.name}</span><span className="block truncate text-xs text-muted-foreground">{banner.area || "Area not recorded"}</span></span><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></Link>)}
           </CardContent>
         </Card>
         {canViewAnnouncements && <Card className="min-w-0">
