@@ -11,7 +11,7 @@ import { useCanLogPayments, useCreatePayment } from '../../payments/hooks/useLog
 import { useDownloadReceipt, useIssueReceiptLink } from '../../payments/hooks/useReceipt';
 import { usePlots, useUpdatePlot } from '../../plots/hooks/usePlots';
 import { useAllocationRequests, useCreateAllocationRequest } from '../../allocations/hooks/useAllocationRequests';
-import type { Lead, Payment } from '../../../types/domain';
+import { isPaymentPlan, PAYMENT_PLANS, type Lead, type Payment } from '../../../types/domain';
 import { computeDepositStatus, computeMonthlySchedule, previewGrandTotal, qtyOfType } from '../lib/pipelineLogic';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import { StageBadge } from '../components/StageBadge';
@@ -598,10 +598,13 @@ export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNu
   const [noPlotsManuallyEdited, setNoPlotsManuallyEdited] = useState(false);
   const [unitPrice, setUnitPrice] = useState(String(lead.unitPrice));
   const [discount, setDiscount] = useState(lead.discount != null ? String(lead.discount) : '');
-  const [paymentPlan, setPaymentPlan] = useState(lead.paymentPlan);
+  const [paymentPlan, setPaymentPlan] = useState<Lead['paymentPlan'] | ''>(isPaymentPlan(lead.paymentPlan) ? lead.paymentPlan : '');
+  const [confirmedTerms, setConfirmedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const preview = previewGrandTotal(config, plotType, Number(noPlots) || 1, Number(unitPrice) || 0, discount === '' ? null : Number(discount), paymentPlan);
+  const preview = paymentPlan
+    ? previewGrandTotal(config, plotType, Number(noPlots) || 1, Number(unitPrice) || 0, discount === '' ? null : Number(discount), paymentPlan)
+    : null;
 
   if (!editing) {
     return (
@@ -628,7 +631,7 @@ export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNu
         </div>
         <div className={styles.readRow}>
           <span className={styles.readLabel}>Payment plan</span>
-          <span>{lead.paymentPlan}</span>
+          <span>{isPaymentPlan(lead.paymentPlan) ? lead.paymentPlan : 'Unverified — review signed terms'}</span>
         </div>
       </div>
     );
@@ -689,14 +692,12 @@ export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNu
       <div className={styles.field}>
         <label className={styles.label}>Payment plan</label>
         <select className={styles.input} value={paymentPlan} onChange={(e) => setPaymentPlan(e.target.value as Lead['paymentPlan'])}>
-          <option>Full Payment</option>
-          <option>3 Months</option>
-          <option>6 Months</option>
-          <option>9 Months</option>
-          <option>12 Months</option>
+          <option value="" disabled>Choose the plan in the signed agreement</option>
+          {PAYMENT_PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
         </select>
+        {!isPaymentPlan(lead.paymentPlan) && <p className={styles.helpText}>The saved plan is unverified. Check the signed quotation or contract before choosing a plan. Saving a new plan may change the recorded total and payment schedule.</p>}
       </div>
-      <div className={styles.calcBox}>
+      {preview && <div className={styles.calcBox}>
         <div>
           <div className={styles.calcLabel}>Net total</div>
           <div className={styles.calcValue}>{ghs(preview.net)}</div>
@@ -715,7 +716,11 @@ export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNu
           <div className={styles.calcLabel}>New balance</div>
           <div className={styles.calcValue}>{ghs(Math.max(preview.grand - lead.amtPaid, 0))}</div>
         </div>
-      </div>
+      </div>}
+      {!isPaymentPlan(lead.paymentPlan) && <label className={styles.helpText}>
+        <input type="checkbox" checked={confirmedTerms} onChange={(event) => setConfirmedTerms(event.target.checked)} />{' '}
+        I checked the signed terms and the new total above.
+      </label>}
       {error && <p className={styles.errorMsg}>{error}</p>}
       <div className={styles.actionsRow}>
         <button type="button" className={styles.cancelBtn} onClick={() => setEditing(false)}>
@@ -728,6 +733,14 @@ export function PlotPricingSection({ lead, config }: { lead: Lead; config: NonNu
           disabled={update.isPending}
           onClick={() => {
             setError(null);
+            if (!paymentPlan || !preview) {
+              setError('Choose the payment plan confirmed by the signed quotation or contract.');
+              return;
+            }
+            if (!isPaymentPlan(lead.paymentPlan) && !confirmedTerms) {
+              setError('Confirm the signed terms and new total before saving.');
+              return;
+            }
             const grandTotal = preview.grand;
             update
               .mutateAsync({
