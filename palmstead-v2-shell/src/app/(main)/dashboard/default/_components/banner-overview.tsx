@@ -56,8 +56,8 @@ function MiniMap({ banners, filter }: { banners: Banner[]; filter: Filter }) {
     return () => { disposed = true; map.current?.remove(); map.current = null; };
   }, [plotted, router]);
 
-  if (!plotted.length) return <div className="flex aspect-square items-center justify-center rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">No mapped banners match this view.</div>;
-  return <div className="relative aspect-square overflow-hidden rounded-lg border bg-muted/30">
+  if (!plotted.length) return <div className="flex h-56 items-center justify-center rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground sm:h-60">No mapped banners match this view.</div>;
+  return <div className="relative h-56 overflow-hidden rounded-lg border bg-muted/30 sm:h-60">
     <section ref={container} className="absolute inset-0" aria-label={`Map of ${plotted.length} banner locations. Use the full tracker link for the accessible register.`} />
     {error && <p role="alert" className="absolute inset-x-3 top-3 rounded-md bg-card p-3 text-sm text-destructive shadow-sm">{error}</p>}
   </div>;
@@ -70,7 +70,7 @@ export function BannerOverview() {
   const attention = all.filter((banner) => matchesFilter(banner, "attention")).length;
   const withLocation = all.filter((banner) => validBannerCoordinates(banner.lat, banner.lng)).length;
 
-  return <Card className="min-w-0">
+  return <Card className="h-full min-w-0">
     <CardHeader>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0"><CardTitle className="flex items-center gap-2"><MapPinned className="size-4 text-primary" aria-hidden="true" /> Banner footprint</CardTitle><CardDescription>Live locations and condition across the network</CardDescription></div>
@@ -86,10 +86,10 @@ export function BannerOverview() {
       <fieldset className="flex min-w-0 flex-wrap gap-1 border-0 p-0"><legend className="sr-only">Filter banner map</legend>
         {([ ["all", "All"], ["attention", "Attention"], ["placed", "Placed"] ] as const).map(([value, label]) => <Button key={value} type="button" size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</Button>)}
       </fieldset>
-      {banners.isLoading && <div className="flex aspect-square items-center justify-center rounded-lg bg-muted/30 text-sm text-muted-foreground">Loading map…</div>}
+      {banners.isLoading && <div className="flex h-56 items-center justify-center rounded-lg bg-muted/30 text-sm text-muted-foreground sm:h-60">Loading map…</div>}
       {banners.isError && <p role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm text-destructive">Banner locations could not load.</p>}
       {banners.data && <MiniMap banners={all} filter={filter} />}
     </CardContent>
-    <CardFooter><Link href="/dashboard/banners?tab=map" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">Plan a route or inspect a banner <ArrowUpRight className="size-4" aria-hidden="true" /></Link></CardFooter>
+    <CardFooter className="mt-auto"><Link href="/dashboard/banners?tab=map" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">Plan a route or inspect a banner <ArrowUpRight className="size-4" aria-hidden="true" /></Link></CardFooter>
   </Card>;
 }
