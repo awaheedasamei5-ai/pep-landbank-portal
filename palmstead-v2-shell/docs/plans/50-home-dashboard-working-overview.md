@@ -28,3 +28,9 @@ References:
 ## Follow-on dashboard work
 
 After this slice, assess exact task deep links and action priority across apps, then add only alerts backed by a verified source and permission rule. Avoid a crowded dashboard or inferred performance claims.
+
+## 23 November layout and activity follow-up
+
+Management's screenshot showed the map card much taller than the stage and agent cards. Keep the three cards in one equal-column, equal-height desktop row; make the map viewport shorter while retaining filters, pins and the route-planning link. On phones, stack the cards at natural heights and check 320 and 360 pixel widths.
+
+Add a separate live activity row rather than padding the three analytics cards with invented content. Site visit outcomes use the existing Staff-owned or Management-visible visit source, exclude cancelled visits, and distinguish attended, did not attend, past unconfirmed and upcoming. The task workload uses only the signed-in person's assigned schedule items in a clearly labelled 30-day lookback and seven-day forward window. Each card links to its detailed report or planner. Verify Management and Staff isolation, map interaction, theme and overflow in the exact preview and production alias.
