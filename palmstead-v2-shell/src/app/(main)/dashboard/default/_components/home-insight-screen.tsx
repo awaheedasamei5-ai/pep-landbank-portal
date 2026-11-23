@@ -85,7 +85,7 @@ export function HomeInsightScreen({ metric: rawMetric }: { metric?: string }) {
     : 0;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6">
+    <main className="flex w-full min-w-0 flex-col gap-6 px-4 py-6 sm:px-6">
       <Link href="/dashboard/default" className="inline-flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Home</Link>
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Workspace insights · {isManager ? "Company-wide" : "My records"}</p>
@@ -98,7 +98,7 @@ export function HomeInsightScreen({ metric: rawMetric }: { metric?: string }) {
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between">
           <div><p className="text-sm text-muted-foreground">{metric === "outstanding" ? "Balance across listed clients" : "Matching records"}</p><p className="mt-1 text-3xl font-semibold tabular-nums">{isLoading ? "…" : metric === "outstanding" ? ghs(outstanding) : rows.length}</p></div>
-          <label className="relative block w-full sm:max-w-xs"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><span className="sr-only">Search {selected.title.toLowerCase()}</span><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search records" className="pl-9" /></label>
+          <div className="relative block w-full sm:max-w-xs"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label={`Search ${selected.title.toLowerCase()}`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search records" className="pl-9" /></div>
         </CardContent>
       </Card>
       {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">Could not load these records. Please try again.</p>}
