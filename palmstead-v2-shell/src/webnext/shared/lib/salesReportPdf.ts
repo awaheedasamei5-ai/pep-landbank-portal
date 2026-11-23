@@ -156,6 +156,7 @@ export async function buildSalesReportPdf(
       { label: "Outstanding", value: money(report.outstanding) },
       { label: "Recorded visit cost", value: money(report.attributedVisitCost) },
       { label: "Conversations", value: report.conversations.length },
+      { label: "Needs contact", value: report.needingContact },
     ]);
   }
   if (sections.has("comparison") && options.comparison) {
@@ -238,6 +239,14 @@ export async function buildSalesReportPdf(
         row.payingClients,
       ]),
     );
+    y = continuingSection(
+      doc,
+      y,
+      "Contact recency by owner",
+      "Open clients without a recorded call or discussion for 14+ days; current snapshot",
+      35,
+    );
+    y = table(doc, y, ["Owner", "Clients", "Need contact"], report.staff.map((row) => [row.name, row.clients, row.needingContact]));
     y = continuingSection(
       doc,
       y,
@@ -434,6 +443,7 @@ export async function buildSalesReportPdf(
         ["Field", "Recorded value"],
         [
           ["Stage / plan", `${client.lead.stage} / ${salesPaymentPlanLabel(client.lead.paymentPlan)}`],
+          ["Last recorded contact", client.lastContactAt ? `${when(client.lastContactAt)} (${client.daysSinceContact} days ago)${client.needsContact ? " - follow-up needed" : ""}` : `No call or discussion recorded${client.needsContact ? " - follow-up needed" : ""}`],
           ["Plot / quantity", `${client.lead.plotType} / ${client.lead.noPlots}`],
           [
             "Source / handler",
