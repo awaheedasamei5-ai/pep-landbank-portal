@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, ClipboardList, Download, MessageSquareText } from 'lucide-react';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '../../../auth/useSessionStore';
@@ -14,6 +14,8 @@ import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { SiteVisit } from '../../../types/domain';
 import { useAllSiteVisits, useCancelSiteVisit, useSiteVisits } from '../hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
+import { useCanManageCompanyLeads } from '../../company-leads/hooks/useCompanyLeads';
+import { leadDestination } from '../lib/leadDestination';
 import styles from './SiteVisitsScreen.module.css';
 
 function initials(name: string): string {
@@ -58,9 +60,24 @@ export function SiteVisitsScreen() {
   // same leftover-pilot scope SveManagementScreen's own gate had, opened
   // the same way (see that screen's comment for the matching RLS fix).
   const hasSveAccess = !!profile;
+  const canManageCompanyLeads = useCanManageCompanyLeads();
   const mine = useSiteVisits();
   const all = useAllSiteVisits();
   const { data: visits, isLoading } = isManager ? all : mine;
+  const linkedLeadIds = useMemo(() => [...new Set((visits ?? []).map((visit) => visit.leadId).filter((id): id is string => !!id))].sort(), [visits]);
+  const leadOwners = useQuery({
+    queryKey: ['site-visit-lead-owners', profile?.key, linkedLeadIds],
+    enabled: !!profile?.key && !demoMode && linkedLeadIds.length > 0,
+    queryFn: async () => {
+      const owners: Record<string, string> = {};
+      for (let index = 0; index < linkedLeadIds.length; index += 100) {
+        const { data, error } = await requireSupabase().from('leads').select('id,agent_key').in('id', linkedLeadIds.slice(index, index + 100));
+        if (error) throw error;
+        for (const lead of data ?? []) if (lead.agent_key) owners[lead.id] = lead.agent_key;
+      }
+      return owners;
+    },
+  });
   const { data: staff } = useStaffDirectory();
   const downloadPdf = useDownloadSiteVisitFormPdf();
   const cancelVisit = useCancelSiteVisit();
@@ -224,6 +241,7 @@ export function SiteVisitsScreen() {
       {filtered.map((v) => {
         const isOpen = expanded.has(v.id);
         const details = DETAIL_FIELDS.filter((f) => v[f.key]);
+        const leadRoute = v.leadId ? (demoMode ? `/dashboard/pipeline/${v.leadId}` : leadDestination(v.leadId, leadOwners.data?.[v.leadId])) : null;
         return (
           <div className={styles.card} key={v.id}>
             <button type="button" className={styles.row} onClick={() => toggle(v.id)} aria-expanded={isOpen}>
@@ -267,18 +285,20 @@ export function SiteVisitsScreen() {
                 >
                   {downloadPdf.isPending ? 'Preparing PDF…' : (<span className="inline-flex items-center gap-1"><Download className="size-4" aria-hidden="true" /> Download request form (PDF)</span>)}
                 </button>
-                {v.leadId ? (
+                {leadRoute ? (
                   <button
                     type="button"
                     className={styles.pdfRowBtn}
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/dashboard/pipeline/${v.leadId}`);
+                      navigate(leadRoute);
                     }}
                   >
-                    View lead →
+                    View {leadOwners.data?.[v.leadId!] === 'company' ? 'Company Lead' : 'pipeline lead'} →
                   </button>
-                ) : (
+                ) : v.leadId ? (
+                  <p className={styles.detailValue}>{leadOwners.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account. Open the visit record for its other details.'}</p>
+                ) : (<>
                   <button
                     type="button"
                     className={styles.pdfRowBtn}
@@ -287,9 +307,19 @@ export function SiteVisitsScreen() {
                       navigate('/dashboard/pipeline/new', { state: { name: v.name, contact: v.contact, returnTo: '/dashboard/site-visits', siteVisitIdToLink: v.id } });
                     }}
                   >
-                    Convert to lead
+                    Add to my pipeline
                   </button>
-                )}
+                  {canManageCompanyLeads && <button
+                    type="button"
+                    className={styles.pdfRowBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate('/dashboard/pipeline/new', { state: { name: v.name, contact: v.contact, returnTo: '/dashboard/site-visits', siteVisitIdToLink: v.id, agentKeyOverride: 'company' } });
+                    }}
+                  >
+                    Add to Company Leads
+                  </button>}
+                </>)}
                 {(isManager || v.agentKey === profile?.key) &&
                   (deletingId === v.id ? (
                     <div className={styles.deleteConfirm} onClick={(e) => e.stopPropagation()}>
