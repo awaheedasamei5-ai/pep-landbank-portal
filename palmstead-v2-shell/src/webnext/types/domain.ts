@@ -2525,4 +2525,3 @@ export interface DataCheckDismissal {
   isCompanyWide: boolean;
 }
 
-
