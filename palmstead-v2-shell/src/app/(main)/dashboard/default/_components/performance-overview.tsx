@@ -32,6 +32,7 @@ export function PerformanceOverview() {
   const currentMonth = trend[trend.length - 1] ?? 0;
   const prevMonth = trend[trend.length - 2] ?? 0;
   const delta = currentMonth - prevMonth;
+  const hasCollections = trend.some((amount) => amount > 0);
 
   return (
     <Card className="@container/card">
@@ -54,7 +55,7 @@ export function PerformanceOverview() {
       </CardHeader>
 
       <CardContent>
-        <ChartContainer config={chartConfig} className="aspect-auto h-80 w-full">
+        {!isLoading && !hasCollections ? <div className="flex min-h-28 items-center rounded-lg border border-dashed px-4 text-sm text-muted-foreground">No approved payments recorded in the last six months.</div> : <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full sm:h-80">
           <AreaChart data={chartData} margin={{ top: 0 }}>
             <defs>
               <linearGradient id="fillCollected" x1="0" y1="0" x2="0" y2="1">
@@ -80,7 +81,7 @@ export function PerformanceOverview() {
               fillOpacity={1}
             />
           </AreaChart>
-        </ChartContainer>
+        </ChartContainer>}
       </CardContent>
     </Card>
   );

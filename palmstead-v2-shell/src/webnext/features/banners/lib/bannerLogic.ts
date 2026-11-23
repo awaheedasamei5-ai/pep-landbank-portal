@@ -147,7 +147,7 @@ export function reportPeriodRange(key: ReportPeriod, customFrom: string, customT
 // available, so this is a deliberately loose shape covering only what
 // BannerMapPanel.tsx actually calls.
 export interface LeafletGlobal {
-  map(el: HTMLElement): LeafletMapInstance;
+  map(el: HTMLElement, opts?: Record<string, unknown>): LeafletMapInstance;
   tileLayer(url: string, opts: Record<string, unknown>): { addTo(map: LeafletMapInstance): void };
   circleMarker(latlng: [number, number], opts: Record<string, unknown>): LeafletMarker;
   polyline(points: [number, number][], opts: Record<string, unknown>): LeafletPolyline;

@@ -34,8 +34,8 @@ export function SubscriberOverview() {
   const maxAgentValue = Math.max(1, ...(data?.byAgent.map((a) => a.value) ?? [1]));
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <Card>
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle className="leading-none">Pipeline by stage</CardTitle>
           <CardDescription>
@@ -60,7 +60,7 @@ export function SubscriberOverview() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle className="leading-none">{seesCompanyWide ? "By agent" : "My pipeline"}</CardTitle>
           <CardDescription>{seesCompanyWide ? "Real pipeline value per agent, ranked highest first." : "Value of leads assigned to you."}</CardDescription>
@@ -76,9 +76,9 @@ export function SubscriberOverview() {
                 {initials(a.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2 text-sm">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
                   <span className="truncate font-medium">{a.name}</span>
-                  <span className="shrink-0 tabular-nums">{ghs(a.value)}</span>
+                  <span className="break-all tabular-nums">{ghs(a.value)}</span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div

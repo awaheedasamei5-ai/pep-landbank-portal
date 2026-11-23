@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CalendarDays, ClipboardList, Megaphone, MapPinned } from "lucide-react";
+import { ArrowRight, CalendarDays, ClipboardList, FlagTriangleRight, Megaphone, MapPinned } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,9 @@ import { canOpenNavigationItem, useNavigationAccess } from "@/lib/permissions/us
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { useAnnouncements } from "../../announcements/_components/use-announcements";
 import { useMySchedule } from "../../operations/_components/use-my-schedule";
+import { useSiteVisits } from "@/webnext/features/site-visits/hooks/useSiteVisits";
+import { useSessionStore } from "@/webnext/auth/useSessionStore";
+import { getDataSource } from "@/webnext/data/source";
 
 function weekEnd(start: string): string {
   const date = new Date(`${start}T12:00:00Z`);
@@ -29,6 +33,18 @@ export function WorkspaceHome() {
   const schedule = useMySchedule(canViewSchedule ? profile?.key : undefined, start, weekEnd(start));
   const announcements = useAnnouncements(canViewAnnouncements ? profile?.key : undefined);
   const overview = useManagerOverview();
+  const myVisits = useSiteVisits();
+  const demoMode = useSessionStore((state) => state.demoMode);
+  const teamVisits = useQuery({
+    queryKey: ["siteVisitsAll"],
+    enabled: Boolean(isManager && profile?.key),
+    queryFn: () => getDataSource(demoMode).siteVisits.listAll(),
+  });
+  const visibleVisits = isManager ? teamVisits : myVisits;
+  const nextVisits = (visibleVisits.data ?? [])
+    .filter((visit) => !visit.deletedAt && visit.visitDate >= start && visit.status.toLowerCase() !== "cancelled")
+    .sort((a, b) => `${a.visitDate} ${a.visitTime ?? ""}`.localeCompare(`${b.visitDate} ${b.visitTime ?? ""}`))
+    .slice(0, 3);
   const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 4);
   const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
   const news = published.slice(0, 3);
@@ -37,7 +53,7 @@ export function WorkspaceHome() {
 
   return (
     <section className="grid gap-4" aria-label="Workspace overview">
-      <div className="rounded-2xl border bg-card p-5 shadow-xs sm:p-7">
+      <div className="relative overflow-hidden rounded-2xl border bg-linear-to-br from-primary/10 via-card to-card p-5 shadow-xs sm:p-7">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Palmstead workspace</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -50,7 +66,7 @@ export function WorkspaceHome() {
             <CalendarDays className="size-4" aria-hidden="true" /> Open schedule
           </Link>}
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {canViewOperations && <Link href="/dashboard/operations" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <ClipboardList className="size-5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Operations</span><span className="block text-xs text-muted-foreground">Tasks and projects</span></span>
@@ -61,6 +77,11 @@ export function WorkspaceHome() {
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Site visits</span><span className="block text-xs text-muted-foreground">{overview.data ? `${overview.data.siteVisitsCount} visible visits` : "Bookings and outcomes"}</span></span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </Link>
+          <Link href="/dashboard/banners" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
+            <FlagTriangleRight className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Banners</span><span className="block text-xs text-muted-foreground">Map and inspections</span></span>
+            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </Link>
           {canViewAnnouncements && <Link href="/dashboard/announcements" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
             <Megaphone className="size-5 shrink-0 text-primary" aria-hidden="true" />
             <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Company updates</span><span className="block text-xs text-muted-foreground">{unread ? `${unread} unread` : "News and notices"}</span></span>
@@ -69,7 +90,7 @@ export function WorkspaceHome() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {canViewSchedule && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Coming up</CardTitle>
@@ -80,13 +101,28 @@ export function WorkspaceHome() {
             {schedule.isError && <p className="text-sm text-muted-foreground">Schedule is unavailable right now. Open it to retry.</p>}
             {!schedule.isLoading && !schedule.isError && upcoming.length === 0 && <p className="text-sm text-muted-foreground">No open tasks in the next seven days.</p>}
             {upcoming.map((item) => (
-              <Link key={item.id} href="/dashboard/operations?view=schedule" className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
-                <span className="min-w-0 truncate text-sm font-medium">{item.title}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">{item.date}{item.startTime ? ` · ${item.startTime}` : ""}</span>
+              <Link key={item.id} href="/dashboard/operations?view=schedule" className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 rounded-lg border p-3 hover:bg-muted/50">
+                <span className="min-w-0 break-words text-sm font-medium">{item.title}</span>
+                <span className="text-xs text-muted-foreground">{item.date}{item.startTime ? ` · ${item.startTime}` : ""}</span>
               </Link>
             ))}
           </CardContent>
         </Card>}
+        <Card className="min-w-0">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="text-base">{isManager ? "Upcoming team visits" : "My upcoming visits"}</CardTitle>
+            <Link href="/dashboard/site-visits" className="shrink-0 text-sm font-medium text-primary hover:underline">All visits</Link>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {visibleVisits.isLoading && <p className="text-sm text-muted-foreground">Loading visits…</p>}
+            {visibleVisits.isError && <p role="alert" className="text-sm text-destructive">Visits are unavailable. Open Site Visits to retry.</p>}
+            {!visibleVisits.isLoading && !visibleVisits.isError && nextVisits.length === 0 && <p className="text-sm text-muted-foreground">No upcoming visits recorded.</p>}
+            {nextVisits.map((visit) => <Link key={visit.id} href={`/dashboard/site-visits/${visit.id}`} className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
+              <span className="min-w-0"><span className="block truncate text-sm font-medium">{visit.name}</span><span className="block truncate text-xs text-muted-foreground">{isManager ? `${visit.agentName} · ` : ""}{visit.site || "Site pending"}</span></span>
+              <span className="shrink-0 text-right text-xs text-muted-foreground">{visit.visitDate}{visit.visitTime ? <span className="block">{visit.visitTime}</span> : null}</span>
+            </Link>)}
+          </CardContent>
+        </Card>
         {canViewAnnouncements && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Company updates</CardTitle>

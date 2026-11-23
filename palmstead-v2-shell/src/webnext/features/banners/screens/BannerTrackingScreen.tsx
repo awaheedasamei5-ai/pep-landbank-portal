@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, MapPin } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import type { Banner, BannerStatus } from '../../../types/domain';
@@ -73,6 +73,9 @@ export function BannerTrackingScreen() {
   const { data: leadCounts } = useLeadBannerCounts();
   const downloadPdf = useDownloadBannerReportPdf();
   const [tab, setTab] = useState<BannerTab>('dashboard');
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tab') === 'map') setTab('map');
+  }, []);
   const [showAdd, setShowAdd] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<BannerStatus | ''>('');
