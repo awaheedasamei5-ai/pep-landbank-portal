@@ -112,18 +112,25 @@ export async function buildSalesReportPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...PDF_INK);
+  const selectedStaff = report.filters.staffKey
+    ? report.staff.find((row) => row.key === report.filters.staffKey)?.name ?? report.filters.staffKey
+    : "all";
+  const selectedClient = report.filters.clientId
+    ? report.clients.find((row) => row.lead.id === report.filters.clientId)?.lead.name ?? "selected client unavailable"
+    : "all";
   const scopeLines = [
     `Data loaded: ${new Date(report.loadedAt).toLocaleString("en-GB", { timeZone: "Africa/Accra" })} Ghana time`,
-    `Filters: staff ${report.filters.staffKey || "all"}; source ${report.filters.source || "all"}; stage ${report.filters.stage || "all"};`,
+    `Filters: staff ${safe(selectedStaff)}; source ${report.filters.source || "all"}; stage ${report.filters.stage || "all"};`,
     `action ${report.filters.action || "all"}; outcome ${report.filters.outcome || "all"}; site ${report.filters.site || "all"}; plan ${report.filters.paymentPlan || "all"}.`,
-    `Pool: ${report.filters.pool || "all"}; client: ${report.filters.clientId || "all"}.`,
+    `Pool: ${report.filters.pool || "all"}; client: ${safe(selectedClient)}.`,
     "Activity and lead cohorts use their event dates; payment cash uses payment date and approved status.",
     "Current stage and paid-in-full conversion are snapshots, not historical stage transitions.",
     `${report.excludedImportPlaceholders} allocation-only names without sales evidence were excluded from this scope.`,
   ];
   for (const line of scopeLines) {
-    doc.text(line, 12, y);
-    y += 5.5;
+    const wrapped = doc.splitTextToSize(line, doc.internal.pageSize.getWidth() - 24);
+    doc.text(wrapped, 12, y);
+    y += 5.5 * wrapped.length;
   }
   y += 4;
   let bodyStarted = false;
