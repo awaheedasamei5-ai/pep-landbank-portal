@@ -4,6 +4,7 @@ import { agentPoints } from "../features/manager/lib/leaderboardLogic";
 import { computeGrandTotal, deriveStageFromPayment, STAGES } from "../features/pipeline/lib/pipelineLogic";
 import { monthKey, shiftMonth, today } from "../shared/lib/format";
 import { friendlyErrorObj, friendlyFunctionsInvokeError } from "../shared/lib/friendlyError";
+import { isPaymentPlan } from "../types/domain";
 import type {
   AchievementDef,
   ActivityLogEntry,
@@ -195,7 +196,10 @@ function buildLeadDbPatch(patch: LeadUpdate): Record<string, unknown> {
   if ("discount" in patch) dbPatch.discount = patch.discount;
   if ("netTotal" in patch) dbPatch.net_total = patch.netTotal;
   if ("grandTotal" in patch) dbPatch.grand_total = patch.grandTotal;
-  if ("paymentPlan" in patch) dbPatch.payment_plan = patch.paymentPlan;
+  if ("paymentPlan" in patch) {
+    if (!isPaymentPlan(patch.paymentPlan)) throw friendlyErrorObj("Select a valid payment plan before saving.");
+    dbPatch.payment_plan = patch.paymentPlan;
+  }
   if ("amtPaid" in patch) dbPatch.amt_paid = patch.amtPaid;
   if ("stage" in patch) dbPatch.stage = patch.stage;
   if ("nextAction" in patch) dbPatch.next_action = patch.nextAction;
@@ -1782,6 +1786,7 @@ function createLiveDataSource(): DataSource {
         return (data ?? []).map(mapLeadRow);
       },
       async create(agentKey, input) {
+        if (!isPaymentPlan(input.paymentPlan)) throw friendlyErrorObj("Select a valid payment plan before saving.");
         // Master Spec Section 4.4: amt_paid is never a free field written
         // from form input -- always starts at 0 regardless of what the
         // caller's `input.amtPaid` says. A nonzero opening deposit becomes
@@ -1834,6 +1839,7 @@ function createLiveDataSource(): DataSource {
       // a cross-row all-or-nothing transaction (a bigger, more speculative
       // change the master spec's own wording doesn't clearly call for).
       async createWithFollowup(agentKey, input, followupPatch) {
+        if (!isPaymentPlan(input.paymentPlan)) throw friendlyErrorObj("Select a valid payment plan before saving.");
         const grandTotal = computeGrandTotal(input.unitPrice, input.noPlots);
         const followupCols = buildLeadDbPatch(followupPatch);
         const { data, error } = await requireClient()
@@ -5568,4 +5574,5 @@ function createLiveDataSource(): DataSource {
     },
   };
 }
+
 
