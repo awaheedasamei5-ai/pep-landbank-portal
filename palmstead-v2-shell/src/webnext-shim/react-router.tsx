@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentPropsWithoutRef, createContext, type ReactNode, useContext, useState } from "react";
+import { type ComponentPropsWithoutRef, createContext, type ReactNode, useContext, useEffect, useState } from "react";
 
 import NextLink from "next/link";
 import {
@@ -23,17 +23,10 @@ import { emptyPortalTrail, resolvePortalReturn } from "@/lib/palmstead/portal-na
 // (react-router's client-side router vs Next's App Router), not a
 // rewrite of any real logic or UI.
 
-// react-router's navigate(to, { state }) passes arbitrary state to the
-// next screen's useLocation().state with no URL round-trip. Next has no
-// native equivalent for a client-side push. Real call sites in the
-// copied code (AddLeadScreen prefill from Client Database/Company
-// Leads/Master Pipeline) pass a small flat object immediately before
-// navigating, read back synchronously by the next screen's
-// useLocation() in the same tab -- a module-level handoff variable
-// faithfully replicates that exact real usage without needing a URL
-// param or storage round-trip that a hard reload/deep-link never had
-// either in the original react-router version.
-let pendingState: unknown = null;
+// Keep navigation state tied to the destination. A source screen can
+// re-render and call useLocation() while Next is transitioning; consuming
+// a single unscoped value there loses the new screen's prefill and pool.
+let pendingState: { pathname: string; value: unknown } | null = null;
 
 export function useNavigate() {
   const router = useRouter();
@@ -43,13 +36,14 @@ export function useNavigate() {
   const current = search ? `${pathname}?${search}` : pathname;
   return (to: string | number, opts?: { replace?: boolean; state?: unknown }) => {
     if (typeof to === "number") {
+      pendingState = null;
       if (to === -1) {
         if (navigation) navigation.back(current);
         else router.push(resolvePortalReturn(current, emptyPortalTrail()).href);
       } else if (to === 1) router.forward();
       return;
     }
-    pendingState = opts?.state ?? null;
+    pendingState = opts?.state === undefined ? null : { pathname: new URL(to, window.location.href).pathname, value: opts.state };
     if (opts?.replace) router.replace(to);
     else router.push(to);
   };
@@ -63,14 +57,14 @@ export function useLocation() {
   const pathname = usePathname();
   const searchParams = useNextSearchParams();
   const search = searchParams.toString();
-  // Consumed once -- matches react-router's own real semantics where
-  // state is only meaningfully read by the screen the navigate() call
-  // targeted, not preserved across further navigation.
+  // Several components may read useLocation() during the same transition.
+  // Clear after the destination commits, not during its render.
   const [state] = useState<unknown>(() => {
-    const s = pendingState;
-    pendingState = null;
-    return s;
+    return pendingState?.pathname === pathname ? pendingState.value : null;
   });
+  useEffect(() => {
+    if (pendingState?.pathname === pathname) pendingState = null;
+  }, [pathname]);
   return { pathname, search: search ? `?${search}` : "", hash: "", state, key: pathname };
 }
 
