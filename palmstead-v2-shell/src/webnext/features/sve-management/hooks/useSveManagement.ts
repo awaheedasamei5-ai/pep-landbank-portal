@@ -311,19 +311,21 @@ export function useSendSveDayReport() {
 
       const managers = await ds.staff.list().catch(() => []);
       const toManagers = managers.filter((m) => m.role === 'manager' && m.key !== profile?.key);
-      if (toManagers.length > 0) {
-        ds.notifications.notify(profile?.key ?? '', profile?.name ?? '', toManagers.map((m) => m.key), body, 'sve_report_ready', 'sve_day_report', report.id).catch(() => {});
-      }
-      const phones = new Set(toManagers.map((m) => m.phone).filter((p): p is string => !!p));
+      const notificationSent = toManagers.length > 0
+        ? await ds.notifications.notify(profile?.key ?? '', profile?.name ?? '', toManagers.map((m) => m.key), body, 'sve_report_ready', 'sve_day_report', report.id).then(() => true).catch(() => false)
+        : false;
+      const phones = new Set(managers.filter((m) => m.role === 'manager').map((m) => m.phone).filter((p): p is string => !!p));
       if (config?.companyPhone) phones.add(config.companyPhone);
-      for (const phone of phones) ds.sms.send(phone, body, 'sve_report_ready', profile?.key ?? null).catch(() => {});
+      const smsResults = await Promise.all([...phones].map((phone) =>
+        ds.sms.send(phone, body, 'sve_report_ready', profile?.key ?? null).catch(() => false),
+      ));
 
       const filename = sveDayReportFilename(report.visitDate);
       doc.save(filename);
       logDownload(filename, 'pdf', doc.output('datauristring'));
-      return token;
+      return { token, managerCount: toManagers.length, notificationSent, smsAttempted: phones.size, smsSent: smsResults.filter(Boolean).length };
     },
-    onSuccess: (_token, report) => {
+    onSuccess: (_delivery, report) => {
       queryClient.setQueryData(['sveDayReport', report.visitDate], (prev: SveDayReport | undefined) => (prev ? { ...prev, status: 'sent' as const } : prev));
       queryClient.invalidateQueries({ queryKey: ['sveDayReports'] });
     },

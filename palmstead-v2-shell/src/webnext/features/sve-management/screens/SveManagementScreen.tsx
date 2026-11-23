@@ -442,7 +442,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
                 </div>
                 {existing && (
                   <span className={`${styles.status} ${existing.status === 'sent' ? styles.statusDone : styles.statusPending}`}>
-                    {existing.status === 'sent' ? 'Report sent' : 'Draft in progress'}
+                    {existing.status === 'sent' ? 'Report published' : 'Draft in progress'}
                   </span>
                 )}
               </div>
@@ -459,7 +459,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
       {allDays.length > 0 && days.length === 0 && <p className={styles.emptyMsg}>No site visits for {daysPeriod.label}. Widen the filter above to see older ones.</p>}
 
       <div className={styles.reportHead} style={{ marginTop: 22 }}>
-        Sent reports
+        Published reports
       </div>
       <PeriodFilterBar state={sentPeriod} resultCount={sentReports.length} totalCount={allSentReports.length} />
       {sentReports.map((r) => (
@@ -468,7 +468,7 @@ function DayReportsTab({ visits, visitsLoading, selectedDate, onSelectDate }: {
             <div className={styles.rowMain}>
               <div className={styles.name}>{fmtLongDate(r.visitDate)}</div>
               <div className={styles.meta}>
-                {r.entries.length} scheduled client{r.entries.length === 1 ? '' : 's'} · sent {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
+                {r.entries.length} scheduled client{r.entries.length === 1 ? '' : 's'} · published {r.sentAt ? new Date(r.sentAt).toLocaleDateString('en-GB') : ''}
               </div>
             </div>
             <div className={styles.right}>
@@ -513,6 +513,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   const [siteSummaryAi, setSiteSummaryAi] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<{ token: string; managerCount: number; notificationSent: boolean; smsAttempted: number; smsSent: number } | null>(null);
   // Local edit state re-syncs to the server snapshot whenever it's a
   // genuinely different one (a fresh load, or right after a save echoes
   // back what was just persisted) -- derived during render (React's own
@@ -619,9 +620,10 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
   async function submitReport() {
     setError(null);
     setSavedNote(null);
+    setDelivery(null);
     try {
       const saved = await saveDayReport.mutateAsync({ id: reportId, patch: currentPatch() });
-      await sendReport.mutateAsync(saved);
+      setDelivery(await sendReport.mutateAsync(saved));
     } catch (e) {
       setError(friendlyError(e, 'Could not send report'));
     }
@@ -649,7 +651,7 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
         <div className={styles.rowMain}>
           <div className={styles.name}>{fmtLongDate(visitDate)}</div>
           <div className={styles.meta}>
-            {report.site} · {entries.length} client{entries.length === 1 ? '' : 's'} · {report.status === 'sent' ? 'Sent' : 'Draft'}
+            {report.site} · {entries.length} client{entries.length === 1 ? '' : 's'} · {report.status === 'sent' ? 'Published' : 'Draft'}
           </div>
         </div>
         <button type="button" className={styles.copyBtn} onClick={onClose}>
@@ -863,7 +865,14 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
           </button>
         </div>
         {downloadSaved.error && <p role="alert" className={styles.reportError}>Could not download the saved report PDF. Please try again.</p>}
-        {report.status === 'sent' && <p className={styles.reportSentNote}>Sent to Management — in-app and by SMS.</p>}
+        {delivery && (
+          <div className={delivery.smsSent < delivery.smsAttempted || !delivery.notificationSent ? styles.smsWarning : styles.reportSentNote} role="status">
+            <strong>Report published.</strong> Management in-app: {delivery.notificationSent ? `sent to ${delivery.managerCount}` : 'not confirmed'}.
+            {' '}SMS: {delivery.smsSent} of {delivery.smsAttempted} accepted by the provider{delivery.smsAttempted === 0 ? ' (no Management number available)' : ''}.
+            {' '}<a href={`${APP_ORIGIN}/sve-report/${delivery.token}`} target="_blank" rel="noreferrer">Open report link</a> to share it directly if needed.
+          </div>
+        )}
+        {report.status === 'sent' && !delivery && <p className={styles.reportSentNote}>Report published. Earlier SMS delivery was not recorded here.</p>}
       </div>
     </div>
   );
