@@ -26,6 +26,7 @@ import type { SveDayReportEntry } from '../../../types/domain';
 import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
 import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
+import { sveInviteEligibility } from '../lib/inviteEligibility';
 import styles from './SveManagementScreen.module.css';
 
 function initials(name: string): string {
@@ -95,6 +96,7 @@ export function SveManagementScreen() {
   const [tab, setTab] = useState<'feedback' | 'reports' | 'conversion'>('feedback');
   const [selectedReportDate, setSelectedReportDate] = useState<string | null>(null);
   const [smsFailedId, setSmsFailedId] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<{ id: string; message: string } | null>(null);
   const feedbackPeriod = usePeriodFilter();
   const filteredVisits = (visits ?? []).filter((v) => inPeriodRange(v.siteVisit.visitDate, feedbackPeriod.range));
 
@@ -132,10 +134,15 @@ export function SveManagementScreen() {
     updateLocation('reports', date);
   }
 
-  async function sendInviteFor(siteVisitId: string, clientName: string, clientContact: string) {
+  async function sendInviteFor(siteVisitId: string) {
     setSmsFailedId((cur) => (cur === siteVisitId ? null : cur));
-    const { smsSent } = await sendInvite.mutateAsync({ siteVisitId, clientName, clientContact });
-    if (!smsSent) setSmsFailedId(siteVisitId);
+    setInviteError(null);
+    try {
+      const { smsSent } = await sendInvite.mutateAsync({ siteVisitId });
+      if (!smsSent) setSmsFailedId(siteVisitId);
+    } catch (error) {
+      setInviteError({ id: siteVisitId, message: friendlyError(error, 'Could not send the invite') });
+    }
   }
 
   if (!hasAccess) {
@@ -181,6 +188,7 @@ export function SveManagementScreen() {
           {isLoading && <p className={styles.emptyMsg}>Loading…</p>}
           {filteredVisits.map(({ siteVisit, invite, submission }) => {
             const isOpen = expanded === siteVisit.id;
+            const eligibility = sveInviteEligibility(siteVisit);
             return (
               <div className={styles.card} key={siteVisit.id}>
                 <div className={styles.row}>
@@ -193,7 +201,7 @@ export function SveManagementScreen() {
                     </div>
                     {!invite && (
                       <div>
-                        <span className={`${styles.status} ${styles.statusNone}`}>No invite sent</span>
+                        <span className={`${styles.status} ${styles.statusNone}`}>{eligibility.reason}</span>
                       </div>
                     )}
                     {invite && !submission && (
@@ -209,15 +217,18 @@ export function SveManagementScreen() {
                   </div>
                   <div className={styles.right}>
                     <div className={styles.date}>{siteVisit.visitDate}</div>
-                    {!invite && (
+                    {!invite && eligibility.allowed && (
                       <button
                         type="button"
                         className={styles.sendBtn}
                         disabled={sendInvite.isPending}
-                        onClick={() => sendInviteFor(siteVisit.id, siteVisit.name, siteVisit.contact)}
+                        onClick={() => sendInviteFor(siteVisit.id)}
                       >
                         {sendInvite.isPending ? 'Sending…' : 'Send invite'}
                       </button>
+                    )}
+                    {!invite && !eligibility.allowed && !siteVisit.deletedAt && (
+                      <a className={styles.copyBtn} href={`/dashboard/site-visits/${siteVisit.id}`}>Open visit record</a>
                     )}
                     {invite && !submission && (
                       <button type="button" className={styles.copyBtn} onClick={() => copyLink(invite.token, siteVisit.id)}>
@@ -231,6 +242,7 @@ export function SveManagementScreen() {
                     )}
                   </div>
                 </div>
+                {inviteError?.id === siteVisit.id && <div className={styles.inviteError} role="alert">{inviteError.message}</div>}
                 {smsFailedId === siteVisit.id && (
                   <div className={styles.smsWarning}>
                     The invite was created, but the SMS could not be sent to {siteVisit.contact || 'this number'} — use Copy link to share it another way (WhatsApp, in person).
