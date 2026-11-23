@@ -125,7 +125,7 @@ export function AddLeadScreen() {
   const { data: banners } = useBanners();
   const createReferral = useCreateReferral();
   const linkReferralLead = useLinkReferralLead();
-  const [depositNotice, setDepositNotice] = useState<{ leadId: string; message: string } | null>(null);
+  const [saveNotice, setSaveNotice] = useState<{ leadPath: string; message: string; siteVisitId?: string; leadId: string; depositMessage?: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Source-attribution sub-state -- deliberately not part of the RHF/zod
@@ -328,29 +328,45 @@ export function AddLeadScreen() {
         // Non-fatal -- see comment above.
       }
     }
+    let linkFailed = false;
     if (prefill?.siteVisitIdToLink) {
       try {
         await linkSiteVisitToLead.mutateAsync({ id: prefill.siteVisitIdToLink, leadId: lead.id });
       } catch {
-        // Non-fatal -- the lead is real and saved; a failed link-back
-        // shouldn't block or roll back the lead creation itself, same
-        // discipline as the Referral-link attempt above.
+        // The lead is saved, but the visit must not appear linked until the
+        // second write succeeds. Keep the lead ID and offer a safe retry.
+        linkFailed = true;
       }
     }
-    if (depositError) {
-      setDepositNotice({ leadId: lead.id, message: depositError });
+    if (depositError || linkFailed) {
+      setSaveNotice({
+        leadId: lead.id,
+        leadPath: prefill?.agentKeyOverride === 'company' ? `/dashboard/company-leads/${lead.id}` : `/dashboard/pipeline/${lead.id}`,
+        siteVisitId: linkFailed ? prefill?.siteVisitIdToLink : undefined,
+        depositMessage: depositError ?? undefined,
+        message: linkFailed ? `Lead saved in ${prefill?.agentKeyOverride === 'company' ? 'Company Leads' : 'your pipeline'}, but the visit could not be linked. Retry the link before leaving this page.${depositError ? ` ${depositError}` : ''}` : depositError!,
+      });
       return;
     }
     navigate(returnTo);
   }
 
-  if (depositNotice) {
+  if (saveNotice) {
     return (
       <div className={styles.wrap}>
         <h1 className={styles.title}>Lead saved</h1>
-        <p className={styles.err} style={{ marginTop: 8 }}>{depositNotice.message}</p>
+        <p className={styles.err} style={{ marginTop: 8 }} role="alert">{saveNotice.message}</p>
         <div className={styles.actions} style={{ marginTop: 16 }}>
-          <button type="button" className={styles.save} onClick={() => navigate(`${returnTo}/${depositNotice.leadId}`)}>
+          {saveNotice.siteVisitId && <button type="button" className={styles.save} disabled={linkSiteVisitToLead.isPending} onClick={async () => {
+            try {
+              await linkSiteVisitToLead.mutateAsync({ id: saveNotice.siteVisitId!, leadId: saveNotice.leadId });
+              if (saveNotice.depositMessage) setSaveNotice({ ...saveNotice, siteVisitId: undefined, message: saveNotice.depositMessage });
+              else navigate(returnTo);
+            } catch {
+              setSaveNotice((current) => current ? { ...current, message: 'The lead is saved, but the visit link still failed. Retry or open the lead and ask Management to resolve the link.' } : current);
+            }
+          }}>{linkSiteVisitToLead.isPending ? 'Linking…' : 'Retry linking visit'}</button>}
+          <button type="button" className={styles.save} onClick={() => navigate(saveNotice.leadPath)}>
             Open the lead
           </button>
         </div>
@@ -369,8 +385,8 @@ export function AddLeadScreen() {
       <button type="button" className={styles.backLink} onClick={() => navigate(returnTo)}>
         <ArrowLeft className="size-4" aria-hidden="true" /> Back
       </button>
-      <h1 className={styles.title}>Add to pipeline</h1>
-      <p className={styles.sub}>Saved straight into your pipeline.</p>
+      <h1 className={styles.title}>{prefill?.agentKeyOverride === 'company' ? 'Add to Company Leads' : 'Add to pipeline'}</h1>
+      <p className={styles.sub}>{prefill?.agentKeyOverride === 'company' ? 'This lead belongs to the company pool and will not appear in your personal pipeline.' : 'This lead will be saved in your pipeline.'}</p>
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className={styles.grid}>
           <div className={styles.mainCol}>
