@@ -1,4 +1,5 @@
 import type { ActivityLogEntry, Lead, Payment, SiteVisit } from "../../types/domain";
+import { isPaymentPlan } from "../../types/domain.ts";
 import type { SalesClientCost, SalesConversation, SalesReportData } from "./salesReportData";
 
 export type SalesReportScope = "mine" | "master" | "company";
@@ -162,8 +163,7 @@ export interface SalesReport {
 export const GHANA_TIME_ZONE = "Africa/Accra";
 
 export function salesPaymentPlanLabel(value: string): string {
-  const plan = value.trim();
-  return plan === "[object Object]" || !plan ? "Unverified payment plan" : plan;
+  return isPaymentPlan(value) ? value : "Unverified payment plan";
 }
 
 export function ghanaDate(value: string): string {
