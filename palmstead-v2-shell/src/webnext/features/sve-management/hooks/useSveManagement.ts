@@ -14,6 +14,7 @@ import { useLogDownload } from '../../../shared/hooks/useLogDownload';
 import { inPeriodRange, type PeriodRange } from '../../../shared/lib/periodFilter';
 import { buildSveDayReportPdf, buildSveSubmissionPdf, sveDayReportFilename, sveSubmissionFilename, type SveReportAttendance } from '../lib/sveReportPdf';
 import { APP_ORIGIN } from '../../../shared/lib/appOrigin';
+import { sveInviteEligibility } from '../lib/inviteEligibility';
 import type { Lead, SiteVisit, SveDayReport, SveDayReportEntry, SveDayReportPatch, SveSubmissionRecord } from '../../../types/domain';
 
 // {token} substitution against a DB-editable sms_templates.body_template
@@ -117,7 +118,28 @@ export function useSendSveInvite() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ siteVisitId, clientName, clientContact }: { siteVisitId: string; clientName: string; clientContact: string }) => {
+    mutationFn: async ({ siteVisitId }: { siteVisitId: string }) => {
+      const visit = demoMode
+        ? (await getDataSource(true).siteVisits.listAll()).find((row) => row.id === siteVisitId)
+        : await (async () => {
+          const client = getSupabaseClient();
+          if (!client) throw new Error('Site visits are unavailable.');
+          const { data, error } = await client.from('site_visits')
+            .select('name,contact,attended,deleted_at,visit_date')
+            .eq('id', siteVisitId).maybeSingle();
+          if (error) throw error;
+          return data ? {
+            name: data.name as string, contact: data.contact as string,
+            attended: data.attended as boolean | null,
+            deletedAt: data.deleted_at as string | null,
+            visitDate: data.visit_date as string,
+          } : null;
+        })();
+      if (!visit) throw new Error('This visit is no longer available. Refresh the list.');
+      const eligibility = sveInviteEligibility(visit);
+      if (!eligibility.allowed) throw new Error(`${eligibility.reason}. Refresh the visit before sending feedback.`);
+      const clientName = visit.name;
+      const clientContact = visit.contact;
       const invite = await getDataSource(demoMode).sve.createInvite(siteVisitId, clientName, clientContact, profile?.key ?? '');
       let smsSent = false;
       if (clientContact) {
