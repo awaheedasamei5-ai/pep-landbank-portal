@@ -160,8 +160,11 @@ test("Ghana dates use the local day at a UTC boundary", () => {
   assert.equal(ghanaDate("2026-11-01T23:30:00Z"), "2026-11-01");
 });
 
-test("legacy object payment plans are labelled for review and can be filtered", () => {
+test("unsupported payment plans are labelled for review and can be filtered", () => {
   assert.equal(salesPaymentPlanLabel("[object Object]"), "Unverified payment plan");
+  assert.equal(salesPaymentPlanLabel("40000"), "Unverified payment plan");
+  assert.equal(salesPaymentPlanLabel("4 Months"), "Unverified payment plan");
+  assert.equal(salesPaymentPlanLabel("9 Months"), "9 Months");
   const legacy = {
     ...data,
     leads: data.leads.map((lead) => (lead.id === "a" ? { ...lead, paymentPlan: "[object Object]" } : lead)),
