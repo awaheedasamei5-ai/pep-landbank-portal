@@ -32,7 +32,9 @@ function MiniMap({ banners, filter }: { banners: Banner[]; filter: Filter }) {
     ensureLeafletLoaded().then(() => {
       if (disposed || !container.current || !window.L) return;
       const leaflet = window.L;
-      const instance = leaflet.map(container.current).setView([plotted[0].lat!, plotted[0].lng!], 11);
+      // This preview is re-created by status filters. Disable Leaflet's zoom
+      // transition so its callback cannot run after React removes the map.
+      const instance = leaflet.map(container.current, { zoomAnimation: false, fadeAnimation: false, markerZoomAnimation: false }).setView([plotted[0].lat!, plotted[0].lng!], 11);
       map.current = instance;
       leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
@@ -48,7 +50,7 @@ function MiniMap({ banners, filter }: { banners: Banner[]; filter: Filter }) {
         }).addTo(instance).on("click", () => router.push(`/dashboard/banners/${banner.id}`));
       }
       if (plotted.length > 1) {
-        instance.fitBounds(leaflet.latLngBounds(plotted.map((banner) => [banner.lat!, banner.lng!] as [number, number])), { padding: [28, 28] });
+        instance.fitBounds(leaflet.latLngBounds(plotted.map((banner) => [banner.lat!, banner.lng!] as [number, number])), { padding: [28, 28], animate: false });
       }
     }).catch(() => { if (!disposed) setError("Map tiles are unavailable. Open Banner Tracker to view the records."); });
     return () => { disposed = true; map.current?.remove(); map.current = null; };
