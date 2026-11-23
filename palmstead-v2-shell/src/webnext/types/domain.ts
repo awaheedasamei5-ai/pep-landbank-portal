@@ -41,6 +41,10 @@ export interface StaffInvite {
 
 export type PlotType = "Full Plot" | "Half Plot";
 export type PaymentPlan = "Full Payment" | "3 Months" | "6 Months" | "9 Months" | "12 Months";
+export const PAYMENT_PLANS: readonly PaymentPlan[] = ["Full Payment", "3 Months", "6 Months", "9 Months", "12 Months"];
+export function isPaymentPlan(value: unknown): value is PaymentPlan {
+  return typeof value === "string" && PAYMENT_PLANS.includes(value as PaymentPlan);
+}
 // Internal stage codes -- displayed to staff via the flipped
 // DISPLAY_STAGE_CODE mapping (index.html:17138), never shown raw.
 export type Stage = "1" | "2A" | "2B" | "3" | "4" | "Lost";
@@ -2520,4 +2524,5 @@ export interface DataCheckDismissal {
   dismissedAt: string;
   isCompanyWide: boolean;
 }
+
 
