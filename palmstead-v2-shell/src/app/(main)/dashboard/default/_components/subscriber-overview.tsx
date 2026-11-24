@@ -53,15 +53,17 @@ export function SubscriberOverview() {
           </PieChart>
         </ChartContainer>}
       </div>
-      <div className="min-w-0 space-y-1.5" role="list" aria-label={mode === "team" ? "Pipeline value by person" : "Leads by stage"}>
-        {segments.map((segment, index) => <div key={segment.key} role="listitem" className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/50">
+      <div className="min-w-0 space-y-1.5">
+      <ul aria-label={mode === "team" ? "Pipeline value by person" : "Leads by stage"}>
+        {segments.map((segment, index) => <li key={segment.key} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/50">
           <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-sm" title={segment.label}>{segment.label}</span>
           <span className="shrink-0 text-right text-xs font-medium tabular-nums">{mode === "team" ? ghs(segment.amount) : segment.amount}</span>
           <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{total ? `${Math.round(segment.amount / total * 100)}%` : "0%"}</span>
-        </div>)}
-        <p className="px-2 text-xs text-muted-foreground">{data?.totalLeads ?? 0} leads · {mode === "team" ? "segments reflect value" : "segments reflect lead count"}</p>
-        <Link href="/dashboard/pipeline" className="inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline">Explore pipeline →</Link>
+        </li>)}
+      </ul>
+      <p className="px-2 text-xs text-muted-foreground">{data?.totalLeads ?? 0} leads · {mode === "team" ? "segments reflect value" : "segments reflect lead count"}</p>
+      <Link href="/dashboard/pipeline" className="inline-flex min-h-10 items-center text-sm font-medium text-primary hover:underline">Explore pipeline →</Link>
       </div>
     </CardContent>
   </Card>;
