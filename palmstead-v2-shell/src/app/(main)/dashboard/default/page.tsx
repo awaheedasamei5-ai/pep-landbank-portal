@@ -1,6 +1,5 @@
-import { PerformanceOverview } from "./_components/performance-overview";
 import { SubscriberOverview } from "./_components/subscriber-overview";
-import { WorkspaceHome } from "./_components/workspace-home";
+import { CompanyUpdates, WorkspaceHome } from "./_components/workspace-home";
 import { BannerOverview } from "./_components/banner-overview";
 
 export default function Page() {
@@ -11,7 +10,7 @@ export default function Page() {
         <SubscriberOverview />
         <BannerOverview />
       </div>
-      <PerformanceOverview />
+      <CompanyUpdates />
     </div>
   );
 }
