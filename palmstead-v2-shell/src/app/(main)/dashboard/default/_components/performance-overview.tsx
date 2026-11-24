@@ -21,7 +21,7 @@ function trailingMonthLabels(): string[] {
 }
 
 const chartConfig = {
-  collected: { label: "Collected", color: "var(--chart-1)" },
+  collected: { label: "Collected", color: "#f15b39" },
 } satisfies ChartConfig;
 
 export function PerformanceOverview() {
@@ -86,3 +86,4 @@ export function PerformanceOverview() {
     </Card>
   );
 }
+
