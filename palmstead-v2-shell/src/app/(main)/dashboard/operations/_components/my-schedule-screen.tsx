@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Link from "next/link";
 
@@ -799,6 +799,16 @@ function QuickAddForm({ defaultDate, onDone }: { defaultDate: string; onDone: (a
 
 export function MyScheduleScreen() {
   const profile = useAuthStore((s) => s.profile);
+  const [linkedTodo, setLinkedTodo] = useState<{ id: string; date: string } | null>(null);
+  const openedLinkedTodo = useRef<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("todo");
+    const date = params.get("date");
+    if (id && date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00Z`))) {
+      setLinkedTodo({ id, date });
+    }
+  }, []);
   const todoAccess = useQuery({
     queryKey: ["operationsTodoAccess", profile?.key],
     enabled: Boolean(profile?.key),
@@ -874,6 +884,16 @@ export function MyScheduleScreen() {
     addScheduleDays(today, -90),
     addScheduleDays(today, 3),
   );
+  const linkedDate = linkedTodo?.date ?? today;
+  const linkedTodoQuery = useMySchedule(canViewTodos && linkedTodo ? profile?.key : undefined, linkedDate, linkedDate);
+  useEffect(() => {
+    if (!linkedTodo || !canViewTodos || !linkedTodoQuery.data || openedLinkedTodo.current === linkedTodo.id) return;
+    const todo = linkedTodoQuery.data.find((item) => item.id === linkedTodo.id);
+    if (todo) {
+      openedLinkedTodo.current = linkedTodo.id;
+      setSelected(todo);
+    }
+  }, [linkedTodo, linkedTodoQuery.data, canViewTodos]);
   const meetingsQuery = useScheduleMeetings(canViewMeetings ? profile?.key : undefined, range.from, range.to);
   const meetings = meetingsQuery.data;
 
@@ -1008,6 +1028,9 @@ export function MyScheduleScreen() {
 
   return (
     <div className="grid gap-4">
+      {linkedTodo && canViewTodos && linkedTodoQuery.data && !linkedTodoQuery.data.some((item) => item.id === linkedTodo.id) && (
+        <Alert><AlertTitle>Task unavailable</AlertTitle><AlertDescription>This task may have moved, been removed, or is not assigned to you. Your own schedule remains available below.</AlertDescription></Alert>
+      )}
       <SchedulePushSettings />
       {todoAccess.isError && (
         <Alert variant="destructive">
@@ -1286,4 +1309,5 @@ export function MyScheduleScreen() {
     </div>
   );
 }
+
 
