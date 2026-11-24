@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Cell, Label, Pie, PieChart } from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { ghs } from "@/lib/palmstead/format";
@@ -10,7 +10,7 @@ import { useManagerOverview } from "@/lib/palmstead/use-manager-overview";
 import { useAuthStore } from "@/stores/auth/auth-store";
 
 const stageNames: Record<string, string> = { "1": "New", "2A": "Site visit", "2B": "Reserved", "3": "Documents", "4": "Closed", Lost: "Lost" };
-const colors = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "#d97706", "#0d9488", "#7c3aed", "#db2777", "#475569"];
+const colors = ["#f15b39", "#2563eb", "#0d9488", "#7c3aed", "#db2777", "#d97706", "#0891b2", "#65a30d", "#b45309", "#4f46e5"];
 const config = { amount: { label: "Pipeline", color: "var(--chart-1)" } } satisfies ChartConfig;
 function compactMoney(value: number): string {
   if (value >= 1_000_000) return `GHS ${(value / 1_000_000).toFixed(1)}m`;
@@ -44,14 +44,13 @@ export function SubscriberOverview() {
             <ChartTooltip cursor={false} content={({ active, payload }) => active && payload?.length ? <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md"><p className="font-medium">{payload[0].payload.label}</p><p>{mode === "team" ? ghs(Number(payload[0].value ?? 0)) : `${payload[0].value} leads`}</p></div> : null} />
             <Pie data={plotted} dataKey="amount" nameKey="label" innerRadius="70%" outerRadius="94%" paddingAngle={plotted.length > 1 ? 2 : 0} stroke="none" isAnimationActive="auto" animationDuration={850}>
               {plotted.map((segment) => <Cell key={segment.key} fill={colors[segments.findIndex((item) => item.key === segment.key) % colors.length]} />)}
-              <Label position="center" content={({ viewBox }) => {
-                if (!viewBox || !("cx" in viewBox) || !("cy" in viewBox)) return null;
-                const cx = Number(viewBox.cx), cy = Number(viewBox.cy);
-                return <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" className="fill-foreground"><tspan x={cx} dy="-0.2em" className="fill-muted-foreground text-[11px]">Pipeline value</tspan><tspan x={cx} dy="1.35em" className="text-[18px] font-semibold">{compactMoney(data?.pipelineValue ?? 0)}</tspan></text>;
-              }} />
             </Pie>
           </PieChart>
         </ChartContainer>}
+        {!isLoading && total > 0 && <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-xs text-muted-foreground">Pipeline value</span>
+          <strong className="text-lg font-semibold tabular-nums sm:text-xl">{compactMoney(data?.pipelineValue ?? 0)}</strong>
+        </div>}
       </div>
       <div className="min-w-0 space-y-1.5">
       <ul aria-label={mode === "team" ? "Pipeline value by person" : "Leads by stage"}>
