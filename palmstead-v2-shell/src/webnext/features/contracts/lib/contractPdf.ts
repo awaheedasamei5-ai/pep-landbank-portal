@@ -762,4 +762,3 @@ export function contractFilename(clientName: string): string {
   return `ContractOfSale_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
 }
 
-
