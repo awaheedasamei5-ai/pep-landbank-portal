@@ -15,6 +15,7 @@ import { useSiteVisits } from "@/webnext/features/site-visits/hooks/useSiteVisit
 import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { getDataSource } from "@/webnext/data/source";
 import { MetricCards } from "./metric-cards";
+import { PerformanceOverview } from "./performance-overview";
 
 function weekEnd(start: string): string {
   const date = new Date(`${start}T12:00:00Z`);
@@ -46,7 +47,6 @@ export function WorkspaceHome() {
     .slice(0, 3);
   const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 2);
   const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
-  const news = published.slice(0, 2);
   const unread = published.filter((item) => !item.isRead).length;
   const firstName = profile?.name?.trim().split(/\s+/)[0] || "there";
 
@@ -109,27 +109,40 @@ export function WorkspaceHome() {
             </Link>)}
           </div>
         </div>
-        {canViewAnnouncements && <div className="min-w-0 lg:pl-5">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Company updates</h2>
-            <Link href="/dashboard/announcements" className="text-sm font-medium text-primary hover:underline">All updates</Link>
-          </div>
-          <div className="grid gap-2">
-            {announcements.isLoading && <p className="text-sm text-muted-foreground">Loading updates…</p>}
-            {announcements.isError && <p className="text-sm text-muted-foreground">Updates are unavailable right now. Open the information center to retry.</p>}
-            {!announcements.isLoading && !announcements.isError && news.length === 0 && <p className="text-sm text-muted-foreground">No active company updates.</p>}
-            {news.map((item) => (
-              <Link key={item.id} href="/dashboard/announcements" className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
-                <span className="min-w-0"><span className="block truncate text-sm font-medium">{item.title}</span><span className="block text-xs text-muted-foreground">{item.createdAt.slice(0, 10)}</span></span>
-                {!item.isRead && <Badge variant="secondary">New</Badge>}
-              </Link>
-            ))}
-          </div>
-        </div>}
+        <div className="min-w-0 lg:pl-5"><PerformanceOverview /></div>
         </CardContent>
       </Card>
     </section>
   );
+}
+
+export function CompanyUpdates() {
+  const profile = useAuthStore((state) => state.profile);
+  const isManager = profile?.role === "manager";
+  const access = useNavigationAccess(profile?.key, isManager);
+  const canView = canOpenNavigationItem("announcements", access.data, isManager);
+  const announcements = useAnnouncements(canView ? profile?.key : undefined);
+  if (!canView) return null;
+  const now = Date.now();
+  const news = (announcements.data ?? [])
+    .filter((item) => item.active && new Date(item.publishAt).getTime() <= now && (!item.expiresAt || new Date(item.expiresAt).getTime() > now))
+    .slice(0, 3);
+
+  return <Card className="min-w-0">
+    <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardTitle>Company updates</CardTitle>
+      <Link href="/dashboard/announcements" className="shrink-0 text-sm font-medium text-primary hover:underline">All updates</Link>
+    </CardHeader>
+    <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {announcements.isLoading && <p className="text-sm text-muted-foreground">Loading updates…</p>}
+      {announcements.isError && <p role="alert" className="text-sm text-destructive">Updates are unavailable right now.</p>}
+      {!announcements.isLoading && !announcements.isError && news.length === 0 && <p className="text-sm text-muted-foreground">No active company updates.</p>}
+      {news.map((item) => <Link key={item.id} href="/dashboard/announcements" className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
+        <span className="min-w-0"><span className="block truncate text-sm font-medium">{item.title}</span><span className="block text-xs text-muted-foreground">{item.createdAt.slice(0, 10)}</span></span>
+        {!item.isRead && <Badge variant="secondary">New</Badge>}
+      </Link>)}
+    </CardContent>
+  </Card>;
 }
 
 
