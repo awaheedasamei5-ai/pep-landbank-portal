@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { CalendarClock, Megaphone, MessageCircle, Plus, Users, X } from "lucide-react";
 
@@ -69,7 +69,7 @@ function AnnouncementCard({ announcement, isManager }: { announcement: Announcem
   const past = !announcement.active || (!!announcement.expiresAt && new Date(announcement.expiresAt).getTime() <= Date.now());
 
   return (
-    <Card className={!announcement.isRead ? "border-primary/40" : undefined}>
+    <Card id={`announcement-${announcement.id}`} className={!announcement.isRead ? "border-primary/40 target:ring-2 target:ring-primary/50" : "target:ring-2 target:ring-primary/50"}>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
@@ -191,6 +191,16 @@ export function AnnouncementsScreen() {
   const profile = useAuthStore((s) => s.profile);
   const isManager = profile?.role === "manager";
   const { data, isLoading } = useAnnouncements(profile?.key);
+  const openedHash = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data?.length) return;
+    const hash = window.location.hash.slice(1);
+    if (!hash.startsWith("announcement-") || openedHash.current === hash) return;
+    const id = hash.slice("announcement-".length);
+    if (!data.some((item) => item.id === id)) return;
+    openedHash.current = hash;
+    document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [data]);
   const [showCompose, setShowCompose] = useState(false);
 
   const scheduled = (data ?? []).filter((a) => a.active && new Date(a.publishAt).getTime() > Date.now());
@@ -265,4 +275,5 @@ export function AnnouncementsScreen() {
     </div>
   );
 }
+
 
