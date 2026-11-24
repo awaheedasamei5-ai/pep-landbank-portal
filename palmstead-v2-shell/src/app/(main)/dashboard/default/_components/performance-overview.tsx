@@ -2,16 +2,11 @@
 
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { ghs } from "@/lib/palmstead/format";
 import { useManagerOverview } from "@/lib/palmstead/use-manager-overview";
 
-// Real "collected this month" trend -- approved payments only (the same
-// real app-wide rule every other Palmstead report uses: a pending
-// payment doesn't count as collected until a manager approves it),
-// grouped by month straight from the payments table. Replaces the
-// template's fake 6-month "Customer Activity" multi-series chart.
+// Approved payments only, grouped by month from the role-scoped overview.
 function trailingMonthLabels(): string[] {
   const now = new Date();
   return Array.from({ length: 6 }, (_, i) => {
@@ -35,36 +30,22 @@ export function PerformanceOverview() {
   const hasCollections = trend.some((amount) => amount > 0);
 
   return (
-    <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="leading-none">Collected this month</CardTitle>
-        <CardDescription>
-          {isLoading ? (
-            "Loading…"
-          ) : (
-            <>
-              {ghs(currentMonth)}
-              {delta !== 0 && (
-                <span className={delta > 0 ? "ml-2 text-emerald-600" : "ml-2 text-red-600"}>
-                  {delta > 0 ? "▲" : "▼"} {ghs(Math.abs(delta))} vs last month
-                </span>
-              )}
-            </>
-          )}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        {!isLoading && !hasCollections ? <div className="flex min-h-28 items-center rounded-lg border border-dashed px-4 text-sm text-muted-foreground">No approved payments recorded in the last six months.</div> : <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full sm:h-80">
-          <AreaChart data={chartData} margin={{ top: 0 }}>
+    <section className="flex min-w-0 flex-col gap-2" aria-label="Approved collections trend">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <h2 className="text-sm font-semibold">Collected this month</h2>
+        <span className="text-sm font-semibold tabular-nums">{isLoading ? "Loading…" : ghs(currentMonth)}</span>
+      </div>
+      {delta !== 0 && !isLoading && <p className="text-xs text-muted-foreground">{delta > 0 ? "▲" : "▼"} {ghs(Math.abs(delta))} vs last month</p>}
+      {!isLoading && !hasCollections ? <p className="flex min-h-28 items-center text-sm text-muted-foreground">No approved payments in the last six months.</p> : <ChartContainer config={chartConfig} className="aspect-auto h-32 w-full sm:h-36 lg:h-28">
+          <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="fillCollected" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--color-collected)" stopOpacity={0.36} />
                 <stop offset="95%" stopColor="var(--color-collected)" stopOpacity={0.04} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} strokeOpacity={0.5} />
-            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
+            <CartesianGrid vertical={false} strokeOpacity={0.35} />
+            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={5} fontSize={10} />
             <ChartTooltip
               cursor={false}
               content={
@@ -73,17 +54,18 @@ export function PerformanceOverview() {
             />
             <Area
               dataKey="collected"
-              type="natural"
+              type="monotone"
               fill="url(#fillCollected)"
               stroke="var(--color-collected)"
               strokeWidth={1.5}
               dot={false}
               fillOpacity={1}
+              isAnimationActive="auto"
             />
           </AreaChart>
         </ChartContainer>}
-      </CardContent>
-    </Card>
+      <p className="text-xs text-muted-foreground">Approved payments · last six months</p>
+    </section>
   );
 }
 
