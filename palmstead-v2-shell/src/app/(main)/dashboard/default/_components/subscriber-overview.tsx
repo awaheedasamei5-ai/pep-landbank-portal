@@ -17,6 +17,11 @@ function compactMoney(value: number): string {
   if (value >= 1_000) return `GHS ${(value / 1_000).toFixed(0)}k`;
   return `GHS ${Math.round(value)}`;
 }
+function percentage(value: number, total: number): string {
+  if (!total || value <= 0) return "0%";
+  const share = value / total * 100;
+  return share < 0.5 ? "<1%" : `${Math.round(share)}%`;
+}
 
 export function SubscriberOverview() {
   const { data, isLoading } = useManagerOverview();
@@ -58,7 +63,7 @@ export function SubscriberOverview() {
           <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-sm" title={segment.label}>{segment.label}</span>
           <span className="shrink-0 text-right text-xs font-medium tabular-nums">{mode === "team" ? ghs(segment.amount) : segment.amount}</span>
-          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{total ? `${Math.round(segment.amount / total * 100)}%` : "0%"}</span>
+          <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{percentage(segment.amount, total)}</span>
         </li>)}
       </ul>
       <p className="px-2 text-xs text-muted-foreground">{data?.totalLeads ?? 0} leads · {mode === "team" ? "segments reflect value" : "segments reflect lead count"}</p>
