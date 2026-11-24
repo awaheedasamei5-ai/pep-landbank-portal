@@ -137,7 +137,7 @@ export function CompanyUpdates() {
       {announcements.isLoading && <p className="text-sm text-muted-foreground">Loading updates…</p>}
       {announcements.isError && <p role="alert" className="text-sm text-destructive">Updates are unavailable right now.</p>}
       {!announcements.isLoading && !announcements.isError && news.length === 0 && <p className="text-sm text-muted-foreground">No active company updates.</p>}
-      {news.map((item) => <Link key={item.id} href="/dashboard/announcements" className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
+      {news.map((item) => <Link key={item.id} href={`/dashboard/announcements#announcement-${item.id}`} className="flex min-w-0 items-start justify-between gap-3 rounded-lg border p-3 hover:bg-muted/50">
         <span className="min-w-0"><span className="block truncate text-sm font-medium">{item.title}</span><span className="block text-xs text-muted-foreground">{item.createdAt.slice(0, 10)}</span></span>
         {!item.isRead && <Badge variant="secondary">New</Badge>}
       </Link>)}
