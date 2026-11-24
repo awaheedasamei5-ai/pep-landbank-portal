@@ -23,9 +23,9 @@ export function MetricCards() {
   ];
 
   return (
-    <Card className="grid min-w-0 grid-cols-2 gap-0 overflow-hidden py-0 lg:grid-cols-4">
+    <Card className="grid min-w-0 grid-cols-1 gap-0 overflow-hidden py-0 min-[350px]:grid-cols-2 lg:grid-cols-4">
       {cards.map((c) => (
-        <Link key={c.label} href={`/dashboard/default/insights?metric=${c.metric}`} aria-label={`View ${c.label.toLowerCase()} details`} className="min-w-0 border-b p-3 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary even:border-l lg:border-b-0 lg:p-5 lg:not-first:border-l">
+        <Link key={c.label} href={`/dashboard/default/insights?metric=${c.metric}`} aria-label={`View ${c.label.toLowerCase()} details`} className="min-w-0 border-b p-3 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary min-[350px]:even:border-l lg:border-b-0 lg:p-5 lg:not-first:border-l">
           <div className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm"><c.icon className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="truncate">{c.label}</span></div>
           <div className="mt-2 break-words text-lg font-semibold tabular-nums leading-tight tracking-tight sm:text-2xl">{isLoading ? <span className="text-sm text-muted-foreground">Loading…</span> : c.value}</div>
           <span className="mt-2 block text-xs text-primary">View details →</span>
