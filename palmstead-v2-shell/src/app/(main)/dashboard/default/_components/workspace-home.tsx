@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CalendarDays, ClipboardList, FlagTriangleRight, Megaphone, MapPinned } from "lucide-react";
+import { CalendarDays, ClipboardList, FlagTriangleRight, Megaphone, MapPinned } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { today } from "@/lib/palmstead/format";
-import { useManagerOverview } from "@/lib/palmstead/use-manager-overview";
 import { canOpenNavigationItem, useNavigationAccess } from "@/lib/permissions/use-navigation-access";
 import { useAuthStore } from "@/stores/auth/auth-store";
 import { useAnnouncements } from "../../announcements/_components/use-announcements";
@@ -33,7 +32,6 @@ export function WorkspaceHome() {
   const start = today();
   const schedule = useMySchedule(canViewSchedule ? profile?.key : undefined, start, weekEnd(start));
   const announcements = useAnnouncements(canViewAnnouncements ? profile?.key : undefined);
-  const overview = useManagerOverview();
   const myVisits = useSiteVisits();
   const demoMode = useSessionStore((state) => state.demoMode);
   const teamVisits = useQuery({
@@ -46,9 +44,9 @@ export function WorkspaceHome() {
     .filter((visit) => !visit.deletedAt && visit.visitDate >= start && visit.status.toLowerCase() !== "cancelled")
     .sort((a, b) => `${a.visitDate} ${a.visitTime ?? ""}`.localeCompare(`${b.visitDate} ${b.visitTime ?? ""}`))
     .slice(0, 3);
-  const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 4);
+  const upcoming = (schedule.data ?? []).filter((item) => item.status === "open").slice(0, 2);
   const published = (announcements.data ?? []).filter((item) => item.active && new Date(item.publishAt).getTime() <= Date.now() && (!item.expiresAt || new Date(item.expiresAt).getTime() > Date.now()));
-  const news = published.slice(0, 3);
+  const news = published.slice(0, 2);
   const unread = published.filter((item) => !item.isRead).length;
   const firstName = profile?.name?.trim().split(/\s+/)[0] || "there";
 
@@ -67,38 +65,24 @@ export function WorkspaceHome() {
             <CalendarDays className="size-4" aria-hidden="true" /> Open schedule
           </Link>}
         </div>
-        <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {canViewOperations && <Link href="/dashboard/operations" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
-            <ClipboardList className="size-5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Operations</span><span className="block text-xs text-muted-foreground">Tasks and projects</span></span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>}
-          <Link href="/dashboard/site-visits" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
-            <MapPinned className="size-5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Site visits</span><span className="block text-xs text-muted-foreground">{overview.data ? `${overview.data.siteVisitsCount} visible visits` : "Bookings and outcomes"}</span></span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>
-          <Link href="/dashboard/banners" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
-            <FlagTriangleRight className="size-5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Banners</span><span className="block text-xs text-muted-foreground">Map and inspections</span></span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>
-          {canViewAnnouncements && <Link href="/dashboard/announcements" className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/60">
-            <Megaphone className="size-5 shrink-0 text-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1"><span className="block text-sm font-medium">Company updates</span><span className="block text-xs text-muted-foreground">{unread ? `${unread} unread` : "News and notices"}</span></span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </Link>}
+        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t pt-4 text-sm">
+          {canViewOperations && <Link href="/dashboard/operations" className="inline-flex min-h-8 items-center gap-2 font-medium hover:text-primary"><ClipboardList className="size-4 text-primary" aria-hidden="true" />Operations</Link>}
+          <Link href="/dashboard/site-visits" className="inline-flex min-h-8 items-center gap-2 font-medium hover:text-primary"><MapPinned className="size-4 text-primary" aria-hidden="true" />Site visits</Link>
+          <Link href="/dashboard/banners" className="inline-flex min-h-8 items-center gap-2 font-medium hover:text-primary"><FlagTriangleRight className="size-4 text-primary" aria-hidden="true" />Banners</Link>
+          {canViewAnnouncements && <Link href="/dashboard/announcements" className="inline-flex min-h-8 items-center gap-2 font-medium hover:text-primary"><Megaphone className="size-4 text-primary" aria-hidden="true" />Company updates{unread ? <Badge variant="secondary">{unread}</Badge> : null}</Link>}
         </div>
       </div>
 
       <MetricCards />
-      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
-        {canViewSchedule && <Card className="min-w-0">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">Coming up</CardTitle>
+      <Card className="min-w-0">
+        <CardHeader><CardTitle>Today and next</CardTitle></CardHeader>
+        <CardContent className="grid min-w-0 gap-5 lg:grid-cols-3 lg:divide-x">
+        {canViewSchedule && <div className="min-w-0 lg:pr-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Coming up</h2>
             <Link href="/dashboard/operations?view=schedule" className="text-sm font-medium text-primary hover:underline">View schedule</Link>
-          </CardHeader>
-          <CardContent className="grid gap-2">
+          </div>
+          <div className="grid gap-2">
             {schedule.isLoading && <p className="text-sm text-muted-foreground">Loading your schedule…</p>}
             {schedule.isError && <p className="text-sm text-muted-foreground">Schedule is unavailable right now. Open it to retry.</p>}
             {!schedule.isLoading && !schedule.isError && upcoming.length === 0 && <p className="text-sm text-muted-foreground">No open tasks in the next seven days.</p>}
@@ -108,14 +92,14 @@ export function WorkspaceHome() {
                 <span className="text-xs text-muted-foreground">{item.date}{item.startTime ? ` · ${item.startTime}` : ""}</span>
               </Link>
             ))}
-          </CardContent>
-        </Card>}
-        <Card className="min-w-0">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">{isManager ? "Upcoming team visits" : "My upcoming visits"}</CardTitle>
+          </div>
+        </div>}
+        <div className="min-w-0 lg:px-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">{isManager ? "Upcoming team visits" : "My upcoming visits"}</h2>
             <Link href="/dashboard/site-visits" className="shrink-0 text-sm font-medium text-primary hover:underline">All visits</Link>
-          </CardHeader>
-          <CardContent className="grid gap-2">
+          </div>
+          <div className="grid gap-2">
             {visibleVisits.isLoading && <p className="text-sm text-muted-foreground">Loading visits…</p>}
             {visibleVisits.isError && <p role="alert" className="text-sm text-destructive">Visits are unavailable. Open Site Visits to retry.</p>}
             {!visibleVisits.isLoading && !visibleVisits.isError && nextVisits.length === 0 && <p className="text-sm text-muted-foreground">No upcoming visits recorded.</p>}
@@ -123,14 +107,14 @@ export function WorkspaceHome() {
               <span className="min-w-0"><span className="block truncate text-sm font-medium">{visit.name}</span><span className="block truncate text-xs text-muted-foreground">{isManager ? `${visit.agentName} · ` : ""}{visit.site || "Site pending"}</span></span>
               <span className="shrink-0 text-right text-xs text-muted-foreground">{visit.visitDate}{visit.visitTime ? <span className="block">{visit.visitTime}</span> : null}</span>
             </Link>)}
-          </CardContent>
-        </Card>
-        {canViewAnnouncements && <Card className="min-w-0">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">Company updates</CardTitle>
+          </div>
+        </div>
+        {canViewAnnouncements && <div className="min-w-0 lg:pl-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Company updates</h2>
             <Link href="/dashboard/announcements" className="text-sm font-medium text-primary hover:underline">All updates</Link>
-          </CardHeader>
-          <CardContent className="grid gap-2">
+          </div>
+          <div className="grid gap-2">
             {announcements.isLoading && <p className="text-sm text-muted-foreground">Loading updates…</p>}
             {announcements.isError && <p className="text-sm text-muted-foreground">Updates are unavailable right now. Open the information center to retry.</p>}
             {!announcements.isLoading && !announcements.isError && news.length === 0 && <p className="text-sm text-muted-foreground">No active company updates.</p>}
@@ -140,10 +124,12 @@ export function WorkspaceHome() {
                 {!item.isRead && <Badge variant="secondary">New</Badge>}
               </Link>
             ))}
-          </CardContent>
-        </Card>}
-      </div>
+          </div>
+        </div>}
+        </CardContent>
+      </Card>
     </section>
   );
 }
+
 
