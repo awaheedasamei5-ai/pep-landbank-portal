@@ -87,7 +87,7 @@ export function WorkspaceHome() {
             {schedule.isError && <p className="text-sm text-muted-foreground">Schedule is unavailable right now. Open it to retry.</p>}
             {!schedule.isLoading && !schedule.isError && upcoming.length === 0 && <p className="text-sm text-muted-foreground">No open tasks in the next seven days.</p>}
             {upcoming.map((item) => (
-              <Link key={item.id} href="/dashboard/operations?view=schedule" className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 rounded-lg border p-3 hover:bg-muted/50">
+              <Link key={item.id} href={`/dashboard/operations?view=schedule&todo=${encodeURIComponent(item.id)}&date=${item.date}`} className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 rounded-lg border p-3 hover:bg-muted/50">
                 <span className="min-w-0 break-words text-sm font-medium">{item.title}</span>
                 <span className="text-xs text-muted-foreground">{item.date}{item.startTime ? ` · ${item.startTime}` : ""}</span>
               </Link>
