@@ -220,6 +220,10 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
   }
   function listItem(markerX: number, bodyX: number, marker: string, body: string, boldMarker: boolean) {
     const w = marginR - bodyX;
+    // Measure with the same face and size used to draw the body. The
+    // preceding heading or marker may have left a wider bold font active.
+    setContractFont(doc, 'normal');
+    doc.setFontSize(10);
     const lines: string[] = doc.splitTextToSize(body, w);
     const h = Math.max(lines.length * sp.lineH, sp.lineH);
     ensure(h + sp.itemGap);
@@ -267,6 +271,8 @@ export function contractBody(doc: jsPDF, y: number, n: number, text: string, den
         }
       } else {
         const w = marginR - 14;
+        setContractFont(doc, 'normal');
+        doc.setFontSize(10);
         const lines: string[] = doc.splitTextToSize(para, w);
         const h = lines.length * sp.lineH;
         ensure(h + sp.paraGap);
@@ -755,4 +761,5 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
 export function contractFilename(clientName: string): string {
   return `ContractOfSale_${(clientName || 'client').replace(/\s+/g, '_')}.pdf`;
 }
+
 
