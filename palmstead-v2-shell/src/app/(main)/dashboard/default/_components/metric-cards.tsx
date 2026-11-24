@@ -17,7 +17,7 @@ export function MetricCards() {
 
   const cards = [
     { icon: Gauge, label: isManager ? "Total leads" : "My leads", value: data ? String(data.totalLeads) : null, metric: "leads" },
-    { icon: Wallet, label: isManager ? "Outstanding" : "My leads outstanding", value: data ? ghs(data.outstanding) : null, metric: "outstanding" },
+    { icon: Wallet, label: isManager ? "Outstanding" : "My outstanding", value: data ? ghs(data.outstanding) : null, metric: "outstanding" },
     { icon: CircleCheck, label: isManager ? "Fully paid" : "My fully paid clients", value: data ? String(data.fullyPaidCount) : null, metric: "fully-paid" },
     { icon: AlertTriangle, label: isManager ? "Open complaints" : "My open complaints", value: data ? String(data.openComplaints) : null, metric: "complaints" },
   ];
