@@ -15,6 +15,7 @@ import { useMySchedule } from "../../operations/_components/use-my-schedule";
 import { useSiteVisits } from "@/webnext/features/site-visits/hooks/useSiteVisits";
 import { useSessionStore } from "@/webnext/auth/useSessionStore";
 import { getDataSource } from "@/webnext/data/source";
+import { MetricCards } from "./metric-cards";
 
 function weekEnd(start: string): string {
   const date = new Date(`${start}T12:00:00Z`);
@@ -90,6 +91,7 @@ export function WorkspaceHome() {
         </div>
       </div>
 
+      <MetricCards />
       <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {canViewSchedule && <Card className="min-w-0">
           <CardHeader className="flex flex-row items-center justify-between gap-3">
