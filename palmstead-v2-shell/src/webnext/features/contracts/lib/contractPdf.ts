@@ -393,17 +393,13 @@ function splitClausesBeforeMarkers(text: string, markers: string[]): string[] {
 
 export async function prepareStandardContractPdf(lead: Lead, config: Config, acresOverride?: number): Promise<jsPDF> {
   let cover: string | null = null;
-  let wordmark: string | null = null;
   try {
     cover = config.contractCoverImage || (await loadImageAsDataUri('/contract-cover.jpg'));
   } catch {
     // A missing optional image must not prevent a legal document.
   }
-  try {
-    wordmark = config.contractWordmarkImage || (await loadImageAsDataUri('/trulander-wordmark.png'));
-  } catch {
-    // The title remains readable without an optional wordmark.
-  }
+  // Client-facing contracts must carry the approved company mark.
+  const wordmark = config.contractWordmarkImage || (await loadImageAsDataUri('/trulander-wordmark.png'));
   const fontBase64 = await loadContractFontBase64();
   return buildContractOfSalePdf(lead, config, cover, wordmark, acresOverride, fontBase64);
 }
@@ -465,16 +461,17 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
     setContractFont(doc, 'normal');
     centeredAddress(doc, '(' + purchaserAddress + ')', 139, 2, pageW - 28);
   }
-  if (wordmarkDataUri) {
-    try {
-      doc.addImage(wordmarkDataUri, 'PNG', pageW / 2 - 25, 174, 50, 18);
-    } catch {
-      // A malformed wordmark shouldn't block the rest of the document.
-    }
+  if (!wordmarkDataUri) throw new Error('The company logo is required on the Contract of Sale title page.');
+  try {
+    // Respect PNG or JPEG uploads and position the mark near the foot of the title page.
+    const imageFormat = doc.getImageProperties(wordmarkDataUri).fileType;
+    doc.addImage(wordmarkDataUri, imageFormat, pageW / 2 - 35, 229, 70, 25);
+  } catch {
+    throw new Error('The company logo could not be added to the contract. Upload a PNG or JPEG in Contract settings.');
   }
   setContractFont(doc, 'normal');
   doc.setFontSize(11);
-  centeredAddress(doc, vendorAddress, 199.3, 2, pageW - 28);
+  centeredAddress(doc, vendorAddress, 266, 2, pageW - 28);
 
   // ---- Page 3: KYC I-III ----
   n = 3;
