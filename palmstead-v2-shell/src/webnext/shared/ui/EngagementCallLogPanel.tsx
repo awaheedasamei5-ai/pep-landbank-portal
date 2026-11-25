@@ -96,7 +96,7 @@ export function EngagementCallLogPanel({
           <Card className={styles.section}>
             <CardHeader className="pb-2">
               <CardTitle className="font-normal">Calls by {trends.filter.granularity}</CardTitle>
-              <CardDescription>Site visits in this period: {trends.siteVisitsInPeriod}</CardDescription>
+              <CardDescription>Confirmed visits in this period: {trends.siteVisitsInPeriod}</CardDescription>
             </CardHeader>
             <CardContent>
               <ChartContainer config={trendsChartConfig} className="aspect-auto h-44 w-full">
