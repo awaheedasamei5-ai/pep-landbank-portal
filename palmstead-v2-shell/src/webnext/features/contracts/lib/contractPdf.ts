@@ -663,20 +663,21 @@ export function buildContractOfSalePdf(lead: Lead, config: Config, coverDataUri:
   n++;
   y = contractNewPage(doc, n);
   ({ y, n } = contractBody(doc, y, n, 'IT IS NOW MUTUALLY agreed as follows:'));
-  const transactionItems = [
-    '1.3 THE TRANSACTION',
-    '1.3.1 The consideration for ' + acres + ' Acres of land (more or less) is hereby agreed at ' + (t.discountTotal > 0 ? 'a discounted amount of ' : '') + contractMoney(t.grand) + '.',
+  // Number clauses after selecting the payment-plan terms. An outright
+  // contract has no monthly installment or monthly due date, and must not
+  // leave a numbering gap where the installment clause was removed.
+  const transactionClauses = [
+    'The consideration for ' + acres + ' Acres of land (more or less) is hereby agreed at ' + (t.discountTotal > 0 ? 'a discounted amount of ' : '') + contractMoney(t.grand) + '.',
     planLabel === 'Outright'
-      ? '1.3.2 The Purchaser agrees to pay the full consideration of ' + contractMoney(t.grand) + ' on the execution of this contract.'
-      : '1.3.2 The Purchaser agrees to pay on the execution of this contract a deposit of ' + contractMoney(t.deposit) + ' which constitutes approximately ' + depositPct + '% of the net price. The remaining balance shall be spread over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') monthly installments.',
-    planLabel === 'Outright' ? null : '1.3.3 Monthly installment payments of ' + contractMoney(t.monthlyDue) + ' shall be made over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months. The final installment shall be adjusted to settle any rounding balance.',
-    '1.3.4 All Payments shall be made via the Companies designated payment platforms and shall be in the name ' + vendorName + '. All Payment shall be duly receipted.',
-    '1.3.5 Upon ' + (planLabel === 'Outright' ? 'receipt of the full consideration of ' + contractMoney(t.grand) : 'receipt of the agreed initial deposit of ' + contractMoney(t.deposit)) + ', ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
-    '1.3.6 Indentures shall be released to Purchaser after final payment unless explicitly agreed.',
-    '1.3.7 All monthly installments shall be due on the fifth (5th) day of each month.',
-  ]
-    .filter((x): x is string => x !== null)
-    .join('\n\n');
+      ? 'The Purchaser agrees to pay the full consideration of ' + contractMoney(t.grand) + ' on the execution of this contract.'
+      : 'The Purchaser agrees to pay on the execution of this contract a deposit of ' + contractMoney(t.deposit) + ' which constitutes approximately ' + depositPct + '% of the net price. The remaining balance shall be spread over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') monthly installments.',
+    ...(planLabel === 'Outright' ? [] : ['Monthly installment payments of ' + contractMoney(t.monthlyDue) + ' shall be made over ' + (CONTRACT_MONTH_WORDS[t.planMonths] || t.planMonths) + ' (' + t.planMonths + ') months. The final installment shall be adjusted to settle any rounding balance.']),
+    'All Payments shall be made via the Companies designated payment platforms and shall be in the name ' + vendorName + '. All Payment shall be duly receipted.',
+    'Upon ' + (planLabel === 'Outright' ? 'receipt of the full consideration of ' + contractMoney(t.grand) : 'receipt of the agreed initial deposit of ' + contractMoney(t.deposit)) + ', ' + (config.quoteCompanyName || 'Trulander JSF Limited') + ' shall allocate the said Land with reference above to the Purchaser.',
+    'Indentures shall be released to Purchaser after final payment unless explicitly agreed.',
+    ...(planLabel === 'Outright' ? [] : ['All monthly installments shall be due on the fifth (5th) day of each month.']),
+  ];
+  const transactionItems = ['1.3 THE TRANSACTION', ...transactionClauses.map((clause, index) => `1.3.${index + 1} ${clause}`)].join('\n\n');
   ({ y, n } = contractBody(doc, y, n, transactionItems));
 
   // ---- 2-6: Representations, payments/defaults/refund, governing law,
