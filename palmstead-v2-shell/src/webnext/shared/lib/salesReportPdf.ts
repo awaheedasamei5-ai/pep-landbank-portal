@@ -20,7 +20,7 @@ export const SALES_PDF_SECTIONS: { key: SalesPdfSection; label: string }[] = [
   { key: "overview", label: "Executive scorecard" },
   { key: "comparison", label: "Previous period" },
   { key: "trend", label: "Monthly trend" },
-  { key: "staff", label: "Staff comparison" },
+  { key: "staff", label: "Staff performance" },
   { key: "mix", label: "Conversion and data quality" },
   { key: "quality", label: "Records needing attention" },
   { key: "registers", label: "Calls, visits and receipts" },
@@ -286,6 +286,77 @@ export async function buildSalesReportPdf(
         row.knownCostPerPayingClient === null ? "N/A" : money(row.knownCostPerPayingClient),
       ]),
     );
+  }
+  if (sections.has("staff")) {
+    bodyStarted = true;
+    const ownerByLead = new Map(report.clients.map((client) => [client.lead.id, client.lead.agent]));
+    if (!report.staff.length) {
+      y = newSection(doc, "Personal performance", "No client records match this report scope");
+      y = table(doc, y, ["Result"], [["No staff activity can be attributed to the selected clients"]]);
+    }
+    for (const row of report.staff) {
+      const isCompanyPool = row.key === "company";
+      y = newSection(
+        doc,
+        `${isCompanyPool ? "Company pool" : "Staff"} | ${safe(row.name)}`,
+        `${report.filters.from} to ${report.filters.to} | Dated activity and current deal snapshot`,
+      );
+      y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
+        { label: "Clients", value: row.clients, accent: PDF_LEAF },
+        { label: "New leads", value: row.newLeads, accent: PDF_GOLD },
+        { label: "Genuine calls", value: row.calls, accent: PDF_LEAF },
+        { label: "Reached rate", value: percent(row.reachedRate), accent: PDF_GOLD },
+        { label: "Attended visits", value: row.attendedVisits, accent: PDF_LEAF },
+        { label: "Approved receipts", value: money(row.approvedCash), accent: PDF_GOLD },
+      ]);
+      y = continuingSection(doc, y, "Activity and conversion", undefined, 42);
+      y = table(doc, y, ["Measure", "Recorded value", "Basis"], [
+        ["Visit requests", row.visitRequests, "Requests created in period for linked clients"],
+        ["Scheduled visits", row.scheduledVisits, "Scheduled date in period; attendance may be unknown"],
+        ["Attended visits", row.attendedVisits, "Explicit attendance confirmation in period"],
+        ["Discussions", row.conversations, "Timestamped conversations in period"],
+        ["Paying clients", row.payingClients, "Approved payment recorded by report load time"],
+        ["Attended to paying", percent(row.visitToPayingRate), "Attended clients in period with an approved payment to date"],
+      ], { 0: 45, 1: 35 });
+      y = continuingSection(doc, y, "Value and recorded visit cost", undefined, 42);
+      y = table(doc, y, ["Measure", "Amount / count", "Basis"], [
+        ["Pipeline value", money(row.pipelineValue), "Current deal value; not a dated sale"],
+        ["Approved receipts", money(row.approvedCash), "Approved client payments dated in period"],
+        ["Outstanding", money(row.outstanding), "Current client balances; not a prior-period figure"],
+        ["Known visit cost", money(row.attributedVisitCost), "Recorded client cost attribution; incomplete coverage possible"],
+        ["Known cost per payer", row.knownCostPerPayingClient === null ? "N/A" : money(row.knownCostPerPayingClient), "Known visit cost divided by paying clients"],
+        ["Needs contact", row.needingContact, "Open clients without contact for 14+ days"],
+      ], { 0: 45, 1: 42 });
+      const monthly = report.months.slice(-12).map((month) => ({
+        month: month.month,
+        newLeads: report.newLeads.filter((lead) => lead.agent === row.key && lead.date.startsWith(month.month)).length,
+        calls: report.calls.filter((call) => ownerByLead.get(call.leadId ?? "") === row.key && call.createdAt.startsWith(month.month)).length,
+        visitRequests: report.requestedVisits.filter((visit) => ownerByLead.get(visit.leadId ?? "") === row.key && visit.createdAt.startsWith(month.month)).length,
+        approvedCash: report.approvedPayments.filter((payment) => ownerByLead.get(payment.leadId) === row.key && payment.date.startsWith(month.month)).reduce((sum, payment) => sum + payment.amount, 0),
+      })).filter((month) => month.newLeads || month.calls || month.visitRequests || month.approvedCash);
+      if (monthly.length) {
+        if (monthly.some((month) => month.approvedCash > 0)) {
+          y = continuingSection(doc, y, "Monthly receipts", "Approved client payments by payment month, in GHS thousands", 65);
+          y = pdfBarChart(doc, 14, y, 180, 42, monthly.slice(-6).map((month) => ({
+            label: month.month.slice(2),
+            value: Math.round(month.approvedCash / 1000 * 100) / 100,
+            color: PDF_LEAF,
+          })));
+        }
+        y = continuingSection(doc, y, "Monthly activity", "Only months with a dated event are shown", 45);
+        y = table(doc, y, ["Month", "New leads", "Calls", "Visit requests", "Approved receipts"],
+          monthly.map((month) => [month.month, month.newLeads, month.calls, month.visitRequests, money(month.approvedCash)]));
+      }
+      const followUps = report.clients.filter((client) => client.lead.agent === row.key && client.needsContact);
+      if (followUps.length) {
+        y = continuingSection(doc, y, "Clients needing contact", "Current snapshot; open each client record for the full discussion trail", 45);
+        y = table(doc, y, ["Client", "Last contact", "Next action"], followUps.map((client) => [
+          safe(client.lead.name),
+          client.lastContactAt ? when(client.lastContactAt) : "No contact recorded",
+          safe(client.lead.nextAction),
+        ]));
+      }
+    }
   }
   if (sections.has("mix")) {
     bodyStarted = true;
