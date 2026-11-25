@@ -296,8 +296,8 @@ export async function buildSalesReportPdf(
     }
     for (const [index, row] of report.staff.entries()) {
       const isCompanyPool = row.key === "company";
-      const heading = `${isCompanyPool ? "Company pool" : "Staff"} | ${safe(row.name)}`;
-      const subheading = `${report.filters.from} to ${report.filters.to} | Dated activity and current deal snapshot`;
+      const heading = isCompanyPool ? "Company pool" : "Staff performance";
+      const subheading = isCompanyPool ? "Shared company leads" : safe(row.name);
       y = index === 0 && report.canCompareStaff
         ? continuingSection(doc, y, heading, subheading, 115)
         : newSection(doc, heading, subheading);
