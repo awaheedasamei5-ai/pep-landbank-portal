@@ -194,7 +194,19 @@ test("a genuine call excludes automatic activity; cash excludes pending payments
   assert.equal(report.approvedPayments.length, 1);
   assert.equal(report.approvedPayments[0].amount, 100);
   assert.equal(report.visitRequestWithoutLead, 1);
-  assert.ok(Math.abs((report.newLeadToVisitRate ?? 0) - 100 / 3) < 0.00001);
+  assert.equal(report.newLeadToVisitRate, 0); // A scheduled visit is not confirmed attendance.
+});
+
+test("staff visit conversion uses confirmed attendance within the selected dates", () => {
+  const confirmed = {
+    ...data,
+    visits: data.visits.map((visit) => visit.id === "visit-a" ? { ...visit, attended: true } : visit),
+  } as SalesReportData;
+  const full = buildSalesReport(confirmed, "master", "manager", true, filters);
+  assert.ok(Math.abs((full.newLeadToVisitRate ?? 0) - 100 / 3) < 0.00001);
+  assert.equal(full.staff.find((row) => row.key === "adams")?.visitToPayingRate, 100);
+  const beforeVisit = buildSalesReport(confirmed, "master", "manager", true, { ...filters, to: "2026-11-09" });
+  assert.equal(beforeVisit.staff.find((row) => row.key === "adams")?.visitToPayingRate, null);
 });
 
 test("personal and company cohorts stay separate and staff cannot widen to master", () => {
