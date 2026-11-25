@@ -15,6 +15,7 @@ import { requireSupabase } from '@/lib/supabase.client';
 import { useAuthStore } from '@/stores/auth/auth-store';
 import { pdfBrandedHeader, pdfReportFooter, pdfSectionTitle } from '@/webnext/shared/lib/pdfReport';
 import { visitFollowThrough } from '@/webnext/features/site-visits/lib/visitFollowThrough';
+import { visitReviewQueue } from '@/webnext/features/site-visits/lib/visitReviewQueue';
 
 type Visit = {
   id:string; agent_key:string; agent_name:string; name:string; site:string|null;
@@ -221,7 +222,7 @@ export function SiteVisitReportsScreen(){
   const [intentSearch,setIntentSearch]=useState('');
   const [paymentFilter,setPaymentFilter]=useState<'all'|'later'|'none'|'unassessable'>('all');
   const [compare,setCompare]=useState(false);
-  const [pdfSections,setPdfSections]=useState({summary:true,trend:true,evidence:true,logistics:true,cohorts:false,register:true});
+  const [pdfSections,setPdfSections]=useState({summary:true,trend:true,evidence:true,actions:true,logistics:true,cohorts:false,register:true});
   const [pdfBusy,setPdfBusy]=useState(false);
   const [pdfError,setPdfError]=useState('');
   useEffect(()=>{
@@ -294,6 +295,10 @@ export function SiteVisitReportsScreen(){
   const priorFiltered=(priorReport.data?.visits??[]).filter((v)=>matches(v,priorReport.data));
   const cross=evidence(filtered,report.data);
   const followThrough=visitFollowThrough(filtered,report.data);
+  const reviewQueue=visitReviewQueue(filtered,today,{
+    invites:report.data?.invites??[],surveys:report.data?.surveys??[],
+    costs:report.data?.costs??[],costDays:report.data?.costDays??[],
+  });
   const priorCross=evidence(priorFiltered,priorReport.data);
   const logistics=logisticsFor(filtered,report.data?.forms??[]);
   const priorCounts=useMemo(()=>({records:priorFiltered.length,attended:priorFiltered.filter((v)=>outcome(v)==='attended').length,unconfirmed:priorFiltered.filter((v)=>outcome(v)==='pending').length,linked:priorFiltered.filter((v)=>!!v.lead_id).length}),[priorFiltered]);
@@ -363,7 +368,7 @@ export function SiteVisitReportsScreen(){
         ['Staff follow-up text recorded',counts.withFeedback],['Linked to staff pipeline',poolCounts.personal],['Linked to Company Leads',poolCounts.company],
         ['Unlinked to pipeline lead',poolCounts.unlinked],['Linked lead unavailable',poolCounts.unknown],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:9,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
-      if(compare||pdfSections.trend||pdfSections.evidence||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
+      if(compare||pdfSections.trend||pdfSections.evidence||pdfSections.actions||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
       if(compare&&priorPeriod){
         if(y>218){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Previous equal-length period',`${priorPeriod.from} to ${priorPeriod.to}`);
@@ -375,7 +380,7 @@ export function SiteVisitReportsScreen(){
           ['Survey responses',cross.responded,priorCross.responded,changeLabel(cross.responded,priorCross.responded)],
           ['Attended linked visits with later approved payment',cross.linkedAttendedPaid,priorCross.linkedAttendedPaid,changeLabel(cross.linkedAttendedPaid,priorCross.linkedAttendedPaid)],
         ].map((row)=>row.map(String)),theme:'grid',styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
-        if(pdfSections.trend||pdfSections.evidence||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
+        if(pdfSections.trend||pdfSections.evidence||pdfSections.actions||(manager&&pdfSections.logistics)||pdfSections.cohorts||pdfSections.register)y=nextY(doc,y);
       }
       }
       if(pdfSections.trend){
@@ -444,6 +449,18 @@ export function SiteVisitReportsScreen(){
         doc.text('NPS uses scored client responses only; no score is inferred from staff notes.',14,y);y+=5;
         doc.text('No visible later payment does not prove the client is unpaid.',14,y);y+=12;
       }
+      if(pdfSections.actions){
+        if(y>225){doc.addPage();y=20}
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Visits needing review',`${reviewQueue.length} past visits with unresolved records`);
+        if(reviewQueue.length){
+          autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Visit date','Staff / client','Site','Next review steps']],body:reviewQueue.map(({visit,actions})=>[
+            visit.visit_date,`${agentName(visit)}\n${visit.name}`,visit.site||'Not recorded',actions.join('; '),
+          ]),theme:'grid',styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},headStyles:{fillColor:[11,30,61]}});
+          y=nextY(doc,y);
+        }else{doc.setFontSize(9);doc.text('No past visits need review under these filters.',14,y);y+=12}
+        if(y>252){doc.addPage();y=20}
+        doc.setFontSize(8);doc.text('Review steps indicate missing records; they do not prove that a visit or payment did not occur.',14,y);y+=11;
+      }
       if(pdfSections.logistics&&manager){
         if(y>180){doc.addPage();y=20}
         y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Authorization and logistics','Shared day forms on dates represented by the filtered visits');
@@ -503,7 +520,7 @@ export function SiteVisitReportsScreen(){
       <label className="grid gap-1 text-sm">Payment follow-through<select className="h-9 min-w-44 max-w-64 rounded-md border bg-background px-3" value={paymentFilter} onChange={(e)=>setPaymentFilter(e.target.value as typeof paymentFilter)}><option value="all">All visits</option><option value="later">Later approved payment</option><option value="none">No visible later approved payment</option><option value="unassessable">Attendance or lead link missing</option></select></label>
       <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input type="checkbox" checked={compare} onChange={(e)=>setCompare(e.target.checked)}/>Compare previous equal-length period</label>
       <Button size="sm" variant="outline" onClick={()=>{setFrom(today.slice(0,7)+'-01');setTo(today);setStaffKey('');setSite('');setSource('');setStatus('all');setLinkFilter('all');setPoolFilter('all');setSurveyFilter('all');setIntentSearch('');setPaymentFilter('all');setCompare(false)}}>Reset filters</Button>
-      <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['evidence','Survey, payment and cost'],['logistics','Authorization and logistics'],['cohorts','Staff comparison'],['register','Visit register']] as const).filter(([key])=>manager||(key!=='cohorts'&&key!=='logistics')).map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
+      <fieldset className="flex w-full flex-wrap gap-3 text-sm"><legend className="mb-1 font-medium">PDF sections</legend>{([['summary','Summary and comparison'],['trend','Weekly trend'],['evidence','Survey, payment and cost'],['actions','Visits needing review'],['logistics','Authorization and logistics'],['cohorts','Staff comparison'],['register','Visit register']] as const).filter(([key])=>manager||(key!=='cohorts'&&key!=='logistics')).map(([key,label])=><label key={key} className="flex items-center gap-2"><input type="checkbox" checked={pdfSections[key]} onChange={(e)=>setPdfSections((current)=>({...current,[key]:e.target.checked}))}/>{label}</label>)}</fieldset>
       <Button onClick={download} disabled={!report.data||pdfBusy||(compare&&!priorReport.data)}><Download className="size-4"/>{pdfBusy?'Preparing…':'Download selected PDF sections'}</Button>
     </CardContent></Card>
     {!valid&&<p role="alert" className="text-destructive">Choose a valid date range.</p>}
@@ -548,6 +565,10 @@ export function SiteVisitReportsScreen(){
         <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead><tr className="border-b"><th className="py-2 pr-3">Cost category</th><th>Estimate</th><th>Actual entered</th><th>Actual on approved forms</th></tr></thead><tbody>{logistics.categories.map((row)=><tr key={row.label} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.label}</td><td>{ghs(row.estimated)}</td><td>{ghs(row.enteredActual)}</td><td>{ghs(row.approvedActual)}</td></tr>)}</tbody></table></div>
         <p className="mt-4 text-xs text-muted-foreground">Entered actuals are form entries, not proof of payment. These whole-day amounts are not attributed to an individual staff member or client. Older forms without a visit date cannot be matched here; missing actuals are not evidence of zero spend.</p>
       </CardContent></Card>}
+      <Card><CardHeader><CardTitle>Visits needing review</CardTitle></CardHeader><CardContent>
+        <p className="mb-3 text-sm text-muted-foreground">Past visits with attendance, lead links, client feedback or reviewed cost evidence to check. Open a visit to review its record.</p>
+        <div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead><tr className="border-b"><th className="py-2 pr-3">Visit date</th><th className="py-2 pr-3">Client</th><th className="py-2 pr-3">Site</th><th className="py-2 pr-3">Review steps</th></tr></thead><tbody>{reviewQueue.map(({visit,actions})=><tr key={visit.id} className="border-b last:border-0"><td className="py-2 pr-3">{visit.visit_date}</td><td className="py-2 pr-3"><Link className="font-medium text-primary hover:underline" href={`/dashboard/site-visits/${visit.id}`}>{visit.name}</Link><br/><span className="text-muted-foreground">{agentName(visit)}</span></td><td className="py-2 pr-3">{visit.site||'Not recorded'}</td><td className="py-2 pr-3">{actions.join(' · ')}</td></tr>)}</tbody></table>{!reviewQueue.length&&<p className="py-3 text-sm text-muted-foreground">No past visits need review under these filters.</p>}</div>
+      </CardContent></Card>
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
