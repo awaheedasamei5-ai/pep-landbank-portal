@@ -62,10 +62,10 @@ export function useEngagementDashboard(leads: Lead[], activity: ActivityLogEntry
     const callsInPeriod = activity.filter((e) => inRange(e.createdAt, range));
     const callDates = callsInPeriod.map((e) => e.createdAt);
     const callDays = activeDaysCount(callDates);
-    const visitsInPeriod = allVisits.filter((v) => inRange(v.visitDate, range));
+    const visitsInPeriod = allVisits.filter((v) => v.attended === true && inRange(v.visitDate, range));
     const cashInPeriod = allPayments.filter((p) => inRange(p.date, range)).reduce((s, p) => s + p.amount, 0);
 
-    const visitedLeadIds = new Set(allVisits.map((v) => v.leadId as string));
+    const visitedLeadIds = new Set(allVisits.filter((v) => v.attended === true).map((v) => v.leadId as string));
     const purchased = leads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal);
     const boughtCount = purchased.length;
     const notBoughtCount = leads.length - boughtCount;
@@ -92,8 +92,8 @@ export function useEngagementDashboard(leads: Lead[], activity: ActivityLogEntry
     const drilldown: Record<EngagementDrillDownKey, EngagementDrillDownEntry> = {
       callsLogged: { kind: "activity", label: "Calls logged", rows: callsInPeriod },
       avgCallsPerActiveDay: { kind: "activity", label: "Calls logged", rows: callsInPeriod },
-      siteVisitsInPeriod: { kind: "visits", label: "Site visits in period", rows: visitsInPeriod },
-      clientsEverVisited: { kind: "leads", label: "Clients ever visited", rows: visitedLeads },
+      siteVisitsInPeriod: { kind: "visits", label: "Confirmed visits in period", rows: visitsInPeriod },
+      clientsEverVisited: { kind: "leads", label: "Clients with confirmed visit", rows: visitedLeads },
       boughtClients: { kind: "leads", label: "Bought clients", rows: purchased },
       notYetBought: { kind: "leads", label: "Not yet bought", rows: notBoughtLeads },
       cashInPeriod: { kind: "payments", label: "Cash in — period", rows: cashPaymentsInPeriod },
