@@ -134,7 +134,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
     );
     return compareSalesPeriods(report, previous);
   }, [report, dataQuery.data, profile, scope, isManager, filters, names]);
-  const activePdfSections = pdfSections.filter((section) => section !== "staff" || isManager);
+  const activePdfSections = pdfSections;
   const update = (field: keyof SalesReportFilters, value: string) =>
     setFilters((current) => ({ ...current, [field]: value }));
   const choices = useMemo(() => {
@@ -212,7 +212,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
               Choose what the downloaded report includes. Its date range and filters always match the screen.
             </p>
             <FieldGroup className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {SALES_PDF_SECTIONS.filter((section) => section.key !== "staff" || isManager).map((section) => (
+              {SALES_PDF_SECTIONS.map((section) => (
                 <Field key={section.key} orientation="horizontal">
                   <Checkbox
                     id={`sales-pdf-${section.key}`}
