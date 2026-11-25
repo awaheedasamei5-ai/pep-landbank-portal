@@ -281,7 +281,7 @@ export async function buildSalesReportPdf(
         money(row.pipelineValue),
         money(row.approvedCash),
         money(row.outstanding),
-        money(row.attributedVisitCost),
+        row.knownCostRecords ? money(row.attributedVisitCost) : "N/A",
         percent(row.visitToPayingRate),
         row.knownCostPerPayingClient === null ? "N/A" : money(row.knownCostPerPayingClient),
       ]),
@@ -294,13 +294,13 @@ export async function buildSalesReportPdf(
       y = newSection(doc, "Personal performance", "No client records match this report scope");
       y = table(doc, y, ["Result"], [["No staff activity can be attributed to the selected clients"]]);
     }
-    for (const row of report.staff) {
+    for (const [index, row] of report.staff.entries()) {
       const isCompanyPool = row.key === "company";
-      y = newSection(
-        doc,
-        `${isCompanyPool ? "Company pool" : "Staff"} | ${safe(row.name)}`,
-        `${report.filters.from} to ${report.filters.to} | Dated activity and current deal snapshot`,
-      );
+      const heading = `${isCompanyPool ? "Company pool" : "Staff"} | ${safe(row.name)}`;
+      const subheading = `${report.filters.from} to ${report.filters.to} | Dated activity and current deal snapshot`;
+      y = index === 0 && report.canCompareStaff
+        ? continuingSection(doc, y, heading, subheading, 115)
+        : newSection(doc, heading, subheading);
       y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
         { label: "Clients", value: row.clients, accent: PDF_LEAF },
         { label: "New leads", value: row.newLeads, accent: PDF_GOLD },
@@ -323,7 +323,7 @@ export async function buildSalesReportPdf(
         ["Pipeline value", money(row.pipelineValue), "Current deal value; not a dated sale"],
         ["Approved receipts", money(row.approvedCash), "Approved client payments dated in period"],
         ["Outstanding", money(row.outstanding), "Current client balances; not a prior-period figure"],
-        ["Known visit cost", money(row.attributedVisitCost), "Recorded client cost attribution; incomplete coverage possible"],
+        ["Known visit cost", row.knownCostRecords ? money(row.attributedVisitCost) : "N/A", "Recorded client cost attribution; incomplete coverage possible"],
         ["Known cost per payer", row.knownCostPerPayingClient === null ? "N/A" : money(row.knownCostPerPayingClient), "Known visit cost divided by paying clients"],
         ["Needs contact", row.needingContact, "Open clients without contact for 14+ days"],
       ], { 0: 45, 1: 42 });
