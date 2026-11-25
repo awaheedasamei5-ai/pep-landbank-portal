@@ -207,6 +207,7 @@ test("staff visit conversion uses confirmed attendance within the selected dates
   assert.equal(full.staff.find((row) => row.key === "adams")?.visitToPayingRate, 100);
   const beforeVisit = buildSalesReport(confirmed, "master", "manager", true, { ...filters, to: "2026-11-09" });
   assert.equal(beforeVisit.staff.find((row) => row.key === "adams")?.visitToPayingRate, null);
+  assert.equal(beforeVisit.staff.find((row) => row.key === "elias")?.knownCostPerPayingClient, null);
 });
 
 test("personal and company cohorts stay separate and staff cannot widen to master", () => {
