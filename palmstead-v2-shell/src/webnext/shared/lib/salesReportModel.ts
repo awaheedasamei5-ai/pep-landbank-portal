@@ -405,7 +405,9 @@ export function buildSalesReport(
       const ownVisits = visits.filter((visit) => !!visit.leadId && ownerByLead.get(visit.leadId) === key);
       const ownApproved = approvedPayments.filter((payment) => ownerByLead.get(payment.leadId) === key);
       const ownReached = ownCalls.filter(isReached).length;
-      const visitedIds = new Set(ownVisits.filter((visit) => visit.attended === true).map((visit) => visit.leadId));
+      const visitedIds = new Set(
+        ownVisits.filter((visit) => visit.attended === true && within(visit.visitDate, filters)).map((visit) => visit.leadId),
+      );
       const payingClients = ownClients.filter((client) => client.paidToDate > 0);
       const attributedVisitCost = ownClients.reduce((sum, client) => sum + client.attributedVisitCost, 0);
       return {
