@@ -28,7 +28,7 @@ export function useEngagementTrends(leads: Lead[], activity: ActivityLogEntry[],
 
   const siteVisitsInPeriod = useMemo(() => {
     const range = periodToRange(filter);
-    return allVisits.filter((v) => inRange(v.visitDate, range)).length;
+    return allVisits.filter((v) => v.attended === true && inRange(v.visitDate, range)).length;
   }, [allVisits, filter]);
 
   return { filter, setFilter, chartData, cohort, siteVisitsInPeriod, activityDates: activity.map((e) => e.createdAt) };
