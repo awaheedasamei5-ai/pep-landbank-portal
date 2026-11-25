@@ -47,8 +47,8 @@ export function EngagementDashboardPanel({
   const row1: { label: string; value: string; key: EngagementDrillDownKey }[] = [
     { label: "Calls logged", value: String(metrics.callsLogged), key: "callsLogged" },
     { label: "Avg calls / active day", value: metrics.avgCallsPerActiveDay.toFixed(1), key: "avgCallsPerActiveDay" },
-    { label: "Site visits in period", value: String(metrics.siteVisitsInPeriod), key: "siteVisitsInPeriod" },
-    { label: "Clients ever visited", value: String(metrics.clientsEverVisited), key: "clientsEverVisited" },
+    { label: "Confirmed visits in period", value: String(metrics.siteVisitsInPeriod), key: "siteVisitsInPeriod" },
+    { label: "Clients with confirmed visit", value: String(metrics.clientsEverVisited), key: "clientsEverVisited" },
     { label: "Bought clients", value: String(metrics.boughtClients), key: "boughtClients" },
     { label: "Not yet bought", value: String(metrics.notYetBought), key: "notYetBought" },
   ];
