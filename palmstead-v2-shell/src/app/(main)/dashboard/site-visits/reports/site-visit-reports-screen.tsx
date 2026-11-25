@@ -415,7 +415,7 @@ export function SiteVisitReportsScreen(){
           ['Those followed by an approved payment',cross.linkedAttendedPaid],
           ['Later-payment rate among attended linked visits',percent(cross.linkedAttendedPaid,cross.linkedAttended)],
           ['Approved cash after attended linked visits (unique payments)','GHS '+cross.approvedCash.toLocaleString('en-GH')],
-          ['Reviewed per-client visit cost','GHS '+cross.attributedCost.toLocaleString('en-GH')],
+          ['Reviewed per-client visit cost',cross.linkedAttended>cross.linkedAttendedWithoutCost?ghs(cross.attributedCost):'Not recorded'],
           ['Attended linked visits without cost attribution',cross.linkedAttendedWithoutCost],
         ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:8,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
         y=nextY(doc,y);
@@ -528,7 +528,7 @@ export function SiteVisitReportsScreen(){
           ['Attended and lead-linked',cross.linkedAttended],['With later approved payment',cross.linkedAttendedPaid],
           ['Later-payment rate',percent(cross.linkedAttendedPaid,cross.linkedAttended)],
           ['Approved cash after visit','GHS '+cross.approvedCash.toLocaleString('en-GH')],
-          ['Reviewed client visit cost','GHS '+cross.attributedCost.toLocaleString('en-GH')],
+          ['Reviewed client visit cost',cross.linkedAttended>cross.linkedAttendedWithoutCost?ghs(cross.attributedCost):'Not recorded'],
           ['Attended linked visits missing cost',cross.linkedAttendedWithoutCost],
         ] as const).map(([label,value])=><div key={label} className="min-w-0 rounded-lg border bg-background p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 break-words text-xl font-semibold">{value}</p></div>)}</div>
         {!!cross.intentCounts.length&&<div className="mt-5"><h3 className="text-sm font-semibold">Purchase intent from client answers</h3><div className="mt-2 grid gap-2">{cross.intentCounts.map(([label,count])=><div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="min-w-0 break-words">{label}</span><strong>{count}</strong></div>)}</div></div>}
