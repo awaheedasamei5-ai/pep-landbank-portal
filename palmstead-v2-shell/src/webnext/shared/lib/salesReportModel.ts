@@ -88,6 +88,7 @@ export interface SalesStaffRow {
   pipelineValue: number;
   outstanding: number;
   attributedVisitCost: number;
+  knownCostRecords: number;
   visitToPayingRate: number | null;
   knownCostPerPayingClient: number | null;
 }
@@ -410,6 +411,7 @@ export function buildSalesReport(
       );
       const payingClients = ownClients.filter((client) => client.paidToDate > 0);
       const attributedVisitCost = ownClients.reduce((sum, client) => sum + client.attributedVisitCost, 0);
+      const knownCostRecords = ownClients.reduce((sum, client) => sum + client.costs.length, 0);
       return {
         key,
         name: names[key] ?? (key === "company" ? "Company pool" : key),
@@ -430,11 +432,12 @@ export function buildSalesReport(
         pipelineValue: ownClients.reduce((sum, client) => sum + client.lead.grandTotal, 0),
         outstanding: ownClients.reduce((sum, client) => sum + client.outstanding, 0),
         attributedVisitCost,
+        knownCostRecords,
         visitToPayingRate: rate(
           payingClients.filter((client) => visitedIds.has(client.lead.id)).length,
           visitedIds.size,
         ),
-        knownCostPerPayingClient: payingClients.length ? attributedVisitCost / payingClients.length : null,
+        knownCostPerPayingClient: payingClients.length && knownCostRecords ? attributedVisitCost / payingClients.length : null,
       };
     })
     .sort((a, b) => b.approvedCash - a.approvedCash || b.calls - a.calls || a.name.localeCompare(b.name));
