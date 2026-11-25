@@ -50,7 +50,9 @@ export interface VisitCohort {
 
 export function computeVisitCohort(leads: Lead[], visits: SiteVisit[]): VisitCohort {
   const leadIds = new Set(leads.map((l) => l.id));
-  const visitedLeadIds = new Set(visits.filter((v) => v.leadId && leadIds.has(v.leadId)).map((v) => v.leadId as string));
+  const visitedLeadIds = new Set(
+    visits.filter((v) => v.attended === true && v.leadId && leadIds.has(v.leadId)).map((v) => v.leadId as string),
+  );
   const visitedLeads = leads.filter((l) => visitedLeadIds.has(l.id));
   const boughtCount = visitedLeads.filter((l) => l.grandTotal > 0 && l.amtPaid >= l.grandTotal).length;
   return { visitedCount: visitedLeadIds.size, boughtCount, notBoughtCount: visitedLeadIds.size - boughtCount };
