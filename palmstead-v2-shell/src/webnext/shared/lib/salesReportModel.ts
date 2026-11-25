@@ -357,7 +357,11 @@ export function buildSalesReport(
     return Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 86_400_000)) : null;
   };
   const reached = calls.filter(isReached).length;
-  const visitedLeadIds = new Set(visits.map((visit) => visit.leadId));
+  // A booking, cancellation or no-show is not evidence that a client
+  // visited. Count only confirmed attendance within the selected dates.
+  const visitedLeadIds = new Set(
+    visits.filter((visit) => visit.attended === true && within(visit.visitDate, filters)).map((visit) => visit.leadId),
+  );
   const newLeadsVisited = newLeads.filter((lead) => visitedLeadIds.has(lead.id)).length;
   const newLeadsPaid = newLeads.filter((lead) => lead.grandTotal > 0 && lead.amtPaid >= lead.grandTotal).length;
   const ownerByLead = new Map(leads.map((lead) => [lead.id, lead.agent]));

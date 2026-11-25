@@ -362,7 +362,7 @@ export function SalesReportScreen({ scope }: { scope: SalesReportScope }) {
                 report.requestedVisits.length.toLocaleString(),
                 `${report.scheduledVisits.length} visits scheduled in dates`,
               ],
-              ["Lead to visit", pct(report.newLeadToVisitRate), "Current visit evidence for new lead cohort"],
+              ["Lead to attended visit", pct(report.newLeadToVisitRate), "Confirmed attendance in selected dates for new lead cohort"],
               ["Lead paid in full", pct(report.newLeadToPaidRate), "Current status of new lead cohort"],
               [
                 "Approved receipts",

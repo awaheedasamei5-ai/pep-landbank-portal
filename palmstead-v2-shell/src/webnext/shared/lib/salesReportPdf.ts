@@ -152,7 +152,7 @@ export async function buildSalesReportPdf(
         value: money(report.approvedPayments.reduce((sum, payment) => sum + payment.amount, 0)),
         accent: PDF_LEAF,
       },
-      { label: "Lead to visit", value: percent(report.newLeadToVisitRate), accent: PDF_GOLD },
+      { label: "Lead to attended visit", value: percent(report.newLeadToVisitRate), accent: PDF_GOLD },
     ]);
     y += 3;
     y = pdfSectionTitle(doc, y, doc.internal.pageSize.getWidth(), "Value and activity scorecard");
@@ -291,7 +291,7 @@ export async function buildSalesReportPdf(
     bodyStarted = true;
     y = continuingSection(doc, y, "Conversion and mix");
     y = pdfAccentStatRow(doc, y, doc.internal.pageSize.getWidth(), [
-      { label: "Lead to visit", value: percent(report.newLeadToVisitRate) },
+      { label: "Lead to attended visit", value: percent(report.newLeadToVisitRate) },
       { label: "Lead to paid in full", value: percent(report.newLeadToPaidRate) },
       { label: "Scheduled visits", value: report.scheduledVisits.length },
       { label: "Other recorded events", value: report.activities.length - report.calls.length },
