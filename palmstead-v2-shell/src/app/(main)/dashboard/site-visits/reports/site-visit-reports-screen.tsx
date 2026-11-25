@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useAuthStore } from '@/stores/auth/auth-store';
 import { pdfBrandedHeader, pdfReportFooter, pdfSectionTitle } from '@/webnext/shared/lib/pdfReport';
+import { visitFollowThrough } from '@/webnext/features/site-visits/lib/visitFollowThrough';
 
 type Visit = {
   id:string; agent_key:string; agent_name:string; name:string; site:string|null;
@@ -200,34 +201,6 @@ function evidence(visits:Visit[],data:VisitData|undefined){
   const intentCounts=[...surveyRows.reduce((items,row)=>{const label=row.purchase_intent?.trim()||'Not answered';items.set(label,(items.get(label)??0)+1);return items;},new Map<string,number>()).entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   const nps=scores.length?Math.round((scores.filter((v)=>v>=9).length-scores.filter((v)=>v<=6).length)*100/scores.length):null;
   return {invited,responded,surveyResponses:surveyRows.length,ratings:ratings.length,averageRating:ratings.length?ratings.reduce((sum,value)=>sum+value,0)/ratings.length:null,nps,npsResponses:scores.length,intentCounts,linkedAttended,linkedAttendedPaid,linkedAttendedWithoutCost,approvedCash:[...paidPayments.values()].reduce((sum,row)=>sum+Number(row.amount||0),0),attributedCost:[...attributedCosts.values()].reduce((sum,row)=>sum+Number(row.amount||0),0)};
-}
-
-// Keep the visit-level evidence separate from the deduplicated totals above.
-// A lead may visit twice, so later payments or same-day cost attributions
-// can appear on both visit rows; these are evidence, not additive totals.
-function visitFollowThrough(visits:Visit[],data:VisitData|undefined){
-  const formDay=new Map((data?.costDays??[]).map((form)=>[form.id,form.visit_date]));
-  const surveysByInvite=new Map((data?.surveys??[]).map((survey)=>[survey.invite_id,survey]));
-  const paymentsByLead=new Map<string,ApprovedPayment[]>();
-  for(const payment of data?.payments??[])paymentsByLead.set(payment.lead_id,[...(paymentsByLead.get(payment.lead_id)??[]),payment]);
-  const costsByLead=new Map<string,Cost[]>();
-  for(const cost of data?.costs??[])costsByLead.set(cost.lead_id,[...(costsByLead.get(cost.lead_id)??[]),cost]);
-  const invitesByVisit=new Map<string,Invite[]>();
-  for(const invite of data?.invites??[])invitesByVisit.set(invite.site_visit_id,[...(invitesByVisit.get(invite.site_visit_id)??[]),invite]);
-  return visits.filter((visit)=>outcome(visit)==='attended'&&!!visit.lead_id).map((visit)=>{
-    const payments=(paymentsByLead.get(visit.lead_id!)??[]).filter((payment)=>payment.payment_date>=visit.visit_date);
-    const costs=(costsByLead.get(visit.lead_id!)??[]).filter((cost)=>formDay.get(cost.source_id)===visit.visit_date);
-    const surveys=(invitesByVisit.get(visit.id)??[])
-      .map((invite)=>surveysByInvite.get(invite.id)).filter((survey):survey is Survey=>!!survey)
-      .sort((a,b)=>b.created_at.localeCompare(a.created_at));
-    return {
-      visit,
-      laterReceipts:payments.length,
-      laterCash:payments.reduce((sum,payment)=>sum+Number(payment.amount||0),0),
-      matchedCost:costs.length?costs.reduce((sum,cost)=>sum+Number(cost.amount||0),0):null,
-      purchaseIntent:surveys[0]?.purchase_intent?.trim()||null,
-    };
-  });
 }
 
 export function SiteVisitReportsScreen(){
