@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 
@@ -36,6 +37,7 @@ function outcome(visit: SiteVisit) {
 
 export function SiteVisitDetailScreen() {
   const id = String(useParams<{ id: string }>().id ?? '');
+  const navigate = useNavigate();
   const profile = useSessionStore((s) => s.profile);
   const demoMode = useSessionStore((s) => s.demoMode);
   const query = useQuery({
@@ -61,6 +63,30 @@ export function SiteVisitDetailScreen() {
     },
   });
   const leadRoute = visit?.leadId ? (demoMode ? `/dashboard/pipeline/${visit.leadId}` : leadDestination(visit.leadId, leadOwner.data)) : null;
+  const companyCreateAccess = useQuery({
+    queryKey: ['siteVisitCompanyLeadCreate', profile?.key],
+    enabled: !!profile?.key && !demoMode,
+    queryFn: async () => {
+      const db = requireSupabase();
+      const [view, create] = await Promise.all([
+        db.rpc('has_permission', { p_key: 'company_leads.view' }),
+        db.rpc('has_permission', { p_key: 'company_leads.create' }),
+      ]);
+      if (view.error || create.error) throw view.error ?? create.error;
+      return view.data === true && create.data === true;
+    },
+  });
+  const canCreateCompanyLead = demoMode || profile?.role === 'manager' || companyCreateAccess.data === true;
+  const canCreateLeadFromVisit = !!visit && !visit.deletedAt && (profile?.role === 'manager' || visit.agentKey === profile?.key);
+  const addToPipeline = (company: boolean) => {
+    if (!visit || !canCreateLeadFromVisit || (company && !canCreateCompanyLead)) return;
+    navigate('/dashboard/pipeline/new', { state: {
+      name: visit.name, contact: visit.contact,
+      returnTo: `/dashboard/site-visits/${visit.id}`,
+      siteVisitIdToLink: visit.id,
+      ...(company ? { agentKeyOverride: 'company' } : {}),
+    } });
+  };
   const formPdf = useDownloadSiteVisitFormPdf();
   const saveAttendance = useSetSiteVisitAttendance();
   const [attendanceChoice, setAttendanceChoice] = useState<boolean | null>(null);
@@ -136,7 +162,7 @@ export function SiteVisitDetailScreen() {
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Connected records</CardTitle></CardHeader><CardContent className="space-y-4 text-sm">
           <div><p className="font-medium">Visit report</p><Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/site-visits/reports?from=${visit.visitDate}&to=${visit.visitDate}`}><ExternalLink className="size-4" /> View this visit date in reports</Link></Button><p className="mt-2 text-muted-foreground">The report includes every visit scheduled for this date and uses recorded attendance outcomes.</p></div>
-          <div><p className="font-medium">Pipeline lead</p>{leadRoute ? <Button asChild variant="outline" className="mt-2"><Link href={leadRoute}><ExternalLink data-icon="inline-start" /> Open {leadOwner.data === 'company' ? 'Company Lead' : 'pipeline lead'}</Link></Button> : <p className="mt-1 text-muted-foreground">{visit.leadId ? leadOwner.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account.' : 'No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.'}</p>}</div>
+          <div><p className="font-medium">Pipeline lead</p>{leadRoute ? <Button asChild variant="outline" className="mt-2"><Link href={leadRoute}><ExternalLink data-icon="inline-start" /> Open {leadOwner.data === 'company' ? 'Company Lead' : 'pipeline lead'}</Link></Button> : <><p className="mt-1 text-muted-foreground">{visit.leadId ? leadOwner.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account.' : 'No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.'}</p>{!visit.leadId && canCreateLeadFromVisit && <div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => addToPipeline(false)}>Add to my pipeline</Button>{canCreateCompanyLead && <Button type="button" variant="outline" onClick={() => addToPipeline(true)}>Add to Company Leads</Button>}</div>}</>}</div>
           <div><p className="font-medium">Client feedback and site manager review</p><div className="mt-2 flex flex-wrap gap-2"><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=feedback&date=${visit.visitDate}&visit=${visit.id}`}><ExternalLink className="size-4" /> Open this client’s feedback</Link></Button><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=reports&date=${visit.visitDate}`}><ExternalLink className="size-4" /> Open this day’s report</Link></Button></div><p className="mt-2 text-muted-foreground">Review the separate client response and the site manager day report there.</p></div>
           <div><p className="font-medium">Visit authorization and cost</p><Button asChild variant="outline" className="mt-2"><Link href="/dashboard/site-visit-authorization"><ExternalLink className="size-4" /> Open authorization</Link></Button><p className="mt-2 text-muted-foreground">Cost is recorded by the authorization workflow; this view does not infer an amount from the visit request.</p></div>
         </CardContent></Card>
