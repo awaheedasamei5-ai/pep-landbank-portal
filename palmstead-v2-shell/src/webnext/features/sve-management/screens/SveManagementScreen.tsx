@@ -231,9 +231,17 @@ export function SveManagementScreen() {
                       <a className={styles.copyBtn} href={`/dashboard/site-visits/${siteVisit.id}`}>Open visit record</a>
                     )}
                     {invite && !submission && (
-                      <button type="button" className={styles.copyBtn} onClick={() => copyLink(invite.token, siteVisit.id)}>
-                        {copiedId === siteVisit.id ? 'Copied!' : 'Copy link'}
-                      </button>
+                      <>
+                        {eligibility.allowed && (
+                          <button type="button" className={styles.sendBtn} disabled={sendInvite.isPending}
+                            onClick={() => sendInviteFor(siteVisit.id)}>
+                            {sendInvite.isPending ? 'Sending…' : 'Resend invite SMS'}
+                          </button>
+                        )}
+                        <button type="button" className={styles.copyBtn} onClick={() => copyLink(invite.token, siteVisit.id)}>
+                          {copiedId === siteVisit.id ? 'Copied!' : 'Copy link'}
+                        </button>
+                      </>
                     )}
                     {submission && (
                       <button type="button" className={styles.viewBtn} onClick={() => setExpanded(isOpen ? null : siteVisit.id)}>
@@ -877,4 +885,3 @@ function DayReportEditor({ visitDate, onClose }: { visitDate: string; onClose: (
     </div>
   );
 }
-
