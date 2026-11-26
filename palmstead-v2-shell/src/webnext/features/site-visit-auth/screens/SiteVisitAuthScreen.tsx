@@ -9,6 +9,7 @@ import { useCanViewSiteVisitAuth, useFinalizeWeeklyVisitForm, useSaveWeeklyVisit
 import { useCancelSiteVisit, useRescheduleSiteVisit } from '../../site-visits/hooks/useSiteVisits';
 import { useDownloadSiteVisitAuthPdf } from '../hooks/useSiteVisitAuthPdf';
 import { useSessionStore } from '../../../auth/useSessionStore';
+import { useSetSiteVisitAttendance } from '../../sve-management/hooks/useSveManagement';
 import { friendlyError } from '../../../shared/lib/friendlyError';
 import styles from './SiteVisitAuthScreen.module.css';
 
@@ -40,7 +41,7 @@ export function SiteVisitAuthScreen() {
     return (
       <div className={styles.wrap}>
         <h1 className={styles.title}>Site Visit Authorization</h1>
-        <p className={styles.sub}>Restricted to Management, Elias, Emmanuel and Elizabeth.</p>
+        <p className={styles.sub}>Sign in to view the company site visit schedule.</p>
       </div>
     );
   }
@@ -259,13 +260,18 @@ type VisitCardMode = 'none' | 'menu' | 'cancel' | 'reschedule';
 // Rescheduled). Both close over the same visit; reschedule additionally
 // surfaces the previous date so a reviewer can see what changed.
 function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean }) {
+  const profile = useSessionStore((s) => s.profile);
   const cancelVisit = useCancelSiteVisit();
   const rescheduleVisit = useRescheduleSiteVisit();
+  const setAttendance = useSetSiteVisitAttendance();
   const [mode, setMode] = useState<VisitCardMode>('none');
   const [reason, setReason] = useState('');
   const [newDate, setNewDate] = useState(visit.visitDate);
   const [newTime, setNewTime] = useState(visit.visitTime ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const canMarkAttendance = profile?.role === 'manager' || profile?.key === visit.agentKey;
+  const visitHasHappened = visit.visitDate <= new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Accra' });
 
   function reset() {
     setMode('none');
@@ -295,8 +301,11 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
       return;
     }
     try {
-      await rescheduleVisit.mutateAsync({ id: visit.id, newDate, newTime: newTime.trim() || null });
+      const result = await rescheduleVisit.mutateAsync({ id: visit.id, newDate, newTime: newTime.trim() || null });
       reset();
+      setNotice(result.clientSmsSent
+        ? 'Visit moved. The client reschedule SMS was accepted by the provider.'
+        : 'Visit moved. The client SMS was not accepted; contact the client directly.');
     } catch (e) {
       setError(friendlyError(e, 'Failed to reschedule this visit'));
     }
@@ -320,6 +329,28 @@ function VisitCard({ visit, canCancel }: { visit: SiteVisit; canCancel: boolean 
       {visit.transport && <div className={styles.visitField}>Transport: {visit.transport}</div>}
       {visit.feedbackAfter && <div className={styles.visitField}>Feedback: {visit.feedbackAfter}</div>}
       <div className={styles.visitField}>Staff: {visit.agentName}</div>
+      <div className={styles.visitField}>Attendance: {visit.attended === true ? 'Attended' : visit.attended === false ? 'Did not attend' : 'Unconfirmed'}</div>
+      {!visit.deletedAt && visitHasHappened && canMarkAttendance && (
+        <div className={styles.confirmRow} role="group" aria-label={`Attendance for ${visit.name}`}>
+          <button type="button" className={styles.finalizeBtn} aria-pressed={visit.attended === true}
+            disabled={setAttendance.isPending}
+            onClick={() => { setError(null); void setAttendance.mutateAsync({ siteVisitId: visit.id, attended: true }).catch((e) => setError(friendlyError(e, 'Could not mark attendance'))); }}>
+            Attended
+          </button>
+          <button type="button" className={styles.cancelBtn} aria-pressed={visit.attended === false}
+            disabled={setAttendance.isPending}
+            onClick={() => { setError(null); void setAttendance.mutateAsync({ siteVisitId: visit.id, attended: false }).catch((e) => setError(friendlyError(e, 'Could not mark attendance'))); }}>
+            Did not attend
+          </button>
+        </div>
+      )}
+      {error && mode === 'none' && <p role="alert" className={styles.errorMsg}>{error}</p>}
+      {visit.attended === true && !visit.deletedAt && (
+        <a className={styles.fieldHint} href={`/dashboard/site-visits/experience?tab=feedback&date=${visit.visitDate}&visit=${visit.id}`}>
+          Open Experience to send the client feedback invite →
+        </a>
+      )}
+      {notice && <p role="status" className={styles.fieldHint}>{notice}</p>}
       {visit.status === 'Rescheduled' && visit.previousVisitDate && (
         <span className={styles.rescheduleTag}>Rescheduled from {visit.previousVisitDate}</span>
       )}
