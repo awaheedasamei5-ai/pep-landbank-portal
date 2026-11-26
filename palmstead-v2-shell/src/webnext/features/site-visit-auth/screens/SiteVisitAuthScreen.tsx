@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Calendar, Download, X } from 'lucide-react';
 import { ghs } from '../../../shared/lib/format';
 import type { SiteVisit, WeeklyVisitForm } from '../../../types/domain';
@@ -29,6 +29,18 @@ export function SiteVisitAuthScreen() {
   const profile = useSessionStore((s) => s.profile);
   const [weekStart, setWeekStart] = useState(currentWeekStartIso());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  function jumpToDate(value: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value + 'T00:00:00Z'))) return;
+    const date = new Date(value + 'T00:00:00Z');
+    if (date.toISOString().slice(0, 10) !== value) return;
+    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+    setWeekStart(date.toISOString().slice(0, 10));
+    setSelectedDay(value);
+  }
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('date');
+    if (requested) jumpToDate(requested);
+  }, []);
 
   const days = allowedDayIsos(weekStart);
   const { data: weekVisits } = useWeekSiteVisits(weekStart);
@@ -87,6 +99,11 @@ export function SiteVisitAuthScreen() {
             );
           })}
         </div>
+        <label className={styles.fieldHint}>
+          Jump to booking date
+          <input className={styles.input} type="date" value={activeDay}
+            onChange={(event) => jumpToDate(event.target.value)} />
+        </label>
       </div>
 
       {formLoading && <p className={styles.emptyMsg}>Loading…</p>}
