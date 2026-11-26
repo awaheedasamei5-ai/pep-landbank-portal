@@ -41,6 +41,9 @@ export function TeamSettings() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState("");
+  const [resetCooldowns, setResetCooldowns] = useState<Record<string, number>>({});
+  const [linkCopied, setLinkCopied] = useState(false);
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
@@ -103,7 +106,7 @@ export function TeamSettings() {
     else {
       setName("");
       setEmail("");
-      setMessage("Staff invitation saved. The invited person can create an account using this email.");
+      setMessage("Staff email approved for registration. Share the registration link below; this action does not email the person.");
       await load();
     }
     setBusy(false);
@@ -116,6 +119,23 @@ export function TeamSettings() {
     setMessage(error ? "Invitation could not be removed." : "Invitation removed.");
     if (!error) await load();
     setBusy(false);
+  }
+
+  async function sendRecovery(person: Staff) {
+    if (!person.email || resetBusy || Date.now() < (resetCooldowns[person.id] ?? 0)) return;
+    setResetBusy(person.id);
+    try {
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(person.email, {
+        redirectTo: "https://palmstead-v2-shell.vercel.app/auth/v1/reset-password",
+      });
+      if (error) throw error;
+      setMessage(`Reset request accepted for ${person.name}. The staff member must use the link in their own email; Management cannot see their password.`);
+      setResetCooldowns((current) => ({ ...current, [person.id]: Date.now() + 60_000 }));
+    } catch {
+      setMessage("The reset request was rejected. Check the account email or try again later.");
+    } finally {
+      setResetBusy("");
+    }
   }
 
   async function reviewWork(profileId: string, approve: boolean) {
@@ -177,11 +197,16 @@ export function TeamSettings() {
                         {person.email ?? "No email"}
                       </span>
                     </span>
-                    <span className="flex flex-wrap gap-1">
+                    <span className="flex flex-wrap items-center gap-1">
                       <Badge variant="secondary">{person.role}</Badge>
                       <Badge variant={person.active ? "secondary" : "outline"}>
                         {person.active ? "Active" : "Inactive"}
                       </Badge>
+                      {person.email && <Button type="button" size="sm" variant="outline"
+                        disabled={!!resetBusy || Date.now() < (resetCooldowns[person.id] ?? 0)}
+                        onClick={() => void sendRecovery(person)}>
+                        {resetBusy === person.id ? "Requesting…" : "Send reset link"}
+                      </Button>}
                     </span>
                   </div>
                 ))}
@@ -225,7 +250,7 @@ export function TeamSettings() {
             <Card>
               <CardHeader>
                 <CardTitle>Invite staff</CardTitle>
-                <CardDescription>Only invited emails can create a Palmstead account.</CardDescription>
+                <CardDescription>Approve a staff email, then share the registration link. Only approved emails can create an account.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={invite} className="flex flex-col gap-4">
@@ -255,6 +280,16 @@ export function TeamSettings() {
                     {busy ? "Saving…" : "Save invitation"}
                   </Button>
                 </form>
+                <div className="mt-4 flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm">
+                  <span className="font-medium">Staff registration link</span>
+                  <span className="break-all text-muted-foreground">https://palmstead-v2-shell.vercel.app/auth/v1/register</span>
+                  <Button type="button" size="sm" variant="outline" className="w-fit"
+                    onClick={() => void navigator.clipboard.writeText("https://palmstead-v2-shell.vercel.app/auth/v1/register")
+                      .then(() => setLinkCopied(true))
+                      .catch(() => setMessage("Copy the registration link shown above."))}>
+                    {linkCopied ? "Copied" : "Copy link"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
             <Card>

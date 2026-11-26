@@ -9,6 +9,14 @@ import { createClient } from "@supabase/supabase-js";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Capture the recovery marker before createClient processes and may clean the
+// redirect URL. The reset page can mount after PASSWORD_RECOVERY was emitted.
+export const recoveryRedirectFromUrl =
+  typeof window !== "undefined" &&
+  window.location.pathname === "/auth/v1/reset-password" &&
+  (new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery" ||
+    new URLSearchParams(window.location.search).get("type") === "recovery");
+
 export const supabase = url && anonKey ? createClient(url, anonKey) : null;
 
 export function requireSupabase() {
