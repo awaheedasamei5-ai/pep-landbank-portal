@@ -2997,8 +2997,12 @@ function createLiveDataSource(): DataSource {
         return mapSiteVisitRow(data);
       },
       async linkToLead(id, leadId) {
-        const { data, error } = await requireClient().from("site_visits").update({ lead_id: leadId }).eq("id", id).select().single();
+        // A second link attempt must never replace a visit's existing client.
+        // RLS still decides whether this session may update the visit.
+        const { data, error } = await requireClient().from("site_visits")
+          .update({ lead_id: leadId }).eq("id", id).is("lead_id", null).select().maybeSingle();
         if (error) throw error;
+        if (!data) throw new Error("This visit is already linked or is no longer available. Refresh it before trying again.");
         return mapSiteVisitRow(data);
       },
     },
