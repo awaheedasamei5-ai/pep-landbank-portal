@@ -159,7 +159,19 @@ export function useSendSveInvite() {
       if (!eligibility.allowed) throw new Error(`${eligibility.reason}. Refresh the visit before sending feedback.`);
       const clientName = visit.name;
       const clientContact = visit.contact;
-      const invite = await getDataSource(demoMode).sve.createInvite(siteVisitId, clientName, clientContact, profile?.key ?? '');
+      // Reuse a pending invitation when staff retries a failed SMS. Creating a
+      // second token would invalidate the link that may already be with the client.
+      const existing = demoMode
+        ? (await getDataSource(true).sve.listVisitsWithStatus()).find((row) => row.siteVisit.id === siteVisitId)?.invite
+        : await (async () => {
+          const client = getSupabaseClient();
+          if (!client) throw new Error('Site visit invitations are unavailable.');
+          const { data, error } = await client.from('site_visit_experience_invites')
+            .select('token').eq('site_visit_id', siteVisitId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if (error) throw error;
+          return data;
+        })();
+      const invite = existing ?? await getDataSource(demoMode).sve.createInvite(siteVisitId, clientName, clientContact, profile?.key ?? '');
       let smsSent = false;
       if (clientContact) {
         const link = `${APP_ORIGIN}/visit-feedback/${invite.token}`;
@@ -534,4 +546,3 @@ export function useConversionAnalytics(range: PeriodRange | null) {
 }
 
 export type { SveDayReportEntry };
-
