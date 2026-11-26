@@ -15,6 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { requireSupabase } from '@/lib/supabase.client';
 import { useSessionStore } from '@/webnext/auth/useSessionStore';
 import { useDownloadSiteVisitFormPdf } from '@/webnext/features/site-visits/hooks/useSiteVisitFormPdf';
+import { useLinkSiteVisitToLead } from '@/webnext/features/site-visits/hooks/useSiteVisits';
 import { useSetSiteVisitAttendance } from '@/webnext/features/sve-management/hooks/useSveManagement';
 import { getDataSource } from '@/webnext/data/source';
 import { mapSiteVisitRow } from '@/webnext/data/mappers';
@@ -78,6 +79,40 @@ export function SiteVisitDetailScreen() {
   });
   const canCreateCompanyLead = demoMode || profile?.role === 'manager' || companyCreateAccess.data === true;
   const canCreateLeadFromVisit = !!visit && !visit.deletedAt && (profile?.role === 'manager' || visit.agentKey === profile?.key);
+  const eligibleLeads = useQuery({
+    queryKey: ['siteVisitEligibleLeads', visit?.id, visit?.agentKey, profile?.key, canCreateCompanyLead],
+    enabled: !!visit && !visit.leadId && canCreateLeadFromVisit && !demoMode,
+    queryFn: async () => {
+      const keys = canCreateCompanyLead ? [visit!.agentKey, 'company'] : [visit!.agentKey];
+      const { data, error } = await requireSupabase().from('leads')
+        .select('id,name,contact,agent_key').in('agent_key', [...new Set(keys)])
+        .is('deleted_at', null).order('name');
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string; contact: string | null; agent_key: string }[];
+    },
+  });
+  const [leadSearch, setLeadSearch] = useState('');
+  const [selectedLeadId, setSelectedLeadId] = useState('');
+  const [leadLinkError, setLeadLinkError] = useState('');
+  const linkExistingLead = useLinkSiteVisitToLead();
+  const matchingLeads = (eligibleLeads.data ?? []).filter((lead) =>
+    `${lead.name} ${lead.contact ?? ''}`.toLocaleLowerCase().includes(leadSearch.trim().toLocaleLowerCase()));
+  const selectedLead = eligibleLeads.data?.find((lead) => lead.id === selectedLeadId);
+  async function attachExistingLead() {
+    if (!visit || !canCreateLeadFromVisit || !selectedLead || visit.leadId) return;
+    if (selectedLead.agent_key !== visit.agentKey && !(selectedLead.agent_key === 'company' && canCreateCompanyLead)) return;
+    setLeadLinkError('');
+    try {
+      await linkExistingLead.mutateAsync({ id: visit.id, leadId: selectedLead.id });
+      setSelectedLeadId('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['site-visit-detail', visit.id] }),
+        queryClient.invalidateQueries({ queryKey: ['site-visit-report'] }),
+      ]);
+    } catch {
+      setLeadLinkError('Could not link this lead. The visit may already have been linked or your access may have changed. Refresh and try again.');
+    }
+  }
   const addToPipeline = (company: boolean) => {
     if (!visit || !canCreateLeadFromVisit || (company && !canCreateCompanyLead)) return;
     navigate('/dashboard/pipeline/new', { state: {
@@ -162,7 +197,7 @@ export function SiteVisitDetailScreen() {
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Connected records</CardTitle></CardHeader><CardContent className="space-y-4 text-sm">
           <div><p className="font-medium">Visit report</p><Button asChild variant="outline" className="mt-2"><Link href={`/dashboard/site-visits/reports?from=${visit.visitDate}&to=${visit.visitDate}`}><ExternalLink className="size-4" /> View this visit date in reports</Link></Button><p className="mt-2 text-muted-foreground">The report includes every visit scheduled for this date and uses recorded attendance outcomes.</p></div>
-          <div><p className="font-medium">Pipeline lead</p>{leadRoute ? <Button asChild variant="outline" className="mt-2"><Link href={leadRoute}><ExternalLink data-icon="inline-start" /> Open {leadOwner.data === 'company' ? 'Company Lead' : 'pipeline lead'}</Link></Button> : <><p className="mt-1 text-muted-foreground">{visit.leadId ? leadOwner.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account.' : 'No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.'}</p>{!visit.leadId && canCreateLeadFromVisit && <div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => addToPipeline(false)}>Add to my pipeline</Button>{canCreateCompanyLead && <Button type="button" variant="outline" onClick={() => addToPipeline(true)}>Add to Company Leads</Button>}</div>}</>}</div>
+          <div><p className="font-medium">Pipeline lead</p>{leadRoute ? <Button asChild variant="outline" className="mt-2"><Link href={leadRoute}><ExternalLink data-icon="inline-start" /> Open {leadOwner.data === 'company' ? 'Company Lead' : 'pipeline lead'}</Link></Button> : <><p className="mt-1 text-muted-foreground">{visit.leadId ? leadOwner.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account.' : 'No exact lead link has been recorded for this visit. Payments or sales cannot be attributed to it yet.'}</p>{!visit.leadId && canCreateLeadFromVisit && <><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => addToPipeline(false)}>Add to my pipeline</Button>{canCreateCompanyLead && <Button type="button" variant="outline" onClick={() => addToPipeline(true)}>Add to Company Leads</Button>}</div><div className="mt-4 rounded-md border bg-background p-3"><p className="font-medium">Already in a pipeline?</p><p className="mt-1 text-xs text-muted-foreground">Search and choose the exact existing lead. Only this visit’s staff pipeline and Company Leads you can access are shown.</p><label className="mt-3 grid gap-1 text-xs">Find existing lead<input type="search" className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" value={leadSearch} onChange={(event) => { setLeadSearch(event.target.value); setSelectedLeadId(''); }} placeholder="Client name or phone" /></label><label className="mt-3 grid gap-1 text-xs">Choose matching lead<select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" value={selectedLeadId} onChange={(event) => setSelectedLeadId(event.target.value)} disabled={eligibleLeads.isLoading || !!eligibleLeads.error}><option value="">Select a lead</option>{matchingLeads.slice(0, 50).map((lead) => <option key={lead.id} value={lead.id}>{lead.name} · {lead.agent_key === 'company' ? 'Company Leads' : 'Staff pipeline'}{lead.contact ? ` · ${lead.contact}` : ''}</option>)}</select></label>{matchingLeads.length > 50 && <p className="mt-1 text-xs text-muted-foreground">Showing the first 50 matches. Refine your search to find a specific lead.</p>}{eligibleLeads.error && <p role="alert" className="mt-2 text-xs text-destructive">Could not load eligible leads. Refresh and try again.</p>}<Button type="button" className="mt-3" disabled={!selectedLead || linkExistingLead.isPending} onClick={() => void attachExistingLead()}>{linkExistingLead.isPending ? 'Linking…' : 'Link selected lead'}</Button>{leadLinkError && <p role="alert" className="mt-2 text-xs text-destructive">{leadLinkError}</p>}</div></>}</>}</div>
           <div><p className="font-medium">Client feedback and site manager review</p><div className="mt-2 flex flex-wrap gap-2"><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=feedback&date=${visit.visitDate}&visit=${visit.id}`}><ExternalLink className="size-4" /> Open this client’s feedback</Link></Button><Button asChild variant="outline"><Link href={`/dashboard/site-visits/experience?tab=reports&date=${visit.visitDate}`}><ExternalLink className="size-4" /> Open this day’s report</Link></Button></div><p className="mt-2 text-muted-foreground">Review the separate client response and the site manager day report there.</p></div>
           <div><p className="font-medium">Visit authorization and cost</p><Button asChild variant="outline" className="mt-2"><Link href="/dashboard/site-visit-authorization"><ExternalLink className="size-4" /> Open authorization</Link></Button><p className="mt-2 text-muted-foreground">Cost is recorded by the authorization workflow; this view does not infer an amount from the visit request.</p></div>
         </CardContent></Card>
