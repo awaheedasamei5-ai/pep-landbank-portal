@@ -124,15 +124,18 @@ export function TeamSettings() {
   async function sendRecovery(person: Staff) {
     if (!person.email || resetBusy || Date.now() < (resetCooldowns[person.id] ?? 0)) return;
     setResetBusy(person.id);
-    const { error } = await requireSupabase().auth.resetPasswordForEmail(person.email, {
-      redirectTo: "https://palmstead-v2-shell.vercel.app/auth/v1/reset-password",
-    });
-    if (error) setMessage("The reset request was rejected. Check the account email or try again later.");
-    else {
+    try {
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(person.email, {
+        redirectTo: "https://palmstead-v2-shell.vercel.app/auth/v1/reset-password",
+      });
+      if (error) throw error;
       setMessage(`Reset request accepted for ${person.name}. The staff member must use the link in their own email; Management cannot see their password.`);
       setResetCooldowns((current) => ({ ...current, [person.id]: Date.now() + 60_000 }));
+    } catch {
+      setMessage("The reset request was rejected. Check the account email or try again later.");
+    } finally {
+      setResetBusy("");
     }
-    setResetBusy("");
   }
 
   async function reviewWork(profileId: string, approve: boolean) {
