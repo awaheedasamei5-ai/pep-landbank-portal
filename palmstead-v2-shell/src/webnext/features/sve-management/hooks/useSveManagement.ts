@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDataSource } from '../../../data/source';
+import { mapSveSubmissionRow } from '../../../data/mappers';
 import { getSupabaseClient } from '../../../data/client';
 import { useSessionStore } from '../../../auth/useSessionStore';
 import { useConfig } from '../../manager/hooks/useConfigSettings';
@@ -39,6 +40,24 @@ async function loadReportAttendance(report: SveDayReport, demoMode: boolean): Pr
       return data ?? [];
     })();
   return Object.fromEntries(rows.map((row) => [row.id, row.deleted_at ? 'cancelled' : row.attended === true ? 'attended' : row.attended === false ? 'no-show' : 'unconfirmed']));
+}
+
+async function loadReportSubmissions(report: SveDayReport, demoMode: boolean): Promise<Record<string, SveSubmissionRecord>> {
+  const ids = [...new Set(report.entries.map((entry) => entry.submissionId).filter((id): id is string => !!id))];
+  if (!ids.length) return {};
+  if (demoMode) {
+    const rows = await getDataSource(true).sve.listVisitsWithStatus();
+    return Object.fromEntries(rows.filter((row) => row.submission && ids.includes(row.submission.id)).map((row) => [row.submission!.id, row.submission!]));
+  }
+  const client = getSupabaseClient();
+  if (!client) throw new Error('Client feedback is unavailable.');
+  const results: SveSubmissionRecord[] = [];
+  for (let index = 0; index < ids.length; index += 100) {
+    const { data, error } = await client.from('site_visit_experience_submissions').select('*').in('id', ids.slice(index, index + 100));
+    if (error) throw error;
+    results.push(...(data ?? []).map(mapSveSubmissionRow));
+  }
+  return Object.fromEntries(results.map((row) => [row.id, row]));
 }
 
 async function sveFeedbackThankYouTemplate(): Promise<string | null> {
@@ -302,8 +321,8 @@ export function useSendSveDayReport() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const attendance = await loadReportAttendance(report, demoMode);
-      const doc = buildSveDayReportPdf(report, logo, profile?.name, attendance);
+      const [attendance, submissions] = await Promise.all([loadReportAttendance(report, demoMode), loadReportSubmissions(report, demoMode)]);
+      const doc = buildSveDayReportPdf(report, logo, profile?.name, attendance, submissions);
       const blob = doc.output('blob');
       const token = await ds.sve.issueDayReportLink(report.id, blob, profile?.key ?? '', profile?.name ?? '');
       const link = `${APP_ORIGIN}/sve-report/${token}`;
@@ -352,8 +371,8 @@ export function useDownloadSveDayReportPdf() {
       } catch {
         // Missing/blocked logo shouldn't stop the report from generating.
       }
-      const attendance = await loadReportAttendance(saved, demoMode);
-      const doc = buildSveDayReportPdf(saved, logo, profile?.name, attendance);
+      const [attendance, submissions] = await Promise.all([loadReportAttendance(saved, demoMode), loadReportSubmissions(saved, demoMode)]);
+      const doc = buildSveDayReportPdf(saved, logo, profile?.name, attendance, submissions);
       const filename = sveDayReportFilename(saved.visitDate);
       doc.save(filename);
       logDownload(filename, 'pdf', doc.output('datauristring'));

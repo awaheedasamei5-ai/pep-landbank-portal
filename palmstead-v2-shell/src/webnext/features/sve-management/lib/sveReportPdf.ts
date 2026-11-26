@@ -60,7 +60,7 @@ function reportFields(doc: jsPDF, initialY: number, fields: [string, string | nu
   return y;
 }
 
-export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null, attendanceByVisitId: Record<string, SveReportAttendance> = {}): jsPDF {
+export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string | null, generatedByName?: string | null, attendanceByVisitId: Record<string, SveReportAttendance> = {}, submissionsById: Record<string, SveSubmissionRecord> = {}): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const nextPage = () => {
@@ -172,13 +172,27 @@ export function buildSveDayReportPdf(report: SveDayReport, logoDataUri: string |
     doc.text(sanitizePdfText(entry.clientContact || ''), pageW - 12, y, { align: 'right' });
     y += 6;
 
+    const submission = entry.submissionId ? submissionsById[entry.submissionId] : null;
+    const clientAnswers: [string, string | null][] = submission ? [
+      ['Client survey submitted', ghanaTimestamp(submission.createdAt)],
+      ['Client answer — overall rating', submission.overallRating == null ? null : `${submission.overallRating} / 5`],
+      ['Client answer — NPS score', submission.npsScore == null ? null : String(submission.npsScore)],
+      ['Client answer — journey to site', submission.journeyRating],
+      ['Client answer — how site matched expectations', submission.siteDescriptionRating],
+      ['Client answer — reason below expectation', submission.belowExpectationReason],
+      ['Client answer — visit handling', submission.handlingFeedback],
+      ['Client answer — purchase intent', submission.purchaseIntent],
+      ['Client answer — improvement suggestions', submission.improvementSuggestions],
+      ['Client answer — additional comments', submission.additionalComments],
+    ] : [];
     const fields: [string, string | null][] = [
       ['Site visit record', entry.siteVisitId],
       ['Attendance', ({ attended: 'Attended', 'no-show': 'Did not attend', unconfirmed: 'Unconfirmed', cancelled: 'Cancelled' })[attendanceByVisitId[entry.siteVisitId] ?? 'unconfirmed']],
-      ['Client survey', entry.submissionId ? `Submitted (${entry.submissionId}); raw answers are in the individual feedback record.` : 'No client feedback survey submitted.'],
-      ['AI summary of client feedback', entry.aiFeedbackSummary],
+      ['Client survey', entry.submissionId ? `Submitted (${entry.submissionId})${submission ? '; original answers follow.' : '; original answers unavailable to this account.'}` : 'No client feedback survey submitted.'],
+      ...clientAnswers,
+      ['AI summary of client feedback — not verbatim', entry.aiFeedbackSummary],
       ["Site manager's original debrief", reviewDigest(entry.managerReview) || null],
-      ['AI-polished manager debrief', entry.managerNotesAi],
+      ['AI-polished manager debrief — not client testimony', entry.managerNotesAi],
     ];
     y = reportFields(
       doc,
