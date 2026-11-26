@@ -25,13 +25,15 @@ export function InviteRegistration() {
     setPending(true);
     setMessage("");
     try {
-      await requireSupabase().auth.signUp({ email: email.trim(), password });
+      const { error } = await requireSupabase().auth.signUp({ email: email.trim(), password });
+      if (error) throw error;
       setSubmitted(true);
       setPassword("");
       setConfirm("");
     } catch {
-      // Keep the same public response for invited, existing and unknown addresses.
-      setSubmitted(true);
+      // A rejected sign-up must not look like a delivered confirmation email.
+      // Do not disclose whether this address is invited or already registered.
+      setMessage("Account creation was not completed. Check your invitation and password, then try again or contact Management.");
     } finally {
       setPending(false);
     }
