@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { requireSupabase } from "@/lib/supabase.client";
+import { recoveryRedirectFromUrl, requireSupabase } from "@/lib/supabase.client";
 
 export function PasswordRecoveryFinish() {
   const [recovery, setRecovery] = useState(false);
@@ -19,11 +19,14 @@ export function PasswordRecoveryFinish() {
 
   useEffect(() => {
     const client = requireSupabase();
-    const { data } = client.auth.onAuthStateChange((event) => {
+    const { data } = client.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
         setRecovery(true);
         setChecking(false);
       } else if (event === "INITIAL_SESSION") {
+        // The browser may finish exchanging the email link before React
+        // mounts this page, so the PASSWORD_RECOVERY event can be missed.
+        if (recoveryRedirectFromUrl && session) setRecovery(true);
         setChecking(false);
       }
     });
