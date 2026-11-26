@@ -12,7 +12,7 @@ import { PeriodFilterBar } from '../../../shared/ui/PeriodFilterBar';
 import { inPeriodRange, usePeriodFilter } from '../../../shared/lib/periodFilter';
 import { useStaffDirectory } from '../../memos/hooks/useMemos';
 import type { SiteVisit } from '../../../types/domain';
-import { useAllSiteVisits, useCancelSiteVisit, useSiteVisits } from '../hooks/useSiteVisits';
+import { useAllSiteVisits, useCancelSiteVisit } from '../hooks/useSiteVisits';
 import { useDownloadSiteVisitFormPdf } from '../hooks/useSiteVisitFormPdf';
 import { leadDestination } from '../lib/leadDestination';
 import styles from './SiteVisitsScreen.module.css';
@@ -73,9 +73,8 @@ export function SiteVisitsScreen() {
     },
   });
   const canCreateCompanyLead = demoMode || isManager || companyCreateAccess.data === true;
-  const mine = useSiteVisits();
   const all = useAllSiteVisits();
-  const { data: visits, isLoading } = isManager ? all : mine;
+  const { data: visits, isLoading } = all;
   const linkedLeadIds = useMemo(() => [...new Set((visits ?? []).map((visit) => visit.leadId).filter((id): id is string => !!id))].sort(), [visits]);
   const leadOwners = useQuery({
     queryKey: ['site-visit-lead-owners', profile?.key, linkedLeadIds],
@@ -128,7 +127,7 @@ export function SiteVisitsScreen() {
     });
   }
 
-  const byStaff = useMemo(() => (visits ?? []).filter((v) => !isManager || !staffFilter || v.agentKey === staffFilter), [visits, isManager, staffFilter]);
+  const byStaff = useMemo(() => (visits ?? []).filter((v) => !staffFilter || v.agentKey === staffFilter), [visits, staffFilter]);
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const queueCounts = {
@@ -173,9 +172,9 @@ export function SiteVisitsScreen() {
     <div className={styles.wrap}>
       <div className={styles.head}>
         <div>
-          <h1 className={styles.title}>{isManager ? 'Site visit records' : 'Site visits'}</h1>
+          <h1 className={styles.title}>Site visit records</h1>
           <p className={styles.sub}>
-            {filtered.length} {isManager ? 'company-wide' : 'logged'}
+            {filtered.length} company-wide
           </p>
         </div>
         <button type="button" className={styles.addBtn} onClick={() => navigate('/dashboard/site-visits/new')}>
@@ -230,10 +229,10 @@ export function SiteVisitsScreen() {
 
       <div className={styles.filterRow}>
         <input className={styles.search} aria-label="Search visits" placeholder="Search client name or contact…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        {isManager && <select className={styles.staffSelect} aria-label="Filter staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+        <select className={styles.staffSelect} aria-label="Filter staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
           <option value="">All staff</option>
           {(staff ?? []).filter((s) => s.role === 'agent').map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
-        </select>}
+        </select>
         <select className={styles.staffSelect} aria-label="Filter visit outcome" value={outcomeFilter} onChange={(e) => setOutcomeFilter(e.target.value)}>
           <option value="all">All outcomes</option><option value="attended">Attended</option><option value="no-show">Did not attend</option><option value="unconfirmed">Unconfirmed</option><option value="cancelled">Cancelled</option>
         </select>
@@ -253,7 +252,10 @@ export function SiteVisitsScreen() {
       {filtered.map((v) => {
         const isOpen = expanded.has(v.id);
         const details = DETAIL_FIELDS.filter((f) => v[f.key]);
-        const leadRoute = v.leadId ? (demoMode ? `/dashboard/pipeline/${v.leadId}` : leadDestination(v.leadId, leadOwners.data?.[v.leadId])) : null;
+        const visibleLeadOwner = v.leadId ? leadOwners.data?.[v.leadId] : undefined;
+        const leadRoute = v.leadId && (demoMode || visibleLeadOwner === profile?.key || visibleLeadOwner === 'company' || isManager)
+          ? (demoMode ? `/dashboard/pipeline/${v.leadId}` : leadDestination(v.leadId, visibleLeadOwner))
+          : null;
         return (
           <div className={styles.card} key={v.id}>
             <button type="button" className={styles.row} onClick={() => toggle(v.id)} aria-expanded={isOpen}>
@@ -263,7 +265,7 @@ export function SiteVisitsScreen() {
                 <div className={styles.meta}>
                   {v.contact} · {v.site}
                   {v.plot ? ` · ${v.plot}` : ''}
-                  {isManager ? ` · ${v.agentName}` : ''}
+                  {v.agentName ? ` · ${v.agentName}` : ''}
                 </div>
               </div>
               <div className={styles.right}>
@@ -310,7 +312,7 @@ export function SiteVisitsScreen() {
                   </button>
                 ) : v.leadId ? (
                   <p className={styles.detailValue}>{leadOwners.isLoading ? 'Checking linked lead…' : 'Linked lead unavailable to this account. Open the visit record for its other details.'}</p>
-                ) : (<>
+                ) : (v.agentKey === profile?.key || isManager) ? (<>
                   <button
                     type="button"
                     className={styles.pdfRowBtn}
@@ -331,7 +333,7 @@ export function SiteVisitsScreen() {
                   >
                     Add to Company Leads
                   </button>}
-                </>)}
+                </>) : <p className={styles.detailValue}>Only the booking staff member or Management can link this visit to a pipeline.</p>}
                 {(isManager || v.agentKey === profile?.key) &&
                   (deletingId === v.id ? (
                     <div className={styles.deleteConfirm} onClick={(e) => e.stopPropagation()}>
@@ -392,4 +394,3 @@ export function SiteVisitsScreen() {
     </div>
   );
 }
-
