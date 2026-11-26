@@ -207,6 +207,14 @@ export function useRescheduleSiteVisit() {
     mutationFn: async ({ id, newDate, newTime }: { id: string; newDate: string; newTime: string | null }) => {
       const ds = getDataSource(demoMode);
       const updated = await ds.siteVisits.reschedule(id, newDate, newTime, profile?.key ?? '', profile?.name ?? '');
+      const clientSmsSent = updated.contact
+        ? await ds.sms.send(
+            updated.contact,
+            `Hi ${updated.name}, your Royal Palm Enclave site visit has been moved to ${fmtLongDate(updated.visitDate)}${updated.visitTime ? ' at ' + updated.visitTime : ''}. Please contact us if this date does not work for you. - PEP Landbank`,
+            'site_visit_rescheduled_client',
+            profile?.key ?? null,
+          ).catch(() => false)
+        : false;
       if (updated.agentKey && updated.agentKey !== profile?.key) {
         const body = `${profile?.name || 'A manager'} rescheduled the site visit for ${updated.name} to ${fmtLongDate(updated.visitDate)}${updated.visitTime ? ' (' + updated.visitTime + ')' : ''}.`;
         ds.notifications.notify(profile?.key ?? '', profile?.name ?? '', [updated.agentKey], body, 'site_visit_rescheduled', 'site_visit', updated.id).catch(() => {});
@@ -218,7 +226,7 @@ export function useRescheduleSiteVisit() {
           })
           .catch(() => {});
       }
-      return updated;
+      return { ...updated, clientSmsSent };
     },
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
@@ -248,4 +256,3 @@ export function useLinkSiteVisitToLead() {
     },
   });
 }
-
