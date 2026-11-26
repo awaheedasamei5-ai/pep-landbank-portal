@@ -282,6 +282,10 @@ export function SiteVisitsScreen() {
             {isOpen && (
               <div className={styles.detail}>
                 <button type="button" className={styles.pdfRowBtn} onClick={() => navigate(`/dashboard/site-visits/${v.id}`)}>Open full visit record →</button>
+                <button type="button" className={styles.pdfRowBtn}
+                  onClick={() => navigate(`/dashboard/site-visit-authorization?date=${v.visitDate}`)}>
+                  View in Authorization on {v.visitDate} →
+                </button>
                 {details.map((f) => (
                   <div className={styles.detailRow} key={f.key}>
                     <span className={styles.detailLabel}>{f.label}</span>
