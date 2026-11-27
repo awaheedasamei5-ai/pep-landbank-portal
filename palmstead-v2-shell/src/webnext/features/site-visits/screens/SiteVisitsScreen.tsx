@@ -75,6 +75,20 @@ export function SiteVisitsScreen() {
   const canCreateCompanyLead = demoMode || isManager || companyCreateAccess.data === true;
   const all = useAllSiteVisits();
   const { data: visits, isLoading } = all;
+  const myVisitCosts = useQuery({
+    queryKey: ['mySiteVisitCosts', profile?.key],
+    enabled: !!profile?.key && !demoMode && !isManager,
+    queryFn: async () => {
+      const rows: { visit_id: string; amount: number }[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await requireSupabase().from('site_visit_cost_allocations')
+          .select('visit_id,amount').eq('agent_key', profile!.key).order('visit_id').range(offset, offset + 999);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if ((data ?? []).length < 1000) return rows;
+      }
+    },
+  });
   const linkedLeadIds = useMemo(() => [...new Set((visits ?? []).map((visit) => visit.leadId).filter((id): id is string => !!id))].sort(), [visits]);
   const leadOwners = useQuery({
     queryKey: ['site-visit-lead-owners', profile?.key, linkedLeadIds],
@@ -114,6 +128,9 @@ export function SiteVisitsScreen() {
     const channel = db.channel(`site-visits-list-${profile.key}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visits' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['siteVisits'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_visit_cost_allocations' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['mySiteVisitCosts', profile.key] });
       }).subscribe();
     return () => { void db.removeChannel(channel); };
   }, [profile?.key, demoMode, queryClient]);
@@ -167,6 +184,17 @@ export function SiteVisitsScreen() {
       unconfirmed: list.filter((v) => !v.deletedAt && v.attended === null && v.visitDate < new Date().toISOString().slice(0, 10)).length,
     };
   }, [byStaff, thisMonthKey]);
+  const mySpend = useMemo(() => {
+    const owned = (visits ?? []).filter((visit) => visit.agentKey === profile?.key && !visit.deletedAt && visit.attended === true);
+    const byId = new Map(owned.map((visit) => [visit.id, visit]));
+    const allocated = (myVisitCosts.data ?? []).filter((row) => byId.has(row.visit_id));
+    return {
+      attended: owned.length,
+      costed: allocated.length,
+      total: allocated.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+      thisMonth: allocated.reduce((sum, row) => sum + (byId.get(row.visit_id)?.visitDate.slice(0, 7) === thisMonthKey ? Number(row.amount || 0) : 0), 0),
+    };
+  }, [visits, profile?.key, myVisitCosts.data, thisMonthKey]);
 
   return (
     <div className={styles.wrap}>
@@ -196,6 +224,17 @@ export function SiteVisitsScreen() {
           <ArrowUpRight size={18} className={styles.quickActionArrow} aria-hidden="true" />
         </button>
       </nav>
+
+      {!isManager && !demoMode && <section className={styles.mySpend} aria-label="My site visit spending">
+        <div><p className={styles.mySpendEyebrow}>My client visits</p><h2>Company spending on my attended visits</h2><p>Approved actual costs are split across everyone who attended that day. Visits without an approved cost remain unknown.</p></div>
+        <div className={styles.mySpendNumbers}>
+          <div><span>This month</span><strong>{myVisitCosts.isLoading ? 'Loading…' : `GHS ${mySpend.thisMonth.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</strong></div>
+          <div><span>All recorded dates</span><strong>{myVisitCosts.isLoading ? 'Loading…' : `GHS ${mySpend.total.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</strong></div>
+          <div><span>Costed visits</span><strong>{mySpend.costed} of {mySpend.attended}</strong></div>
+        </div>
+        {myVisitCosts.error && <p role="alert">Could not load approved visit costs. Please refresh or open Visit reports.</p>}
+        <button type="button" className={styles.mySpendLink} onClick={() => navigate('/dashboard/site-visits/reports')}>Explore my visit report <ArrowUpRight size={16} aria-hidden="true" /></button>
+      </section>}
 
       {isManager && (
         <>

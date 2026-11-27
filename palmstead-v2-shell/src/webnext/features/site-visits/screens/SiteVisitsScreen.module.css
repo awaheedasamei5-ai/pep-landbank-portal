@@ -138,6 +138,22 @@
 
 .kpiWrap { margin-bottom: 14px; }
 
+.mySpend {
+  display: grid; gap: 16px; margin-bottom: 18px; padding: 18px;
+  border: 1px solid var(--c-line); border-radius: var(--r-md);
+  background: var(--c-card); box-shadow: var(--shadow);
+}
+.mySpendEyebrow { margin: 0 0 4px; color: var(--c-accent); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.mySpend h2 { margin: 0; color: var(--c-text); font-size: 17px; line-height: 1.3; }
+.mySpend p:not(.mySpendEyebrow) { margin: 7px 0 0; color: var(--c-muted); font-size: 12px; line-height: 1.5; }
+.mySpendNumbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mySpendNumbers div { display: grid; gap: 4px; min-width: 0; padding: 12px; border-radius: 10px; background: var(--c-paper); }
+.mySpendNumbers span { color: var(--c-muted); font-size: 11px; }
+.mySpendNumbers strong { color: var(--c-text); font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mySpendLink { display: inline-flex; align-items: center; gap: 5px; justify-self: start; padding: 0; border: 0; background: none; color: var(--c-accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.mySpendLink:hover, .mySpendLink:focus-visible { text-decoration: underline; }
+@media (max-width: 560px) { .mySpendNumbers { grid-template-columns: 1fr 1fr; } .mySpendNumbers div:last-child { grid-column: 1 / -1; } }
+
 .queueSection { margin: 0 0 18px; }
 .queueHeading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 9px; font-size: 13px; font-weight: 800; }
 .queueHeading span { color: var(--c-muted); font-size: 11px; font-weight: 500; }
@@ -189,4 +205,3 @@
   .detailRow { flex-wrap: wrap; }
   .detailLabel { min-width: 0; flex-basis: 100%; }
 }
-
