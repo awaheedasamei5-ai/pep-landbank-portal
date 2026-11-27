@@ -513,7 +513,7 @@ export function SiteVisitReportsScreen(){
         autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Visits','Attended','Unknown','Linked','Feedback visits','Later paid']],body:staffRows.map((row)=>[row.name,row.visits,row.attended,row.unknown,row.linked,row.responded,row.linkedAttendedPaid]),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
         y=nextY(doc,y);
         if(y>220){doc.addPage();y=20}
-        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Staff cost and receipt follow-through','Confirmed attended visits with exact lead links');
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Staff cost and receipt follow-through','All attended costs; linked receipts');
         autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Linked attended','Later receipt visits','Later receipt rate','Reviewed visit cost','Later receipts']],body:staffRows.map((row)=>[row.name,row.linkedAttended,row.linkedAttendedPaid,percent(row.linkedAttendedPaid,row.linkedAttended),row.costedVisits?ghs(row.attributedCost)+(row.attendedWithoutCost?' (partial)':''):'Not recorded',ghs(row.approvedCash)]),theme:'grid',styles:{fontSize:6.7,cellPadding:1.7,overflow:'linebreak'},headStyles:{fillColor:[11,30,61]}});
         y=nextY(doc,y);
         const staffEconomicsNote=doc.splitTextToSize('Reviewed cost is allocated once per confirmed attended visit, including visitors without a linked lead. Later receipts can repeat across staff for one client and do not prove the visit caused the sale. Missing cost is unknown.',180) as string[];
