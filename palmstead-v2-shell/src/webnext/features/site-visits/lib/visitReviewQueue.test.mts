@@ -17,13 +17,12 @@ test('review queue identifies missing evidence without treating future, no-show,
       { id: 'answered', site_visit_id: 'complete', sent_at: '2026-11-20' },
     ],
     surveys: [{ invite_id: 'answered' }],
-    costs: [{ lead_id: 'lead-b', source_id: 'day-form' }],
-    costDays: [{ id: 'day-form', visit_date: '2026-11-20' }],
+    allocations: [{ visit_id: 'complete' }],
   });
   assert.deepEqual(rows.map(({ visit }) => visit.id), ['unknown', 'unlinked', 'linked']);
   assert.deepEqual(rows.map(({ actions }) => actions), [
     ['Confirm attendance'],
-    ['Link pipeline lead', 'Invite client feedback'],
-    ['Follow up on client feedback', 'Review visit cost attribution'],
+    ['Link pipeline lead', 'Invite client feedback', 'Review or approve actual visit cost'],
+    ['Follow up on client feedback', 'Review or approve actual visit cost'],
   ]);
 });
