@@ -27,8 +27,6 @@ type Staff = {agent_key:string;name:string;active:boolean};
 type Invite = {id:string;site_visit_id:string;sent_at:string|null;submitted_at:string|null};
 type Survey = {id:string;invite_id:string;created_at:string;overall_rating:number|null;nps_score:number|null;purchase_intent:string|null};
 type ApprovedPayment = {id:string;lead_id:string;amount:number;payment_date:string};
-type Cost = {id:string;lead_id:string;source_id:string;amount:number};
-type CostDay = {id:string;visit_date:string};
 type VisitAllocation = {visit_id:string;agent_key:string;lead_id:string|null;amount:number};
 type LeadOwner = {id:string;agent_key:string};
 type PipelinePool = 'personal'|'company'|'unlinked'|'unknown';
@@ -37,7 +35,7 @@ type DayForm = {
   vehicle_rental_est:number|null;drivers_tip_est:number|null;fuel_est:number|null;refreshment_est:number|null;tnt_est:number|null;
   vehicle_rental_act:number|null;drivers_tip_act:number|null;fuel_act:number|null;refreshment_act:number|null;tnt_act:number|null;
 };
-type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];allocations:VisitAllocation[];forms:DayForm[];leadOwners:Record<string,'personal'|'company'>};
+type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];allocations:VisitAllocation[];forms:DayForm[];leadOwners:Record<string,'personal'|'company'>};
 type Outcome = 'all'|'attended'|'not-attended'|'cancelled'|'pending';
 
 async function allPages<T>(make:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>):Promise<T[]> {
@@ -64,7 +62,6 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
   const inviteRows:Invite[]=[];
   const allocations:VisitAllocation[]=[];
   const paymentRows:ApprovedPayment[]=[];
-  const costRows:Cost[]=[];
   const leadOwners:Record<string,'personal'|'company'>={};
   const visitIds=visits.map((v)=>v.id);
   const leadIds=[...new Set(visits.map((v)=>v.lead_id).filter((id):id is string=>!!id))];
@@ -89,26 +86,16 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
   }
   for(let offset=0;offset<leadIds.length;offset+=100){
     const ids=leadIds.slice(offset,offset+100);
-    const [payments,costs,owners]=await Promise.all([
+    const [payments,owners]=await Promise.all([
       db.from('payments').select('id,lead_id,amount,payment_date').eq('status','approved').in('lead_id',ids),
-      db.from('client_cost_attributions').select('id,lead_id,source_id,amount').eq('source_type','site_visit').in('lead_id',ids),
       db.from('leads').select('id,agent_key').in('id',ids),
     ]);
     if(payments.error)throw new Error(payments.error.message);
-    if(costs.error)throw new Error(costs.error.message);
     if(owners.error)throw new Error(owners.error.message);
     paymentRows.push(...((payments.data??[]) as ApprovedPayment[]));
-    costRows.push(...((costs.data??[]) as Cost[]));
     for(const owner of (owners.data??[]) as LeadOwner[]) leadOwners[owner.id]=owner.agent_key==='company'?'company':'personal';
   }
-  const costDays:CostDay[]=[];
-  const formIds=[...new Set(costRows.map((cost)=>cost.source_id))];
-  for(let offset=0;offset<formIds.length;offset+=100){
-    const {data,error}=await db.from('weekly_visit_forms').select('id,visit_date').in('id',formIds.slice(offset,offset+100));
-    if(error)throw new Error(error.message);
-    costDays.push(...((data??[]) as CostDay[]));
-  }
-  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,allocations,forms,leadOwners};
+  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,allocations,forms,leadOwners};
 }
 function pipelinePool(visit:Visit,data:VisitData|undefined):PipelinePool{
   if(!visit.lead_id)return 'unlinked';
@@ -305,7 +292,7 @@ export function SiteVisitReportsScreen(){
   const followThrough=visitFollowThrough(filtered,report.data);
   const reviewQueue=visitReviewQueue(filtered,today,{
     invites:report.data?.invites??[],surveys:report.data?.surveys??[],
-    costs:report.data?.costs??[],costDays:report.data?.costDays??[],
+    allocations:report.data?.allocations??[],
   });
   const priorCross=evidence(priorFiltered,priorReport.data);
   const logistics=logisticsFor(filtered,report.data?.forms??[]);
