@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { visitFollowThrough } from './visitFollowThrough.ts';
 
-test('only confirmed, linked visits receive exact survey, later receipt and same-day cost evidence', () => {
+test('only confirmed, linked visits receive exact survey, later receipt and visit cost evidence', () => {
   const visits = [
     { id: 'first', lead_id: 'lead-a', visit_date: '2026-11-10', attended: true, deleted_at: null },
     { id: 'second', lead_id: 'lead-a', visit_date: '2026-11-20', attended: true, deleted_at: null },
@@ -17,12 +17,11 @@ test('only confirmed, linked visits receive exact survey, later receipt and same
       { lead_id: 'lead-a', amount: 200, payment_date: '2026-11-22' },
       { lead_id: 'lead-b', amount: 500, payment_date: '2026-11-22' },
     ],
-    costs: [
-      { lead_id: 'lead-a', source_id: 'day-10', amount: 50 },
-      { lead_id: 'lead-a', source_id: 'day-20', amount: 70 },
-      { lead_id: 'lead-b', source_id: 'day-10', amount: 90 },
+    allocations: [
+      { visit_id: 'first', amount: 50 },
+      { visit_id: 'second', amount: 70 },
+      { visit_id: 'unlinked', amount: 90 },
     ],
-    costDays: [{ id: 'day-10', visit_date: '2026-11-10' }, { id: 'day-20', visit_date: '2026-11-20' }],
     invites: [{ id: 'invite-old', site_visit_id: 'first' }, { id: 'invite-new', site_visit_id: 'first' }],
     surveys: [
       { invite_id: 'invite-old', created_at: '2026-11-11T09:00:00Z', purchase_intent: 'Maybe' },

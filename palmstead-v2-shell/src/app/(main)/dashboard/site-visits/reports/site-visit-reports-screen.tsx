@@ -29,6 +29,7 @@ type Survey = {id:string;invite_id:string;created_at:string;overall_rating:numbe
 type ApprovedPayment = {id:string;lead_id:string;amount:number;payment_date:string};
 type Cost = {id:string;lead_id:string;source_id:string;amount:number};
 type CostDay = {id:string;visit_date:string};
+type VisitAllocation = {visit_id:string;agent_key:string;lead_id:string|null;amount:number};
 type LeadOwner = {id:string;agent_key:string};
 type PipelinePool = 'personal'|'company'|'unlinked'|'unknown';
 type DayForm = {
@@ -36,7 +37,7 @@ type DayForm = {
   vehicle_rental_est:number|null;drivers_tip_est:number|null;fuel_est:number|null;refreshment_est:number|null;tnt_est:number|null;
   vehicle_rental_act:number|null;drivers_tip_act:number|null;fuel_act:number|null;refreshment_act:number|null;tnt_act:number|null;
 };
-type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];forms:DayForm[];leadOwners:Record<string,'personal'|'company'>};
+type VisitData = {visits:Visit[];staff:Staff[];invites:Invite[];surveys:Survey[];payments:ApprovedPayment[];costs:Cost[];costDays:CostDay[];allocations:VisitAllocation[];forms:DayForm[];leadOwners:Record<string,'personal'|'company'>};
 type Outcome = 'all'|'attended'|'not-attended'|'cancelled'|'pending';
 
 async function allPages<T>(make:(from:number,to:number)=>PromiseLike<{data:T[]|null;error:{message:string}|null}>):Promise<T[]> {
@@ -61,6 +62,7 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
     manager?allPages<DayForm>((a,b)=>db.from('weekly_visit_forms').select('id,visit_date,status,approved_by,finalized_at,vehicle_rental_est,drivers_tip_est,fuel_est,refreshment_est,tnt_est,vehicle_rental_act,drivers_tip_act,fuel_act,refreshment_act,tnt_act').gte('visit_date',from).lte('visit_date',to).order('visit_date',{ascending:false}).order('id').range(a,b)):Promise.resolve([] as DayForm[]),
   ]);
   const inviteRows:Invite[]=[];
+  const allocations:VisitAllocation[]=[];
   const paymentRows:ApprovedPayment[]=[];
   const costRows:Cost[]=[];
   const leadOwners:Record<string,'personal'|'company'>={};
@@ -68,9 +70,15 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
   const leadIds=[...new Set(visits.map((v)=>v.lead_id).filter((id):id is string=>!!id))];
   // Keep each request small enough for PostgREST URL limits. RLS still scopes every row.
   for(let offset=0;offset<visitIds.length;offset+=100){
-    const {data,error}=await db.from('site_visit_experience_invites').select('id,site_visit_id,sent_at,submitted_at').in('site_visit_id',visitIds.slice(offset,offset+100));
-    if(error)throw new Error(error.message);
-    inviteRows.push(...((data??[]) as Invite[]));
+    const ids=visitIds.slice(offset,offset+100);
+    const [invites,allocated]=await Promise.all([
+      db.from('site_visit_experience_invites').select('id,site_visit_id,sent_at,submitted_at').in('site_visit_id',ids),
+      db.from('site_visit_cost_allocations').select('visit_id,agent_key,lead_id,amount').in('visit_id',ids),
+    ]);
+    if(invites.error)throw new Error(invites.error.message);
+    if(allocated.error)throw new Error(allocated.error.message);
+    inviteRows.push(...((invites.data??[]) as Invite[]));
+    allocations.push(...((allocated.data??[]) as VisitAllocation[]));
   }
   const surveyRows:Survey[]=[];
   const inviteIds=inviteRows.map((invite)=>invite.id);
@@ -100,7 +108,7 @@ async function loadVisits(key:string,manager:boolean,from:string,to:string,staff
     if(error)throw new Error(error.message);
     costDays.push(...((data??[]) as CostDay[]));
   }
-  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,forms,leadOwners};
+  return {visits,staff,invites:inviteRows,surveys:surveyRows,payments:paymentRows,costs:costRows,costDays,allocations,forms,leadOwners};
 }
 function pipelinePool(visit:Visit,data:VisitData|undefined):PipelinePool{
   if(!visit.lead_id)return 'unlinked';
@@ -176,32 +184,32 @@ function evidence(visits:Visit[],data:VisitData|undefined){
   const submissions=new Map((data?.surveys??[]).map((survey)=>[survey.invite_id,survey]));
   const paymentByLead=new Map<string,ApprovedPayment[]>();
   for(const payment of data?.payments??[]) paymentByLead.set(payment.lead_id,[...(paymentByLead.get(payment.lead_id)??[]),payment]);
-  const dayByForm=new Map((data?.costDays??[]).map((day)=>[day.id,day.visit_date]));
-  const costsByLead=new Map<string,Cost[]>();
-  for(const cost of data?.costs??[]) costsByLead.set(cost.lead_id,[...(costsByLead.get(cost.lead_id)??[]),cost]);
+  const allocationByVisit=new Map((data?.allocations??[]).map((row)=>[row.visit_id,row]));
   const surveyRows:Survey[]=[];
   const paidPayments=new Map<string,ApprovedPayment>();
-  const attributedCosts=new Map<string,Cost>();
-  let invited=0,responded=0,linkedAttended=0,linkedAttendedPaid=0,linkedAttendedWithoutCost=0;
+  let attributedCost=0;
+  let invited=0,responded=0,linkedAttended=0,linkedAttendedPaid=0,linkedAttendedWithoutCost=0,costedVisits=0,attendedWithoutCost=0;
   for(const visit of visits){
     const invites=inviteByVisit.get(visit.id)??[];
     if(invites.some((invite)=>!!invite.sent_at)) invited++;
     const responses=invites.map((invite)=>submissions.get(invite.id)).filter((row):row is Survey=>!!row);
     if(responses.length){responded++;surveyRows.push(...responses);}
-    if(outcome(visit)!=='attended'||!visit.lead_id)continue;
+    if(outcome(visit)!=='attended')continue;
+    const allocation=allocationByVisit.get(visit.id);
+    if(allocation){costedVisits++;attributedCost+=Number(allocation.amount||0)}
+    else attendedWithoutCost++;
+    if(!visit.lead_id)continue;
     linkedAttended++;
     const later=(paymentByLead.get(visit.lead_id)??[]).filter((payment)=>payment.payment_date>=visit.visit_date);
     if(later.length)linkedAttendedPaid++;
     for(const payment of later) paidPayments.set(payment.id,payment);
-    const exact=(costsByLead.get(visit.lead_id)??[]).filter((cost)=>dayByForm.get(cost.source_id)===visit.visit_date);
-    if(!exact.length)linkedAttendedWithoutCost++;
-    for(const cost of exact)attributedCosts.set(cost.id,cost);
+    if(!allocation)linkedAttendedWithoutCost++;
   }
   const ratings=surveyRows.map((row)=>Number(row.overall_rating)).filter((value)=>Number.isFinite(value)&&value>0);
   const scores=surveyRows.filter((row)=>row.nps_score!==null).map((row)=>Number(row.nps_score)).filter((value)=>Number.isFinite(value)&&value>=0&&value<=10);
   const intentCounts=[...surveyRows.reduce((items,row)=>{const label=row.purchase_intent?.trim()||'Not answered';items.set(label,(items.get(label)??0)+1);return items;},new Map<string,number>()).entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   const nps=scores.length?Math.round((scores.filter((v)=>v>=9).length-scores.filter((v)=>v<=6).length)*100/scores.length):null;
-  return {invited,responded,surveyResponses:surveyRows.length,ratings:ratings.length,averageRating:ratings.length?ratings.reduce((sum,value)=>sum+value,0)/ratings.length:null,nps,npsResponses:scores.length,intentCounts,linkedAttended,linkedAttendedPaid,linkedAttendedWithoutCost,approvedCash:[...paidPayments.values()].reduce((sum,row)=>sum+Number(row.amount||0),0),attributedCost:[...attributedCosts.values()].reduce((sum,row)=>sum+Number(row.amount||0),0)};
+  return {invited,responded,surveyResponses:surveyRows.length,ratings:ratings.length,averageRating:ratings.length?ratings.reduce((sum,value)=>sum+value,0)/ratings.length:null,nps,npsResponses:scores.length,intentCounts,linkedAttended,linkedAttendedPaid,linkedAttendedWithoutCost,costedVisits,attendedWithoutCost,approvedCash:[...paidPayments.values()].reduce((sum,row)=>sum+Number(row.amount||0),0),attributedCost};
 }
 
 export function SiteVisitReportsScreen(){
@@ -340,7 +348,7 @@ export function SiteVisitReportsScreen(){
       const noShow=rows.filter((visit)=>outcome(visit)==='not-attended').length;
       const active=rows.filter((visit)=>outcome(visit)!=='cancelled').length;
       const summary=evidence(rows,report.data);
-      return {name,visits:rows.length,attended,noShow,coverage:percent(attended+noShow,active),linked:rows.filter((visit)=>!!visit.lead_id).length,responded:summary.responded,laterPaid:summary.linkedAttendedPaid,cost:summary.attributedCost,costMissing:summary.linkedAttendedWithoutCost,linkedAttended:summary.linkedAttended,cash:summary.approvedCash};
+      return {name,visits:rows.length,attended,noShow,coverage:percent(attended+noShow,active),linked:rows.filter((visit)=>!!visit.lead_id).length,responded:summary.responded,laterPaid:summary.linkedAttendedPaid,cost:summary.attributedCost,costedVisits:summary.costedVisits,costMissing:summary.attendedWithoutCost,linkedAttended:summary.linkedAttended,cash:summary.approvedCash};
     }).sort((a,b)=>b.visits-a.visits||a.name.localeCompare(b.name));
   },[filtered,report.data]);
   const trend=useMemo(()=>{
@@ -436,8 +444,8 @@ export function SiteVisitReportsScreen(){
           ['Those followed by an approved payment',cross.linkedAttendedPaid],
           ['Later-payment rate among attended linked visits',percent(cross.linkedAttendedPaid,cross.linkedAttended)],
           ['Approved cash after attended linked visits (unique payments)','GHS '+cross.approvedCash.toLocaleString('en-GH')],
-          ['Reviewed per-client visit cost',cross.linkedAttended>cross.linkedAttendedWithoutCost?ghs(cross.attributedCost):'Not recorded'],
-          ['Attended linked visits without cost attribution',cross.linkedAttendedWithoutCost],
+          ['Reviewed cost across attended visits',cross.costedVisits?ghs(cross.attributedCost):'Not recorded'],
+          ['Attended visits without approved cost',cross.attendedWithoutCost],
         ].map(([label,value])=>[String(label),String(value)]),theme:'striped',styles:{fontSize:8,cellPadding:2},columnStyles:{0:{fontStyle:'bold'}}});
         y=nextY(doc,y);
         if(cross.intentCounts.length){
@@ -505,10 +513,17 @@ export function SiteVisitReportsScreen(){
         autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Visits','Attended','Unknown','Linked','Feedback visits','Later paid']],body:staffRows.map((row)=>[row.name,row.visits,row.attended,row.unknown,row.linked,row.responded,row.linkedAttendedPaid]),theme:'grid',styles:{fontSize:7,cellPadding:2},headStyles:{fillColor:[11,30,61]}});
         y=nextY(doc,y);
         if(y>220){doc.addPage();y=20}
-        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Site comparison','Exact recorded site names; spelling variants stay separate');
-        autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Site','Visits','Attended','Outcome','Linked','Survey','Later paid','Reviewed cost','Later receipts']],body:siteRows.map((row)=>[row.name,row.visits,row.attended,row.coverage,row.linked,row.responded,row.laterPaid,row.linkedAttended>row.costMissing?ghs(row.cost):'Not recorded',ghs(row.cash)]),theme:'grid',styles:{fontSize:6.3,cellPadding:1.5,overflow:'linebreak'},headStyles:{fillColor:[11,30,61]}});
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Staff cost and receipt follow-through','All attended costs; linked receipts');
+        autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Staff','Linked attended','Later receipt visits','Later receipt rate','Reviewed visit cost','Later receipts']],body:staffRows.map((row)=>[row.name,row.linkedAttended,row.linkedAttendedPaid,percent(row.linkedAttendedPaid,row.linkedAttended),row.costedVisits?ghs(row.attributedCost)+(row.attendedWithoutCost?' (partial)':''):'Not recorded',ghs(row.approvedCash)]),theme:'grid',styles:{fontSize:6.7,cellPadding:1.7,overflow:'linebreak'},headStyles:{fillColor:[11,30,61]}});
         y=nextY(doc,y);
-        const comparisonNote=doc.splitTextToSize('Amounts use exact lead links and approved records. A client may appear at multiple sites: do not add site totals together. Missing cost means unknown, not zero.',180) as string[];
+        const staffEconomicsNote=doc.splitTextToSize('Reviewed cost is allocated once per confirmed attended visit, including visitors without a linked lead. Later receipts can repeat across staff for one client and do not prove the visit caused the sale. Missing cost is unknown.',180) as string[];
+        if(y+staffEconomicsNote.length*4>275){doc.addPage();y=20}
+        doc.setFontSize(7);doc.text(staffEconomicsNote,14,y);y+=staffEconomicsNote.length*4+7;
+        if(y>220){doc.addPage();y=20}
+        y=pdfSectionTitle(doc,y,doc.internal.pageSize.getWidth(),'Site comparison','Exact recorded site names; spelling variants stay separate');
+        autoTable(doc,{startY:y,margin:{left:14,right:14,bottom:18},head:[['Site','Visits','Attended','Outcome','Linked','Survey','Later paid','Reviewed cost','Later receipts']],body:siteRows.map((row)=>[row.name,row.visits,row.attended,row.coverage,row.linked,row.responded,row.laterPaid,row.costedVisits?ghs(row.cost):'Not recorded',ghs(row.cash)]),theme:'grid',styles:{fontSize:6.3,cellPadding:1.5,overflow:'linebreak'},headStyles:{fillColor:[11,30,61]}});
+        y=nextY(doc,y);
+        const comparisonNote=doc.splitTextToSize('Reviewed costs use one allocation per confirmed attended visit, including unlinked visitors. Later receipts require an exact lead link and can recur across sites for the same client. Missing cost means unknown, not zero.',180) as string[];
         if(y+comparisonNote.length*4>275){doc.addPage();y=20}
         doc.setFontSize(7);
         doc.text(comparisonNote,14,y);
@@ -562,7 +577,7 @@ export function SiteVisitReportsScreen(){
         ['Staff follow-up text',counts.withFeedback],['Staff pipeline visits',poolCounts.personal],['Company Leads visits',poolCounts.company],['Unlinked visits',poolCounts.unlinked],['Linked lead unavailable',poolCounts.unknown],['Rescheduled',counts.rescheduled],
       ].map(([label,value])=><Card key={label}><CardContent className="pt-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></CardContent></Card>)}</div>
       <Card><CardHeader><CardTitle>Client response and commercial follow-through</CardTitle></CardHeader><CardContent>
-        <p className="mb-4 text-sm text-muted-foreground">Surveys join by visit invitation. Payments and reviewed costs join through an exact pipeline lead and a confirmed attended visit.</p>
+        <p className="mb-4 text-sm text-muted-foreground">Surveys join by visit invitation. Later payments require an exact pipeline lead; reviewed costs are split across all confirmed attended visitors, including unlinked visitors.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([
           ['Visits with invitation sent',cross.invited],['Visits with client response',cross.responded],['Submitted feedback forms',cross.surveyResponses],['Response rate by visit',percent(cross.responded,cross.invited)],
           ['Average overall rating',cross.averageRating===null?'—':cross.averageRating.toFixed(1)+' / 5'],
@@ -570,12 +585,12 @@ export function SiteVisitReportsScreen(){
           ['Attended and lead-linked',cross.linkedAttended],['With later approved payment',cross.linkedAttendedPaid],
           ['Later-payment rate',percent(cross.linkedAttendedPaid,cross.linkedAttended)],
           ['Approved cash after visit','GHS '+cross.approvedCash.toLocaleString('en-GH')],
-          ['Reviewed client visit cost',cross.linkedAttended>cross.linkedAttendedWithoutCost?ghs(cross.attributedCost):'Not recorded'],
-          ['Attended linked visits missing cost',cross.linkedAttendedWithoutCost],
+          ['Reviewed attended visit cost',cross.costedVisits?ghs(cross.attributedCost):'Not recorded'],
+          ['Attended visits missing approved cost',cross.attendedWithoutCost],
         ] as const).map(([label,value])=><div key={label} className="min-w-0 rounded-lg border bg-background p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 break-words text-xl font-semibold">{value}</p></div>)}</div>
         {!!cross.intentCounts.length&&<div className="mt-5"><h3 className="text-sm font-semibold">Purchase intent from client answers</h3><div className="mt-2 grid gap-2">{cross.intentCounts.map(([label,count])=><div key={label} className="flex min-w-0 items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"><span className="min-w-0 break-words">{label}</span><strong>{count}</strong></div>)}</div></div>}
-        <p className="mt-4 text-xs text-muted-foreground">A later approved payment is not proof that the visit caused the sale. Cash and cost rows are counted once. Missing cost attribution means unknown cost, not free service.</p>
-        <div className="mt-5"><h3 className="text-sm font-semibold">Attended client follow-through</h3><p className="mt-1 text-xs text-muted-foreground">Only confirmed visits with an exact pipeline lead link. Receipts or same-day costs may appear beside more than one visit for the same client; do not add the row amounts together.</p>
+        <p className="mt-4 text-xs text-muted-foreground">A later approved payment is not proof that the visit caused the sale. Payments are counted once per report cohort; approved costs are counted once per attended visit. Missing cost means unknown cost, not free service.</p>
+        <div className="mt-5"><h3 className="text-sm font-semibold">Attended client follow-through</h3><p className="mt-1 text-xs text-muted-foreground">Only confirmed visits with an exact pipeline lead link. Later receipts can appear beside more than one visit for the same client; each matched visit cost belongs to that visit only.</p>
           <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b">{['Visit / site','Staff / client','Pipeline','Client answer','Later approved receipts','Matched visit cost'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{followThrough.map((item)=><tr key={item.visit.id} className="border-b last:border-0"><td className="py-2 pr-3">{item.visit.visit_date}<br/>{item.visit.site||'Site not recorded'}</td><td className="py-2 pr-3">{agentName(item.visit)}<br/><Link className="font-medium text-primary hover:underline" href={`/dashboard/site-visits/${item.visit.id}`}>{item.visit.name}</Link></td><td className="py-2 pr-3">{pipelinePoolLabel(pipelinePool(item.visit,report.data))}</td><td className="py-2 pr-3">{clientSurveyStatus(item.visit.id)}{item.purchaseIntent&&<><br/>Intent: {item.purchaseIntent}</>}</td><td className="py-2 pr-3">{item.laterReceipts?ghs(item.laterCash):'No later receipt recorded'}{item.laterReceipts>0&&<><br/>{item.laterReceipts} receipt(s)</>}</td><td className="py-2 pr-3">{item.matchedCost===null?'Not recorded':ghs(item.matchedCost)}</td></tr>)}</tbody></table>{!followThrough.length&&<p className="py-3 text-sm text-muted-foreground">No confirmed, lead-linked visits match these filters.</p>}</div>
         </div>
       </CardContent></Card>
@@ -596,7 +611,12 @@ export function SiteVisitReportsScreen(){
       </CardContent></Card>
       {compare&&priorReport.data&&priorPeriod&&<Card><CardHeader><CardTitle>Compared with {priorPeriod.from} to {priorPeriod.to}</CardTitle></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['Visit records',counts.records,priorCounts.records],['Attended',counts.attended,priorCounts.attended],['Unconfirmed',counts.unconfirmed,priorCounts.unconfirmed],['Linked leads',counts.linked,priorCounts.linked]] as const).map(([label,current,previous])=><div key={label} className="rounded-lg border p-3"><p className="text-sm text-muted-foreground">{label}</p><p className="text-xl font-semibold">{current} <span className="text-sm font-normal text-muted-foreground">vs {previous}</span></p><p className="text-xs text-muted-foreground">{changeLabel(current,previous)}</p></div>)}</CardContent></Card>}
       {manager&&<Card><CardHeader><CardTitle>Staff comparison</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Staff','Visits','Attended','Unknown','Linked','Visits with feedback','Later paid'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.unknown}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.linkedAttendedPaid}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div></CardContent></Card>}
-      {manager&&<Card><CardHeader><CardTitle>Site comparison</CardTitle></CardHeader><CardContent><p className="mb-3 text-sm text-muted-foreground">All figures use the current report filters. Recorded site names remain separate when spelled differently. Later paid counts only confirmed attended visits with an exact lead and a later approved receipt. Reviewed cost and receipts use exact lead links, and one client may appear at multiple sites, so do not add site amounts together. Missing cost is unknown, not zero.</p>{siteRows.length>0&&<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart layout="vertical" data={siteRows.slice(0,6)} margin={{left:6,right:8}}><CartesianGrid strokeDasharray="3 3" horizontal={false}/><XAxis type="number" allowDecimals={false}/><YAxis type="category" dataKey="name" width={118} tick={{fontSize:10}} tickFormatter={(label:string)=>label.length>17?label.slice(0,16)+'…':label}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[0,4,4,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[0,4,4,0]}/></BarChart></ResponsiveContainer></div>}<div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1120px] text-left text-sm"><thead><tr className="border-b">{['Site','Visits','Attended','Outcome coverage','Linked','Survey visits','Later paid','Reviewed cost','Later receipts'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{siteRows.map((row)=><tr key={row.name} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.coverage}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.laterPaid}</td><td>{row.linkedAttended>row.costMissing?ghs(row.cost):'Not recorded'}</td><td>{ghs(row.cash)}</td></tr>)}</tbody></table>{!siteRows.length&&<p className="py-4 text-sm text-muted-foreground">No sites match these filters.</p>}</div></CardContent></Card>}
+      {manager&&<Card><CardHeader><CardTitle>Staff cost and receipt follow-through</CardTitle></CardHeader><CardContent>
+        <p className="mb-3 text-sm text-muted-foreground">Later receipt rates use attended visits with exact pipeline lead links. Reviewed costs include every attended visitor, including those without a lead link. Missing approved cost is unknown.</p>
+        <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b">{['Staff','Linked attended','Later receipt visits','Later receipt rate','Reviewed visit cost','Later receipts'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{staffRows.map((row)=><tr key={row.key} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.linkedAttended}</td><td>{row.linkedAttendedPaid}</td><td>{percent(row.linkedAttendedPaid,row.linkedAttended)}</td><td>{row.costedVisits?ghs(row.attributedCost)+(row.attendedWithoutCost?' (partial)':''):'Not recorded'}</td><td>{ghs(row.approvedCash)}</td></tr>)}</tbody></table>{!staffRows.length&&<p className="py-4 text-sm text-muted-foreground">No staff visits match these filters.</p>}</div>
+        <p className="mt-3 text-xs text-muted-foreground">Each approved visit cost belongs to one staff member and can be added across rows. Later receipts can repeat across staff for the same client; do not add those receipt figures together.</p>
+      </CardContent></Card>}
+      {manager&&<Card><CardHeader><CardTitle>Site comparison</CardTitle></CardHeader><CardContent><p className="mb-3 text-sm text-muted-foreground">All figures use the current report filters. Recorded site names remain separate when spelled differently. Later paid counts only attended visits with an exact lead and a later approved receipt. Reviewed costs are assigned once to each attended visit, including unlinked visitors. Later receipts can repeat across sites for the same client. Missing cost is unknown.</p>{siteRows.length>0&&<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart layout="vertical" data={siteRows.slice(0,6)} margin={{left:6,right:8}}><CartesianGrid strokeDasharray="3 3" horizontal={false}/><XAxis type="number" allowDecimals={false}/><YAxis type="category" dataKey="name" width={118} tick={{fontSize:10}} tickFormatter={(label:string)=>label.length>17?label.slice(0,16)+'…':label}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[0,4,4,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[0,4,4,0]}/></BarChart></ResponsiveContainer></div>}<div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1120px] text-left text-sm"><thead><tr className="border-b">{['Site','Visits','Attended','Outcome coverage','Linked','Survey visits','Later paid','Reviewed cost','Later receipts'].map((label)=><th key={label} className="py-2 pr-3">{label}</th>)}</tr></thead><tbody>{siteRows.map((row)=><tr key={row.name} className="border-b last:border-0"><td className="py-2 pr-3 font-medium">{row.name}</td><td>{row.visits}</td><td>{row.attended}</td><td>{row.coverage}</td><td>{row.linked}</td><td>{row.responded}</td><td>{row.laterPaid}</td><td>{row.costedVisits?ghs(row.cost):'Not recorded'}</td><td>{ghs(row.cash)}</td></tr>)}</tbody></table>{!siteRows.length&&<p className="py-4 text-sm text-muted-foreground">No sites match these filters.</p>}</div></CardContent></Card>}
       <Card><CardHeader><CardTitle>Visits by scheduled week</CardTitle></CardHeader><CardContent>{trend.length?<div className="h-56 w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={trend}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="week" tick={{fontSize:11}}/><YAxis allowDecimals={false}/><Tooltip/><Bar dataKey="visits" fill="#14305d" name="Visit records" radius={[4,4,0,0]}/><Bar dataKey="attended" fill="#b99b37" name="Attended" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>:<p className="text-sm text-muted-foreground">No visits in this period.</p>}</CardContent></Card>
       <Card><CardHeader><CardTitle>Visit register</CardTitle></CardHeader><CardContent><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr className="border-b">{['Date','Staff','Client','Site','Outcome','Pipeline','Client survey'].map((h)=><th key={h} className="py-2 pr-3">{h}</th>)}</tr></thead><tbody>{filtered.map((v)=><tr key={v.id} className="border-b last:border-0"><td className="py-2 pr-3">{v.visit_date}</td><td className="py-2 pr-3">{agentName(v)}</td><td className="py-2 pr-3">{v.deleted_at?v.name:<Link className="font-medium text-primary underline-offset-4 hover:underline" href={`/dashboard/site-visits/${v.id}`}>{v.name}</Link>}</td><td className="py-2 pr-3">{v.site||'—'}</td><td className="py-2 pr-3">{outcomeLabel(outcome(v))}</td><td className="py-2 pr-3">{pipelinePoolLabel(pipelinePool(v,report.data))}</td><td className="py-2 pr-3">{clientSurveyStatus(v.id)}</td></tr>)}</tbody></table>{!filtered.length&&<p className="py-4 text-sm text-muted-foreground">No visits match these filters.</p>}</div></CardContent></Card>
       <p className="text-xs text-muted-foreground">Outcome recording coverage = attended or explicitly not attended ÷ non-cancelled records. Attendance unknown is not a no-show. Staff follow-up text is not a client survey. Payment follow-through is assessable only for confirmed attended visits with an exact lead link; no visible payment does not establish that the client has not paid. A linked lead does not establish a sale.</p>
